@@ -146,6 +146,20 @@ NAMES after its parent (`ether1.55` on RouterOS) is classified
 every public codec's captures, and a sub-interface from each grammar
 that names one onto every codec.
 
+**Where a name depends on the other names, the target places them
+together.**  `format_port_identity` is given one name at a time, and
+a target whose name for a loopback depends on the config's other
+loopbacks cannot be right that way: Junos has one loopback
+interface, `lo0`, whose unit 0 is the global table's loopback and of
+which each routing instance takes a unit of its own.  Such a codec
+overrides `CodecBase.place_loopbacks`, which the orchestrator calls
+once, across vendors, with every loopback no entry decides (its
+name, its number and its routing instance) and the names the entries
+give; it answers the name of each it places and, for each that has
+no place, the reason, which the job reports as it drops the name.
+Every other codec keeps the default (`None`: each loopback is
+formatted alone).  See `tests/unit/migration/test_a_loopback_is_a_unit_of_lo0.py`.
+
 **Two codecs may SHARE one bridge when they are the same platform in
 different wire formats.**  `cisco_iosxe` (NETCONF / OpenConfig)
 delegates both methods to `cisco_iosxe_cli.port_names` rather than
@@ -500,7 +514,22 @@ the policy locally:
   `xml` / `exclamation`) and skip the password command.  NEVER fall
   back to plaintext (would leak the hash literal as the password).
   Per-target accepted-algorithm sets live in
-  `_TARGET_ACCEPTS[<vendor>]`.
+  `_TARGET_ACCEPTS[<vendor>]`, and a typed password (`plaintext`) is
+  in a target's set only where the target has a line that takes one:
+  a new user-rendering codec goes in `_TYPED_FORM` in
+  `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`.
+
+* **`netcanon/migration/_comments.py`** — a value written into a
+  comment stays in it.  Public API: `comment(text, syntax)` (the
+  comment with its delimiters) and `comment_text(text, syntax)` (the
+  text alone, e.g. for an `ET.Comment`).  A comment that ends at a
+  terminator (`slash` `/* */`, `xml` `<!-- -->`) is ended by a value
+  that holds it, and what follows is configuration; the helper breaks
+  the terminator where it stands.  Build every comment that carries a
+  value of the tree through it (both `format_review_comment` helpers
+  do); a new codec goes in `_COMMENT_FORMS` in
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  also reads the source for a block comment built anywhere else.
 
 * **`netcanon/migration/_radius_secrets.py`** — cross-vendor RADIUS
   shared-secret portability.  Public API:
@@ -515,6 +544,33 @@ the policy locally:
   A new rendering codec goes in `_TARGET_ACCEPTS` here AND in
   `_RENDERING_TARGETS` in
   `tests/unit/migration/test_radius_secret_portability.py`.
+
+* **`netcanon/migration/_one_value.py`** — a credential or an
+  account's name is written as ONE value of the place it goes, or not
+  at all.  Public API: `splits(value)` (not one word of a
+  word-at-a-time CLI: white space or a `"`), `breaks_its_quotes(value)`
+  (cannot stand between quotes on a grammar with no escape, AOS-S),
+  `left_out(what, target_label)` (the review line's text; `what` must
+  not hold a secret).  A renderer writing a password, community,
+  SNMPv3 user or FHRP key asks before it writes, and leaves the record
+  out (never alters it) where the value would not be one value; where
+  its target quotes, it escapes as the platform documents.  A new
+  line-grammar codec is judged by
+  `tests/unit/migration/test_a_secret_is_one_value.py` with no entry
+  of its own (it walks `list_public_codecs()`); a target that quotes
+  goes in that module's `_QUOTES` with the escape it documents.
+  For what is not a secret: `one_value_tree(tree, target_label, names=,
+  addresses=, unread_text=, no_escape=, test=)`, called once at the top
+  of `render_intent`, before the first line, with the fields the
+  renderer writes as one word; it returns the tree to write and the
+  review lines, which the renderer puts at the top of its output in
+  its own comment form.  `one_word(name)` is the one word a name is
+  written as.  A new line-grammar codec is judged by
+  `tests/unit/migration/test_a_name_is_one_word.py` with no entry of its
+  own; a place of its grammar that reads to the end of the line goes in
+  that module's `_REST_OF_LINE`, from a vendor page or a committed
+  capture that prints such a line, and a target that
+  quotes in some places only, in `_QUOTED_PLACES`.
 
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec
@@ -545,6 +601,18 @@ the policy locally:
   whitespace runs to `_` so the wire form round-trips.  Source state
   is preserved on the canonical model — sanitisation happens only at
   the wire boundary.
+
+* **`netcanon/migration/_one_line.py`** — a value is written on one
+  line.  Public API: `one_line_each(tree)` (the pipeline's, after the
+  transforms: each run of line breaks as one space, in place, and the
+  places it did so, for the job's warnings), `first_line_break(tree)`
+  (the check `CodecBase.render` makes: a tree that still holds a break
+  is a `RenderError`), `LINE_BREAKS`.  A renderer needs to do nothing:
+  it is never handed a value of more than one line, whatever the field,
+  so it may put any value into its line as it stands.  A parser that
+  reads a value of several lines (FortiOS between its quotes, the XML
+  parsers) keeps it as it is; the layout is lost on the way out, and
+  the job says where.
 
 * **`netcanon/migration/canonical/transforms.py::project_switchport_to_vlan`**
   — projects per-iface switchport state (`switchport_mode`,

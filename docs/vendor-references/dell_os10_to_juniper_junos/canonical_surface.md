@@ -107,6 +107,9 @@ Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
 Sample: `{"lags[0] {'name': 'port-channel100'}": {'name': {'source': 'port-channel100', 'target': 'ae100'}}, "lags[1] {'name': 'port-channel200'}": {'name': {'source': 'port-channel200', 't`
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — a password as typed is refused on Junos.**  Junos takes a password into its config only as a hash; up to 0.7.7 a typed password was written as `encrypted-password "<typed>"`, which no password matches.  The two Azure Local ToR captures hold each of their 2 accounts' passwords as typed (a template placeholder), so those 4 accounts are now refused, a `review:` comment naming each in place of the account; the kitchen sink's 2 `$6$` accounts arrive.  Measured after the change: **2 of 6** accounts arrive across the 3 cells that populate users.  The counts below describe the code before the change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/dell_os10__juniper_junos.yaml`.
+
 ### `local_users` — lossy
 
 Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).

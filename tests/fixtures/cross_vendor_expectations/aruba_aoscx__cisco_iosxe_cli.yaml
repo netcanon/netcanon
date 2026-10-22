@@ -54,11 +54,11 @@ meta:
     Campus like-for-like replacement: an ArubaOS-CX access/aggregation switch
     swapped for a Catalyst-class IOS-XE switch carrying the same VLANs, SVI
     addressing, trunk/access membership and uplink port-channels.  Hostname,
-    VLAN IDs and names, static routes, SNMP scalars, usernames, VRF names,
+    VLAN IDs and names, static routes, SNMP scalars, VRF names,
     VXLAN VNI bindings and the anycast gateway MAC all survive.  What does not
     is the port-name form (AOS-CX `1/1/x` is not an IOS-XE interface name), the
-    per-SVI active-gateway address, VLAN descriptions, the AOS-CX role
-    vocabulary, and the out-of-band `mgmt` port.
+    per-SVI active-gateway address, VLAN descriptions, the out-of-band
+    `mgmt` port, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-iosxecli-surface
@@ -282,14 +282,15 @@ per_field_expectation:
     references: [aoscx-iosxecli-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells, including the awkward ones — `PROD-WEB`,
-      `CORE-ROUTING`, `NULL2701`, `test_vlan`.  The IOS-XE render emits
-      `vlan <id>` + ` name <name>` and re-parses it unchanged.  This is where
-      the pair diverges from aruba_aoscx -> arista_eos, where VLAN names drift
-      on 2 of the same 7 cells; the campus-to-campus pairing genuinely does
-      better here.
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): Cisco
+      documents the `name` under `vlan <id>` by its length only,
+      and a place no page says reads the rest of the line is
+      written as one word.  The DCN arch3 leaves' `VLAN 11` lands
+      as `VLAN_11`.  A name with no white space is preserved.
     references: [aoscx-iosxecli-surface]
 
   "vlans[].ipv4_addresses":
@@ -481,50 +482,55 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      Drifts on 4 of the 7 cells; 2 preserve every username. The AOS-CX
-      `AQB...` password ciphertext cannot be re-emitted as an IOS-XE secret,
-      so those accounts are dropped with a review comment instead of being
-      written under a cleartext marker. Accounts whose secret is consumable
-      survive, hence `lossy`. Re-create the dropped accounts and set passwords
-      on the target. This is the deliberate post-fix behaviour: an
-      unrecognised or unconsumable secret is REFUSED rather than re-emitted
-      under the target's cleartext marker, which previously turned the digest
-      itself into the password. The account vanishing is the cost of not
-      leaking a credential; it is recorded here rather than hidden.
+      0 of 7 accounts arrive across the 6 cells that populate local
+      users; the list is emptied on each.  Each of the 7 holds an AOS-CX
+      ciphertext (`password ciphertext`), encrypted under the key of the
+      switch that made it: 6 `AQB` blobs, and the GL CX 10.09 capture's
+      `admin`, whose publisher put a placeholder word where its
+      ciphertext was.  Up to 0.7.7 the AOS-CX parser read that word by
+      its shape, as a password as typed, and it was written onto this
+      target as one; the parser now reads a value by its keyword, so it
+      is refused like the rest
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      IOS-XE can consume `secret 5` / `8` / `9` or `password 7`, or a
+      password as typed; anything else is refused on purpose (#461) with
+      a review comment naming the account and no user entry.  Recorded
+      `lossy` rather than `unsupported`: an AOS-CX account configured
+      `password plaintext` is read as typed and arrives, as `secret 0
+      <password>`; no committed capture has one.  Before cutover, list
+      the source accounts, search the render for `review:` comments, and
+      re-create each refused account on the target with a fresh
+      password.
     references: [aoscx-iosxecli-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users, and the mapping is
-      visible in the render: AOS-CX `administrators` becomes
-      `username <name> privilege 15 ...` and re-parses as `admin`, while
-      `operators` renders with no privilege keyword and re-parses as
-      `operator`.  The privilege INTENT survives for both built-in AOS-CX
-      roles in this corpus; the role string does not, and aruba_aoscx
-      separately declares `/local-users/user/privilege-level` lossy.  No cell
-      carries a custom AOS-CX RBAC role, so how one of those lands is not
-      something this pair has measured — check the resulting privilege level
-      of every migrated account before cutover, especially any role that is
-      not one of the two built-ins.
+      No account arrives on the corpus (see `local_users[].name`), so
+      there is no role on the target to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  On an account that arrives,
+      `administrators` renders `privilege 15` and re-parses as `admin`,
+      while `operators` renders with no privilege keyword and re-parses
+      as `operator`; the privilege intent survives, the role string does
+      not.  Recorded `lossy` for that.
     references: [aoscx-iosxecli-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Preserved byte-for-byte on all 6 cells that populate local users — and
-      this `good` is a hazard, not a reassurance.  It survives because the
-      IOS-XE render emits it under the TYPE-0 keyword
-      (`username <name> privilege 15 secret 0 <blob>`), and type 0 is IOS-XE's
-      plaintext marker.  What round-trips is the string, not a credential: the
-      AOS-CX secret is stored in Aruba's own encrypted form (an `AQB...`-prefixed
-      ciphertext blob, neither a crypt(3) hash nor anything IOS-XE can
-      validate), so pasted onto a real Catalyst that line would set the user's
-      literal password to the ciphertext.  The fidelity harness scores
-      preservation, not target-syntax validity.  Set passwords on the target
-      before cutover, or the accounts are unusable.  The ciphertext is
-      deliberately NOT quoted here — it is operator-traceable key material even
-      though it is encrypted.
+      No secret is written in a form IOS-XE cannot consume.  On the
+      corpus no account arrives (see `local_users[].name`), so there is
+      no value to compare; the only drift on this key is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here.  An
+      AOS-CX account configured `password plaintext` is carried with the
+      credential unchanged, as `secret 0 <password>`.  Before #461 every
+      AOS-CX ciphertext was written behind `secret 0`, the IOS-XE
+      cleartext marker, so the account held the ciphertext as its
+      literal password.  No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [aoscx-iosxecli-surface]
 
   # -- Fabric ---------------------------------------------------------------

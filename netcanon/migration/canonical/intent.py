@@ -263,6 +263,16 @@ class CanonicalInterface(BaseModel):
         voice_vlan: Voice VLAN ID for IP phone traffic.
         lag_member_of: LAG / port-channel name if this interface is
             bundled, otherwise ``None``.
+        vlan_parent: The interface a VLAN interface rides on, where the
+            config states it apart from the VLAN interface's name --
+            RouterOS ``/interface vlan add interface=bridge
+            name=mgmtvlan11 vlan-id=11``.  ``None`` where the config
+            does not state one, and where the name itself says it
+            (``GigabitEthernet0/1.100``, ``ge-0/0/1.100``).  A
+            reference to another interface: the port-name sweep
+            renames it with that interface, and clears it where that
+            interface is dropped.  A renderer that has to name a
+            parent and finds none here chooses one itself.
         dhcp_client: ``True`` if the interface acquires its IPv4 via
             DHCP rather than static configuration.
         dhcp_client_v6: IPv6 dynamic-address mode.  ``""`` = static /
@@ -345,6 +355,7 @@ class CanonicalInterface(BaseModel):
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None
     lag_member_of: str | None = None
+    vlan_parent: str | None = None
     dhcp_client: bool = False
     dhcp_client_v6: str = ""
     tunnel_type: str = ""

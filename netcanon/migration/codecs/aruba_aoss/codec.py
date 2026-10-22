@@ -305,6 +305,22 @@ class ArubaAOSSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/routing/static-route/interface",
+                reason=(
+                    "AOS-S takes an address, a VLAN (``vlan <id>``) or the "
+                    "discard (``blackhole``, written for ``Null0``) as a "
+                    "next hop and nothing else.  A route out any other "
+                    "interface -- a routed port, a LAG, a tunnel -- is "
+                    "left out under a ``; review:`` line, and an interface "
+                    "named beside a gateway is not written.  Error-level: "
+                    "the job is partial for any route that names an "
+                    "interface, the ones written as ``vlan`` or "
+                    "``blackhole`` included, since the matrix cannot tell "
+                    "them apart."
+                ),
+                severity="error",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "AOS-S does not declare IANA ifType; the codec "
@@ -485,10 +501,11 @@ class ArubaAOSSCodec(CodecBase):
             UnsupportedPath(
                 path="/routing/static-route/vrf",
                 reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
+                    "AOS-S has no VRF (HPE's routing guide names none): "
+                    "a route in a VRF is left out under a ``; review:`` "
+                    "line.  It was written into the switch's one table, "
+                    "where it routed traffic the source routed in "
+                    "another."
                 ),
             ),
         ],

@@ -9,7 +9,7 @@ Retrieved: 2026-04-30
 <laggs version="1.0.0">
   <lagg uuid="...">
     <laggif>lagg0</laggif>
-    <members>opt3,opt4</members>
+    <members>igb2,igb3</members>
     <proto>lacp</proto>
     <descr>Bonded uplink to core switch</descr>
   </lagg>
@@ -20,12 +20,16 @@ OPNsense LAG notes:
 
 - LAG bundle named `lagg<N>` (FreeBSD lagg(4) driver naming;
   zero-based).
-- `<members>` is a comma-separated list of interface NAMES (zone
-  labels or BSD device names).
+- `<members>` is a comma-separated list of BSD device names.  A
+  member is an UNASSIGNED interface: "Only unassigned interfaces can
+  be added to LAGG" (same page, Other Types), so it is in no zone of
+  `<interfaces>` (corrected 2026-10-20: the example listed zone
+  names).
 - `<proto>` enumerates: `lacp`, `failover`, `loadbalance`,
   `roundrobin`, `none`.  No active/passive distinction — FreeBSD
   always advertises actively when LACP is selected.
-- Reverse-link: each member `CanonicalInterface.lag_member_of`
+- Reverse-link: each member has a `CanonicalInterface` of its own
+  (the config has none, being in no zone) whose `lag_member_of`
   points to `lagg<N>`.
 
 ## Junos

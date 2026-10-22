@@ -201,6 +201,18 @@ Provenance in
 
 ## Common gotchas
 
+- **A review comment shows `--` in a name as `- -`.**  XML allows no
+  `--` inside `<!-- -->`, and `-->` ends it: a source account left out
+  for its password, named with either, made the output malformed or
+  wrote what followed as XML (an account the source never had).  The
+  name in the comment is the source's name with a space after each
+  hyphen that another follows.
+- **A user whose password cannot be carried is left out** as a target,
+  with an XML comment in its place.  Up to 0.7.7 the `<user>` element
+  stayed, with no `<password>`.  A password the source holds as typed
+  (IOS-XE `password 0`, AOS-CX `password plaintext`) is one of them:
+  `<password>` is the hash `password_verify()` checks a password
+  against, and up to 0.7.7 the typed string was written there.
 - **Driver names onto another vendor** — an OPNsense interface is
   named for its FreeBSD driver, and the port translator reads some
   drivers' names (`igb0`, `ix1`, `em0`) and not others (`igc0`).
@@ -242,13 +254,21 @@ Provenance in
   output bound its DHCP server to `interface lan`, FortiOS wrote
   `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
   beside an `<interfaces>` with no `<lan>` in it.
-- **A lagg's members onto a switch** — the members of a lagg are
-  as a rule NICs assigned to nothing, so the config has no interface
-  for them and Netcanon makes no port record for them.  A target
-  that writes a LAG on each member's own stanza (EOS, AOS-CX, IOS-XE,
-  IOS-XR, NX-OS, OS10, Junos) then writes the LAG with no member, in
-  a job that can be `completed`.  Add the members on the target by
-  hand.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+- **A lagg's members** — OPNsense adds only an unassigned interface
+  to a lagg ("Only unassigned interfaces can be added to LAGG",
+  docs.opnsense.org, Other Types), so a member is named in `<laggs>`
+  alone, and Netcanon gives it a port record of its own that names
+  its lagg.  Onto OPNsense, a member of a LAG is written in the
+  lagg's `<members>` and in no zone of `<interfaces>`; where the
+  source gave the member something a zone would carry (a
+  description, an MTU, an address, a disabled state), a comment in
+  the `<lagg>` names the member and the elements not written, never
+  their values.
+  ⚠️ Up to 0.7.7 the members had no record: a target that writes a
+  LAG on each member's own stanza (EOS, AOS-CX, IOS-XE, IOS-XR,
+  NX-OS, OS10, Junos) wrote the LAG with no member, or none at all,
+  in a job that could be `completed`; and an OPNsense output
+  assigned each member a zone of its own.
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
   API or in the Interface rename modal an override typed in another

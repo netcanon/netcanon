@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-21T00:55:02+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261021T005044Z.json",
-  "mesh_run_started_utc": "2026-10-21T00:50:36+00:00",
+  "started_utc": "2026-10-22T02:09:00+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T020857Z.json",
+  "mesh_run_started_utc": "2026-10-22T02:08:35+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,19 +593,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9369,
+    "ALIGNED": 9097,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4209,
-    "EXPECTED_UNSUPPORTED": 2699,
-    "METHODOLOGY_ISSUE_under": 1943,
+    "EXPECTED_LOSSY": 4154,
+    "EXPECTED_UNSUPPORTED": 2727,
+    "METHODOLOGY_ISSUE_under": 1963,
     "METHODOLOGY_ISSUE_over": 21,
-    "STRUCTURAL_ONLY": 4528,
-    "TRIVIAL_EMPTY": 34884,
+    "STRUCTURAL_ONLY": 4841,
+    "TRIVIAL_EMPTY": 34850,
     "fields_total": 57657,
     "severity_high": 4,
-    "severity_medium": 287,
-    "severity_low": 6205,
-    "severity_ok": 51161
+    "severity_medium": 285,
+    "severity_low": 6540,
+    "severity_ok": 50828
   },
   "severity_matrix": {
     "arista_eos": {
@@ -779,6 +779,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -803,6 +804,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -827,6 +829,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -861,6 +864,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -885,6 +889,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -909,6 +914,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1353,7 +1359,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -1653,6 +1659,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1677,6 +1684,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": "Port-Channel10",
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1701,6 +1709,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": "Port-Channel11",
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1735,6 +1744,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1759,6 +1769,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": "Port-channel10",
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -1783,6 +1794,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": "Port-channel11",
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -2320,7 +2332,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -3289,6 +3301,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3332,6 +3345,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3356,6 +3370,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3398,6 +3413,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3441,6 +3457,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3465,6 +3482,7 @@
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
                 "lag_member_of": null,
+                "vlan_parent": null,
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
@@ -3759,10 +3777,58 @@
           "severity": "ok"
         },
         "vlans": {
-          "actual": "preserved",
-          "expected": "not_applicable",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "id": 10,
+                "name": "User VLAN 10 SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "target": [
+              {
+                "id": 10,
+                "name": "User_VLAN_10_SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "drift": {
+              "vlans[0] {'id': 10, 'name': 'User VLAN 10 SVI'}": {
+                "name": {
+                  "source": "User VLAN 10 SVI",
+                  "target": "User_VLAN_10_SVI"
+                }
+              }
+            },
+            "source_count": 1,
+            "target_count": 1
+          }
         },
         "static_routes": {
           "actual": "trivially_preserved",
@@ -3901,9 +3967,9 @@
       "summary": {
         "ALIGNED": 4,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 2,
+        "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 1,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 30,
@@ -3911,8 +3977,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 3,
-        "severity_ok": 36
+        "severity_low": 2,
+        "severity_ok": 37
       }
     }
   ],

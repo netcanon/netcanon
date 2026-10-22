@@ -74,7 +74,12 @@ Logical:
   override via the per-pane port-rename surface for non-default
   mappings.
 - **Loopback unit.** Cisco `Loopback0` maps to Junos `lo0.0` (unit
-  0 implicit in Cisco's flat name, explicit in Junos).
+  0 implicit in Cisco's flat name, explicit in Junos).  Junos has no
+  `lo1`: another unit of `lo0` is the loopback of a routing instance
+  ("you must place each additional unit in a separate routing
+  instance", Juniper, *Loopback Interfaces*), so `Loopback5` in a VRF
+  is `lo0.5` there, and a second loopback of the global table has no
+  Junos name (the translator drops and lists it).
 - **SVI versus IRB.** Cisco `Vlan100` (an L3 SVI auto-created by
   the VLAN stanza) maps to Junos `irb.100` (an IRB unit explicitly
   declared and bound to the VLAN via `set vlans NAME l3-interface

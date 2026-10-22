@@ -301,8 +301,19 @@ _JUNOS = "\n".join([
     "set vlans VLAN100 vxlan vni 10100",
     "",
 ])
-#: ... and the loopback of a routing instance beside it.
-_JUNOS_UNIT_2 = _JUNOS + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
+#: ... and an ``irb`` and a ``vlan`` unit of one VLAN beside it (the
+#: two Junos grammars' names for a VLAN interface): every target that
+#: has a VLAN interface names both after the VLAN.  (A unit of ``lo0``
+#: was this example, and is a loopback of its own now: ``lo0.2`` is
+#: ``Loopback2``.)
+_JUNOS_TWO_VLAN_INTERFACES = _JUNOS + "\n".join([
+    "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+    "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
+    "",
+])
+#: ... and a port of a second FPC, which a target that numbers its
+#: ports in one run names as the first one's.
+_JUNOS_TWO_FPCS = _JUNOS + "set interfaces ge-1/0/1 unit 0 family inet address 10.2.0.1/24\n"
 
 #: Two aggregates numbered from 0, which IOS numbers from 1.
 _JUNOS_TWO_LAGS = "\n".join([
@@ -314,13 +325,14 @@ _JUNOS_TWO_LAGS = "\n".join([
     "",
 ])
 
-#: A port, a loopback and its per-instance unit, and the management
-#: port, which IOS-XE has no name for.
+#: A port, the loopback, two VLAN interfaces of one VLAN, and the
+#: management port, which IOS-XE has no name for.
 _JUNOS_BOTH = "\n".join([
     "set system host-name r1",
     "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
     "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
-    "set interfaces lo0 unit 2 family inet address 192.0.2.2/32",
+    "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+    "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
     "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
     "",
 ])
@@ -476,14 +488,17 @@ class TestTwoNamesOnOneName:
     @pytest.mark.parametrize(
         ("text", "target_name", "expected"),
         [
-            (_JUNOS_UNIT_2, "arista_eos", {"Loopback0": ["lo0", "lo0.2"]}),
+            (
+                _JUNOS_TWO_VLAN_INTERFACES, "arista_eos",
+                {"Vlan100": ["irb.100", "vlan.100"]},
+            ),
             (_JUNOS_TWO_LAGS, "cisco_iosxe_cli", {"Port-channel1": ["ae0", "ae1"]}),
         ],
-        ids=["two loopbacks", "two aggregates"],
+        ids=["two VLAN interfaces", "two aggregates"],
     )
     def test_two_logical_names(self, text: str, target_name: str, expected: dict) -> None:
         """With no device declared there is no pairing whose ports
-        alone need protecting: two loopbacks on one loopback are two
+        alone need protecting: two VLAN interfaces on one are two
         interfaces written as one, and no hardware port is in it."""
         job = _checked("juniper_junos", target_name, text)
         assert job.fused_ports == expected
@@ -564,10 +579,11 @@ class TestWhatIsNotASecondInterface:
         assert (job.status, job.fused_ports, job.error) == (COMPLETED, {}, None)
 
     def test_another_unit_is_a_second_interface(self) -> None:
-        """``lo0.2`` is the loopback of a routing instance.  On
-        ``Loopback0`` beside ``lo0`` it is two interfaces in one --
-        and the reference ``lo0.0`` is still not a third."""
-        job = _checked("juniper_junos", "arista_eos", _JUNOS_UNIT_2)
+        """``lo0.2`` is the loopback of a routing instance.  Put on
+        ``Loopback0`` beside ``lo0`` by an entry, it is two interfaces
+        in one -- and the reference ``lo0.0`` is still not a third."""
+        text = _JUNOS + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
+        job = _checked("juniper_junos", "arista_eos", text, {"lo0.2": "Loopback0"})
         assert job.port_renames["lo0.0"] == "Loopback0"
         assert job.fused_ports == {"Loopback0": ["lo0", "lo0.2"]}
         assert job.status == PARTIAL
@@ -718,12 +734,12 @@ class TestADroppedPort:
         text = _JUNOS_BOTH + "set interfaces fxp0 unit 5 family inet address 198.51.100.9/24\n"
         named = _checked(
             "juniper_junos", "cisco_iosxe_cli", text,
-            {"fxp0": "GigabitEthernet0/0", "lo0.2": "Loopback2"},
+            {"fxp0": "GigabitEthernet0/0", "vlan.100": "Loopback2"},
         )
         assert named.port_drops == ["fxp0.5"]
         assert (named.status, named.unresolved_ports) == (PARTIAL, ["fxp0.5"])
         dropped = _checked(
-            "juniper_junos", "cisco_iosxe_cli", text, {"fxp0": None, "lo0.2": "Loopback2"},
+            "juniper_junos", "cisco_iosxe_cli", text, {"fxp0": None, "vlan.100": "Loopback2"},
         )
         assert dropped.port_drops == ["fxp0", "fxp0.5"]
         assert (dropped.status, dropped.unresolved_ports) == (COMPLETED, [])
@@ -1269,7 +1285,7 @@ _DEVICES_FOR_SOME = (
 class TestWhatTheJobSays:
     def test_both_in_one_job(self) -> None:
         job = _checked("juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH)
-        assert job.fused_ports == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job.fused_ports == {"Vlan100": ["irb.100", "vlan.100"]}
         assert job.unresolved_ports == ["fxp0"]
         assert job.untranslated_ports == []
         assert job.status == PARTIAL
@@ -1288,13 +1304,13 @@ class TestWhatTheJobSays:
     def test_an_entry_for_each_settles_it(self) -> None:
         job = _checked(
             "juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH,
-            {"lo0.2": "Loopback2", "fxp0": None},
+            {"vlan.100": "Loopback2", "fxp0": None},
         )
         assert (job.status, job.error) == (COMPLETED, None)
         assert (job.fused_ports, job.unresolved_ports) == ({}, [])
         assert read_back(
             get_codec("juniper_junos"), get_codec("cisco_iosxe_cli"), _JUNOS_BOTH, job,
-            {"lo0.2": "Loopback2", "fxp0": None},
+            {"vlan.100": "Loopback2", "fxp0": None},
         ) == []
 
     @pytest.mark.parametrize(
@@ -1354,13 +1370,13 @@ class TestWhatTheJobSays:
         assert migration_pipeline._names_message({}, [], [], ["x"]) == ""
 
     def test_devices_are_not_offered_for_these(self) -> None:
-        """Two loopbacks on one loopback.  With both devices declared
+        """Two VLAN interfaces on one.  With both devices declared
         the same output is ``completed``: the pairing is of hardware
         ports and asks nothing of these.  So the sentence here does
         not offer it."""
-        job = _checked("juniper_junos", "arista_eos", _JUNOS_UNIT_2)
-        assert job.fused_ports == {"Loopback0": ["lo0", "lo0.2"]}
-        assert not set(job.source_ports).intersection(job.fused_ports["Loopback0"])
+        job = _checked("juniper_junos", "arista_eos", _JUNOS_TWO_VLAN_INTERFACES)
+        assert job.fused_ports == {"Vlan100": ["irb.100", "vlan.100"]}
+        assert not set(job.source_ports).intersection(job.fused_ports["Vlan100"])
         assert job.error == (
             NOT_SETTLED + _SAID["fused"] + "An entry in port_rename_map "
             "settles each: " + _SETTLED_BY["fused"] + "."
@@ -1370,11 +1386,11 @@ class TestWhatTheJobSays:
         """VyOS cannot carry the VXLAN of this config, so the job is
         ``partial`` for the validation report.  The sentence about
         the names is added after that one, not put in its place."""
-        before = _unchecked("juniper_junos", "vyos", _JUNOS_UNIT_2)
+        before = _unchecked("juniper_junos", "vyos", _JUNOS_TWO_FPCS)
         assert before.status == PARTIAL and before.error
-        job = _checked("juniper_junos", "vyos", _JUNOS_UNIT_2)
+        job = _checked("juniper_junos", "vyos", _JUNOS_TWO_FPCS)
         assert job.status == PARTIAL
-        assert job.fused_ports == {"lo": ["lo0", "lo0.2"]}
+        assert job.fused_ports == {"eth1": ["ge-0/0/1", "ge-1/0/1"]}
         first, _, second = job.error.partition(" " + NOT_SETTLED)
         assert first == before.error
         assert second.startswith("1 name(s) in the output received more than one")
@@ -1455,7 +1471,7 @@ class TestWhatTheJobSays:
             "juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH, transforms=[rename_host],
         )
         assert "hostname renamed" in job.rendered
-        assert job.fused_ports == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job.fused_ports == {"Vlan100": ["irb.100", "vlan.100"]}
 
     def test_it_takes_what_the_frozen_one_takes(self) -> None:
         """Every handler's arguments fit both: the helper that
@@ -1478,11 +1494,12 @@ class TestTheReadBackItself:
     status looked at the names."""
 
     def test_two_interfaces_written_as_one(self) -> None:
-        job = _unchecked("juniper_junos", "arista_eos", _JUNOS_UNIT_2)
+        job = _unchecked("juniper_junos", "arista_eos", _JUNOS_TWO_VLAN_INTERFACES)
         assert job.status == COMPLETED
         assert read_back(
-            get_codec("juniper_junos"), get_codec("arista_eos"), _JUNOS_UNIT_2, job, {},
-        ) == ["'Loopback0' in the output carries the addresses of ['lo0', 'lo0.2']"]
+            get_codec("juniper_junos"), get_codec("arista_eos"),
+            _JUNOS_TWO_VLAN_INTERFACES, job, {},
+        ) == ["'Vlan100' in the output carries the addresses of ['irb.100', 'vlan.100']"]
 
     def test_a_port_that_is_not_in_the_output(self) -> None:
         job = _unchecked("cisco_nxos", "cisco_iosxe_cli", _NXOS_MGMT)
@@ -1530,20 +1547,21 @@ class TestTheReadBackItself:
         assert read_back(source, target, text, job, {}) == []
 
     def test_an_address_of_either_family_counts(self) -> None:
-        """Interfaces that have only IPv6 addresses: two loopbacks
-        written as one, and a port that is not in the output."""
+        """Interfaces that have only IPv6 addresses: two VLAN
+        interfaces written as one, and a port that is not in the
+        output."""
         text = "\n".join([
             "set system host-name r1",
             "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
-            "set interfaces lo0 unit 0 family inet6 address 2001:db8::1/128",
-            "set interfaces lo0 unit 2 family inet6 address 2001:db8::2/128",
+            "set interfaces irb unit 100 family inet6 address 2001:db8::1/64",
+            "set interfaces vlan unit 100 family inet6 address 2001:db8:1::1/64",
             "",
         ])
         job = _unchecked("juniper_junos", "arista_eos", text)
         assert job.status == COMPLETED
         assert read_back(
             get_codec("juniper_junos"), get_codec("arista_eos"), text, job, {},
-        ) == ["'Loopback0' in the output carries the addresses of ['lo0', 'lo0.2']"]
+        ) == ["'Vlan100' in the output carries the addresses of ['irb.100', 'vlan.100']"]
 
         text = _NXOS_MGMT.replace("ip address 192.0.2.9/24", "ipv6 address 2001:db8:9::9/64")
         job = _unchecked("cisco_nxos", "cisco_iosxe_cli", text)
@@ -1723,7 +1741,11 @@ CAPTURES = _captures()
 #: number here and says which.
 _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     "arista_eos": (0, 0, 9, 1, 0, 0),
-    "aruba_aoscx": (0, 0, 6, 0, 0, 0),
+    # From (0, 0, 6, 0, 0, 0): onto Junos the global table has one
+    # loopback, unit 0 of lo0.  The two arch3 leafs have `loopback 0`
+    # and `loopback 1` there; `loopback 1` was written `lo1`, an
+    # interface Junos does not have, and is dropped and listed (+2).
+    "aruba_aoscx": (0, 0, 6, 2, 0, 0),
     # From (8, 0, 0, 0, 6, 0): an AOS-S stanza ends at its `exit`, not
     # at a line in column 0.  The KB.15.15 capture, every line at
     # column 0, had been read as three empty VLANs; its 48 letter-slot
@@ -1736,9 +1758,16 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # From (10, 0, 0, 0, 3, 20): the IOSv capture whose every line is
     # at column 0 is refused by the IOS-XE CLI parser now, and is no
     # longer among the captures (it is under `refused/`); two of its
-    # jobs had a name shared with a hardware port.
-    "cisco_iosxe_cli": (8, 0, 0, 0, 3, 20),
-    "cisco_iosxr": (4, 0, 13, 0, 1, 2),
+    # jobs had a name shared with a hardware port.  And from (8, 0, 0,
+    # 0, 3, 20): onto AOS-S, the umbrella capture's routes out `dhcp`
+    # are left out under a review line, AOS-S having no such next hop,
+    # and the job is `partial` for them before any name is checked.
+    # And the EVPN leaf's `Loopback2`, the VTEP source beside
+    # `Loopback0`, was `lo2` onto Junos (+1 logical name dropped).
+    "cisco_iosxe_cli": (8, 0, 0, 1, 3, 19),
+    # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
+    # the global table; onto Junos `Loopback123` was `lo123` (+1).
+    "cisco_iosxr": (4, 0, 13, 1, 1, 2),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     "fortigate_cli": (0, 0, 0, 0, 0, 11),
@@ -1747,8 +1776,21 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
     # listed nothing else and are `completed`; three that listed it
     # beside a dropped port now list the port alone.
-    "juniper_junos": (0, 0, 8, 0, 3, 6),
-    "mikrotik_routeros": (0, 0, 0, 0, 21, 7),
+    #
+    # From (0, 0, 8, 0, 3, 6): a unit of lo0 is a loopback of its own
+    # (`lo0.2` is `Loopback2`), so the two captures whose routing
+    # instances each have one no longer put them on one loopback, and
+    # list only the names left as they were (-2 several, +2 left).
+    "juniper_junos": (0, 0, 8, 0, 5, 4),
+    # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
+    # continued is read whole, so the CRS310 capture's ports are
+    # called by the names the operator gave them (`Desktop`,
+    # `Access Point`).  No classifier reads such a name, so each is
+    # left as the source has it and listed; and `ether1` and
+    # `sfp-sfpplus1`, which the translator had put on one target
+    # port, are not in the config to be put there.  Three jobs that
+    # listed both now list the names alone.
+    "mikrotik_routeros": (0, 0, 0, 0, 24, 4),
     "opnsense": (4, 0, 0, 0, 23, 1),
     "vyos": (17, 0, 0, 0, 0, 0),
 }
@@ -1812,8 +1854,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 1, 63, 48]
-        assert sum(by_reason) == 213
+        assert by_reason == [40, 0, 61, 5, 68, 42]
+        assert sum(by_reason) == 216
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

@@ -40,7 +40,7 @@ Retrieved: 2026-04-30
 <laggs version="1.0.0">
   <lagg uuid="...">
     <laggif>lagg0</laggif>
-    <members>opt3,opt4</members>
+    <members>igb2,igb3</members>
     <proto>lacp</proto>
     <descr>Bonded uplink to core switch</descr>
   </lagg>
@@ -51,8 +51,14 @@ OPNsense LAG notes:
 
 - LAG bundle named `lagg<N>` (FreeBSD lagg(4) driver naming;
   zero-based).
-- `<members>` is a comma-separated list of interface NAMES (zone
-  labels or BSD device names).
+- `<members>` is a comma-separated list of BSD device names.
+- A member is an UNASSIGNED interface: "Only unassigned interfaces can
+  be added to LAGG" (same page, Other Types).  So a member is named in
+  `<laggs>` and in no zone of `<interfaces>`, and has no description,
+  MTU, address or `<enable/>` of its own in the config.  Netcanon
+  writes a LAG member onto OPNsense in `<members>` alone, and says in a
+  comment in the `<lagg>` which elements the source gave the member
+  that are not written (added 2026-10-20).
 - `<proto>` enumerates: `lacp` (the common case), `failover`,
   `loadbalance`, `roundrobin`, `none`.  No active/passive
   distinction — FreeBSD always advertises actively.
@@ -71,7 +77,7 @@ Junos -> OPNsense:
   `CanonicalLAG.members` lists the member-interface names.
   OPNsense `<members>` round-trips the list as a comma-separated
   string.  Member names themselves rename via the port-rename
-  mesh (Junos `ge-0/0/2` → some OPNsense zone label).
+  mesh (Junos `ge-0/0/2` → an OPNsense device name such as `igb2`).
 - `lags[].mode`: **lossy** — Junos's three-way `active` / `passive` /
   static collapses to OPNsense's single `<proto>lacp</proto>`
   (FreeBSD always advertises actively).  Static-mode Junos LAGs

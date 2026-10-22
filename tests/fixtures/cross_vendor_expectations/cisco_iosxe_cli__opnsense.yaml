@@ -245,21 +245,36 @@ per_field_expectation:
       type field; the cross-pair drops the type hint.
 
   interfaces[].mtu:
-    disposition: good
-    note: >
-      Cisco ``mtu <N>`` ↔ OPNsense ``<mtu>N</mtu>`` — both render
-      explicitly when set.
-    references: [opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 1 of the 5 records that carry an MTU is a
+      port-channel member and loses it.  Every other record keeps its
+      value: Cisco ``mtu <N>`` ↔ OPNsense ``<mtu>N</mtu>``.
+    references: [opnsense-interfaces, opnsense-laggs]
 
   interfaces[].ipv4_addresses:
-    disposition: good
-    note: >
-      Cisco's dotted-mask form (``255.255.255.0``) converts
-      mechanically to OPNsense CIDR (``<subnet>24</subnet>``).
-      Multiple Cisco IPv4 addresses per interface (primary +
-      secondary) collapse to the primary only — canonical takes
-      one address.
-    references: [opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 1 of the 40 records that carry an IPv4
+      address is a port-channel member and loses it.  Every other
+      record keeps its address: Cisco's dotted-mask form
+      (``255.255.255.0``) converts mechanically to OPNsense CIDR
+      (``<subnet>24</subnet>``).  Multiple Cisco IPv4 addresses per
+      interface (primary + secondary) collapse to the primary only —
+      canonical takes one address.
+    references: [opnsense-interfaces, opnsense-laggs]
 
   interfaces[].ipv6_addresses:
     disposition: lossy
@@ -483,30 +498,39 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Cisco type-9 (``$9$`` scrypt) and type-8 (``$4$`` PBKDF2-
-      SHA256) hashes are NOT bcrypt and OPNsense will reject them
-      on apply.  Type-5 (``$1$`` MD5-crypt) might work via PAM
-      legacy but is not the default.  Operators must reset
-      passwords on the OPNsense target.  Privilege number (1-15)
-      collapses to OPNsense's binary admin / non-admin via group
-      membership: privilege >= 15 → ``<groupname>admins</groupname>``,
-      otherwise ``<groupname>users</groupname>`` (or similar).  Both
-      codecs pass hashes through verbatim; loss surfaces in the
-      validation report.
+      1 of 11 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 6 of them. The 10 accounts that vanish carry 5 Cisco
+      type-9 scrypt, 3 MD5 crypt (Cisco type 5), 1 Cisco type-7 reversible
+      obfuscation, 1 Cisco type-8 PBKDF2. OPNsense can consume bcrypt (`$2y$` /
+      `$2b$`) or SHA-512 crypt (`$6$`) in `<password>`, or a genuine plaintext
+      password; anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was written
+      as a `<user>` element with no `<password>`; a refused secret now drops the
+      whole account, as on every other target. The survivors are 1 carrying 1
+      plaintext password. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, cisco-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Cisco modern ``radius server NAME / address ipv4 X
       auth-port 1812 acct-port 1813 / key <secret>`` ↔ OPNsense
       ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
-      ``<radius_acct_port>``.  Round-trips host / port pair
-      cleanly.  Cisco type-7 obfuscated keys (``key 7 <hex>``)
-      land verbatim in OPNsense ``<radius_secret>`` and
-      authentication fails until the operator resets the secret —
-      a caveat in the validation report.
+      ``<radius_acct_port>``.  Host and the port pair round-trip,
+      and a key written as typed (``key <secret>``, ``key 0
+      <secret>``) lands in ``<radius_secret>``.  A ``key 7`` or
+      ``key 6`` is a form only IOS-XE reads: it is held behind
+      ``iosxe:``, not decoded, and the OPNsense render writes the
+      server with no secret, beside a review element that names the
+      form; the secret has to be re-entered.  The kitchen sink's
+      ``key 7`` shows it.  Until 2026-10 the type-7 text was written
+      into ``<radius_secret>`` as the secret, and this entry called
+      the field good.
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
 
