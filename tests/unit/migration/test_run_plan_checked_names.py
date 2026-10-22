@@ -1745,7 +1745,15 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # listed nothing else and are `completed`; three that listed it
     # beside a dropped port now list the port alone.
     "juniper_junos": (0, 0, 8, 0, 3, 6),
-    "mikrotik_routeros": (0, 0, 0, 0, 21, 7),
+    # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
+    # continued is read whole, so the CRS310 capture's ports are
+    # called by the names the operator gave them (`Desktop`,
+    # `Access Point`).  No classifier reads such a name, so each is
+    # left as the source has it and listed; and `ether1` and
+    # `sfp-sfpplus1`, which the translator had put on one target
+    # port, are not in the config to be put there.  Three jobs that
+    # listed both now list the names alone.
+    "mikrotik_routeros": (0, 0, 0, 0, 24, 4),
     "opnsense": (4, 0, 0, 0, 23, 1),
     "vyos": (17, 0, 0, 0, 0, 0),
 }
@@ -1809,7 +1817,7 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 1, 63, 47]
+        assert by_reason == [40, 0, 61, 1, 66, 44]
         assert sum(by_reason) == 212
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 

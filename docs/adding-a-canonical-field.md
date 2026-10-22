@@ -313,7 +313,13 @@ parser both call), so the name is translated with the rest, and
 Model-to-model port mapping checks a finished translation over that
 list — a place missing from it is a name the check never looks at,
 and a place missing from the rename pass is a name that stays behind
-when its port moves.
+when its port moves.  A field that only REFERS to an interface — a
+route's interface, the parent a VLAN interface rides on
+(`interfaces[].vlan_parent`) — also goes in `_only_referred_to`, and
+one that holds a single name is cleared by `_strip_dropped_ports`
+where the interface it names is dropped (say so in the job's
+warnings when a renderer then has to choose for itself, as
+`_parents_gone` does).
 
 Two tests hold you to it, both in `test_port_name_universe.py`.  One
 builds a canonical tree from the schema, with a name of its own in

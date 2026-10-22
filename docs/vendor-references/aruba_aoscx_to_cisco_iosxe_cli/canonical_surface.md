@@ -182,6 +182,9 @@ no supported, lossy or unsupported entry — while its renderer emits
 matrix under-declaration, the same shape as the one recorded on the arista_eos
 pair, and it belongs in a codec change rather than in a pair expectation file.
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto IOS-XE as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
+
 **2. `local_users[].hashed_password` is `good`, and `good` here is a hazard.**
 The field round-trips byte-for-byte on all 6 populated cells. It survives
 because the IOS-XE render emits it under the **type-0 keyword**

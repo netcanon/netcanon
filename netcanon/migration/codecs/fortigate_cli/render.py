@@ -45,6 +45,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
     radius_secret_is_migratable,
@@ -511,13 +512,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             yang_path="/",
         )
 
+    # An address is never altered: one that is not one word is left out
+    # and said (a static route whose gateway it is, whole).  Policy:
+    # :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "FortiOS", addresses=ADDRESSES,
+    )
+
     out: list[str] = []
     out.append("#config-version=netcanon-translator")
+    out += [f"# {said}" for said in one_value_said]
 
     # --- system global ---
     if tree.hostname:
         out.append("config system global")
-        out.append(f'    set hostname "{tree.hostname}"')
+        out.append(f'    set hostname "{_esc(tree.hostname)}"')
         out.append("end")
 
     # --- system dns ---
@@ -665,18 +674,33 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # freely (VL_100, DATA, etc.) so name alone isn't
                 # sufficient.
                 vid = _vlan_id_for(iface.name, tree.vlans)
-                # Use the elided iface list (post-stub-removal) so
-                # the parent fallback prefers a real LAN port over a
-                # bare WAN stub like OPNsense's ``igc0`` (Finding 6
-                # in user_smoke_findings.md).  The pre-elision tree
-                # still has ``igc0`` as its first iface, which would
-                # incorrectly anchor every VLAN child to the WAN.
-                parent = _parent_for_vlan_iface(
-                    iface.name, deduped_ifaces, scored_parent,
-                )
+                # The parent the config states, where this output has
+                # it.  Otherwise one is chosen from the elided iface
+                # list (post-stub-removal) so the fallback prefers a
+                # real LAN port over a bare WAN stub like OPNsense's
+                # ``igc0`` (Finding 6 in user_smoke_findings.md).  The
+                # pre-elision tree still has ``igc0`` as its first
+                # iface, which would incorrectly anchor every VLAN
+                # child to the WAN.
+                stated = iface.vlan_parent
+                if stated and stated in seen_iface_names:
+                    parent = stated
+                else:
+                    parent = _parent_for_vlan_iface(
+                        iface.name, deduped_ifaces, scored_parent,
+                    )
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")
+                    if stated and parent != stated:
+                        out.append(
+                            f"        # review: rides on \"{stated}\" in "
+                            f"the source, which is not in this output; "
+                            f"the parent below was chosen"
+                            if parent else
+                            f"        # review: rides on \"{stated}\" in "
+                            f"the source, which is not in this output"
+                        )
                     if parent:
                         out.append(f'        set interface "{parent}"')
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
@@ -835,7 +859,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     if group.authentication.startswith("plain:"):
                         out.append(
                             f'                set authentication '
-                            f'"{group.authentication[6:]}"'
+                            f'"{_esc(group.authentication[6:])}"'
                         )
                     if group.track_interfaces:
                         # FortiOS ``set vrdst`` is single-valued; emit
@@ -895,7 +919,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append("config system snmp community")
             out.append("    edit 1")
             community_name = tree.snmp.community or "public"
-            out.append(f'        set name "{community_name}"')
+            out.append(f'        set name "{_esc(community_name)}"')
             if tree.snmp.trap_hosts:
                 out.append("        config hosts")
                 for idx, host in enumerate(tree.snmp.trap_hosts, start=1):
@@ -945,7 +969,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"target"
                     )
                     continue
-                out.append(f'    edit "{u.name}"')
+                out.append(f'    edit "{_esc(u.name)}"')
                 if u.auth_protocol and u.priv_protocol:
                     out.append("        set security-level auth-priv")
                 elif u.auth_protocol:
@@ -966,9 +990,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.auth_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set auth-pwd "{val}"')
+                            out.append(
+                                f'        set auth-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set auth-pwd "ENC {val}"')
+                            out.append(
+                                f'        set auth-pwd "ENC {_esc(val)}"'
+                            )
                 if u.priv_protocol:
                     fg_priv = _CAN_TO_FG_PRIV.get(u.priv_protocol, "aes")
                     out.append(f"        set priv-proto {fg_priv}")
@@ -977,9 +1005,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.priv_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set priv-pwd "{val}"')
+                            out.append(
+                                f'        set priv-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set priv-pwd "ENC {val}"')
+                            out.append(
+                                f'        set priv-pwd "ENC {_esc(val)}"'
+                            )
                 out.append("    next")
             out.append("end")
 
@@ -987,7 +1019,33 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         out.append("config system admin")
         for user in tree.local_users:
-            out.append(f'    edit "{user.name}"')
+            # A secret FortiOS cannot take drops the WHOLE account: an
+            # admin written without its password is an admin with none
+            # (the review line used to sit inside the ``edit``, with the
+            # access profile after it).
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "fortigate_cli",
+            ):
+                algorithm, _payload = classify_hash(user.hashed_password)
+                out.append("    " + format_review_comment(
+                    user.name, algorithm, comment_syntax="hash",
+                    target_label="FortiOS",
+                ))
+                continue
+            # This device's own blob is written bare, so one that holds
+            # white space is not one value; the account is left out whole
+            # rather than written with no password.
+            if user.hashed_password:
+                algorithm, payload = classify_hash(user.hashed_password)
+                if (
+                    algorithm == "fortios" and payload.startswith("ENC ")
+                    and splits(payload[4:])
+                ):
+                    out.append(
+                        "    # " + left_out(f"admin {user.name}", "FortiOS")
+                    )
+                    continue
+            out.append(f'    edit "{_esc(user.name)}"')
             # Hash-portability gate (Issue #1a from
             # tests/fixtures/real/user_smoke_findings.md).  Foreign
             # hashes (Cisco type-5/7/8/9, Arista sha512, OPNsense
@@ -999,36 +1057,29 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # FortiOS would either reject at commit time or, worse,
             # parse as garbage.  Now we consult the shared
             # :mod:`netcanon.migration._user_secrets` policy and
-            # emit a comment-form ``review:`` line instead, naming
-            # the source algorithm so the operator knows exactly
-            # which user to reset.  Native fortigate hashes tagged
-            # ``fortios:<blob>`` still pass through unchanged.
+            # emit a comment-form ``review:`` line instead (above,
+            # in place of the account), naming the source algorithm so
+            # the operator knows exactly which user to reset.  Native
+            # fortigate hashes tagged ``fortios:<blob>`` still pass
+            # through unchanged.
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "fortigate_cli"):
-                    alg, _, raw = user.hashed_password.partition(":")
-                    if alg == "fortios":
-                        out.append(f"        set password {raw}")
-                    elif raw:
-                        out.append(f"        set password ENC {raw}")
-                    else:
-                        out.append(
-                            f"        set password ENC "
-                            f"{user.hashed_password}"
-                        )
+                # This FortiGate's own ``ENC <blob>`` goes back as the
+                # device printed it.  Anything else that passed the gate
+                # is a password as it was TYPED, and is written as one
+                # quoted value for FortiOS to encrypt on save: under
+                # ``ENC`` it would be read as a blob it is not (and a
+                # typed password with a space was two words).
+                algorithm, payload = classify_hash(user.hashed_password)
+                if algorithm == "fortios" and payload.startswith("ENC "):
+                    out.append(f"        set password {payload}")
                 else:
-                    algorithm, _payload = classify_hash(
-                        user.hashed_password,
-                    )
-                    review_comment = format_review_comment(
-                        user.name, algorithm, comment_syntax="hash", target_label="FortiOS"
-                    )
-                    out.append(f"        {review_comment}")
+                    out.append(f'        set password "{_esc(payload)}"')
             # Map canonical privilege back to accprofile.
             accprofile = (
                 "super_admin" if user.privilege_level == 15
                 else (user.role or "prof_admin")
             )
-            out.append(f'        set accprofile "{accprofile}"')
+            out.append(f'        set accprofile "{_esc(accprofile)}"')
             out.append("    next")
         out.append("end")
 
@@ -1069,6 +1120,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             server.host,
                             comment_syntax="hash",
                             target_label="FortiGate",
+                            secret=server.key,
                         )
                     )
             if server.auth_port and server.auth_port != 1812:

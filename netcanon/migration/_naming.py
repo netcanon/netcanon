@@ -22,11 +22,14 @@ underlying issue is render-side: both codecs were emitting
 ``hostname Quinta Router`` unquoted, and their own parsers refused
 the round-trip.
 
-Per-vendor sanitisation policy may differ for other naming-value
-slots (Junos / Aruba / FortiGate may have looser or stricter
-rules).  This helper currently targets the two codecs whose
-parsers actively reject whitespace; expand the call sites only
-after auditing each new codec's parser grammar.
+Superseded for every line renderer by
+:func:`netcanon.migration._one_value.one_value_tree`, which writes a
+host name, a VLAN name, a VRF name and a route name as one word on the
+tree, at every place each goes, and says so in a review line -- after
+the grammar of each codec was audited
+(``docs/reviews/2026-10-20-values-with-white-space/``).  The two calls
+below run after it and change nothing; they are kept so that a tree
+that reaches them by another path is still written as one word.
 
 See also:
 - netcanon/migration/codecs/arista_eos/render.py — VLAN-name

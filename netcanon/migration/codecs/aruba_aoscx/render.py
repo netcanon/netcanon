@@ -48,6 +48,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import (
     PLAINTEXT,
@@ -97,6 +98,17 @@ _CANON_TO_AOSCX_PRIV = {
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Aruba AOS-CX config text."""
+    # A name that is not one word where AOS-CX reads one is written as
+    # one, at every place it goes; a gateway is left out with its
+    # route.  Both are said.  Policy: :mod:`netcanon.migration._one_value`.
+    # A VLAN's name is not one of them: the switch reads it to the end of
+    # the line, and prints one so (``name VLAN 11`` in a committed DCN
+    # capture).
+    tree, one_value_said = one_value_tree(
+        tree, "AOS-CX",
+        names=("hostname", "routing_instances[].name"),
+        addresses=("static_routes[].gateway",),
+    )
     hostname = tree.hostname or "switch"
     lines: list[str] = []
 
@@ -104,6 +116,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.append("!")
     lines.append(f"!Version ArubaOS-CX {_version_token(tree)}")
     lines.append("!export-password: default")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append(f"hostname {hostname}")
 
     # ── Local users (Phase 2) ──
@@ -212,6 +225,19 @@ def _render_local_user(user) -> str:
     role = user.role or (
         "administrators" if user.privilege_level >= 15 else "operators"
     )
+    # Name, group and password are one word each (a local user's name and
+    # password take no spaces); the account is left out whole rather than
+    # altered.  Policy: :mod:`netcanon.migration._one_value`.
+    payload = (
+        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
+    )
+    # A secret this target cannot take at all is the hash gate's to
+    # say (below); this asks only of one it would write.
+    if splits(user.name) or splits(role) or (
+        splits(payload)
+        and is_migratable(user.hashed_password, "aruba_aoscx")
+    ):
+        return "! " + left_out(f"user {user.name}", "ArubaOS-CX")
     if user.hashed_password:
         algorithm, payload = classify_hash(user.hashed_password)
         if not is_migratable(user.hashed_password, "aruba_aoscx"):
@@ -247,7 +273,10 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     Policy: :mod:`netcanon.migration._usm_keys`.
     """
     lines: list[str] = []
-    if snmp.community:
+    # A community is one word ("spaces are not allowed").
+    if splits(snmp.community):
+        lines.append("! " + left_out("an SNMP community", "ArubaOS-CX"))
+    elif snmp.community:
         lines.append(f"snmp-server community {snmp.community}")
     if snmp.location:
         lines.append(f"snmp-server system-location {snmp.location}")
@@ -262,6 +291,16 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key "
                 f"belongs to the source agent, so this switch cannot re-use "
                 f"it; re-create this user and re-key it on the target"
+            )
+            continue
+        # The user name and both keys are one word each here.
+        if any(
+            splits(v) for v in (
+                user.name, user.auth_passphrase, user.priv_passphrase,
+            )
+        ):
+            lines.append(
+                "! " + left_out(f"snmpv3 user {user.name}", "ArubaOS-CX")
             )
             continue
         # Claim the value is this device's ciphertext only when it is.  A

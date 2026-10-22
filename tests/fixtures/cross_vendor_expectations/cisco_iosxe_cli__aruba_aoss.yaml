@@ -289,14 +289,22 @@ per_field_expectation:
     references: [local_users]
 
   radius_servers:
-    disposition: good
-    note: >
-      Both vendors round-trip the canonical
-      ``host / key / auth_port / acct_port`` tuple cleanly.  Cisco's
-      modern ``radius server <name> / address ipv4 <addr>`` form and
-      legacy flat ``radius-server host`` form both populate the same
-      canonical record; Aruba renders the flat form with separate
-      ``radius-server key "<secret>"`` for the global default.
+    disposition: lossy
+    reason: >
+      Host and the auth / acct port pair round-trip, and a key written
+      as typed (``key <secret>``, ``key 0 <secret>``) is written ``key
+      "<secret>"``.  A key IOS-XE stored in its own form -- ``key 7
+      <blob>`` (Cisco's reversible cipher) or ``key 6 <blob>`` (AES
+      under the router's master key) -- is a form only IOS-XE reads:
+      the parser holds it behind ``iosxe:``, it is not decoded, and the
+      AOS-S render writes the server with no key, beside a review line
+      that names the form; the secret has to be re-entered.  The
+      kitchen sink's ``key 7`` shows it.  Until 2026-10 the parser kept
+      the type in the value, and the AOS-S output's key was ``"7
+      <blob>"``: it round-tripped, and was no secret the server holds.
+      Cisco's modern ``radius server <name>`` form and the flat
+      ``radius-server host`` form fill the same record; Aruba renders
+      the flat form.
     references: [radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

@@ -365,6 +365,26 @@ translate it again from `show running-config` as the device prints it.
 
 ## Common gotchas
 
+- **A RADIUS `key 7` or `key 6` is carried to IOS-XE only** (CLI
+  codec).  A key IOS-XE stored in its own form -- type 7, Cisco's
+  reversible cipher, or type 6, AES under the router's master key --
+  is written back as it was onto IOS-XE.  Onto any other target the
+  server is written with no key, beside a review line that names the
+  form: re-enter the secret there.  `key <secret>` and `key 0
+  <secret>` are the secret as typed, and migrate everywhere.  Type 7
+  is not decoded, and is not written into an EOS `key 7` (whether
+  EOS's type 7 is Cisco's is not established).  ⚠️ With 0.7.7 or
+  earlier, `key 7 <blob>` came out on AOS-S, FortiOS, OPNsense and
+  RouterOS as the secret `7 <blob>`, and the one-line `radius-server
+  host ... key 7 <blob>` came out on IOS-XE as `key <blob>`: a server
+  that authenticates nobody.  Look for such a key in an old output.
+- **A name that holds white space is written as one word as a
+  target.**  A host name, VLAN name, VRF name or a static route's
+  `name` is written with `_` for each run of white space and `'` for
+  each `"`, the VRF at every place it is named, with a `review:` line.
+  Up to 0.7.7 a route's name that held a space was dropped with
+  nothing said.  An address that holds white space is left out and
+  said.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 - **Renaming or dropping `Vlan<N>` in the rename modal is not
   always shown by the output** (CLI codec).  A translation from
   IOS-XE to IOS-XE lists each VLAN interface under *Other names in
