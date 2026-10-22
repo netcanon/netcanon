@@ -25,7 +25,7 @@ firmly out of scope on the Aruba side.
 | `dhcp_relay_versus_pool.md` | Aruba is relay-only; canonical `dhcp_servers` always empty on this direction. |
 | `snmp.md` | v1/v2c surface round-trips; SNMPv3 USM lives in OPNsense plugin's snmpd.conf, not config.xml. |
 | `local_users.md` | Aruba SHA-1 / bcrypt / plaintext versus OPNsense bcrypt; hash formats are not cross-compatible. |
-| `radius.md` | RADIUS server config — round-trips host / port pair / shared key. |
+| `radius.md` | RADIUS server config — round-trips host / port pair and a key written as typed; an `encrypted-key` is refused. |
 | `lags.md` | Aruba `Trk<N>` versus OPNsense `lagg(4)` driver naming + LACP-mode collapse. |
 | `switchport_unsupported.md` | OPNsense has no switching fabric — tagged/untagged port lists, spanning-tree, voice VLAN are all unsupported. |
 | `vrf_unsupported.md` | Neither vendor models VRFs — structurally absent on both ends. |

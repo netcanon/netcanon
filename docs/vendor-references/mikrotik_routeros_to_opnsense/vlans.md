@@ -79,7 +79,9 @@ parent NIC**:
 
 - ``<if>`` is the parent BSD device (``em1``).
 - ``<tag>`` is the 802.1Q VLAN id.
-- ``<descr>`` is the operator-friendly name.
+- ``<descr>`` is the operator-friendly label.  An OPNsense ``<vlan>``
+  has no name of its own; Netcanon reads ``<descr>`` as the VLAN's
+  description.
 - ``<vlanif>`` is the auto-generated FreeBSD child device name
   (``vlan0.10``).
 
@@ -109,10 +111,21 @@ share the 1-4094 range.  Round-trips cleanly.
 
 RouterOS conflates the L3 interface name (``vlan10``) with the
 descriptive VLAN name on Plane 1 (per the MikroTik codec's
-``LossyPath`` on ``/vlans/vlan/name``).  OPNsense's nearest
-equivalent is ``<descr>`` — which is also where the canonical
-``description`` lands.  Two canonical fields collapse to one
-OPNsense XML field; one drops on render.
+``LossyPath`` on ``/vlans/vlan/name``): a RouterOS VLAN is named
+after its interface (``vlan100``).  The OPNsense render writes that
+interface as the VLAN's ``<vlan>`` device under the same name
+(``<vlanif>vlan100</vlanif>``), on the parent the config states, and
+the OPNsense parser names a VLAN after its device, so the name comes
+back.  But not in a form OPNsense takes: its VLAN form refuses a
+device name other than ``vlan0`` followed by digits and dots, or
+``<parent>_vlan<id>``, when the VLAN is saved, and the render says
+so in a ``<!-- review: -->`` comment beside each such device.
+``name`` is recorded **lossy** for that.
+
+The description comes back unchanged: the RouterOS parser takes a
+VLAN's description from its interface's ``comment``, the OPNsense
+render writes it as the device's ``<descr>``, and the OPNsense parser
+reads ``<descr>`` as the VLAN's description.
 
 ### vlans[].tagged_ports / vlans[].untagged_ports
 
@@ -128,9 +141,10 @@ RouterOS ``/interface vlan name=vlan100`` + ``/ip address add
 address=X interface=vlan100`` (SVI absorption) has no first-class
 OPNsense equivalent.  The OPNsense pattern is to assign the VLAN
 sub-interface to a zone (``<opt2>``) and put the address on the
-zone.  The canonical model carries the SVI address but the OPNsense
-render path doesn't synthesise the corresponding zone — operator-
-curated.
+zone.  The render writes the VLAN interface as a zone whose
+``<if>`` is the VLAN device written under its name (``vlan100``),
+with the address on the zone; read back, the address is on that
+interface record, not on the VLAN.
 
 ### interfaces[] switchport fields
 
@@ -144,11 +158,11 @@ trunk mode toggle, and no LLDP-MED voice VLAN concept on OPNsense.
 | Field | Disposition |
 |---|---|
 | `vlans[].id` | good |
-| `vlans[].name` | lossy (collapses with description into single OPNsense `<descr>`) |
-| `vlans[].description` | lossy (collapses with name) |
+| `vlans[].name` | lossy (comes back as the device name, which OPNsense's VLAN form refuses; a review comment says so) |
+| `vlans[].description` | good (`comment` ↔ `<descr>`) |
 | `vlans[].tagged_ports` | unsupported (no OPNsense per-port model) |
 | `vlans[].untagged_ports` | unsupported (no OPNsense per-port model) |
-| `vlans[].ipv4_addresses` | lossy (no first-class OPNsense SVI; zone assignment manual) |
+| `vlans[].ipv4_addresses` | lossy (no first-class OPNsense SVI; the address is on the zone) |
 | `interfaces[].switchport_mode` | unsupported (OPNsense not a switch) |
 | `interfaces[].access_vlan` | unsupported |
 | `interfaces[].trunk_allowed_vlans` | unsupported |

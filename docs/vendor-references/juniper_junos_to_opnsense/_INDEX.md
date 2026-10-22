@@ -15,8 +15,9 @@ roles meet over a small shared canonical surface:
 * DNS / NTP / syslog / timezone — lossy until OPNsense parse + render
   wires up the corresponding `<system>` children
 * interfaces (IP, MTU, enable, descr) — good
-* VLANs — id good; name/description collapse; port-membership and
-  SVI sub-fields unsupported (OPNsense has no VLAN-centric port
+* VLANs — id good; a VLAN comes back named after its OPNsense
+  device, its name in the description; port-membership and SVI
+  sub-fields unsupported (OPNsense has no VLAN-centric port
   lists, no first-class SVI)
 * Static routes — unsupported (OPNsense `<gateways>` +
   `<staticroutes>` model is two-stage and the codec renders neither,

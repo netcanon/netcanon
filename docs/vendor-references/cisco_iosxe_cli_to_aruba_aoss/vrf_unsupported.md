@@ -58,7 +58,7 @@ Cross-pair disposition:
   the VRF into `CanonicalStaticRoute.vrf` and round-trips it
   (`/routing/static-route/vrf` is `supported`).  Aruba has no VRF
   concept (the `aruba_aoss` codec declares
-  `/routing/static-route/vrf` `unsupported`), so the route is
-  dropped to the global table on Cisco -> Aruba migration.
+  `/routing/static-route/vrf` `unsupported`), so the route is left
+  out of the AOS-S output under a `; review:` line.
 
 Disposition: **unsupported** for the entire VRF surface.

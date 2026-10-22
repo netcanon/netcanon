@@ -140,16 +140,24 @@ per_field_expectation:
   # -- Interfaces -- no record loss, so each sub-field stands alone ---------
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      147 source interface records re-parse as 147 target records across all
-      11 cells, with `only_in_source` and `only_in_target` both empty on
-      every cell.  Junos names (`ge-`, `xe-`, `et-`, `ae`, `irb`, `lo0`,
-      `em0`, `fxp0`) are carried through verbatim rather than translated to
-      AOS-CX `1/1/N` form, so the inventory is complete but foreign-looking.
-      That is what makes the rest of the `interfaces[].*` keys below
-      independent: a drift there is a real attribute loss, not a dropped
-      record dragging its attributes with it.
+    disposition: lossy
+    reason: >
+      No interface is lost.  On 10 of 11 cells every source interface record
+      re-parses as one target record, with `only_in_source` and
+      `only_in_target` both empty.  Junos names (`ge-`, `xe-`, `et-`, `ae`,
+      `irb`, `lo0`, `em0`, `fxp0`) are carried through verbatim rather than
+      translated to AOS-CX `1/1/N` form, so the inventory is complete but
+      foreign-looking.  That is what makes the rest of the `interfaces[].*`
+      keys below independent on those cells: a drift there is a real
+      attribute loss, not a dropped record dragging its attributes with it.
+      On `saidvandeklundert_snmpv3_junos172` the list GAINS a record
+      (49 -> 50): the Junos parser folds the address of `irb.698` onto VLAN
+      698 and keeps no interface for the unit, AOS-CX states a VLAN's address
+      on `interface vlan <N>` only, so the render writes `interface vlan 698`
+      for it (`synthesize_svis_from_vlan_l3`), and the AOS-CX parser reads
+      that back as an interface as well as the VLAN's address.  Declared
+      lossy because the audit reads a change of the list's length as one; on
+      that cell the interfaces are therefore not compared record by record.
     references: [junos-aoscx-surface]
 
   "interfaces[].description":
@@ -287,22 +295,17 @@ per_field_expectation:
     references: [junos-aoscx-surface]
 
   "vlans[].ipv4_addresses":
-    disposition: unsupported
-    reason: >
+    disposition: good
+    note: >
       Exactly one VLAN record in the corpus carries L3 on the VLAN record
       itself (VLAN 698 on `saidvandeklundert_snmpv3_junos172.set`,
-      `10.200.1.1/22`) and it is dropped in full.  The two signals disagreed
-      here — the drift shape says total-drop, the aruba_aoscx matrix
-      declares `/vlans/vlan/ipv4/address/ip` LOSSY — so the round-trip was
-      re-driven and the render inspected: the address string appears nowhere
-      in the rendered configuration, and no target interface record picks it
-      up either.  The VLAN survives as `vlan 698` / `name VLAN698` with no
-      SVI at all.  Recorded `unsupported` on the measured behaviour: a
-      vanished gateway is not lossy (#436), and `lossy` would warn while
-      reporting compatible.  Note the loss only bites the Junos irb-folded
-      shape — SVIs mounted on an `irb.<n>` INTERFACE record migrate fine
-      (see `interfaces[].ipv4_addresses`), so audit which shape your source
-      uses before assuming either result.
+      `10.200.1.1/22`, the Junos irb-folded shape), and it is preserved: the
+      AOS-CX render writes it as `interface vlan 698` / `ip address
+      10.200.1.1/22` (`synthesize_svis_from_vlan_l3`), which the AOS-CX
+      parser folds back onto VLAN 698.  The interface it writes is the record
+      `interfaces[].name` counts as gained.  SVIs mounted on an `irb.<n>`
+      INTERFACE record are carried on that record instead (see
+      `interfaces[].ipv4_addresses`).
     references: [junos-aoscx-surface]
 
   "vlans[].untagged_ports":

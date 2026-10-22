@@ -95,8 +95,9 @@ binding. Configured ports, configured SVIs, `loopback0`, `mgmt0` and
   rendered config would bring the target up with no local credentials.
 * **`routing_instances`** — same shape, 12 of 13 cells: "all N dropped". AOS-S
   has one global routing table. Combined with `interfaces[].vrf` and
-  `static_routes[].vrf` (both of which blank on render), every tenant VRF's
-  interfaces and routes land in the global table together.
+  `static_routes[].vrf`, every tenant VRF's interfaces land in the global
+  table together (their VRF blanks on render), and its routes are left out
+  under a `; review:` line.
 * **`vxlan_vnis`** — "all N dropped" on 8 cells; the target matrix declares
   every `/vxlan-vnis/*` path unsupported ("VXLAN not modelled — AOS-S is a
   campus L2/L3 codec").

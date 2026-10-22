@@ -48,8 +48,8 @@ assume the same shape. Here the interface plane is intact.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 
 VyOS `ethN`, `ethN.NNN` dot1q sub-interfaces, `bondN`, `dumN` and `lo` all
@@ -70,7 +70,7 @@ drift.
 | hostname | 13 | 0 | 0 |
 | domain | 1 | 0 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces[].name | 13 | 0 | 0 |
 | interfaces[].description | 7 | 0 | 6 |
 | interfaces[].enabled | 13 | 0 | 0 |
@@ -99,18 +99,18 @@ Fields trivially empty on all 13 cells: `timezone`, `syslog_servers`,
 
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
-| `interface_type` | 55 | 55 | empty string → `ianaift:other` (target **gains** a hint) |
+| `interface_type` | 56 | 56 | empty string → `ianaift:other` (target **gains** a hint) |
 | `lag_member_of` | 2 | 2 populated | `bond0` → `Bundle-Ether0` |
 | `dhcp_client` * | 3 | 3 populated | `True` → `False` |
 | `dhcp_client_v6` * | 1 | 1 populated | `dhcpv6` → empty string |
-| `name` / `description` / `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 55 | — |
+| `name` / `description` / `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 56 | — |
 
 \* `dhcp_client` and `dhcp_client_v6` have **no key** in the audited key set;
 they are recorded here because they were measured, not because any YAML entry
 claims them. See "Two real drifts with no key" below.
 
-Populated-value totals that round-trip unchanged: 15 descriptions, 55 admin
-states (53 up, 2 `shutdown`), 1 MTU, 21 IPv4 addresses, 20 IPv6 addresses —
+Populated-value totals that round-trip unchanged: 15 descriptions, 56 admin
+states (54 up, 2 `shutdown`), 1 MTU, 21 IPv4 addresses, 20 IPv6 addresses —
 all identical on both sides.
 
 ## Source-side gaps vs target-side drops
@@ -237,13 +237,13 @@ before cutover.
 
 ### 4. `interface_type` drifts in the *gain* direction
 
-This is the widest drift on the pair — all 55 records on all 13 cells — and
+This is the widest drift on the pair — all 56 records on all 13 cells — and
 reading it as "IOS-XR loses the type hint" would be backwards.
 
-- The **source** value is the empty string on **all 55 records**. The vyos
+- The **source** value is the empty string on **all 56 records**. The vyos
   parser never populates `interface_type`: the strings `interface_type` and
   `ianaift` do not appear anywhere in `netcanon/migration/codecs/vyos/*.py`.
-- The **target** value is `ianaift:other` on all 55. `cisco_iosxr/parse.py`
+- The **target** value is `ianaift:other` on all 56. `cisco_iosxr/parse.py`
   infers a type from the interface-name prefix via `_TYPE_HINTS`, and `ethN`,
   `bondN`, `dumN` and `lo` match no IOS-XR prefix, so `_infer_type` returns its
   fallback, `ianaift:other`.
@@ -258,7 +258,7 @@ Both matrices already declare `/interfaces/interface/config/type` lossy.
 **Standing observation, not fixed here:** the vyos declaration's reason claims
 the codec "infers it from the interface-name shape (`ethN` → ethernetCsmacd,
 `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag)". Measured, it does
-not — 0 of 55 records carry a type, and the field is never assigned in the
+not — 0 of 56 records carry a type, and the field is never assigned in the
 codec. That is a matrix-vs-code mismatch on the vyos side, not a pair-specific
 fact, and belongs to a codec change rather than to this file.
 
@@ -289,29 +289,22 @@ claimed by `vlans[].id` — and every one of them is empty on both sides of
 every cell. Recording a second loss on any of them would double-count one
 event and could never be evidenced.
 
-## `ntp_servers`: the one drift that is a source-side artifact
+## `ntp_servers` crosses whole
 
-11 of 13 cells preserve their NTP servers exactly; 1 cell is trivially empty.
-The single drifting cell is `houdev_vyos_dhcpv6_pd_client.conf`, whose raw
-config writes the servers with an inline empty brace block:
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
 ```
 server         time1.vyos.net { }
 ```
 
-The vyos brace parser carries the whole remainder into the canonical value, so
-the source-side list is `['time1.vyos.net { }', 'time2.vyos.net { }',
-'time3.vyos.net { }']`. The IOS-XR render emits `server time1.vyos.net { }`
-verbatim and its `_NTP_SERVER_LINE_RE` captures only the first token, so the
-target-side list is the clean `['time1.vyos.net', 'time2.vyos.net',
-'time3.vyos.net']`.
-
-All three server hostnames survive, and the target value is the *usable* one.
-What disappears is a trailing ` { }` token that the vyos parser should not
-have attached in the first place. The key is recorded `lossy` because the
-comparator sees a real value difference on that cell and the audit must not
-paper over it — but the cause is a source-side parse artifact, not an IOS-XR
-drop of operator-authored data.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the IOS-XR render wrote
+it out (`server time1.vyos.net { }` under `ntp`), and that cell drifted. The
+parser now reads such a line as the node it is, the reading the set form gives
+the same path
+(`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and the
+YAML declares `ntp_servers` good.
 
 ## Credential material
 

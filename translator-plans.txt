@@ -1221,6 +1221,18 @@ TIER 3 — interactive rename modal in /migrate UI.
     # Covered by TestPerUnitVlanTagging in test_juniper_junos.py
     # (7 tests).
 
+[SHIPPED] Q-IN-Q: A SUB-INTERFACE'S INNER 802.1Q TAG (dot1q_inner_vlan):
+    # CanonicalInterface.dot1q_inner_vlan, both tags 802.1Q.  Read and
+    # written by IOS-XE CLI and IOS XR (`second-dot1q`), EOS (`inner`)
+    # and Junos (`vlan-tags outer N inner M`, with the device's
+    # vlan-tagging / stacked- / flexible- statement); declared
+    # unsupported on the rest.  A tag statement that is not one tag
+    # and at most one inner tag leaves its sub-interface out with a
+    # row (`without_unread_tags` in codecs/_helpers.py); VyOS `vif-s`
+    # (802.1ad) the same.  Surfaced by the carrier capture's six
+    # `second-dot1q` units.  Covered by
+    # tests/unit/migration/test_a_tag_statement_is_read_whole.py.
+
 [SHIPPED] CANONICAL VRF / ROUTING-INSTANCE SCHEMA (GAP 5, ship-before-wire):
     # Adds CanonicalRoutingInstance + CanonicalInterface.vrf field +
     # top-level routing_instances[] list on CanonicalIntent.

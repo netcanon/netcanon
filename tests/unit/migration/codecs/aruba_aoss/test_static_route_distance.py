@@ -3,9 +3,10 @@
 A route carrying a trailing ``distance N`` / bare-metric token used to fail the
 end-anchored ``_IP_ROUTE_RE`` gateway match and be silently dropped WHOLE.  The
 distance is now captured into ``CanonicalStaticRoute.metric`` and emitted on
-render.  Blackhole / null0 routes remain unparsed by design, which is why
-``aruba_aoss -> mikrotik_routeros`` static_routes stays ``lossy`` even after
-this fix.
+render.  A ``blackhole`` route is read as the tree's discard (``Null0``);
+``reject``, which answers with an ICMP error the tree does not hold, is
+left out and said in a row (see
+``test_a_route_the_switch_takes.py`` beside this module).
 """
 
 from __future__ import annotations
@@ -71,10 +72,16 @@ def test_distance_survives_aruba_self_round_trip():
     assert back["10.0.0.0/8"].metric == 200
 
 
-@pytest.mark.parametrize("gw", ["null0", "reject", "blackhole"])
-def test_blackhole_routes_still_drop_so_pair_stays_lossy(gw):
-    # The blackhole / null0 form uses a non-IP gateway the codec does not
-    # parse — a real forward-direction loss that keeps
-    # aruba_aoss -> mikrotik_routeros static_routes ``lossy`` even after the
-    # distance fix.  Pinned so a future null0 wire-up consciously flips it.
-    assert "10.0.0.0/8" not in _routes(f"hostname t\nip route 10.0.0.0/8 {gw}\n")
+def test_a_blackhole_route_is_read_as_the_discard():
+    route = _routes("hostname t\nip route 10.0.0.0/8 blackhole\n")["10.0.0.0/8"]
+    assert (route.gateway, route.interface) == ("", "Null0")
+
+
+@pytest.mark.parametrize("gw", ["null0", "reject"])
+def test_a_route_of_no_form_read_here_is_said(gw):
+    # ``reject`` discards with an ICMP error, which the tree's one discard
+    # does not say; ``null0`` is no next hop of AOS-S's.
+    cfg = f"hostname t\nip route 10.0.0.0/8 {gw}\n"
+    assert "10.0.0.0/8" not in _routes(cfg)
+    rows = ARUBA.parse(cfg).dropped_tier3_sections
+    assert any(row.startswith(f"ip route 10.0.0.0/8 {gw} (") for row in rows), rows

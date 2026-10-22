@@ -42,14 +42,14 @@ VLAN record at all.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
+| source interface records, all 13 cells | **56** |
 | records after parse → render → re-parse | **46** |
-| records elided by the render | **10** |
+| records elided by the render | **11** |
 | records synthesised by the render | **1** (`Port-Channel0`) |
-| cells where the interface **name set** differs | **6** |
+| cells where the interface **name set** differs | **7** |
 | elided records that carried any content | **0** |
 
-That last row is the one that decides half this file. Every one of the ten
+That last row is the one that decides half this file. Every one of the eleven
 dropped records was **bare** — no description, no IPv4 or IPv6 address, no
 MTU, admin-up, no VRF, no LAG membership, no VRRP group. Nothing an operator
 configured was lost with them.
@@ -58,7 +58,7 @@ configured was lost with them.
 
 | fixture cell | src | tgt | records elided |
 |---|---|---|---|
-| `houdev_vyos_dhcpv6_pd_client.conf` | 2 | 2 | — |
+| `houdev_vyos_dhcpv6_pd_client.conf` | 3 | 2 | `lo` |
 | `metasploit-vyos-config.conf` | 3 | 1 | `eth1`, `lo` |
 | `pc5-round1-border.conf` | 2 | 2 | — |
 | `pc5-round1-core.conf` | 3 | 3 | — |
@@ -71,7 +71,7 @@ configured was lost with them.
 | `wcni-kind-gw0.conf` | 3 | 2 | `lo` |
 | `wcni-kind-gw1.conf` | 3 | 2 | `lo` |
 | `kitchen_sink.conf` (synthetic) | 11 | 12 | — (`Port-Channel0` added) |
-| **total** | **55** | **46** | **10** |
+| **total** | **56** | **46** | **11** |
 
 ### The mechanism
 
@@ -85,9 +85,12 @@ referenced by a VRF binding or a VLAN member list.
 VyOS names match **none** of those shapes. `eth1` is not `Ethernet1`; `lo` is
 not `Loopback0`. So a VyOS interface stub that carries nothing is treated
 exactly like the OPNsense `igc0` leak the policy was written to stop, and is
-dropped. `lo` is elided on five cells for precisely this reason — and survives
+dropped. `lo` is elided on six cells for precisely this reason — and survives
 on `kitchen_sink.conf`, where it carries `10.255.0.1/32` and a `/128`, as
-`interface lo`.
+`interface lo`. The sixth, `houdev_vyos_dhcpv6_pd_client.conf`, prints its
+`lo` as a node with nothing under it (`loopback lo { }`), which the VyOS
+parser has read as an empty interface record since 2026-10: nothing set, so
+it is elided like the others — structural drift, no attribute lost.
 
 **The mechanism is a name-shape mismatch, not a capacity limit.** The EOS
 render never attempts to map `eth1` → `Ethernet1` or `lo` → `Loopback0`; the
@@ -115,16 +118,16 @@ empty`, 13 cells):
 | `hostname` | 13 | 0 | 0 |
 | `domain` | 1 | 0 | 12 |
 | `dns_servers` | 1 | 0 | 12 |
-| `ntp_servers` | 11 | 1 | 1 |
-| `interfaces[].name` | 7 | 6 | 0 |
-| `interfaces[].description` | 3 | 6 | 4 |
-| `interfaces[].enabled` | 7 | 6 | 0 |
-| `interfaces[].mtu` | 0 | 6 | 7 |
-| `interfaces[].ipv6_addresses` | 4 | 6 | 3 |
-| `interfaces[].ipv4_addresses` | 3 | 6 | 4 |
-| `interfaces[].interface_type` | 0 | 6 | 7 |
-| `interfaces[].lag_member_of` | 0 | 6 | 7 |
-| `interfaces[].vrrp_groups` | 0 | 6 | 7 |
+| `ntp_servers` | 12 | 0 | 1 |
+| `interfaces[].name` | 6 | 7 | 0 |
+| `interfaces[].description` | 2 | 7 | 4 |
+| `interfaces[].enabled` | 6 | 7 | 0 |
+| `interfaces[].mtu` | 0 | 7 | 6 |
+| `interfaces[].ipv6_addresses` | 4 | 7 | 2 |
+| `interfaces[].ipv4_addresses` | 2 | 7 | 4 |
+| `interfaces[].interface_type` | 0 | 7 | 6 |
+| `interfaces[].lag_member_of` | 0 | 7 | 6 |
+| `interfaces[].vrrp_groups` | 0 | 7 | 6 |
 | `static_routes` | 4 | 0 | 9 |
 | `snmp.community` / `.location` / `.contact` / `.trap_hosts` | 4 | 0 | 9 |
 | `snmp.v3_users` | 2 | 2 | 9 |
@@ -140,13 +143,13 @@ Trivially empty on all 13 cells: `timezone`, `syslog_servers`, every
 `routing_instances[].description`, `raw_sections`, `apply_groups`,
 `group_content`, `anycast_gateway_mac`.
 
-### Why the `interfaces[].*` sub-keys all read "6 drifted"
+### Why the `interfaces[].*` sub-keys all read "7 drifted"
 
-Six cells change their interface **record set**. When a list changes length the
-comparator reports the *whole record* as drifted and stops diffing sub-fields,
-so every `interfaces[].*` key inherits that one signal on those six cells. It
-is **one** structural loss, claimed once — by `interfaces[].name` — and it is
-correlated drift, not six independent findings.
+Seven cells change their interface **record set**. When a list changes length
+the comparator reports the *whole record* as drifted and stops diffing
+sub-fields, so every `interfaces[].*` key inherits that one signal on those
+seven cells. It is **one** structural loss, claimed once — by `interfaces[].name` — and it is
+correlated drift, not seven independent findings.
 
 Measured on the records that actually survive, across all 13 cells:
 
@@ -167,7 +170,7 @@ The two `enabled: False` records (`kitchen_sink.conf` `eth3` and `eth1.200`)
 both render `shutdown` and re-parse admin-down, so the field is exercised, not
 merely untested.
 
-`interface_type` is populated on **zero** of 55 records: the VyOS parser emits
+`interface_type` is populated on **zero** of 56 records: the VyOS parser emits
 no IANA type hint at all (it declares `/interfaces/interface/config/type`
 lossy in its own right). Both codecs declare that path lossy, and on this pair
 neither declaration ever bites, because there is nothing to carry.
@@ -306,26 +309,21 @@ engineID-salted). Carrying the localized key forward while dropping the engine
 it was localized against produces a config that looks complete and will not
 authenticate. Re-key SNMPv3 users on the target.
 
-### 5. The one `ntp_servers` drift is a source-parser artefact, not a lost server
+### 5. `ntp_servers` crosses whole
 
-`houdev_vyos_dhcpv6_pd_client.conf` writes its NTP servers as one-line
-empty-body blocks:
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
 ```
 server         time1.vyos.net { }
 ```
 
-The VyOS brace parser captures the whole token run, so the canonical value is
-`time1.vyos.net { }` — hostname plus a stray brace pair. The EOS render emits
-`ntp server time1.vyos.net { }` verbatim; the EOS parser reads only the first
-token after `ntp server`, so the round trip returns the clean
-`time1.vyos.net`.
-
-All three hostnames are present on both sides, in order. The canonical string
-is not preserved, so the audit records a drift and the YAML declares
-`ntp_servers` lossy — but the delta is punctuation the *source* parser
-attached, and the round trip removes it. Nothing an operator configured went
-missing. On the other 11 populated cells the lists are identical.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the EOS render wrote it
+out (`ntp server time1.vyos.net { }`), and that cell drifted. The parser now
+reads such a line as the node it is, the reading the set form gives the same
+path (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and
+the YAML declares `ntp_servers` good.
 
 ## Source-side gaps vs target-side drops
 

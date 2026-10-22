@@ -322,18 +322,20 @@ per_field_expectation:
   "static_routes[].vrf":
     disposition: unsupported
     reason: >
-      `management` -> `''` on all 4 cells that carry per-VRF routes.  The
-      aruba_aoss matrix declares `/routing/static-route/vrf` unsupported, so
-      routes that were scoped to a VRF are re-emitted into the single global
-      table.  A management-VRF default route and a tenant default route both
-      land as `ip route 0.0.0.0/0 ...` in the same table — read the rendered
-      routes before deploying, because two defaults that never met on the
-      source now compete.
+      AOS-S has no VRF, and the aruba_aoss matrix declares
+      `/routing/static-route/vrf` unsupported: a route scoped to a VRF is left
+      out of the output under a `; review:` line, on all 4 cells that carry
+      one.  It was once re-emitted into the single global table, where a
+      management-VRF default route and a tenant default route competed; a
+      route the target needs in its one table has to be written there by hand.
     references: [nxos-aoss-surface]
 
   "static_routes[].destination":
     disposition: good
-    note: "CIDR on both platforms; preserved on all 8 populated cells."
+    note: >
+      CIDR on both platforms; preserved on every route that is written.  The
+      routes of a VRF are left out (see `static_routes[].vrf`), which the
+      harness counts as structural drift on the 4 cells that carry one.
     references: [nxos-aoss-surface]
 
   "static_routes[].gateway":

@@ -77,7 +77,7 @@ Internal helper:
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from collections.abc import Set as AbstractSet
 
 from ..limits import charge, ticked
@@ -864,15 +864,22 @@ def project_svi_to_vlan(intent: CanonicalIntent) -> None:
                 existing_pairs.add(pair)
 
 
+#: A VLAN interface however a codec spells it: ``Vlan10`` (IOS-XE,
+#: NX-OS, EOS), ``vlan10`` (OS10) and ``vlan 10`` (AOS-CX).
+_AN_SVI_OF_ANY_SPELLING = re.compile(r"^vlan ?(\d+)$", re.IGNORECASE)
+
+
 def synthesize_svis_from_vlan_l3(
     intent: CanonicalIntent,
+    name: Callable[[int], str] | None = None,
 ) -> list[CanonicalInterface]:
     """Inverse of :func:`project_svi_to_vlan`: materialise a synthetic
     ``interface Vlan<N>`` SVI for every VLAN carrying Layer-3
     (``ipv4_addresses``) that has NO matching ``Vlan<N>`` interface in
     ``intent.interfaces``.
 
-    SVI-model renderers (arista_eos, cisco_iosxe_cli) emit a VLAN's L3
+    SVI-model renderers (arista_eos, cisco_iosxe_cli, cisco_nxos,
+    aruba_aoscx) emit a VLAN's L3
     from a sibling ``interface Vlan<N>`` stanza, NOT from
     :attr:`CanonicalVlan.ipv4_addresses`.  A same-vendor parse keeps
     that interface in ``intent.interfaces`` (the
@@ -895,17 +902,38 @@ def synthesize_svis_from_vlan_l3(
     synthetic SVIs into sibling renders.
 
     The synthetic SVI carries only ``ip`` / ``prefix_length`` — the same
-    subset :func:`project_svi_to_vlan` denormalises onto the VLAN — so
+    subset :func:`project_svi_to_vlan` denormalises onto the VLAN —
+    and marks each address after the first ``is_secondary``, the
+    VLAN record's order being the only primary it states; so
     the rendered SVI re-parses back to an identical
     ``vlans[].ipv4_addresses`` record (the round-trip the cross-mesh
     audit compares), and dedupes on ``(ip, prefix_length)`` for the same
     reason the fold does.
+
+    A VLAN interface the tree already has is recognised however a
+    codec spells it (``Vlan10``, ``vlan10``, ``vlan 10``).  This
+    writes an interface for a VLAN that has NONE; it does not
+    translate a name.  The API and the demo translate port names
+    before a render, so an AOS-CX ``vlan 10`` reaches this as the
+    target's own name; where nothing translates them (a bare
+    :func:`run_plan`, the cross-mesh runner) every name of the
+    source is written as it stands, this one included, and a
+    ``Vlan10`` written beside it was one address on two interfaces.
+
+    Args:
+        intent: The tree to read; it is not changed.
+        name: How the target spells the SVI of a VLAN id (AOS-CX:
+            ``vlan 10``).  ``None`` is ``Vlan<N>``.
+
+    Returns:
+        One synthetic interface per VLAN that has an address and no
+        VLAN interface, in the order of ``intent.vlans``.
     """
     from .intent import CanonicalInterface, CanonicalIPv4Address
 
     existing_svi_ids: set[int] = set()
     for iface in intent.interfaces:
-        m = _SVI_NAME_RE.match(iface.name)
+        m = _AN_SVI_OF_ANY_SPELLING.match(iface.name)
         if m:
             existing_svi_ids.add(int(m.group(1)))
 
@@ -920,12 +948,20 @@ def synthesize_svis_from_vlan_l3(
             if pair in seen:
                 continue
             seen.add(pair)
+            # An address after the first is the SVI's secondary.  A
+            # renderer that writes ``secondary`` from the flag (NX-OS,
+            # EOS, AOS-CX) wrote two primaries otherwise, and the
+            # device keeps the last one given.
             addrs.append(
                 CanonicalIPv4Address(
                     ip=a.ip, prefix_length=a.prefix_length,
+                    is_secondary=bool(addrs),
                 )
             )
         synth.append(
-            CanonicalInterface(name=f"Vlan{vlan.id}", ipv4_addresses=addrs)
+            CanonicalInterface(
+                name=name(vlan.id) if name else f"Vlan{vlan.id}",
+                ipv4_addresses=addrs,
+            )
         )
     return synth

@@ -153,22 +153,21 @@ member list is empty — AOS-S renders a trunk from its ports, so a bundle with
 no ports has nothing to render. Configured-but-unpopulated bundles disappear
 silently.
 
-**3. A VRF-scoped static route survives into the GLOBAL table.** This is the
-most dangerous single behaviour on the pair. `aruba_aoss` declares
-`/routing/static-route/vrf` unsupported ("parses-and-ignores in v1"), and
-*verified* on two cells the route record survives with its VRF binding
-stripped:
+**3. A VRF-scoped static route is left out, and said.** AOS-S has no VRF, so
+a route in one is left out of the output under a `; review:` line, in a job
+that is `partial`:
 
-- `batfish_vpnv4_pe1.txt`: `11.0.0.0/8 via 11.1.1.2` leaves VRF `blue` and
-  lands unscoped.
-- `kitchen_sink.cfg`: `10.99.0.0/16 via 203.0.113.2` leaves VRF `CUSTOMER-A`
-  and lands unscoped.
+- `batfish_vpnv4_pe1.txt`: `11.0.0.0/8 via 11.1.1.2` in VRF `blue`.
+- `kitchen_sink.cfg`: `10.99.0.0/16 via 203.0.113.2` in VRF `CUSTOMER-A`.
 
-Nothing in the render marks it. The failure mode is not a missing route — it
-is a route in the wrong table, which is a leak between customers rather than an
-outage. Meanwhile routes whose only next-hop is an *interface* vanish outright
-(`192.0.2.0/24 → Null0`, `0.0.0.0/1 → Null0`, `2001:db8:23:23::2/128 → BVI500`,
-`192.0.2.1/32 → Null0`), because AOS-S renders destination + gateway only.
+It was once written into the switch's one table with its VRF dropped -- a route
+in the wrong table, a leak between customers rather than an outage, with
+nothing in the render to mark it.  A route whose only next hop is an
+*interface* is written as AOS-S takes one: `blackhole` for `Null0`
+(`192.0.2.0/24`, `0.0.0.0/1`, `192.0.2.1/32`, which now come back intact) and
+`vlan <id>` for a VLAN interface; any other (`2001:db8:23:23::2/128 → BVI500`)
+is left out under a review line, as HPE's routing guide gives AOS-S no other
+next hop.
 
 **4. `interfaces[].name` is `good` but that is preservation, not validity.**
 *Verified*: the AOS-S render carries the IOS-XR names through verbatim —

@@ -47,7 +47,9 @@ OPNsense notes:
   (`<wan>` / `<lan>` / `<optN>`) — there are no separate `<name>`
   child elements.
 - The BSD device name lives in `<if>`.  VLAN child devices are
-  named `<parent>_vlan<tag>` by convention.
+  named `<parent>_vlan<tag>` on older configs; current OPNsense
+  names a new one `vlan01`, `vlan02` ..., or takes a typed `vlan0`
+  and digits and dots, so the digits of the name are not the tag.
 - `<ipaddr>` accepts non-IP keywords: `dhcp` / `pppoe` / `pptp` /
   `l2tp` (per-protocol acquisition).  The non-static branches
   populate `dhcp_client` (or extended state) on canonical when wire-up

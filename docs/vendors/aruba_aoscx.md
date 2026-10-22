@@ -32,7 +32,8 @@ distributed gateway), and VXLAN L2VNI bindings.
   MTU of 1500 on every target.  See the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 - L2 switchport — access / trunk mode, access-VLAN, trunk allowed-VLAN
   list, trunk native VLAN, `lag` membership
-- VLANs — ID, name, description, tagged/untagged port lists
+- VLANs — ID, name, description, tagged/untagged port lists, and an
+  address held on the VLAN record (see Common gotchas)
 - Static routes — default VRF (`ip route`)
 - VRFs — name (a bare `vrf <name>` stanza in v1)
 
@@ -93,7 +94,12 @@ in v1 (parity with the NX-OS / IOS-XE IPv6-anycast deferral).
   targets; the named group round-trips losslessly same-vendor.  The
   `password ciphertext` blob is AES-encrypted with the device key
   (portable same-device only) — cross-vendor migration requires
-  re-keying.
+  re-keying: such an account is left out on every other target, with
+  a review line that names it.  The keyword decides, not the value's
+  shape: `ciphertext` is ciphertext whatever it looks like (a
+  published capture holds a placeholder word there), and `plaintext`
+  is a password as typed, which arrives on every target that takes
+  one (not Junos or OPNsense).
 - **`/snmp/v3-user/auth-passphrase`** — SNMPv3 auth/priv keys are
   device-key `ciphertext` blobs; emitted verbatim cross-vendor but the
   operator must re-key on the target.
@@ -245,6 +251,28 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **A VLAN's name is written whole as a target; a host name or VRF
+  name is not.**  The switch reads a VLAN's `name` to the end of the
+  line (a committed capture prints `name VLAN 11`), so a name with a
+  space is written as it stands.  A host name or VRF name that holds
+  white space or a `"` is written with `_` and `'`, the VRF at every
+  place it is named, and a route whose gateway holds either is left
+  out whole; each with a `review:` line.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A VLAN's address with no interface of its own gets one.**  A
+  source can hold a VLAN's address on the VLAN itself: Junos folds
+  the address of an `irb` unit that a VLAN binds with `l3-interface`
+  onto the VLAN.  As a target, AOS-CX writes `interface vlan <N>`
+  for it, with the addresses after the first `secondary`; an
+  interface of the VLAN the source already has, in any spelling, is
+  the one written.  The address's anycast virtual gateway is not
+  written.  Release 0.7.7 and earlier wrote nothing for such an
+  address, and the job's validation report listed it as lossy.  As
+  a source, an AOS-CX `interface vlan 101` reaches EOS and IOS-XE as
+  `Vlan101` where port names are translated (the API, the demo); a
+  `render` of the parsed tree with no translation writes it as it
+  stands, and 0.7.7 and earlier wrote an `interface Vlan101` beside
+  it there.
 - **A trunk's allowed list means what it says, and AOS-CX cannot say
   "no VLAN".**  `vlan trunk allowed all` is read as EVERY VLAN, and so
   is `vlan trunk native <N>` with no allowed line: the switch adds

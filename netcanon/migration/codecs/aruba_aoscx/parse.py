@@ -31,9 +31,10 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
   (Phase 2; ``lacp mode active|passive`` → mode, absent → static) AND a
   :class:`CanonicalInterface` (kind ``lag``) carrying the LAG's switchport
   state.  The ``multi-chassis`` (VSX MLAG) modifier is dropped in v1.
-* ``user <name> group <group> password ciphertext <blob>`` (Phase 2) →
-  :class:`CanonicalLocalUser` (``group`` → role; administrators → priv
-  15, else 1).
+* ``user <name> group <group> password <ciphertext|plaintext> <value>``
+  (Phase 2) → :class:`CanonicalLocalUser` (``group`` → role;
+  administrators → priv 15, else 1; the keyword, not the value's shape,
+  says which kind of secret it is).
 * top-level ``ip route <dest>/<prefix> <gw> [<dist>]`` (default VRF only)
   → :class:`CanonicalStaticRoute`.
 
@@ -73,6 +74,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._user_secrets import classify_hash
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -179,12 +181,12 @@ _LACP_MODE_RE = re.compile(
     r"^\s+lacp\s+mode\s+(active|passive)\s*$", re.IGNORECASE,
 )
 
-#: ``user <name> group <group> password ciphertext <blob>`` (Phase 2).
-#: The ciphertext blob is a single token (base64-ish, no spaces).  The
-#: ``plaintext`` form is not parsed (rare in a running-config; would drop
-#: the user).
+#: ``user <name> group <group> password <ciphertext|plaintext> <value>``
+#: (Phase 2).  The value is a single token (a ciphertext is base64-ish, no
+#: spaces).  The keyword is CAPTURED: it says what the value is
+#: (:func:`_stored_secret`).
 _USER_RE = re.compile(
-    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(?:ciphertext|plaintext)\s+(\S+)",
+    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(ciphertext|plaintext)\s+(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
 #: AOS-CX built-in group that maps to the cross-vendor admin privilege.
@@ -1006,17 +1008,35 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     users: list[CanonicalLocalUser] = []
     seen: set[str] = set()
     for m in _USER_RE.finditer(raw):
-        name, group, blob = m.group(1), m.group(2), m.group(3)
+        name, group, kind, blob = m.group(1), m.group(2), m.group(3), m.group(4)
         if name in seen:
             continue
         seen.add(name)
         users.append(CanonicalLocalUser(
             name=name,
             privilege_level=15 if group.lower() in _AOSCX_ADMIN_GROUPS else 1,
-            hashed_password=blob,
+            hashed_password=_stored_secret(kind, blob),
             role=group,
         ))
     return users
+
+
+def _stored_secret(kind: str, value: str) -> str:
+    """The canonical form of ``password <kind> <value>``, by the keyword.
+
+    The shared policy reads a bare value by its SHAPE (``AQB`` is AOS-CX
+    ciphertext, a word is a password as typed), and the keyword says what
+    the value IS.  Where the two agree the value is kept bare, the form
+    every AOS-CX tree has held; where they do not, it is tagged
+    ``aoscx:<algorithm>:`` so that the keyword decides.  A committed
+    capture whose publisher put a word in place of each ciphertext was
+    read as a typed password, and written as one onto every other target
+    (``secret 0 <word>`` on IOS-XE): a ciphertext must never be.
+    """
+    algorithm = "plaintext" if kind.lower() == "plaintext" else "aoscx_encrypted"
+    if classify_hash(value)[0] == algorithm:
+        return value
+    return f"aoscx:{algorithm}:{value}"
 
 
 def _parse_snmp(raw: str) -> CanonicalSNMP | None:

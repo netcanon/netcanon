@@ -23,8 +23,9 @@ same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
 ``/system dns``, ``/system ntp client``.  Non-``vrrp`` modes (HSRP /
 CARP / anycast) surface as ``# review:`` comments and skip.
 
-Shared name/type helpers (``_is_ethernet_name``, ``_is_vlan_name``)
-live in :mod:`.parse` and are imported here — the README's split-codec
+Shared name/type helpers (``_is_vlan_name`` and the like) live in
+:mod:`.parse`, and which names are factory port names in
+:mod:`.port_names`; both are imported here — the README's split-codec
 guidance keeps those edges directional (parse → render is invalid;
 render → parse for shared utilities is fine).
 """
@@ -49,12 +50,12 @@ from ...canonical.transforms import is_every_vlan
 from .._helpers import one_mtu_written, same_vendor_version
 from ..base import RenderError
 from .parse import (
-    _is_ethernet_name,
     _is_vlan_name,
     _looks_like_bridge_iface,
     _looks_like_lag_iface,
     _looks_like_vlan_iface,
 )
+from .port_names import is_factory_port_name
 
 # ---------------------------------------------------------------------------
 # Render-only constants
@@ -173,12 +174,12 @@ def _render_ntp_client(tree: Any) -> list[str]:
         and 1 <= len(servers) <= 2
         and _all_ip_literals(servers)
     ):
-        parts = ["set enabled=yes", f"primary-ntp={servers[0]}"]
+        parts = ["set enabled=yes", f"primary-ntp={_quote_if_needed(servers[0])}"]
         if len(servers) == 2:
-            parts.append(f"secondary-ntp={servers[1]}")
+            parts.append(f"secondary-ntp={_quote_if_needed(servers[1])}")
         lines.append(" ".join(parts))
     else:
-        lines.append(f"set enabled=yes servers={','.join(servers)}")
+        lines.append(f"set enabled=yes servers={_quote_if_needed(','.join(servers))}")
     lines.append("")
     return lines
 
@@ -257,8 +258,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Find clause: prefer the MikroTik factory ``default-name=``
             # form when we know the original factory port name - either
             # because parse captured it on a ``set [ find default-name=X ]``
-            # line, or because the canonical name itself follows the
-            # MikroTik ``etherN`` shape (in which case ``default-name``
+            # line, or because the canonical name itself is one a
+            # MikroTik device gives a port (``is_factory_port_name``:
+            # ``ether1_ADMIN`` is not; in which case ``default-name``
             # is the right thing for the device to look up).  When
             # ``default_name`` is empty AND the name doesn't match the
             # factory shape - the common case for cross-vendor sources
@@ -267,10 +269,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # instead.  Using ``default-name`` in that branch would
             # cause a round-trip to synthesise a spurious
             # ``default_name`` field on the second parse pass.
-            use_default_name_form = bool(iface.default_name) or _is_ethernet_name(iface.name)
+            use_default_name_form = bool(iface.default_name) or is_factory_port_name(
+                iface.name
+            )
             if use_default_name_form:
                 find_key = iface.default_name or iface.name
-                parts = [f"set [ find default-name={find_key} ]"]
+                parts = [f"set [ find default-name={_quote_if_needed(find_key)} ]"]
                 # Emit the renamed name only when it differs from
                 # the factory default-name - avoids a noisy no-op
                 # `name=ether1` on otherwise-default ports.
@@ -360,16 +364,34 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # RouterOS docs:
     # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
     # — ``interface=`` must reference an existing parent.
-    has_vlan_to_render = bool(tree.vlans) or any(
-        i.interface_type == "ianaift:l3ipvlan"
+    #
+    # A VLAN interface whose config states its parent
+    # (``vlan_parent``, RouterOS ``interface=``) is written on that
+    # parent, and nothing is chosen for it.  A parent is chosen only
+    # where some VLAN is rendered without one of its own: a VLAN
+    # interface from a config whose names say the parent, or a VLAN
+    # with no interface.  Chosen for a VLAN whose parent was stated,
+    # the single-anchor rule put every VLAN of a RouterOS bridge on
+    # the one port that had an address or a trunk.
+    vlan_ifaces = [
+        i for i in tree.interfaces
+        if i.interface_type == "ianaift:l3ipvlan"
         or _is_vlan_name(i.name)
-        for i in tree.interfaces
+    ]
+    has_vlan_to_render = bool(tree.vlans) or bool(vlan_ifaces)
+    on_a_stated_parent = {
+        _vlan_id_for(i.name, tree.vlans)
+        for i in vlan_ifaces if i.vlan_parent
+    }
+    has_vlan_without_a_parent = has_vlan_to_render and not (
+        all(i.vlan_parent for i in vlan_ifaces)
+        and all(vlan.id in on_a_stated_parent for vlan in tree.vlans)
     )
     vlan_parent_iface = (
-        _identify_vlan_parent(tree) if has_vlan_to_render else None
+        _identify_vlan_parent(tree) if has_vlan_without_a_parent else None
     )
     needs_synthetic_bridge1 = (
-        has_vlan_to_render
+        has_vlan_without_a_parent
         and not bridge_ifaces
         and vlan_parent_iface is None
     )
@@ -435,7 +457,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for lag in tree.lags:
             parts = ["add"]
             if lag.members:
-                parts.append(f"slaves={','.join(lag.members)}")
+                parts.append(f"slaves={_quote_if_needed(','.join(lag.members))}")
             parts.append(
                 f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
             )
@@ -522,6 +544,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # ``remote-address`` RouterOS rejects the add line; we
                 # pick 0.0.0.0 as an obvious sentinel.
                 parts.append("remote-address=0.0.0.0")
+                # A tunnel that is shut is written so, as every other
+                # section here writes one: the parser reads
+                # ``disabled=`` on these lines, and an ``add`` without
+                # it makes the tunnel enabled.  MikroTik's GRE and EoIP
+                # pages list ``disabled (yes | no; Default: no)``; the
+                # IPIP page lists no such row but prints the ``X -
+                # disabled`` flag, so an IPIP item takes it too
+                # (inferred).
+                if not iface.enabled:
+                    parts.append("disabled=yes")
                 lines.append(" ".join(parts))
             lines.append("")
 
@@ -532,12 +564,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # silently dropped any non-conforming name on render.
     # Surfaced by routeros-diff's verbose_export.rsc (the
     # "gn-mgmt" VLAN interface named after its purpose, not its
-    # ID).
-    vlan_ifaces = [
-        i for i in tree.interfaces
-        if i.interface_type == "ianaift:l3ipvlan"
-        or _is_vlan_name(i.name)
-    ]
+    # ID).  ``vlan_ifaces`` is gathered above, where the parent is
+    # chosen.
     if vlan_ifaces or tree.vlans:
         lines.append("/interface vlan")
         rendered_vlan_ids: set[int] = set()
@@ -549,11 +577,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts = ["add"]
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
-            # Bind to the parent we resolved above — either an
-            # identified source-side parent's renamed target name
+            # Bind to the parent the config states, and otherwise
+            # to the one chosen above -- either an identified
+            # source-side parent's renamed target name
             # (router-on-stick: OPNsense ixl0 → sfp-sfpplus0) or
             # the synthesised ``bridge1`` (switching topology).
-            parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
+            parent = iface.vlan_parent or vlan_parent_name
+            parts.append(f"interface={_quote_if_needed(parent)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
             # ``mtu`` is the VLAN interface's layer-3 MTU (default
@@ -613,7 +643,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ip address")
         for ip, prefix, iface_name in ip_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
+                f"add address={_quote_if_needed(f'{ip}/{prefix}')} "
+                f"interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
@@ -627,7 +658,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ipv6 address")
         for ip, prefix, iface_name in ip6_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
+                f"add address={_quote_if_needed(f'{ip}/{prefix}')} "
+                f"interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
@@ -654,15 +686,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts = ["add"]
             if route.description:
                 parts.append(f'comment="{_escape(route.description)}"')
-            parts.append(f"dst-address={route.destination}")
+            parts.append(f"dst-address={_quote_if_needed(route.destination)}")
+            # The whole ``gateway=`` value is one string, quoted as
+            # one: an interface named with a space is part of it.
             if route.gateway and route.interface:
                 # Both populated -- RouterOS combined form pins the
                 # next-hop IP to a specific egress interface.
-                parts.append(f"gateway={route.gateway}%{route.interface}")
-            elif route.gateway:
-                parts.append(f"gateway={route.gateway}")
-            elif route.interface:
-                parts.append(f"gateway={route.interface}")
+                gateway = f"{route.gateway}%{route.interface}"
+            else:
+                gateway = route.gateway or route.interface
+            if gateway:
+                parts.append(f"gateway={_quote_if_needed(gateway)}")
             if route.metric:
                 # RouterOS admin distance (default 1); emit only when the
                 # canonical metric is set so ordinary routes stay clean.
@@ -684,7 +718,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(f'location="{_escape(tree.snmp.location)}"')
         if tree.snmp.trap_hosts:
             parts.append(
-                f'trap-target={",".join(tree.snmp.trap_hosts)}'
+                f'trap-target={_quote_if_needed(",".join(tree.snmp.trap_hosts))}'
             )
         lines.append(" ".join(parts))
         lines.append("")
@@ -692,7 +726,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             lines.append("/snmp community")
             if tree.snmp.community:
                 lines.append(
-                    f"set [ find default=yes ] name={tree.snmp.community}"
+                    f"set [ find default=yes ] "
+                    f"name={_quote_if_needed(tree.snmp.community)}"
                 )
             # Canonical auth/priv → RouterOS names.  RouterOS
             # only accepts ``MD5`` / ``SHA1`` / ``SHA256`` /
@@ -732,7 +767,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"the target"
                     )
                     continue
-                add_parts = ["add", f"name={u.name}"]
+                add_parts = ["add", f"name={_quote_if_needed(u.name)}"]
                 if u.auth_protocol:
                     mt_auth = _CAN_TO_MT_AUTH.get(
                         u.auth_protocol, "SHA1",
@@ -764,7 +799,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.radius_servers:
         lines.append("/radius")
         for server in tree.radius_servers:
-            parts = ["add", f"address={server.host}"]
+            parts = ["add", f"address={_quote_if_needed(server.host)}"]
             # (#482) See netcanon/migration/_radius_secrets.py — RouterOS
             # reads `secret=` as the literal shared secret.
             refused_secret = False
@@ -773,7 +808,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     server.key, tree.source_vendor, "mikrotik_routeros",
                 ):
                     parts.append(
-                        f"secret={unwrap_native_secret(server.key)}"
+                        f"secret={_quote_if_needed(unwrap_native_secret(server.key))}"
                     )
                 else:
                     refused_secret = True
@@ -794,6 +829,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="hash",
                         target_label="MikroTik RouterOS",
+                        secret=server.key,
                     )
                 )
         lines.append("")
@@ -810,21 +846,24 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if not (pool.start_ip and pool.end_ip):
                 continue
             name = f"dhcp_pool{idx}"
+            ranges = f"{pool.start_ip}-{pool.end_ip}"
             lines.append(
-                f"add name={name} ranges={pool.start_ip}-{pool.end_ip}"
+                f"add name={name} ranges={_quote_if_needed(ranges)}"
             )
         lines.append("")
         lines.append("/ip dhcp-server network")
         for pool in tree.dhcp_servers:
             if not pool.network:
                 continue
-            parts = ["add", f"address={pool.network}"]
+            parts = ["add", f"address={_quote_if_needed(pool.network)}"]
             if pool.gateway:
-                parts.append(f"gateway={pool.gateway}")
+                parts.append(f"gateway={_quote_if_needed(pool.gateway)}")
             if pool.dns_servers:
-                parts.append(f"dns-server={','.join(pool.dns_servers)}")
+                parts.append(
+                    f"dns-server={_quote_if_needed(','.join(pool.dns_servers))}"
+                )
             if pool.domain_name:
-                parts.append(f"domain={pool.domain_name}")
+                parts.append(f"domain={_quote_if_needed(pool.domain_name)}")
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -846,16 +885,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # auth bypass for anyone who has read access to the
             # original config.  When the canonical carries a
             # plaintext password, emit it; when foreign-hashed,
-            # skip the field AND emit a ``# password manager …
-            # -- review:`` comment immediately above the ``add``
-            # line so the operator has a deterministic signal that
-            # a hash existed and must be reset manually.  Without
-            # the review comment the user appears to have been
-            # created with no password, with no hint that one was
-            # ever set.  Surfaced by OPNsense supergate smoke test
-            # (issues #13 + #18 in
+            # emit a ``# password manager … -- review:`` comment IN
+            # PLACE of the ``add`` line, so the operator has a
+            # deterministic signal that a hash existed and the user
+            # must be re-created.  Surfaced by OPNsense supergate
+            # smoke test (issues #13 + #18 in
             # ``tests/fixtures/real/user_smoke_findings.md``).
-            parts = ["add", f"group={group}", f"name={user.name}"]
+            # ⚠️ The ``add`` line used to stay, without its password:
+            # "If not specified, it is left blank" (RouterOS ``/user``
+            # reference), so a ``group=full`` user with an EMPTY
+            # password.  Refusing a secret drops the whole account.
+            parts = ["add", f"group={group}", f"name={_quote_if_needed(user.name)}"]
             if user.hashed_password and is_migratable(
                 user.hashed_password, "mikrotik_routeros",
             ):
@@ -881,13 +921,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         target_label="RouterOS",
                     )
                 )
+                continue
             lines.append(" ".join(parts))
         lines.append("")
 
     # ----- /system dns -----
     if tree.dns_servers:
         lines.append("/system dns")
-        lines.append(f"set servers={','.join(tree.dns_servers)}")
+        lines.append(f"set servers={_quote_if_needed(','.join(tree.dns_servers))}")
         lines.append("")
 
     # ----- /system ntp client (dialect-aware: v6 vs v7) -----
@@ -1039,17 +1080,30 @@ def _is_tunnel_type(iface: Any) -> bool:
     return iface.interface_type in _TUNNEL_TYPES
 
 
+#: What a value may hold and be written as it stands: the characters
+#: a RouterOS export itself leaves unquoted in a value -- letters,
+#: digits and ``- . _ / : , %`` (names, addresses, prefixes, lists,
+#: ``<gateway>%<interface>``).  Anything else is written as a string,
+#: since outside one RouterOS reads it as script: white space parts two
+#: words, ``;`` ends the command, ``$`` substitutes a variable, ``[ ]``,
+#: ``( )`` and ``{ }`` open a command, an expression and a scope, ``#``
+#: a comment, and a backslash is refused.  (MikroTik, "Scripting":
+#: https://help.mikrotik.com/docs/spaces/ROS/pages/47579229/Scripting.)
+_BARE_VALUE = re.compile(r"[A-Za-z0-9._/:,%-]+")
+
+
 def _quote_if_needed(value: str) -> str:
-    """Quote a RouterOS key=value value if it contains whitespace
-    or characters that would otherwise break parsing.  No-op for
-    simple identifiers (the common case, so we keep render output
-    tidy by default)."""
-    if not value:
-        return '""'
-    if any(c in value for c in ' \t\n"\\'):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return value
+    """Write a value of the tree into a RouterOS ``key=value``.
+
+    Every value the renderer takes from the tree goes through here (or
+    into a ``"..."`` through :func:`_escape`): a value is the config's
+    text, and a character RouterOS reads as script, left bare, is a
+    command on the device that imports the output.  A value of the
+    bare characters is written as it stands, the common case; any
+    other is written as a string, escaped."""
+    if _BARE_VALUE.fullmatch(value):
+        return value
+    return f'"{_escape(value)}"'
 
 
 def _yes_no(flag: bool) -> str:
@@ -1063,11 +1117,20 @@ def _escape(value: str) -> str:
     string, so a literal backslash must itself be doubled *before*
     double-quotes are escaped — otherwise ``a\\b`` renders as ``a\\b``
     where ``\\b`` is read back as a backspace escape, and a value
-    containing ``"`` closes the literal early.  Mirrors the sibling
-    :func:`_quote_if_needed` (which already escapes both) and the
-    parse-side :func:`~netcanon.migration.codecs.mikrotik_routeros.parse._parse_kv`
-    which reverses this.  Backslash first, then quote (order matters)."""
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    containing ``"`` closes the literal early.  And ``$`` is escaped
+    (``\\$``): inside a string RouterOS substitutes ``$name`` with a
+    variable and ``$[...]`` / ``$(...)`` with what a command or an
+    expression returns, so a description holding ``$[/system reset-configuration]``
+    was that command on the device that imported the output.  A
+    RouterOS export escapes it the same way (``value="\\$(HOSTNAME)"``).
+    Used by :func:`_quote_if_needed`; the parse-side
+    :func:`~netcanon.migration.codecs.mikrotik_routeros.parse._unescape`
+    reverses it.  Backslash first (order matters)."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+    )
 
 
 def _render_vrrp(
