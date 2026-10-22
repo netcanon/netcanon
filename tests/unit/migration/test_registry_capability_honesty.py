@@ -160,6 +160,8 @@ def _maximal_intent() -> CanonicalIntent:
     iface = CanonicalInterface(
         name="Ethernet1", default_name="Ethernet1", description="d",
         enabled=True, interface_type="ianaift:ethernetCsmacd", mtu=9000,
+        # An IP MTU apart from the MTU walks both IP-MTU paths.
+        ip_mtu=1400,
         ipv4_addresses=[addr4, addr4_sec], ipv6_addresses=[addr6, addr6_sec],
         switchport_mode="trunk", access_vlan=10, dot1q_vlan=100,
         dot1q_inner_vlan=200,

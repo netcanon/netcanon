@@ -609,6 +609,13 @@ def _parse_interface_vlan(
         # Disabled flag (defaults to enabled if not present).
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
+        # The VLAN interface's layer-3 MTU (default 1500), which the
+        # renderer writes.
+        if "mtu" in kv:
+            try:
+                iface.mtu = int(kv["mtu"])
+            except ValueError:
+                pass
         # Also record in intent.vlans so the VLAN database is complete.
         # Use the IFACE name as the canonical VLAN name (not the
         # comment) — the render path's `_vlan_id_for` lookup matches

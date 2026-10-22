@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-22T02:52:27+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T025222Z.json",
-  "mesh_run_started_utc": "2026-10-22T02:51:53+00:00",
+  "started_utc": "2026-10-22T02:58:46+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T025841Z.json",
+  "mesh_run_started_utc": "2026-10-22T02:58:11+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,19 +593,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8955,
+    "ALIGNED": 8953,
     "CODEC_BUG": 4,
     "EXPECTED_LOSSY": 4188,
-    "EXPECTED_UNSUPPORTED": 2669,
-    "METHODOLOGY_ISSUE_under": 1874,
+    "EXPECTED_UNSUPPORTED": 2668,
+    "METHODOLOGY_ISSUE_under": 1875,
     "METHODOLOGY_ISSUE_over": 18,
     "STRUCTURAL_ONLY": 5370,
-    "TRIVIAL_EMPTY": 34579,
+    "TRIVIAL_EMPTY": 34581,
     "fields_total": 57657,
     "severity_high": 4,
     "severity_medium": 285,
-    "severity_low": 6977,
-    "severity_ok": 50391
+    "severity_low": 6978,
+    "severity_ok": 50390
   },
   "severity_matrix": {
     "arista_eos": {
@@ -762,6 +762,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -794,6 +795,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -819,6 +821,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -847,6 +850,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -879,6 +883,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -904,6 +909,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -1642,6 +1648,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -1674,6 +1681,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -1699,6 +1707,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -1727,6 +1736,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -1759,6 +1769,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -1784,6 +1795,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -2569,9 +2581,9 @@
           }
         },
         "interfaces[].mtu": {
-          "actual": "preserved",
+          "actual": "trivially_preserved",
           "expected": "good",
-          "variance": "ALIGNED",
+          "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "interfaces[].ipv4_addresses": {
@@ -3201,14 +3213,14 @@
         }
       },
       "summary": {
-        "ALIGNED": 6,
+        "ALIGNED": 5,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 2,
         "METHODOLOGY_ISSUE_under": 5,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 38,
+        "TRIVIAL_EMPTY": 39,
         "fields_total": 55,
         "missing_in_phase1": 3,
         "severity_high": 1,
@@ -3276,6 +3288,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "198.51.100.1",
@@ -3316,6 +3329,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "10.0.10.1",
@@ -3360,6 +3374,7 @@
                 "enabled": false,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
@@ -3388,6 +3403,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "198.51.100.1",
@@ -3428,6 +3444,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "10.0.10.1",
@@ -3472,6 +3489,7 @@
                 "enabled": false,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,

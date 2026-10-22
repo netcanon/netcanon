@@ -193,15 +193,18 @@ per_field_expectation:
   interfaces[].mtu:
     disposition: good
     note: >
-      Preserved on 1 of 11 cells (the vSRX capture's `st0` units,
-      whose `family inet mtu` the Junos parser reads since it writes a
-      unit's MTU per family). On 7 further cells the whole
-      `interfaces` list drifted at once and the reconciler attributes
-      that structural event to one owner sub-field; on the other 3
-      neither side has an MTU. Checked per interface over every Junos
-      input: each MTU the source parse holds is the MTU the OS10 parse
-      of the output reads back. It was declared lossy from the
-      structural drift alone, before any cell could preserve it.
+      Preserved on no cell by the reconciler's count: on 7 cells the
+      whole `interfaces` list drifted at once and the reconciler
+      attributes that structural event to one owner sub-field; on the
+      other 4 neither side has an MTU. Checked per interface over every
+      Junos input: each MTU the source parse holds is the MTU the OS10
+      parse of the output reads back. The vSRX capture's `st0` units
+      state `family inet mtu 1420`, which is an IP MTU (`ip_mtu`), not
+      the unit's MTU; OS10 writes no IP MTU of its own (its matrix
+      declares `/interfaces/interface/config/ip-mtu` lossy), so those
+      two are lost and the job's report says so. It was declared lossy
+      from the structural drift alone, before any cell could preserve
+      it.
     references: [junos-os10-surface]
 
   interfaces[].name:

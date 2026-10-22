@@ -23,7 +23,13 @@ distributed gateway), and VXLAN L2VNI bindings.
 
 - `hostname`
 - Interfaces — name, description, enabled state, MTU, IPv4 + IPv6
-  addresses, VRF binding
+  addresses, VRF binding, and `ip mtu`, the IP MTU.  AOS-CX's IP MTU
+  stays 1500 under a raised `mtu` unless `ip mtu` says otherwise
+  (HPE: `ip mtu` "Default: 1500"), so a port with `mtu 9198` alone
+  is an IP MTU of 1500 on every target, and a port another vendor
+  sends jumbo IP packets on is written `ip mtu` here.  ⚠️ Up to 0.7.7
+  `ip mtu` was not read: a VLAN interface's `ip mtu 9198` was an IP
+  MTU of 1500 on every target.  See the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 - L2 switchport — access / trunk mode, access-VLAN, trunk allowed-VLAN
   list, trunk native VLAN, `lag` membership
 - VLANs — ID, name, description, tagged/untagged port lists, and an

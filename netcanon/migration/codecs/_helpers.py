@@ -938,6 +938,98 @@ def mtu_written(codec: str, payload: int, *, tags: int = 0) -> int:
     return payload + counts.header + counts.per_tag * tags
 
 
+#: The IP MTU of an interface whose config states none, on a platform
+#: where the IP MTU is a setting of its own with a fixed default --
+#: where raising ``mtu`` does not raise it.  ``CanonicalInterface.ip_mtu``
+#: is ``None`` where the IP MTU is the payload, so a parser of such a
+#: platform fills the default where the payload is larger
+#: (:func:`ip_mtu_read`), and its renderer writes the payload as the
+#: IP MTU where the tree says the IP MTU is the payload
+#: (:func:`ip_mtu_written`).
+#:
+#: * AOS-CX: ``ip mtu`` "Sets the IP MTU (maximum transmission unit) for
+#:   an interface. This defines the largest IP packet that can be sent
+#:   or received by the interface" ... "Default: 1500" (HPE, the AOS-CX
+#:   command reference); the page for ``mtu`` gives its own default of
+#:   1500 and says nothing of the IP MTU following it.
+#:
+#: Elsewhere an unstated IP MTU is taken to be the payload: IOS XR says
+#: so ("When Ethernet MTU and no IP MTU is configured, IP MTU value in
+#: the hardware is Ethernet MTU-14B"), and for IOS-XE and Junos it is
+#: not established.  The sentences are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md``.
+IP_MTU_THAT_IS_NOT_STATED: dict[str, int] = {
+    "aruba_aoscx": 1500,
+}
+
+
+def carries_ipv4(iface: CanonicalInterface) -> bool:
+    """Whether *iface* has an IPv4 address, stated or from DHCP: an
+    interface whose IP MTU is about something."""
+    return bool(iface.ipv4_addresses) or iface.dhcp_client
+
+
+def ip_mtu_read(
+    codec: str, stated: int | None, payload: int | None, *, ipv4: bool,
+) -> int | None:
+    """``CanonicalInterface.ip_mtu`` of an interface whose config on
+    *codec* states IP MTU *stated* (``None`` where no line states one)
+    and whose payload the parser read as *payload*.
+
+    Args:
+        codec: The registry name of the codec whose config it is.
+        stated: The IP MTU the config states, or ``None``.
+        payload: ``CanonicalInterface.mtu`` as the parser read it.
+        ipv4: Whether the interface carries IPv4
+            (:func:`carries_ipv4`).
+
+    Returns:
+        ``None`` where the IP MTU is the payload; else the IP MTU,
+        the platform's default included where the config states
+        none and the payload is larger
+        (:data:`IP_MTU_THAT_IS_NOT_STATED`).
+    """
+    if stated is not None:
+        return None if stated == payload else stated
+    default = IP_MTU_THAT_IS_NOT_STATED.get(codec)
+    if default is None or not ipv4 or payload is None or payload <= default:
+        return None
+    return default
+
+
+def ip_mtu_written(codec: str, iface: CanonicalInterface) -> int | None:
+    """The IP MTU *codec*'s renderer writes for *iface*, or ``None``
+    for no line: the inverse of :func:`ip_mtu_read`.  On a platform
+    whose unstated IP MTU is a fixed default, an interface that
+    carries IPv4 is given the payload where the tree says the IP MTU
+    is the payload, and no line where it is the default.
+
+    Args:
+        codec: The registry name of the codec whose config is written.
+        iface: The interface.
+
+    Returns:
+        The number the target's IP-MTU line states, or ``None``.
+    """
+    default = IP_MTU_THAT_IS_NOT_STATED.get(codec)
+    if default is None:
+        return iface.ip_mtu
+    wanted = iface.ip_mtu
+    if wanted is None and carries_ipv4(iface):
+        wanted = iface.mtu
+    return None if wanted is None or wanted == default else wanted
+
+
+def one_mtu_written(iface: CanonicalInterface) -> int | None:
+    """The ``mtu`` of *iface* on a platform with one MTU for the
+    payload and the IP packet (NX-OS, EOS, RouterOS, FortiOS, VyOS,
+    OPNsense): the payload, or the IP MTU where the tree states no
+    payload.  Where it states both, the IP MTU has no line; the
+    capability matrix says so
+    (``/interfaces/interface/config/ip-mtu-beside-mtu``)."""
+    return iface.ip_mtu if iface.mtu is None else iface.mtu
+
+
 def same_vendor_version(
     tree: CanonicalIntent, *, vendor_id: str, default: str
 ) -> str:

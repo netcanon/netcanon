@@ -198,4 +198,84 @@ fragments, "..." joins two fragments of one passage.
   9216).  The device refuses such a line when the config is
   committed; nothing here checks a platform's range.
 - The IP MTU (`ip mtu`, `family inet mtu`, `ipv4 mtu`) counts the same
-  bytes on every platform; it is a field of its own, not this one.
+  bytes on every platform; it is a field of its own, not this one
+  (below).
+
+## The IP MTU: a field of its own
+
+Four platforms state the largest IP packet apart from the interface
+MTU, and each counts the same bytes, the IP header included: IOS-XE
+and AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`.  The
+tree holds it as `CanonicalInterface.ip_mtu` where it is not the
+payload `mtu` holds, and `None` means "the payload".  A parser leaves
+it `None` where the config states the payload itself, and fills it in
+where its platform's IP MTU is a setting with a default of its own
+that the config does not state (`IP_MTU_THAT_IS_NOT_STATED` in
+`netcanon/migration/codecs/_helpers.py`).  Retrieved 2026-10-21.
+
+| Platform | Statement | An IP MTU the config does not state, under a raised `mtu` | Grade | Source |
+|---|---|---|---|---|
+| Cisco IOS-XE | `ip mtu` on the interface | taken to be the payload | the statement: vendor sentence; the unstated value: not established | C1 |
+| Cisco IOS XR | `ipv4 mtu` on the interface | the payload ("Ethernet MTU-14B") | vendor sentence | X3 |
+| Aruba AOS-CX | `ip mtu` on the interface | 1500 | vendor sentence: its default, and the `mtu` page says nothing of the IP MTU following | H5, H1 |
+| Junos | `family inet mtu` on a unit | taken to be the payload | the statement: vendor sentence; the unstated value: not established | J1, J2 |
+| NX-OS, EOS, RouterOS, FortiOS, VyOS, OPNsense | none: the one `mtu` is the IP MTU | -- | the rows of the table above | |
+| Dell OS10 | an IP MTU apart from the link MTU, which `show interface` prints | 1500 in the vendor's example, under a link MTU of 9216 | vendor example output | D1, D2 |
+| Aruba AOS-S | `jumbo ip-mtu`, for the whole switch | -- | vendor sentence | H6 |
+
+### Sources
+
+- **C1** (above): "IP MTU sets the maximum size an IP packet can be
+  before it needs fragmentation."
+- **X3** (above): "When Ethernet MTU and no IP MTU is configured, IP MTU
+  value in the hardware is Ethernet MTU-14B."
+- **H5** -- HPE Aruba Networking, *AOS-CX 10.13 Fundamentals*, `ip mtu`:
+  <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.13/HTML/fundamentals_8400/Content/Chp_IfaceCfg/Iface_cmds/ip-mtu-10.htm>.
+  "Sets the IP MTU (maximum transmission unit) for an interface. This
+  defines the largest IP packet that can be sent or received by the
+  interface. This value should be less than or equal to the overall MTU
+  for the interface." ... "Specifies the IP MTU in bytes. Range: 68 to
+  9198. Default: 1500."
+- **J1** (above): "Increasing the protocol MTU size requires the media
+  MTU to be equal to or greater than the protocol MTU and encapsulation
+  overhead."  **J2** (above): "Default: INET, INET6, and ISO families:
+  1500 bytes".
+- **D1** (above): "If an IP packet includes a L2 header, the IP MTU must
+  be at least 32 bytes smaller than the L2 MTU."  **D2**'s example
+  output: "MTU 9216 bytes, IP MTU 1500 bytes".
+- **H6** -- HPE Aruba Networking, *AOS-S 16.10*, Configuring IP MTU:
+  <https://arubanetworking.hpe.com/techdocs/AOS-S/16.10/MCG/KB/content/kb/cnf-ip-mtu.htm>.
+  "jumbo ip-mtu < size > Globally sets the IP MTU size. Values range
+  between 1500 and 9198 bytes." ... "(Default: 9198 bytes)".
+
+### Not established from a vendor's page
+
+- **IOS-XE and Junos**: what the IP MTU is where the config states none
+  under a raised `mtu`.  The codecs take it to be the payload, as IOS
+  XR says of itself: an IOS-XE `mtu 9000` with no `ip mtu` is an IP MTU
+  of 9000 in the tree, and a Junos unit with no `family inet mtu` is
+  the device's payload.
+- **OS10**: the statement that sets the IP MTU in a config, and whether
+  it follows the link MTU.  D2's example says it does not; the OS10
+  renderer writes none, and the capability matrix says the IP MTU is
+  lost (`lossy`).
+- **EOS `l2 mtu` and RouterOS `l2mtu`**: neither is an IP MTU, and
+  neither is read.
+
+### Mapping notes
+
+- A platform with one MTU writes the IP MTU as its `mtu` where the tree
+  states no payload.  Where both are stated and differ, it writes the
+  payload, and the matrix declares the IP MTU beside it lost
+  (`/interfaces/interface/config/ip-mtu-beside-mtu`, `lossy`): such a
+  target sends IP packets up to its MTU.
+- AOS-CX writes `ip mtu` wherever the IP MTU it would otherwise have,
+  1500, is not what the tree says -- for an interface whose tree says
+  "the payload" under a payload above 1500, `ip mtu` with the payload.
+- A Junos unit's `family inet6 mtu` is read as the unit's MTU, there
+  being no IPv6 MTU in the tree, and written on `family inet` too where
+  the unit carries IPv4 and states no `family inet mtu`.  On unit 0 it
+  is not read; nor are IOS-XE and IOS XR `ipv6 mtu`.
+- AOS-S, whose IP MTU is the switch's, and the IOS-XE NETCONF codec,
+  which carries no IP MTU between OpenConfig and the tree, declare the
+  field `unsupported`.

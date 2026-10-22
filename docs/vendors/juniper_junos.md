@@ -414,9 +414,15 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   and a unit of an aggregate lost its `vlan-id`; translate such a
   config again.  A unit's MTU is written and read per family
   (`family inet mtu`, `family inet6 mtu`; on `family inet` where the
-  unit has no address).  Where both families state one, inet's is
-  kept, and unit 0's family MTU is not read: its record holds the
-  device's own (media) MTU.  Juniper requires the device's media MTU
+  unit has no address).  `family inet mtu`, on any unit, unit 0
+  included, is the IP MTU (`ip_mtu`): IOS-XE and AOS-CX write it
+  `ip mtu`, IOS XR `ipv4 mtu`, and a target with one MTU writes it
+  as that MTU where the device states no other, and says it is lost
+  where it does.  A unit's `family inet6 mtu` above unit 0 is the
+  unit's MTU, there being no IPv6 MTU in the tree; unit 0's is not
+  read: its record holds the device's own (media) MTU.  ⚠️ Up to
+  0.7.7 a unit's `family inet mtu` came out as an interface `mtu` on
+  IOS-XE and IOS XR.  Juniper requires the device's media MTU
   to hold a family MTU and its encapsulation overhead, so where the
   device states no MTU (and the unit's is above 1500) or one that
   cannot hold it, a `# review:` line says so.  ⚠️ Up to
@@ -436,9 +442,10 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   tree's MTU is the payload, so a port's `mtu 9014` is `mtu 9000` on
   IOS-XE, NX-OS, EOS, AOS-CX and the other platforms that count none,
   and their `mtu 9000` is written `mtu 9014` here (`mtu 9018` on a
-  `vlan-tagging` port, `mtu 9022` under the other two).  A port, an aggregate and `irb` are
-  converted (an `irb`'s units are not tags on it); a loopback, a
-  tunnel, and a name the classifier does not read (`reth0`, a
+  `vlan-tagging` port, `mtu 9022` under the other two).  A port, an
+  aggregate and `irb` are converted (an `irb`'s units are not tags on
+  it); a loopback, a tunnel, and a name the classifier does not read
+  (`reth0`, a
   channelised `xe-0/0/6:2`, a wildcard range member) are copied as
   they stand.  A trunk in `family ethernet-switching` is given no
   tag's bytes: what its media MTU has to hold is not established.  A

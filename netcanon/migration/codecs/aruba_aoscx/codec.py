@@ -128,6 +128,8 @@ class ArubaAOSCXCodec(CodecBase):
         version_range="10.x",
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `ip mtu`
+            "/interfaces/interface/config/ip-mtu-beside-mtu",  # `ip mtu` beside the interface MTU
             # System
             "/system/hostname",
             # Interfaces — name + basic L3 (Phase 1)

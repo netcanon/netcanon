@@ -100,7 +100,8 @@ names the canonical surface, not a blanket guarantee.
 * `hostname`, `domain`
 * `interfaces` — `name`, `description`, `enabled`, IPv4 + IPv6
   addresses, `vrf` binding, `kind` (physical / mgmt / loopback /
-  uplink), `mtu`, `lag_member_of`, `dhcp_client_v6` (IPv6 DHCPv6 /
+  uplink), `mtu`, `ip_mtu` (an IP MTU apart from the MTU), `lag_member_of`,
+  `dhcp_client_v6` (IPv6 DHCPv6 /
   SLAAC mode discriminator), `tunnel_type` (GRE / EoIP / IPIP /
   IPSEC / VXLAN encap discriminator)
 * `vlans` — `id`, `name`, `tagged_ports`, `untagged_ports`, SVI L3
@@ -275,6 +276,7 @@ matrix flags the gap honestly rather than masquerading as drift.
 | Path (granular) | Class |
 |---|---|
 | `/interfaces/interface/config/mtu` | Lossy (YANG MTU drops platform-specific IP-vs-link distinction) |
+| `/interfaces/interface/config/ip-mtu` | Unsupported (no IP MTU is carried between OpenConfig and the tree) |
 | `/system/{hostname,dns-server,ntp-server}` | Unsupported |
 | `/vlans/vlan/{id,name}` | Unsupported |
 | `/routing/static-route` | Unsupported |
@@ -2383,8 +2385,22 @@ matter; the matrix is honest about both.
   9000` is written Junos `mtu 9014`, and OS10 `mtu 9216` is IOS-XE
   `mtu 9194`.  A loopback, a tunnel, or a name the codec's classifier
   does not read is copied as it stands.  The IP MTU (`ip mtu`,
-  `family inet mtu`) is another field.  The vendors' sentences are in
+  `family inet mtu`) is another field (next).  The vendors' sentences are in
   [the vendor reference](vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
+* **An IP MTU of its own is carried where the target has one.**
+  IOS-XE and AOS-CX `ip mtu`, IOS XR `ipv4 mtu` and Junos `family
+  inet mtu` state the largest IP packet apart from the MTU; the
+  tree holds it as `ip_mtu` where it is not the payload, and those
+  four write it as their own statement.  AOS-CX's IP MTU stays 1500
+  under a raised `mtu` unless `ip mtu` says otherwise, so a port
+  that sends jumbo IP packets elsewhere is written `ip mtu` there,
+  and an AOS-CX port with `mtu 9198` alone is an IP MTU of 1500
+  elsewhere.  NX-OS, EOS, RouterOS, FortiOS, VyOS and OPNsense have
+  one MTU: an IP MTU with no MTU beside it is written as that MTU,
+  and one beside a different MTU is lost, and the job's report says
+  so (`/interfaces/interface/config/ip-mtu-beside-mtu`, lossy).
+  OS10 writes none (lossy); AOS-S and the IOS-XE NETCONF codec
+  declare it unsupported.  The tree has no IPv6 MTU.
 * **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`

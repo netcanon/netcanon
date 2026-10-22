@@ -54,6 +54,7 @@ from ..._user_secrets import (
 )
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from ...canonical.transforms import is_every_vlan
+from .._helpers import one_mtu_written
 from ..base import RenderError
 from .port_names import classify_port_name
 
@@ -681,8 +682,10 @@ def _zone_body(zone_el: ET.Element, iface) -> None:
         ET.SubElement(zone_el, "descr").text = "Management"
     if iface.enabled:
         ET.SubElement(zone_el, "enable")
-    if iface.mtu is not None:
-        ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
+    # One MTU here: the IP MTU where the tree states no payload.
+    mtu = one_mtu_written(iface)
+    if mtu is not None:
+        ET.SubElement(zone_el, "mtu").text = str(mtu)
     # Sub-finding 9a round-trip: a CanonicalInterface with
     # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
     # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
@@ -834,7 +837,7 @@ def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
         and iface.name not in pooled
         and iface.enabled
         and not (
-            iface.description or iface.kind or iface.mtu is not None
+            iface.description or iface.kind or one_mtu_written(iface) is not None
             or iface.ipv4_addresses or iface.ipv6_addresses
             or iface.dhcp_client or iface.dhcp_client_v6
             or iface.vrrp_groups

@@ -11,7 +11,8 @@ a job that reported nothing.
 
 The tree is read here, and the Junos output is read twice: for the
 line, as text, and by the parser.  The fold without an MTU is held as
-it was.
+it was.  A unit's ``family inet mtu`` is its IP MTU (``ip_mtu``), and
+its ``family inet6 mtu`` its MTU, the tree having no IPv6 MTU.
 """
 
 from __future__ import annotations
@@ -38,17 +39,17 @@ def _junos():
     return get_codec("juniper_junos")
 
 
-def _units_mtu(tree, name: str) -> int | None:
+def _units_mtu(tree, name: str, family: str = "inet") -> int | None:
     found = [i for i in tree.interfaces if i.name == name]
     assert len(found) == 1, [i.name for i in tree.interfaces]
-    return found[0].mtu
+    return found[0].ip_mtu if family == "inet" else found[0].mtu
 
 
 @pytest.mark.parametrize("family", ["inet", "inet6"])
 def test_an_irb_unit_with_an_mtu_is_not_folded(family: str) -> None:
     text = _BASE.format(mtu=f"set interfaces irb unit 100 family {family} mtu 9000\n")
     tree = _junos().parse(text)
-    assert _units_mtu(tree, "irb.100") == 9000
+    assert _units_mtu(tree, "irb.100", family) == 9000
     unit = next(i for i in tree.interfaces if i.name == "irb.100")
     assert [(a.ip, a.prefix_length) for a in unit.ipv4_addresses] == [("192.0.2.1", 24)]
     vlan = next(v for v in tree.vlans if v.id == 100)

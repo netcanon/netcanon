@@ -134,6 +134,8 @@ class JunosCodec(CodecBase):
         # guard in tests/unit/migration/test_scope_boundary.py.
         device_classes=[DeviceClass.switch, DeviceClass.router, DeviceClass.firewall],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `family inet mtu`
+            "/interfaces/interface/config/ip-mtu-beside-mtu",  # `family inet mtu` beside the interface MTU
             "/system/hostname",
             # `set system syslog host <ip>` — parse+render; was implicit-
             # supported, declared explicit alongside promotions #1/#11.

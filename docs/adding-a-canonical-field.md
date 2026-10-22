@@ -69,7 +69,13 @@ whose number counts more convert at their edge, from one table
 (`MTU_BEYOND_THE_PAYLOAD` in `codecs/_helpers.py`).  A number that is
 the same word on every platform is not the same quantity: a timer, a
 cost or a size has a unit, and the parser's own reading back of its
-output cannot tell you it is the wrong one.  For collection fields use `Field(default_factory=list)`.
+output cannot tell you it is the wrong one.  **And ask whether one
+field holds one fact.**  An IP MTU of its own (IOS-XE `ip mtu`, Junos
+`family inet mtu`) is not the interface MTU, and its default is not
+always the MTU's: on AOS-CX it stays 1500 under a raised `mtu`.  It
+is a field of its own (`ip_mtu`), `None` where it is the payload,
+and a platform with one MTU declares it lost where both are stated
+and differ.  For collection fields use `Field(default_factory=list)`.
 
 Top-level features (an entire new canonical object like `CanonicalDHCPPool`)
 get their own class in the same file plus a new field on `CanonicalIntent`:

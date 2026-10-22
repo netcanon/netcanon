@@ -515,6 +515,13 @@ cuts every 1500-byte packet.  Check MTUs migrated then.  The vendors'
 sentences are in the
 [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 
+**No IP MTU of its own is written.**  OS10's IP MTU is a setting apart
+from the link MTU (Dell's example prints `MTU 9216 bytes, IP MTU 1500
+bytes`), and the statement that sets it in a config is not
+established, so another vendor's IP MTU of its own (IOS-XE or AOS-CX
+`ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is not in the
+output, and the job's report says it is lost.
+
 ## Two things that would have been silent bugs
 
 Recorded here because they change how you should read a migration report:

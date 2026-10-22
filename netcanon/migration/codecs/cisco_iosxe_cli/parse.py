@@ -78,6 +78,7 @@ from .._helpers import (
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
     address_key,
+    ip_mtu_read,
     keyword_stanza_rows,
     second_dot1q_tags,
     spaced_port_name,
@@ -124,7 +125,9 @@ _IPV6_RE = re.compile(
 )
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
-_MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``mtu 9000``, the payload, and ``ip mtu 1440``, the largest IP
+#: packet, its header included (``CanonicalInterface.ip_mtu``).
+_MTU_RE = re.compile(r"^\s+(ip\s+)?mtu\s+(\d+)\s*$", re.IGNORECASE)
 # IPv6 dynamic-address keywords.  IOS-XE accepts:
 #   ``ipv6 address dhcp``      — stateful DHCPv6 client
 #   ``ipv6 address autoconfig``— RFC 4862 SLAAC
@@ -1243,6 +1246,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             "trunk_native": None,
             "lag_member_of": None,
             "mtu": None,
+            "ip_mtu": None,
             "ipv6": [],
             "vrf": "",
             "kind": "",
@@ -1305,7 +1309,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         mm = _MTU_RE.match(line)
         if mm:
             try:
-                current["mtu"] = int(mm.group(1))
+                current["ip_mtu" if mm.group(1) else "mtu"] = int(mm.group(2))
             except ValueError:
                 pass
             return
@@ -1708,6 +1712,10 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
         mtu=raw.get("mtu"),
+        ip_mtu=ip_mtu_read(
+            "cisco_iosxe_cli", raw.get("ip_mtu"), raw.get("mtu"),
+            ipv4=bool(ipv4_addrs),
+        ),
         vrf=raw.get("vrf", ""),
         kind=raw.get("kind", ""),
         dhcp_client_v6=raw.get("dhcp_client_v6", ""),

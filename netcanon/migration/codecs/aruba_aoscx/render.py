@@ -63,6 +63,7 @@ from .._helpers import (
     TRUNK_NONE,
     TRUNK_THAT_STATES_NO_NATIVE,
     _coalesce_vlan_ids,
+    ip_mtu_written,
     native_vlan_stated,
     same_vendor_version,
     trunk_list_says,
@@ -464,6 +465,12 @@ def _render_interface(
         # ── L3 (routed) — vrf bind precedes the address ──
         if iface.vrf:
             block.append(f"    vrf attach {iface.vrf}")
+        # The IP MTU is a setting of its own on AOS-CX, 1500 unless
+        # a line says otherwise, so a raised ``mtu`` is written with
+        # an ``ip mtu`` for the packets it is raised for.
+        ip_mtu = ip_mtu_written("aruba_aoscx", iface)
+        if ip_mtu is not None:
+            block.append(f"    ip mtu {ip_mtu}")
         for addr in iface.ipv4_addresses:
             line = f"    ip address {addr.ip}/{addr.prefix_length}"
             if addr.is_secondary:

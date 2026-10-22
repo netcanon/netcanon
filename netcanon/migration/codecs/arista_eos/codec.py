@@ -106,6 +106,7 @@ class AristaEOSCodec(CodecBase):
         version_range="4.20+",
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
@@ -148,6 +149,19 @@ class AristaEOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "EOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/routing-instances/instance/description",
                 reason=(

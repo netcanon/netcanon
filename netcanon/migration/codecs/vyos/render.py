@@ -46,7 +46,7 @@ from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
-from .._helpers import same_vendor_version
+from .._helpers import one_mtu_written, same_vendor_version
 
 logger = logging.getLogger(__name__)
 
@@ -243,8 +243,10 @@ def _iface_body(iface, indent: str) -> list[str]:
         out.append(f"{indent}description {_q(iface.description)}")
     if not iface.enabled:
         out.append(f"{indent}disable")
-    if iface.mtu is not None:
-        out.append(f"{indent}mtu {iface.mtu}")
+    # One MTU here: the IP MTU where the tree states no payload.
+    mtu = one_mtu_written(iface)
+    if mtu is not None:
+        out.append(f"{indent}mtu {mtu}")
     if iface.vrf:
         out.append(f"{indent}vrf {_q(iface.vrf)}")
     return out

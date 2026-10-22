@@ -97,6 +97,7 @@ from .._helpers import (
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
     address_key,
+    ip_mtu_read,
     vlan_id_run,
 )
 from .._input_shape import detect_input_shape
@@ -126,9 +127,13 @@ _IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\d+))?\b", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
-#: ``mtu 9198`` — the L2 frame MTU.  The separate ``ip mtu`` line (L3
-#: MTU) is parse-and-ignore in v1.
+#: ``mtu 9198`` — the largest Ethernet payload (HPE's VSG: "the same
+#: bytes as the Layer 3 MTU").
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``ip mtu 9198`` — the largest IP packet, a setting of its own whose
+#: default is 1500 whatever ``mtu`` says
+#: (``IP_MTU_THAT_IS_NOT_STATED`` in ``codecs/_helpers.py``).
+_IP_MTU_RE = re.compile(r"^\s+ip\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 #: ``ip address 10.0.0.1/24`` — CIDR form, never dotted mask.  The mgmt
 #: port's ``ip static`` / ``ip dhcp`` forms are deferred (not this regex).
 _IP_CIDR_RE = re.compile(
@@ -653,6 +658,7 @@ def _new_iface_scratch(name: str) -> dict:
         "enabled": _default_enabled(name),
         "type": _infer_type(name),
         "mtu": None,
+        "ip_mtu": None,
         "ipv4": [],
         "ipv6": [],
         "vrf": "",
@@ -725,6 +731,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if mm:
             try:
                 current["mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
+            return
+
+        mm = _IP_MTU_RE.match(line)
+        if mm:
+            try:
+                current["ip_mtu"] = int(mm.group(1))
             except ValueError:
                 pass
             return
@@ -830,7 +844,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["lag_member_of"] = f"lag {int(lm.group(1))}"
             return
 
-        # Any other indented line (lacp mode / spanning-tree / ip mtu /
+        # Any other indented line (lacp mode / spanning-tree /
         # active-gateway / ...) is deferred — parse-and-ignore.
 
     # Loop skeleton (open on `interface`, close on dedent, flush at EOF)
@@ -875,6 +889,12 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
         mtu=raw.get("mtu"),
+        # An interface that routes IPv4 with ``mtu`` raised and no
+        # ``ip mtu`` sends IP packets of 1500 bytes, not ``mtu``.
+        ip_mtu=ip_mtu_read(
+            "aruba_aoscx", raw.get("ip_mtu"), raw.get("mtu"),
+            ipv4=bool(raw.get("ipv4")),
+        ),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],

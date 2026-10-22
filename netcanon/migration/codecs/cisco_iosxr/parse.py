@@ -142,6 +142,7 @@ from .._helpers import (
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
+    ip_mtu_read,
     keyword_stanza_rows,
     mtu_read,
     second_dot1q_tags,
@@ -208,6 +209,10 @@ _IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``ipv4 mtu 9000`` -- the largest IPv4 packet, its header included
+#: (Cisco: "MTU config and show commands, at L2 and L3, include the
+#: header size of their corresponding layer").
+_IPV4_MTU_RE = re.compile(r"^\s+ipv4\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 #: ``ipv4 address 198.51.100.1 255.255.255.252 [secondary]`` — dotted
 #: mask, NOT CIDR.  Mirrors IOS-XE's ``ip address`` shape but with the
 #: ``ipv4`` keyword.
@@ -816,6 +821,7 @@ def _new_iface_scratch(name: str) -> dict:
         "enabled": True,
         "type": _infer_type(name),
         "mtu": None,
+        "ipv4_mtu": None,
         "ipv4": [],
         "ipv6": [],
         "vrf": "",
@@ -870,6 +876,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if mm:
             try:
                 current["mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
+            return
+        mm = _IPV4_MTU_RE.match(line)
+        if mm:
+            try:
+                current["ipv4_mtu"] = int(mm.group(1))
             except ValueError:
                 pass
             return
@@ -961,6 +974,10 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
         mtu=_payload(raw),
+        ip_mtu=ip_mtu_read(
+            "cisco_iosxr", raw.get("ipv4_mtu"), _payload(raw),
+            ipv4=bool(raw.get("ipv4")),
+        ),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],

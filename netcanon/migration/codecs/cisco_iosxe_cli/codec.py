@@ -113,6 +113,8 @@ class CiscoIOSXECLICodec(CodecBase):
         version_range="15.x+",
         device_classes=[DeviceClass.router, DeviceClass.switch],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `ip mtu`
+            "/interfaces/interface/config/ip-mtu-beside-mtu",  # `ip mtu` beside the interface MTU
             "/system/hostname",
             "/system/syslog-server",   # promotion #1 — `logging host <ip>` harvest + render
             "/interfaces/interface/name",

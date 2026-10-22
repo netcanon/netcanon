@@ -47,7 +47,7 @@ from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ...canonical.transforms import is_every_vlan
-from .._helpers import same_vendor_version
+from .._helpers import one_mtu_written, same_vendor_version
 from ..base import RenderError
 from .parse import (
     _is_vlan_name,
@@ -289,8 +289,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
             parts.append(f"disabled={_yes_no(not iface.enabled)}")
-            if iface.mtu is not None:
-                parts.append(f"mtu={iface.mtu}")
+            # One MTU here: the IP MTU where the tree states no payload.
+            mtu = one_mtu_written(iface)
+            if mtu is not None:
+                parts.append(f"mtu={mtu}")
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -532,9 +534,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     )
                 parts.append(f"name={_quote_if_needed(iface.name)}")
                 # GRE, EoIP and IPIP each take ``mtu`` (default auto);
-                # the parser reads it back.
-                if iface.mtu is not None:
-                    parts.append(f"mtu={iface.mtu}")
+                # the parser reads it back.  One MTU here: the IP MTU
+                # where the tree states no payload.
+                mtu = one_mtu_written(iface)
+                if mtu is not None:
+                    parts.append(f"mtu={mtu}")
                 # Placeholder endpoint -- canonical model in v1 carries
                 # no tunnel local/remote address pair.  Without
                 # ``remote-address`` RouterOS rejects the add line; we
@@ -582,6 +586,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(f"interface={_quote_if_needed(parent)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
+            # ``mtu`` is the VLAN interface's layer-3 MTU (default
+            # 1500), the parser reads it back.  One MTU here: the IP MTU
+            # where the tree states no payload.  Left out, an AOS-CX
+            # VLAN interface's ``ip mtu 9198`` was 1500 here.
+            mtu = one_mtu_written(iface)
+            if mtu is not None:
+                parts.append(f"mtu={mtu}")
             # Admin-state: a shut VLAN SVI must carry disabled=yes, else
             # RouterOS defaults it up and the shutdown silently inverts on
             # reparse (the ethernet path above already emits this).

@@ -118,6 +118,7 @@ class FortiGateCLICodec(CodecBase):
         version_range="7.x",
         device_classes=[DeviceClass.firewall, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
@@ -172,6 +173,19 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "FortiOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/ipv6/address/scope",
                 reason=(

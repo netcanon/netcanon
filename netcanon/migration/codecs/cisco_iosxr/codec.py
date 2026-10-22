@@ -124,6 +124,8 @@ class CiscoIOSXRCodec(CodecBase):
         version_range="6.x / 7.x",
         device_classes=[DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `ipv4 mtu`
+            "/interfaces/interface/config/ip-mtu-beside-mtu",  # `ipv4 mtu` beside the interface MTU
             # System
             "/system/hostname",
             # Management plane — DNS / NTP / syslog (promotion #13): parse

@@ -789,6 +789,43 @@ timestamp if your timezone matters for an audit.
   OS10 with 0.7.7 or earlier.  Guarded by
   `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
   reads each target's output as text against offsets typed by hand.
+- **An IP MTU of its own was lost, or written as the interface MTU.**
+  IOS-XE and AOS-CX `ip mtu`, IOS XR `ipv4 mtu` and Junos `family inet
+  mtu` state the largest IP packet apart from the interface MTU, and
+  the tree had no field for it.  The AOS-CX parser skipped `ip mtu`,
+  so every jumbo VLAN interface of the committed AOS-CX captures --
+  `ip mtu 9198` and no `mtu` -- came out with no MTU line on every
+  target, an IP MTU of 1500, in jobs that said `completed`; the IOS-XE
+  and IOS XR parsers skipped theirs; and the Junos parser read a
+  unit's `family inet mtu` as the unit's MTU, which IOS-XE and IOS XR
+  then wrote as an interface `mtu`.  The other way, AOS-CX -- whose IP
+  MTU stays 1500 under a raised `mtu` unless `ip mtu` says otherwise
+  -- was written `mtu 9000` alone for an IOS-XE port that sent
+  9000-byte IP packets.  Every check agreed, since neither tree held
+  the number.  `CanonicalInterface.ip_mtu` now holds it where it is
+  not the payload: the four platforms read and write their own
+  statement, and AOS-CX fills in its default of 1500 where a config
+  raises `mtu` on an IPv4 interface and states no `ip mtu`, and writes
+  `ip mtu` for a payload above it.  NX-OS, EOS, RouterOS, FortiOS,
+  VyOS and OPNsense have one MTU: they write the IP MTU as that MTU
+  where the tree states no payload, and where both are stated and
+  differ, the capability matrix says the IP MTU is lost (`lossy`).
+  OS10 writes none (`lossy`: the statement that sets it is not
+  established); AOS-S, whose IP MTU is the switch's, and the IOS-XE
+  NETCONF codec declare it `unsupported`.  A RouterOS VLAN interface,
+  whose `add` line carried no MTU from any source, now writes `mtu=`
+  and the parser reads it back.  The committed AOS-CX inputs that
+  state an `ip mtu` other than their `mtu` or raise `mtu` on an IPv4
+  port, the IOS-XE input that states `ip mtu`, and the RouterOS
+  captures whose VLAN interfaces state `mtu=` parse to a tree they did
+  not before, on purpose.  The vendors' sentences are in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
+  ⚠️ Check the MTUs of VLAN interfaces migrated from AOS-CX with
+  0.7.7 or earlier.  Guarded by
+  `tests/unit/migration/test_an_ip_mtu_of_its_own.py`, which reads
+  the IP MTU each output sends from its text, by a reader per
+  grammar, with each platform's value for an IP MTU it does not state
+  typed by hand.
 - **A Junos IRB unit's MTU was lost where the unit was folded onto
   its VLAN.**  The Junos parser folds an IRB unit that a VLAN names
   (`set vlans v100 l3-interface irb.100`) onto that VLAN -- its
@@ -3885,6 +3922,19 @@ timestamp if your timezone matters for an audit.
   sub-interface of tag 0, which no 802.1Q VLAN has, and is written
   so onto the targets that write a tag; the IOS-XE, IOS XR and EOS
   parsers leave such a stanza out, with a row, when they read it.
+- **The tree has no IPv6 MTU, and some IP MTUs are not carried.**
+  IOS-XE and IOS XR `ipv6 mtu` and a Junos unit 0's `family inet6 mtu`
+  are not read.  A Junos unit's `family inet6 mtu` above unit 0 is
+  read as the unit's MTU, and so is written for IPv4 as well where the
+  unit carries IPv4 and states no `family inet mtu`.  A target with
+  one MTU (NX-OS, EOS, RouterOS, FortiOS, VyOS, OPNsense) loses an IP
+  MTU stated beside a different MTU, and OS10 writes no IP MTU; the
+  job's report says so.  The IP MTU an IOS-XE or Junos config leaves
+  unstated under a raised `mtu` is taken to be the payload, which no
+  vendor page read says.
+- **A sub-interface of another vendor is written onto RouterOS with no
+  `/interface vlan` line.**  Its address is added on `ether2.10`, an
+  interface the output does not define; the job is `partial`.
 
 - **A Junos routed port's native VLAN reaches Junos alone.**  `set
   interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units
