@@ -622,7 +622,9 @@ per_field_expectation:
       assumed: the FLATTENED content mostly still arrives.  The Junos
       two-pass parse folds group-scoped statements into the canonical tree
       before render, so the description and `mtu 9000` that GLOBAL-SETTINGS
-      contributes to `ge-0/0/0` appear as literal AOS-CX interface lines.
+      contributes to `ge-0/0/0` appear as literal AOS-CX interface lines
+      (the MTU as `mtu 8986`: the same packet, in AOS-CX's count, which
+      leaves out the 14-byte header a Junos `mtu` counts).
       What is lost is the group STRUCTURE — after migration those settings
       are per-interface literals with no shared definition to edit — plus
       any group content whose destination field is itself dropped (that same

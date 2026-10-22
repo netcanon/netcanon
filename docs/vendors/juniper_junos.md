@@ -418,15 +418,36 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   kept, and unit 0's family MTU is not read: its record holds the
   device's own (media) MTU.  Juniper requires the device's media MTU
   to hold a family MTU and its encapsulation overhead, so where the
-  device states no MTU (and the unit's is above 1500) or one no
-  larger than the unit's, a `# review:` line says so.  ⚠️ Up to
+  device states no MTU (and the unit's is above 1500) or one that
+  cannot hold it, a `# review:` line says so.  ⚠️ Up to
   0.7.7 a unit's MTU was not read, and was written only under a name
   Junos refuses.  An IRB unit that a VLAN names (`l3-interface
   irb.100`) is folded onto the VLAN -- its address goes on the VLAN
   -- unless it holds what a VLAN record cannot: a description, a
   VRF, an IPv6 address or an MTU.  Such a unit stays `irb.100`.
-  ⚠️ Until then an IRB unit's MTU was lost where it was folded.  `vlan-tagging` on the parent port is not
-  read and not written: add it to an output that has tagged units.
+  ⚠️ Until then an IRB unit's MTU was lost where it was folded.
+- **A device's `mtu` is a media MTU.**  It counts the 14-byte
+  Ethernet header, and 4 bytes more for each 802.1Q tag its tagging
+  statement names (Juniper's overhead table: 14, and 18 for 802.1Q):
+  one under `vlan-tagging`, two under `stacked-vlan-tagging`, and two
+  under `flexible-vlan-tagging`, whose MTU Juniper says to "increase
+  ... to 4 bytes more" for "the future addition of a stacked VLAN
+  tag".  A port that states none is counted by its units' tags.  The
+  tree's MTU is the payload, so a port's `mtu 9014` is `mtu 9000` on
+  IOS-XE, NX-OS, EOS, AOS-CX and the other platforms that count none,
+  and their `mtu 9000` is written `mtu 9014` here (`mtu 9018` on a
+  `vlan-tagging` port, `mtu 9022` under the other two).  A port, an aggregate and `irb` are
+  converted (an `irb`'s units are not tags on it); a loopback, a
+  tunnel, and a name the classifier does not read (`reth0`, a
+  channelised `xe-0/0/6:2`, a wildcard range member) are copied as
+  they stand.  A trunk in `family ethernet-switching` is given no
+  tag's bytes: what its media MTU has to hold is not established.  A
+  jumbo value near the platform's maximum can pass it once converted,
+  and the commit refuses it.  ⚠️ Up to 0.7.7 the number was copied
+  as it stood: a Junos `mtu 1514` was an IP MTU 14 bytes too large on
+  the target, and an IOS-XE `mtu 9000` an IP MTU of 8986 on Junos.
+  Check MTUs migrated then.  The vendors' sentences are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
   (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second

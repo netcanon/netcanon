@@ -129,6 +129,48 @@ _MEDIA_TO_SPEED: dict[str, str] = {
 }
 
 
+def media_mtu_counts_a_header(device: str) -> bool:
+    """Whether the media MTU of the Junos device *device* counts an
+    Ethernet header (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
+
+    A port the classifier reads (``ge-0/0/1``, ``xe-1/0/0``), an
+    aggregate (``ae0``), and ``irb``, whose MTU Juniper computes "by
+    removing the Ethernet header overhead (6(DMAC)+6(SMAC)+2(EtherType))".
+    Not a loopback, a tunnel or a management port: Juniper says "You
+    cannot configure an MTU for" ``fxp0``, ``em0``, ``me0`` and loopback
+    devices, and a tunnel has no Ethernet header.  Nor a name the
+    classifier does not read (``reth0``, ``xe-0/0/6:2``): its number is
+    copied as it stands, a known limitation.
+    """
+    return device == "irb" or media_mtu_counts_a_tag(device)
+
+
+def media_mtu_counts_a_tag(device: str) -> bool:
+    """Whether the media MTU of *device* counts the 802.1Q tag its units
+    carry: a port or an aggregate, whose units' ``vlan-id`` needs
+    ``vlan-tagging`` on it, for an overhead of "802.1Q/Ethernet version
+    2 | 18" (Juniper's encapsulation overhead table).  Not ``irb``: an
+    IRB unit routes for a VLAN and is not a tagged unit of the IRB.
+    """
+    return classify_port_name(device).kind in ("physical", "lag")
+
+
+#: How many 802.1Q tags a device's media MTU counts, by the tagging
+#: statement on the device: one under ``vlan-tagging``, two under
+#: ``stacked-vlan-tagging`` ("dual VLAN tags for all logical
+#: interfaces"), and two under ``flexible-vlan-tagging``, whose MTU
+#: Juniper says to "increase ... to 4 bytes more" than a VLAN-tagged
+#: interface's: "The additional 4 bytes accommodates the future
+#: addition of a stacked VLAN tag" (Enabling VLAN Tagging).  Four
+#: bytes a tag is read from the overhead table (802.1Q/Ethernet
+#: version 2, 18, against Ethernet version 2, 14).
+TAGGING_STATEMENT_TAGS: dict[str, int] = {
+    "vlan-tagging": 1,
+    "stacked-vlan-tagging": 2,
+    "flexible-vlan-tagging": 2,
+}
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Junos port name into a :class:`PortIdentity`."""
     # Standard <media>-<fpc>/<pic>/<port>[.unit]

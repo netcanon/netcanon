@@ -97,13 +97,19 @@ from .._helpers import (
     Tags,
     Uniques,
     a_tag,
+    mtu_read,
     unread_tags_row,
     unstated_trunk_list,
     vlan_id_run,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .port_names import classify_port_name
+from .port_names import (
+    TAGGING_STATEMENT_TAGS,
+    classify_port_name,
+    media_mtu_counts_a_header,
+    media_mtu_counts_a_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -609,6 +615,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # makes no record of it either.
     unread_tags: list[str] = []
     left_out_units: set[str] = set()
+    # How many 802.1Q tags each device's frames carry, which its media
+    # MTU counts as well as the Ethernet header.
+    device_tags = _tags_of_devices(iface_state, found.tagging)
     for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
         if name in lag_state and not state:
@@ -674,8 +683,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # interface-range <r> mtu <N>`` line via the
             # range-fold pass.
             mtu=(
-                state["mtu"] if "mtu" in state
-                # A unit's MTU, read from its family (inet's first).
+                _media_mtu_read(name, state["mtu"], device_tags.get(name, 0))
+                if "mtu" in state
+                # A unit's MTU, read from its family (inet's first):
+                # the largest IP packet already.
                 else state.get("inet_mtu", state.get("inet6_mtu"))
             ),
             # Phase 4 rank-4: L2 switchport semantics.
@@ -1194,6 +1205,54 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
 # ---------------------------------------------------------------------------
 # Tokeniser + dispatch
 # ---------------------------------------------------------------------------
+
+
+def _media_mtu_read(device: str, stated: int, tags: int) -> int:
+    """The payload of a device whose config states media ``mtu``
+    *stated*: the number less the Ethernet header, and 4 bytes for each
+    of the *tags* its frames carry (:func:`_tags_of_devices`;
+    :func:`media_mtu_counts_a_header`).  The tree's MTU
+    is the largest IP packet, and a Junos media MTU counts the bytes
+    in front of it; copied as it stood, ``mtu 1514`` -- the default of
+    a Junos Ethernet port -- was written ``mtu 1514`` on IOS-XE, NX-OS,
+    EOS and AOS-CX, an IP MTU 14 bytes larger than the source's.
+    """
+    if not media_mtu_counts_a_header(device):
+        return stated
+    return mtu_read(
+        "juniper_junos", stated, tags=tags if media_mtu_counts_a_tag(device) else 0,
+    )
+
+
+def _tags_of_devices(
+    iface_state: dict[str, dict[str, Any]], statements: dict[str, str],
+) -> dict[str, int]:
+    """How many 802.1Q tags the frames of each device carry, for its
+    media MTU (:func:`_media_mtu_read`): the count the device's tagging
+    statement names (``TAGGING_STATEMENT_TAGS``) -- a unit of one tag
+    on a ``flexible-vlan-tagging`` port still leaves room for two --
+    and, where the device states none, the most tags one of its units
+    carries, since a pasted fragment can leave the statement out.  A
+    unit whose tags are not read whole (:func:`_tags_of_unit`) counts
+    none.
+
+    Args:
+        iface_state: The parser's state, by interface name; a unit
+            above 0 is ``<device>.<unit>``, unit 0 is the device.
+        statements: The tagging statement each device states.
+    """
+    tags = {device: TAGGING_STATEMENT_TAGS[word] for device, word in statements.items()}
+    for name, state in ticked(iface_state.items()):
+        if not state.get("tag_statements"):
+            continue
+        device = name.rsplit(".", 1)[0] if "." in name else name
+        if device in statements:
+            continue
+        read = _tags_of_unit(state["tag_statements"])
+        if isinstance(read, str):
+            continue
+        tags[device] = max(tags.get(device, 0), 1 if read[1] is None else 2)
+    return tags
 
 
 #: What the classifier calls a name whose interface record is made
@@ -1805,7 +1864,8 @@ class _Found:
     ``stated``, the name of every interface a line configures: the
     first word of an ``interfaces`` line on the device itself or on
     its unit 0, ``<name>.<N>`` of a line under unit N, a member of an
-    interface-range.
+    interface-range.  And, in ``tagging``, the tagging statement each
+    device states (``vlan-tagging`` and the like), by device.
 
     Each handler runs once per line.  Looking through the whole list
     each time (``next(...)``, ``any(...)``, ``value not in a_list``)
@@ -1829,6 +1889,7 @@ class _Found:
         )
         self.once = Uniques()
         self.stated: set[str] = set()
+        self.tagging: dict[str, str] = {}
 
 
 def _dispatch_set(
@@ -2121,6 +2182,14 @@ def _apply_interfaces(  # noqa: C901
     # ``interfaces <name> description "<desc>"``
     if second == "description" and len(tokens) >= 3:
         state["description"] = tokens[2]
+        return
+
+    # ``interfaces <name> vlan-tagging`` (``stacked-vlan-tagging``,
+    # ``flexible-vlan-tagging``): how many tags the device's frames
+    # carry, which its media MTU counts (:func:`_tags_of_devices`).
+    if second in TAGGING_STATEMENT_TAGS and len(tokens) == 2:
+        if found is not None:
+            found.tagging[name] = second
         return
 
     # ``interfaces <name> mtu <N>`` — shared attribute the

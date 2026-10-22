@@ -143,6 +143,7 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     keyword_stanza_rows,
+    mtu_read,
     second_dot1q_tags,
     spaced_port_name,
     without_keyword_stanzas,
@@ -151,6 +152,7 @@ from .._helpers import (
 from .._input_shape import detect_input_shape
 from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
 from ..base import ParseError
+from . import port_names as _port_names
 
 logger = logging.getLogger(__name__)
 
@@ -935,6 +937,22 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     )
 
 
+def _payload(raw: dict) -> int | None:
+    """The tree's MTU, the payload, of an interface whose stanza states
+    ``mtu``: the number less the Ethernet header, and 4 bytes for the
+    tag of a sub-interface that carries one (Cisco: "add 4 bytes for
+    each VLAN tag configured on the sub-interface").  Copied as it
+    stood, ``mtu 1514`` -- the default of an IOS XR Ethernet interface
+    -- was ``mtu 1514`` on IOS-XE, NX-OS, EOS and AOS-CX, an IP MTU 14
+    bytes larger than the source's.  A Q-in-Q sub-interface's
+    ``second-dot1q`` is a tag as well."""
+    stated = raw.get("mtu")
+    if stated is None or not _port_names.mtu_counts_a_header(raw["name"]):
+        return stated
+    tags = 0 if raw.get("dot1q_vlan") is None else 1 + (raw.get("dot1q_inner_vlan") is not None)
+    return mtu_read("cisco_iosxr", stated, tags=tags)
+
+
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     """Convert the parse-time scratch dict into a CanonicalInterface."""
     return CanonicalInterface(
@@ -942,7 +960,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         description=raw.get("description", ""),
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
-        mtu=raw.get("mtu"),
+        mtu=_payload(raw),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],

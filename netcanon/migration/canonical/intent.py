@@ -196,7 +196,12 @@ class CanonicalInterface(BaseModel):
         enabled: ``True`` if the interface is administratively up.
         interface_type: IANA-ifType discriminator (e.g.
             ``"ethernetCsmacd"``, ``"softwareLoopback"``).
-        mtu: Interface MTU in bytes; ``None`` = use vendor default.
+        mtu: Interface MTU in bytes, counting the PAYLOAD: the
+            largest IP packet the interface carries, with no Ethernet
+            header, tag or FCS (IOS-XE ``mtu 1500``, Junos ``mtu
+            1514``).  A codec whose platform counts more converts at
+            its edge (``MTU_BEYOND_THE_PAYLOAD`` in
+            ``codecs/_helpers.py``).  ``None`` = use vendor default.
         ipv4_addresses: IPv4 address records on this interface.
         ipv6_addresses: IPv6 address records on this interface.
         switchport_mode: Switchport state.  ``"access"`` | ``"trunk"`` |

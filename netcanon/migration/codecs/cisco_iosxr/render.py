@@ -42,7 +42,7 @@ import re
 from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from .._helpers import _prefix_to_mask, same_vendor_version
+from .._helpers import _prefix_to_mask, mtu_written, same_vendor_version
 from . import port_names as _port_names
 
 #: Canonical algorithm token -> the IOS-XR keyword + type that consumes it.
@@ -340,6 +340,22 @@ def _render_router_static(routes: list) -> list[str]:
     return out
 
 
+def _stated_mtu(iface) -> int:
+    """The ``mtu`` of *iface* for the tree's MTU, the payload: the
+    Ethernet header added, and 4 bytes for each tag this renderer writes
+    on a sub-interface, its ``second-dot1q`` included (Cisco: the L2
+    MTU "includes 14 bytes for an
+    Ethernet interface"; "add 4 bytes for each VLAN tag").  Copied as
+    it stood, IOS-XE ``mtu 9000`` was IOS XR ``mtu 9000``, which Cisco
+    itself gives as "a max IP packet size of 8986 bytes".  Not an
+    interface whose number counts no Ethernet header here
+    (:func:`.port_names.mtu_counts_a_header`)."""
+    if not _port_names.mtu_counts_a_header(iface.name):
+        return iface.mtu
+    tags = 0 if iface.dot1q_vlan is None else 1 + (iface.dot1q_inner_vlan is not None)
+    return mtu_written("cisco_iosxr", iface.mtu, tags=tags)
+
+
 def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     """Render one ``interface <name>`` stanza (``!``-terminated).
 
@@ -358,7 +374,7 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     if not iface.enabled:
         block.append(" shutdown")
     if iface.mtu is not None:
-        block.append(f" mtu {iface.mtu}")
+        block.append(f" mtu {_stated_mtu(iface)}")
     if iface.vrf:
         block.append(f" vrf {iface.vrf}")
     # GAP 7: routed sub-interface 802.1Q tag.  Emitted directly from the

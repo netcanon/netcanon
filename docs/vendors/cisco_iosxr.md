@@ -224,6 +224,20 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   of tags have no form in the tree: the sub-interface is left out,
   with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
   sub-interface is not translated`).
+- **An interface's `mtu` counts the Ethernet header.**  Cisco: the
+  L2 MTU "includes 14 bytes for an Ethernet interface", and 4 bytes
+  more for each tag of a sub-interface.  The tree's MTU is the
+  payload, so `mtu 9014` is `mtu 9000` on IOS-XE, NX-OS, EOS and
+  AOS-CX, and their `mtu 9000` is written `mtu 9014` here (`mtu 9018`
+  on a sub-interface with a tag).  A port, a management port, a
+  `Bundle-Ether` and their sub-interfaces are converted; a loopback,
+  a tunnel and a `BVI` are copied as they stand.  A Q-in-Q
+  sub-interface's `second-dot1q` is a tag like its `dot1q`.
+  ⚠️ Up to 0.7.7 the number was copied as it stood: IOS XR `mtu
+  1514`, its default, was an IP MTU 14 bytes too large on the
+  target, and IOS-XE `mtu 9000` an IP MTU of 8986 here.  Check MTUs
+  migrated then.  The vendors' sentences are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 - **Paste the config as the router prints it, with its
   indentation.**  IOS XR places each line of a configuration by its
   indentation when it loads a file: a line at the left margin is a

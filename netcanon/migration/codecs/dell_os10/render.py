@@ -89,6 +89,7 @@ from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from .._helpers import (
     TRUNK_ALL,
+    mtu_written,
     native_vlan_stated,
     same_vendor_version,
     switchport_trunk_allowed_value,
@@ -599,7 +600,16 @@ def _render_interface(
     block.extend(_render_switchport_lines(iface, untagged_stated))
 
     if iface.mtu is not None:
-        block.append(f" mtu {iface.mtu}")
+        # The link MTU is a frame size: Dell's example puts "tagged
+        # members with Link MTU of 1522 and IP MTU of 1500".  Copied as
+        # it stood, IOS-XE ``mtu 1500`` was a link MTU that cuts every
+        # 1500-byte packet.
+        stated = (
+            mtu_written("dell_os10", iface.mtu)
+            if _port_names.mtu_is_a_frame(iface.name)
+            else iface.mtu
+        )
+        block.append(f" mtu {stated}")
     if iface.vrf:
         block.append(f" ip vrf forwarding {iface.vrf}")
     for addr in iface.ipv4_addresses:

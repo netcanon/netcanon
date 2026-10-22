@@ -268,7 +268,7 @@ def test_unit_0s_family_mtu_is_not_the_devices() -> None:
         "set interfaces ge-0/0/2 unit 0 family inet mtu 9000\n"
     )
     mtus = {i.name: i.mtu for i in tree.interfaces}
-    assert mtus["ge-0/0/1"] == 9192
+    assert mtus["ge-0/0/1"] == 9178  # the media MTU less its Ethernet header
     assert mtus.get("ge-0/0/2") is None
 
 

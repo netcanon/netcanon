@@ -30,6 +30,7 @@ lossy or unsupported.
 | `routing-protocols.md` | BGP / OSPF / EIGRP / IS-IS / MPLS — out of canonical scope | `cisco-bgp-cg`, `cisco-ospf-cg`, `junos-bgp-overview`, `junos-ospf-overview` |
 | `aaa.md` | RADIUS / TACACS+ servers | `cisco-aaa-cli`, `junos-radius-cli`, `junos-tacplus-cli` |
 | `dhcp-server.md` | On-device DHCP server pools | `cisco-dhcp-cg`, `junos-dhcp-server`, `junos-dhcp-local-server` |
+| `mtu.md` | What an interface `mtu` counts, platform by platform (the payload, a header, a frame) | sources J1-O1 in the file (retrieved 2026-10-20) |
 
 Retrieved 2026-04-30.
 

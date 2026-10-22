@@ -94,7 +94,7 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     eth1 = by_name["ethernet1/1/1"]
     assert eth1.description == "Routed-uplink"
     assert eth1.enabled is True
-    assert eth1.mtu == 9216
+    assert eth1.mtu == 9194  # the link MTU 9216 less the frame's 22 bytes
     assert any(
         a.ip == "192.0.2.1" and a.prefix_length == 31
         for a in eth1.ipv4_addresses

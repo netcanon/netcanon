@@ -92,8 +92,14 @@ from ...canonical.transforms import (
     is_every_vlan,
 )
 from ...limits import charge
+from .._helpers import mtu_written
 from ..base import RenderError
-from .port_names import classify_port_name
+from .port_names import (
+    TAGGING_STATEMENT_TAGS,
+    classify_port_name,
+    media_mtu_counts_a_header,
+    media_mtu_counts_a_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +264,19 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # <auto-name> member <iface>` + one line per shared attr.
     # Per-interface render SUPPRESSES the shared attrs when the
     # interface is a range member.
+    # What each Ethernet device whose units carry tags is told about
+    # them, written once, before the first of its units' tags.
+    tagging = _device_tags(tree.interfaces)
+    # A device's media MTU as written: the tree's MTU is the payload,
+    # and a Junos media MTU counts the Ethernet header in front of it,
+    # and the tags the tagging statement written on it names.
+    media_mtu = {
+        i.name: _media_mtu_written(
+            i.name, i.mtu, TAGGING_STATEMENT_TAGS.get(tagging.statements.get(i.name, ""), 0),
+        )
+        for i in tree.interfaces
+        if i.mtu is not None
+    }
     range_emit_by_name: dict[str, list[str]] = {}
     iface_range_membership: dict[str, str] = {}
     collapsed_iface_count = 0
@@ -282,7 +301,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             continue
         # Collapse key: (mtu, description, enabled).  We DON'T
         # include IP addresses — those are per-interface.
-        key = (iface.mtu, iface.description, iface.enabled)
+        key = (media_mtu.get(iface.name), iface.description, iface.enabled)
         # Skip all-default tuples — nothing worth collapsing.
         if key == (None, "", True):
             continue
@@ -396,10 +415,6 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parent_name = i.name.rsplit(".", 1)[0]
             iface_has_subunits.add(parent_name)
 
-    # What each Ethernet device whose units carry tags is told about
-    # them, written once, before the first of its units' tags.
-    tagging = _device_tags(tree.interfaces)
-
     # --- interfaces ---
     for iface in tree.interfaces:
         name = iface.name
@@ -470,6 +485,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.mtu is not None:
                 _emit_unit_mtu(
                     out, parent, unit_num, iface, mtu_of.get(parent),
+                    media_mtu.get(parent),
                 )
             # Sub-finding 9b: DHCP client.  Junos models the DHCP
             # client as a property of ``family inet`` (replacing the
@@ -585,7 +601,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if emit_disable:
             out.append(f"set interfaces {name} disable")
         if emit_mtu:
-            out.append(f"set interfaces {name} mtu {iface.mtu}")
+            out.append(f"set interfaces {name} mtu {media_mtu[name]}")
         # The tags of the device's unit 0 (``unit 0 vlan-id N``), which
         # the tree keeps on the device's own record.
         if iface.dot1q_vlan is not None:
@@ -1641,12 +1657,30 @@ def _lag_name_to_ae(
 _DEFAULT_PROTOCOL_MTU = 1500
 
 
+def _media_mtu_written(device: str, payload: int, tags: int) -> int:
+    """The media ``mtu`` of *device* for the tree's MTU, the payload:
+    the Ethernet header added, and 4 bytes for each of the *tags* its
+    tagging statement names (``TAGGING_STATEMENT_TAGS``; an IRB unit is
+    no tag on ``irb``) -- ``MTU_BEYOND_THE_PAYLOAD`` in
+    ``codecs/_helpers.py``.  Copied as
+    it stood, IOS-XE ``mtu 9000`` was Junos ``mtu 9000``, an IP MTU of
+    8986.  A device whose media MTU counts no Ethernet header, or
+    whose name the classifier does not read, is written as it stands
+    (:func:`.port_names.media_mtu_counts_a_header`)."""
+    if not media_mtu_counts_a_header(device):
+        return payload
+    return mtu_written(
+        "juniper_junos", payload, tags=tags if media_mtu_counts_a_tag(device) else 0,
+    )
+
+
 def _emit_unit_mtu(
     out: list[str],
     parent: str,
     unit_num: int,
     iface: CanonicalInterface,
     device_mtu: int | None,
+    device_media_mtu: int | None = None,
 ) -> None:
     """Write a unit's MTU as ``family <f> mtu`` for each family it has.
 
@@ -1658,8 +1692,11 @@ def _emit_unit_mtu(
     the device's media MTU to hold a family MTU and its encapsulation
     overhead, so where the device states no MTU (and the unit's is
     above the default protocol MTU) or a smaller one, a review line
-    says so; the overhead depends on the encapsulation, which is not
-    computed here.
+    says so.  *device_mtu* is the tree's MTU of the device, the
+    payload, which already leaves the overhead out where the device
+    counts an Ethernet header; on any other device it is the number
+    as it stands, whose overhead is not computed here.
+    *device_media_mtu* is the device's ``mtu`` as it is written.
     """
     families = []
     if iface.ipv4_addresses or iface.dhcp_client:
@@ -1668,11 +1705,15 @@ def _emit_unit_mtu(
         families.append("inet6")
     if not families:
         families.append("inet")
-    if (
-        (device_mtu is None and iface.mtu > _DEFAULT_PROTOCOL_MTU)
-        or (device_mtu is not None and device_mtu <= iface.mtu)
-    ):
-        stated = "no mtu" if device_mtu is None else f"mtu {device_mtu}"
+    if device_mtu is None:
+        too_small = iface.mtu > _DEFAULT_PROTOCOL_MTU
+    elif media_mtu_counts_a_header(parent):
+        too_small = device_mtu < iface.mtu
+    else:
+        too_small = device_mtu <= iface.mtu
+    if too_small:
+        written = device_mtu if device_media_mtu is None else device_media_mtu
+        stated = "no mtu" if device_mtu is None else f"mtu {written}"
         out.append(
             f"# review: family mtu {iface.mtu} of {parent} unit "
             f"{unit_num} needs a media MTU on {parent} of at least that "
