@@ -57,6 +57,24 @@ firewall translation is your primary need, see
   parent is chosen and a `# review:` line in the VLAN's block names
   the one the source stated.  A VLAN that states no parent, or one
   from another vendor, is on the parent the renderer chooses.
+- **A sub-interface of another vendor is a VLAN interface on its
+  port.**  IOS-XE `GigabitEthernet0/0/1.100` with `encapsulation
+  dot1Q 200`, or a Junos `unit 100 vlan-id 200`, is `edit
+  "port1.100"` / `set type vlan` / `set vlanid 200` / `set interface
+  "port1"`: the tag is the one the sub-interface states, not the
+  number in its name.  Read back, it is a VLAN interface and a VLAN
+  of its tag, not a sub-interface of the port; the job's report says
+  so.  A sub-interface you name with no port in it (`wan10`) rides on
+  the parent chosen for every VLAN, under a `# review:` line: move it
+  to its port.  A FortiGate takes a VLAN id once on an interface
+  (Fortinet's "Rules about VLAN configuration and VDOM interface
+  assignment"): where the output has one twice on a parent, the
+  second block is under a `# review:` line that names the first.  A
+  sub-interface of two tags (IOS-XE `second-dot1q`, EOS `inner`,
+  Junos `vlan-tags`) is written with its outer tag, and the job is
+  `partial`, the validation report listing the inner tag.
+  ⚠️ Up to 0.7.7 the tag was the number in its name (`set vlanid
+  100` for a unit tagged 200).
 - **A VLAN's alias is its label.**  FortiOS names a VLAN after its
   interface (`VL_10`), and the parser reads the interface's `set
   alias` as the description of the VLAN and of the interface.  Onto

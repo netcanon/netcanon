@@ -364,19 +364,24 @@ class FortiGateCLICodec(CodecBase):
                 ),
                 severity="warn",
             ),
-        ],
-        unsupported=[
-            UnsupportedPath(
+            LossyPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
+                    "A routed sub-interface (Cisco `encapsulation dot1Q "
+                    "N`, Junos `unit N vlan-id`) is written as FortiOS's "
+                    "own VLAN interface on its port (`edit \"port1.100\"` "
+                    "/ `set type vlan` / `set vlanid N` / `set interface "
+                    "\"port1\"`), with the sub-interface's own tag, "
+                    "which the device runs as the sub-interface.  FortiOS "
+                    "writes a VLAN interface on a port and on a switch "
+                    "interface alike, so the parser reads it back as a "
+                    "VLAN interface and a VLAN of its tag, not as a "
+                    "sub-interface of the port."
                 ),
+                severity="warn",
             ),
+        ],
+        unsupported=[
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-inner-vlan",
                 reason=(

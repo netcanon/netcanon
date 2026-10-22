@@ -97,9 +97,9 @@ Canonical surface (`CanonicalInterface`).
 - **name** — `lossy`.  Junos slashes are illegal in FortiGate edit
   IDs; the rename mesh sanitises (`ge-0/0/0` -> `port1` typically).
   Junos per-unit form (`ge-0/0/1 unit 100`) materialises in canonical
-  as a child interface (e.g. `ge-0/0/1.100`); FortiGate render must
-  emit a `type vlan` child with `set vlanid 100` + `set interface
-  "ge-0-0-1"`.
+  as a child interface (e.g. `ge-0/0/1.100`); FortiGate render
+  writes it as a `type vlan` child with the unit's `vlan-id` as `set
+  vlanid` and its own port as `set interface`.
 - **description** — `lossy`.  Junos accepts arbitrary-length strings;
   FortiOS `set alias` caps at 25 — long Junos descriptions truncate
   with a banner.

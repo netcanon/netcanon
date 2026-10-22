@@ -403,6 +403,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/vlans/vlan/name` | Lossy | A FortiOS VLAN is an interface (`set type vlan`), and its name is that interface's, which other lines refer to.  Another platform's VLAN name is written as the interface's alias, which holds 25 characters, where the interface states no description of its own, and in a `# review:` line beside the alias where it does; the parser reads the alias as the VLAN's description. |
 | `/vlans/vlan/description` | Lossy | FortiOS has one label for a VLAN, the alias of its interface (25 characters).  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's own description there, and otherwise the VLAN's label (its name where the source chose one, else its description).  A label the interface's own description displaces is written in a `# review:` line, and a VLAN description beside a name of its own is lost.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10 the alias is written as the VLAN's name (see "Cross-paradigm exceptions"). |
 | `/interfaces/interface/config/type` | Lossy | FortiOS has no IANA `ifType`; inferred from `type vlan` sub-setting or name shape. |
+| `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is written as FortiOS's own VLAN interface on its port, `edit "port1.100"` / `set type vlan` / `set vlanid 200` / `set interface "port1"`: the tag is the sub-interface's own, not the number in its name.  Read back, it is a VLAN interface and a VLAN of its tag, not a sub-interface: FortiOS writes a VLAN interface on a port and on a switch interface alike.  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a `# review:` line that says so.  A FortiGate takes a VLAN id once on an interface: where the output has one twice on a parent, the second block is under a `# review:` line that names the first.  A sub-interface of two tags is written with its outer tag: its inner tag (`/interfaces/interface/dot1q-inner-vlan`, unsupported) is reported as a drop and the job is `partial`. |
 | `/filter/rule` | Unsupported | `config firewall policy` is Tier 3 — session-based, zone-aware, UTM-enabled semantics don't translate cleanly. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `set auth-pwd "ENC <v>"` claims the value is encrypted under this FortiGate's key, true only of a value this device produced, so a key belonging to another agent is refused (review comment, no `edit` block).  A source passphrase is portable and is emitted WITHOUT the `ENC` prefix, which is how an operator types one and FortiOS encrypts it on save. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — a foreign privacy key is refused with the user; a portable passphrase is emitted without the prefix. |
@@ -2073,11 +2074,13 @@ nothing, as before.
   vendor none of that is said — and a tag the parser does not read
   (AOS-CX, OS10) is lost there as well, as it is on every path,
   with nothing in the job to report it.
-  And **VyOS and FortiOS take the VLAN id from the number in the
-  name** (`vif <unit>`, `set vlanid <unit>`): a source unit whose
-  number is not its tag — IOS `GigabitEthernet0/0/1.54` with
-  `encapsulation dot1Q 300` — comes out tagged 54, in a `partial`
-  job.  Check the VLAN id of every sub-interface on those two.
+  And **VyOS takes the VLAN id from the number in the name** (`vif
+  <unit>`): a source unit whose number is not its tag — IOS
+  `GigabitEthernet0/0/1.54` with `encapsulation dot1Q 300` — comes
+  out tagged 54, in a `partial` job.  Check the VLAN id of every
+  sub-interface there.  FortiOS writes the source's own tag (`set
+  vlanid 300`, on the port the name is a unit of), and the job says
+  that the block is read back as a VLAN interface.
 
   Not followed across vendors: a unit of a **loopback** or of a
   **management port** (a Junos `lo0.5` is the loopback of a routing

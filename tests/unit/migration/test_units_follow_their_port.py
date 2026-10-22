@@ -254,16 +254,6 @@ def _tag_of(source_name: str, unit: str) -> int:
     return 300 if unit == "54" and source_name != "vyos" else int(unit)
 
 
-#: Targets whose parser reads a sub-interface's tag otherwise than as
-#: ``dot1q_vlan``.  RouterOS writes a sub-interface as a VLAN interface
-#: on its port (``/interface vlan add interface=ether1 name=ether1.54
-#: vlan-id=300``) and a VLAN interface on a port and on a bridge alike,
-#: so its parser reads the line as a VLAN interface and a VLAN of the
-#: tag under the interface's name.  The tag is taken where the parser
-#: reads it so AND a line of the text states it.
-_TAG_AS_A_VLAN_OF_ITS_NAME = {"mikrotik_routeros"}
-
-
 def _routeros_line_says(text: str, name: str, tag: int) -> bool:
     """An ``add`` line of ``/interface vlan`` names *name* and states
     *tag*."""
@@ -281,13 +271,47 @@ def _routeros_line_says(text: str, name: str, tag: int) -> bool:
     return False
 
 
+def _fortios_block_says(text: str, name: str, tag: int) -> bool:
+    """The ``edit`` block of *name* in ``config system interface``
+    states ``set vlanid <tag>``."""
+    section = block = False
+    for line in text.splitlines():
+        words = line.split()
+        if words == ["config", "system", "interface"]:
+            section = True
+        elif section and words[:1] == ["edit"]:
+            block = line.strip() in (f'edit "{name}"', f"edit {name}")
+        elif section and words == ["next"]:
+            block = False
+        elif block and words == ["set", "vlanid", str(tag)]:
+            return True
+    return False
+
+
+#: Targets whose parser reads a sub-interface's tag otherwise than as
+#: ``dot1q_vlan``, with a reader of the text that states it.  RouterOS
+#: writes a sub-interface as a VLAN interface on its port (``/interface
+#: vlan add interface=ether1 name=ether1.54 vlan-id=300``) and FortiOS
+#: as one too (``edit "port1.54"`` / ``set vlanid 300`` / ``set
+#: interface "port1"``); each writes a VLAN interface on a port and on
+#: a bridge or a switch interface alike, so its parser reads it as a
+#: VLAN interface and a VLAN of the tag under the interface's name.
+#: The tag is taken where the parser reads it so AND the text states
+#: it.
+_TAG_AS_A_VLAN_OF_ITS_NAME = {
+    "mikrotik_routeros": _routeros_line_says,
+    "fortigate_cli": _fortios_block_says,
+}
+
+
 def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
     """The tags the output carries on *iface*, read the target's way."""
     tags = {iface.dot1q_vlan} - {None}
-    if target_name in _TAG_AS_A_VLAN_OF_ITS_NAME and iface.interface_type == "ianaift:l3ipvlan":
+    says = _TAG_AS_A_VLAN_OF_ITS_NAME.get(target_name)
+    if says is not None and iface.interface_type == "ianaift:l3ipvlan":
         tags |= {
             vlan.id for vlan in out.vlans
-            if vlan.name == iface.name and _routeros_line_says(rendered, iface.name, vlan.id)
+            if vlan.name == iface.name and says(rendered, iface.name, vlan.id)
         }
     return tags
 
@@ -381,6 +405,44 @@ class TestASubInterfaceOnEveryPair:
         (holder,) = _holders(out, ip)
         assert _tag_of(source_name, unit) not in _tags("mikrotik_routeros", out, holder, job.rendered)
         assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize("source_name", sorted(_UNITS))
+    def test_fortios_is_read_for_a_tag_it_wrote(
+        self, source_name: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Handed the FortiOS renderer that wrote the number in a
+        unit's name for its tag -- the defect FortiOS's reading is
+        for -- the reading finds no tag where the two differ, and the
+        job says ``completed``: the check above fails."""
+        import copy
+
+        from netcanon.migration.codecs.fortigate_cli import codec as fgt_codec
+
+        real = fgt_codec.render_intent
+
+        def render(tree):
+            tree = copy.deepcopy(tree)
+            for iface in tree.interfaces:
+                iface.dot1q_vlan = None
+            return real(tree)
+
+        monkeypatch.setattr(fgt_codec, "render_intent", render)
+        target = get_codec("fortigate_cli")
+        _, text = _UNITS[source_name]
+        job = run_plan_with_overrides(get_codec(source_name), target, text, port_rename_map={})
+        out = target.parse(job.rendered)
+        lost = [
+            ip for unit, ip in _UNIT_ADDRESSES
+            if _tag_of(source_name, unit) != int(unit)
+            and _tag_of(source_name, unit)
+            not in _tags("fortigate_cli", out, _holders(out, ip)[0], job.rendered)
+        ]
+        expected = [
+            ip for unit, ip in _UNIT_ADDRESSES if _tag_of(source_name, unit) != int(unit)
+        ]
+        assert lost == expected
+        if expected:
+            assert job.status == MigrationJobStatus.completed
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),

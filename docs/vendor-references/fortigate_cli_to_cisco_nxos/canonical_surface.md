@@ -258,12 +258,15 @@ row to `good` or `lossy` rather than leave it here.
 
 * `syslog_servers` — the FortiGate matrix declares `/system/syslog-server`
   **unsupported**; NX-OS declares it supported.
-* `interfaces[].switchport_mode`, `[].access_vlan`, `[].dot1q_vlan`,
+* `interfaces[].switchport_mode`, `[].access_vlan`,
   `[].trunk_allowed_vlans`, `[].trunk_native_vlan` — all declared unsupported
   by the FortiGate matrix (it is an L3-only firewall codec; VLAN membership is
   carried by the child interface's parent, not by switchport state). NX-OS
   declares every one of them supported, so the operator must build switchport
-  state on the target from scratch.
+  state on the target from scratch.  `[].dot1q_vlan` is set by the FortiGate
+  parser on no record either: the matrix declares it lossy, for its render of
+  another vendor's sub-interface, and a VLAN interface's tag is on its VLAN
+  record.
 * `interfaces[].vrf` — the FortiGate matrix declares no
   `/interfaces/interface/config/vrf` path at all; FortiOS `set vrf <id>` is not
   parsed into canonical, so nothing reaches the NX-OS `vrf member` render.

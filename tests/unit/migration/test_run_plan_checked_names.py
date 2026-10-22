@@ -1772,7 +1772,13 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # was unsupported.  The CST capture's job was `partial` for the
     # matrix alone; it is `partial` for its names now,
     # `MgmtEth0/RP0/CPU0/0` and `BVI500` together (+1 several).
-    "cisco_iosxr": (4, 0, 13, 1, 1, 3),
+    # And onto FortiOS a routed sub-interface is a VLAN interface on
+    # its port with its own tag, and the same path is lossy there.
+    # The PA3 design capture onto FortiOS had been `partial` for
+    # that path alone; the validation report passes it now, and its
+    # two TenGigE ports on `port1` and its `BVI500`, left as the
+    # source has it, hold it (+1 several).
+    "cisco_iosxr": (4, 0, 13, 1, 1, 4),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     "fortigate_cli": (0, 0, 0, 0, 0, 11),
@@ -1859,8 +1865,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 5, 68, 43]
-        assert sum(by_reason) == 217
+        assert by_reason == [40, 0, 61, 5, 68, 44]
+        assert sum(by_reason) == 218
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

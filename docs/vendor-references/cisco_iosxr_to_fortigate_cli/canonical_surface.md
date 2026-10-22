@@ -36,47 +36,36 @@ IOS-XR box exists to provide.
 
 ## The structural finding
 
-The interface inventory does **not** shrink on this pair — it **grows**, and
-that inversion is the single most important thing to know before reading the
-drift numbers.
+The interface inventory does **not** shrink on this pair: **155 interface
+records in, 155 out**, by name, on all 12 cells.
 
-Corpus-wide: **155 interface records in, 159 out. Zero lost, four added.**
-
-The four additions are on the four cells that carry a canonical VLAN
-(`batfish_ebgp_border01`, `batfish_ebgp_border02`,
-`iosxr_design_cst_pa3_xr752`, `kitchen_sink`): 15 → 16, 15 → 16, 54 → 55,
-9 → 10. The FortiOS renderer synthesises an 802.1Q child interface for every
-canonical VLAN —
+A dot1q sub-interface is written as FortiOS's own VLAN interface, on the port
+it is a unit of, with its own tag —
 
 ```
-edit "vlan35"
+edit "GigabitEthernet0/0/0/1.35"
     set type vlan
     set vlanid 35
-    set interface "Loopback123"
+    set interface "GigabitEthernet0/0/0/1"
+    ...
 next
 ```
 
-— and the re-parse reads each one back as a new interface record. That
-record-count change is what the comparator sees on the parent list, which is
-why every `interfaces[].*` sub-field measures as drifted on exactly those 4
-cells regardless of whether its own value changed.
+— and the re-parse reads it back as a VLAN interface (`ianaift:l3ipvlan`) and
+as a VLAN of its tag named after it, which is why `interfaces[].interface_type`,
+`vlans[].name` and `vlans[].description` are lossy on the four cells that carry
+one (`batfish_ebgp_border01`, `batfish_ebgp_border02`,
+`iosxr_design_cst_pa3_xr752`, `kitchen_sink`). The IOS-XR parser makes a VLAN
+record of each sub-interface's tag, and the renderer takes that VLAN for the
+sub-interface's own rather than writing a second interface for it.
 
-Two consequences worth acting on before pushing a render:
-
-1. **The synthesised child is misparented on every cell.** The renderer
-   resolves the parent as the first `CanonicalLAG` on the tree, falling back to
-   a LAN-preference scorer when there is none
-   (`netcanon/migration/codecs/fortigate_cli/render.py`,
-   `_vlan_child_interfaces`). Measured: `vlan200` lands on `Bundle-Ether321`,
-   `vlan100` on `Bundle-Ether1`, and — on both `batfish_ebgp_border0*` cells —
-   `vlan35` lands on **`Loopback123`**, a loopback. On IOS-XR the VLAN's real
-   parent is the dot1q sub-interface's physical port
-   (`GigabitEthernet0/0/0/1.35` → `GigabitEthernet0/0/0/1`). Re-parent the
-   children by hand.
-2. **Unlike the AOS-CX source, there is no duplicate-address hazard here.** The
-   synthesised children carry no IP on any of the 4 cells, because IOS-XR mounts
-   L3 on the dot1q sub-interface record rather than on the VLAN record. The
-   addressing stays where it was, on a surviving interface record.
+⚠️ Up to 0.7.7 it did write one: an 802.1Q child `vlan<id>` for every canonical
+VLAN, on the first `CanonicalLAG` or a LAN-preference scorer's choice —
+`vlan200` on `Bundle-Ether321`, `vlan100` on `Bundle-Ether1`, and `vlan35` on
+**`Loopback123`**, a loopback, on both `batfish_ebgp_border0*` cells — and the
+list grew 15 → 16, 15 → 16, 54 → 55 and 9 → 10. The sub-interface itself was
+written with the number in its name as its tag. An output of that release
+wants the `vlan<id>` children removed by hand.
 
 ## The loss the structural collapse hides
 
@@ -97,10 +86,10 @@ non-empty `vrf` emptied**, across 8 of the 12 cells —
 | xrdtools_srv6_pe1 | `Gi0/0/0/0` (`CUSTOMER`) |
 | kitchen_sink | `Gi0/0/0/1`, `Gi0/0/0/1.100`, `MgmtEth0/RP0/CPU0/0` |
 
-The mesh comparator sees only **9** of those 16, on 5 cells. The other 7 sit on
-the 4 cells where the interface list changes length, and there the drift record
-is the wholesale string `count drift: N → N+1 (interfaces)` with no per-record
-slice — the count change masks them.
+Up to 0.7.7 the mesh comparator saw only **9** of those 16, on 5 cells. The
+other 7 sat on the 4 cells where the interface list changed length, and there
+the drift record was the wholesale string `count drift: N → N+1 (interfaces)`
+with no per-record slice. The list is kept whole now.
 
 This is the same event as `routing_instances[].name`: the VRF is not modelled by
 the target, so both the instance and every binding to it disappear. It is
@@ -114,9 +103,10 @@ independent corroboration.**
 | hostname | 12 | 0 | 0 |
 | domain | 8 | 0 | 4 |
 | ntp_servers | 1 | 0 | 11 |
-| interfaces (record count) | 8 | 4 | 0 |
+| interfaces (record count) | 12 | 0 | 0 |
 | vlans[].id | 4 | 0 | 8 |
 | vlans[].name | 0 | 4 | 8 |
+| vlans[].description | 0 | 3 | 9 |
 | static_routes | 3 | 3 | 6 |
 | lags | 4 | 0 | 8 |
 | local_users[].name | 9 | 0 | 3 |
@@ -126,7 +116,7 @@ independent corroboration.**
 
 Fields trivially empty on all 12 cells: `dns_servers`, `timezone`,
 `syslog_servers`, `vlans[].ipv4_addresses`, `vlans[].untagged_ports`,
-`vlans[].tagged_ports`, `vlans[].description`, `dhcp_servers`, every `snmp.*`
+`vlans[].tagged_ports`, `dhcp_servers`, every `snmp.*`
 sub-field, `radius_servers`, every `vxlan_vnis[].*` sub-field,
 `evpn_type5_routes`, `raw_sections`, `apply_groups`, `group_content`,
 `anycast_gateway_mac`.
@@ -140,14 +130,14 @@ sub-field, `radius_servers`, every `vxlan_vnis[].*` sub-field,
 | ipv4_addresses | 0 |
 | ipv6_addresses | 0 |
 | lag_member_of | 0 |
-| interface_type | 1 |
+| interface_type | 5 |
 | description | 4 |
 | vrf | 16 |
 
-The `description` and `interface_type` drift is real but **comparator-invisible
-on this corpus**: all 5 records are on `iosxr_design_cst_pa3_xr752.cfg`, which
-is also one of the 4 count-drift cells, so the mesh never emits a per-record
-slice for them.
+Up to 0.7.7 the `description` and `interface_type` drift on
+`iosxr_design_cst_pa3_xr752.cfg` was comparator-invisible: it was one of the
+4 count-drift cells, so the mesh emitted no per-record slice for it. The mesh
+measures it now, and both keys are `lossy`.
 
 - **description** — 4 records truncated to exactly 25 characters
   (`Bundle-Ether500` 30 → 25, `GigabitEthernet0/0/0/12` 58 → 25,
@@ -155,9 +145,11 @@ slice for them.
   is the first 25 characters of the source. fortigate_cli declares
   `/interfaces/interface/config/description` lossy for exactly this reason
   ("FortiOS limits alias to 25 characters").
-- **interface_type** — 1 record, `BVI500`,
-  `ianaift:other` → `ianaift:ethernetCsmacd`. All 18 `ianaift:softwareLoopback`
-  records in the corpus survive with their type intact.
+- **interface_type** — 5 records: `BVI500`,
+  `ianaift:other` → `ianaift:ethernetCsmacd`, and the 4 dot1q sub-interfaces,
+  `ianaift:ethernetCsmacd` → `ianaift:l3ipvlan` (each is written as FortiOS's
+  VLAN interface on its port). All 18 `ianaift:softwareLoopback` records in the
+  corpus survive with their type intact.
 
 ## Source-side gaps vs target-side drops vs symmetric gaps
 
