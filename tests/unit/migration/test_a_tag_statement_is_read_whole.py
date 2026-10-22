@@ -278,8 +278,6 @@ LEFT_OUT = [
      "interface GigabitEthernet0/0/1.20: encapsulation dot1Q 20 second-dot1q 100-200"),
     ("cisco_iosxe_cli", _ios("encapsulation dot1Q 20 second-dot1q 100,200"),
      "interface GigabitEthernet0/0/1.20: encapsulation dot1Q 20 second-dot1q 100,200"),
-    ("cisco_iosxe_cli", _ios("encapsulation dot1Q 20 native"),
-     "interface GigabitEthernet0/0/1.20: encapsulation dot1Q 20 native"),
     ("cisco_iosxr", _xr("encapsulation dot1ad 20 dot1q 30"),
      "interface GigabitEthernet0/0/0/1.20: encapsulation dot1ad 20 dot1q 30"),
     ("cisco_iosxr", _xr("encapsulation dot1q 20 second-dot1q any"),
@@ -443,7 +441,7 @@ DEVICE_LINES = [
     ([_unit("ae1.10", 10)], ["set interfaces ae1 vlan-tagging"]),
     ([_unit("reth0.10", 10)], ["set interfaces reth0 vlan-tagging"]),
     ([_unit("xe-0/0/6:2.10", 10)], ["set interfaces xe-0/0/6:2 vlan-tagging"]),
-    ([CanonicalInterface(name="ge-0/0/1", trunk_native_vlan=10), _unit("ge-0/0/1.10", 10)],
+    ([CanonicalInterface(name="ge-0/0/1.10", dot1q_vlan=10, dot1q_native=True)],
      ["set interfaces ge-0/0/1 flexible-vlan-tagging",
       "set interfaces ge-0/0/1 native-vlan-id 10"]),
     ([_unit("ge-0/0/1", None, ip="192.0.2.1"), _unit("ge-0/0/1.10", 10)],
@@ -501,17 +499,20 @@ def test_a_device_is_told_once() -> None:
 def test_junos_reads_its_own_tags_back() -> None:
     interfaces = [
         _unit("ge-0/0/1", 5, ip="192.0.2.1"), _unit("ge-0/0/1.10", 10),
-        _unit("ge-0/0/1.20", 20, 200), CanonicalInterface(name="ge-0/0/2", trunk_native_vlan=7),
-        _unit("ge-0/0/2.7", 7, ip="198.51.100.1"),
+        _unit("ge-0/0/1.20", 20, 200),
+        CanonicalInterface(
+            name="ge-0/0/2.7", dot1q_vlan=7, dot1q_native=True,
+            ipv4_addresses=[CanonicalIPv4Address(ip="198.51.100.1", prefix_length=24)],
+        ),
     ]
     codec = get_codec("juniper_junos")
     back = codec.parse(codec.render(CanonicalIntent(interfaces=interfaces)))
     tags = {
-        i.name: (i.dot1q_vlan, i.dot1q_inner_vlan, i.trunk_native_vlan)
+        i.name: (i.dot1q_vlan, i.dot1q_inner_vlan, i.dot1q_native)
         for i in back.interfaces
     }
     assert tags == {
-        "ge-0/0/1": (5, None, None), "ge-0/0/1.10": (10, None, None),
-        "ge-0/0/1.20": (20, 200, None), "ge-0/0/2": (None, None, 7),
-        "ge-0/0/2.7": (7, None, None),
+        "ge-0/0/1": (5, None, False), "ge-0/0/1.10": (10, None, False),
+        "ge-0/0/1.20": (20, 200, False), "ge-0/0/2": (None, None, False),
+        "ge-0/0/2.7": (7, None, True),
     }

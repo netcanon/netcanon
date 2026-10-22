@@ -916,3 +916,56 @@ default (`wants_no_untagged_vlan`, same module):
   parser reads a `no untagged` line above the lists as removing
   nothing, which on lists that share no port is the tree they came
   from.  A trunk that carries nothing has no AOS-S form (H16).
+
+## A routed port's untagged frames: the native sub-interface
+
+On a routed port whose sub-interfaces carry tags, both platforms can
+name one sub-interface as the one that takes the frames that arrive
+with no tag.  The tree states it on that sub-interface
+(`CanonicalInterface.dot1q_native`), never as the port's
+`trunk_native_vlan`, which is a switchport's.
+
+| Platform | Form | Received untagged | Source |
+|---|---|---|---|
+| Cisco IOS-XE | `encapsulation dot1Q <tag> native` on the sub-interface | by that sub-interface | C-N1 |
+| Juniper Junos | `native-vlan-id <tag>` on the device, with `flexible-vlan-tagging`, and the unit of `vlan-id <tag>` | by that unit | J-N1 |
+
+### Sources
+
+- **C-N1** — Cisco, *VLAN Configuration Guide, Cisco IOS XE Cupertino
+  17.7.x (Catalyst 9400 Switches)*, "Configuring Layer 3
+  Subinterfaces":
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9400/software/release/17-7/configuration_guide/vlan/b_177_vlan_9400_cg/configuring_layer_3_subinterfaces.html>.
+  Says: `encapsulation dot1q vlan-id [native]`; "native: To make a
+  subinterface the default handler of untagged packets coming to the
+  port, use this keyword"; "For a given physical interface, only one
+  subinterface can have the encapsulation as native"; no IP address
+  configuration is supported on the physical interface when one of
+  its subinterfaces is native; the keyword is not supported on the
+  Catalyst 9600X.
+- **J-N1** — Juniper, "Configuring Tagged Interface with multiple
+  tagged vlans and native vlan":
+  <https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/task/tagged-interfaces-with-multiple-tagged-native-vlan.html>.
+  Says: "To accept untagged packets, include the native-vlan-id
+  statement and the flexible-vlan-tagging statement"; "The logical
+  interface on which untagged packets are to be received must be
+  configured with the same native VLAN ID".
+
+### Not established from a vendor's page
+
+- What either sub-interface SENDS without a tag.  Neither page above
+  says; a Junos 12.3 page for the statement said the tag is popped on
+  egress, and the note is not in later releases.
+- What Junos does with a `native-vlan-id` that names no unit: the
+  parser leaves such a statement out with a row.
+
+### Mapping notes
+
+The Junos parser reads `native-vlan-id` as the device's native unit
+only on a device that is not a switchport (no `family
+ethernet-switching` mode); on an ELS trunk it is the trunk's native
+VLAN, as above.  The IOS-XE parser keeps `native` on the first
+sub-interface of a port that says it and writes any other without it,
+with a row.  Every other target reports
+`/interfaces/interface/dot1q-native` unsupported: none of them writes
+a form for it.

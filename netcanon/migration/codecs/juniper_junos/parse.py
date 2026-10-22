@@ -1074,6 +1074,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         except AttributeError:
             pass
 
+    # A routed device's ``native-vlan-id`` names the unit that takes
+    # its untagged frames, before any VLAN is made of the id.
+    no_native_unit = _native_units(intent)
+
     # Bug 3 transpose: mirror per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
     # centric renderers (Aruba, OPNsense) can emit the membership.
@@ -1207,6 +1211,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         ),
         *unread_tags,
         *_in_several_vlans_row(in_several),
+        *_no_native_unit_row(no_native_unit),
     ]
     if not cut_lines:
         return intent, raw
@@ -2905,6 +2910,70 @@ def _in_several_vlans_row(names: list[str]) -> list[str]:
         f"interfaces {shown}: family ethernet-switching vlan members -- an "
         f"access port (no interface-mode is access) that names more than "
         f"one VLAN is written in its first VLAN only"
+    ]
+
+
+def _native_units(intent: CanonicalIntent) -> list[str]:
+    """Mark the unit a routed device's ``native-vlan-id`` names
+    (``dot1q_native``), and return each ``native-vlan-id`` that names
+    no unit.
+
+    On a device that is not a switchport (no ``family
+    ethernet-switching`` mode) the statement says which unit takes the
+    device's untagged frames: "The logical interface on which untagged
+    packets are to be received must be configured with the same native
+    VLAN ID" (Juniper, "Configuring Tagged Interface with multiple
+    tagged vlans and native vlan").  It was kept as the device's
+    ``trunk_native_vlan``, a switchport's field: IOS-XE wrote it as
+    ``switchport trunk native vlan`` on a routed port, and the other
+    targets left it out with nothing said.  A ``native-vlan-id`` with
+    no unit of that one tag has no form in the tree, and is said in a
+    row (:func:`_no_native_unit_row`).
+
+    Returns:
+        ``<device> native-vlan-id <id>`` for each that names no unit,
+        in the order of the interfaces.
+    """
+    units: dict[str, list[CanonicalInterface]] = {}
+    for iface in ticked(intent.interfaces):
+        device, dot, _unit = iface.name.rpartition(".")
+        if dot:
+            units.setdefault(device, []).append(iface)
+    unplaced: list[str] = []
+    for iface in ticked(intent.interfaces):
+        if (
+            "." in iface.name
+            or iface.switchport_mode is not None
+            or iface.trunk_native_vlan is None
+        ):
+            continue
+        vid, iface.trunk_native_vlan = iface.trunk_native_vlan, None
+        for unit in units.get(iface.name, []):
+            if unit.dot1q_vlan == vid and unit.dot1q_inner_vlan is None:
+                unit.dot1q_native = True
+                break
+        else:
+            unplaced.append(f"{iface.name} native-vlan-id {vid}")
+    return unplaced
+
+
+def _no_native_unit_row(statements: list[str]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for every routed
+    device whose ``native-vlan-id`` names no unit of that one tag
+    (:func:`_native_units`), a few named and the rest counted.
+
+    Returns:
+        ``[]`` or the one row.
+    """
+    if not statements:
+        return []
+    shown = ", ".join(statements[:IN_SEVERAL_SHOWN])
+    rest = len(statements) - IN_SEVERAL_SHOWN
+    if rest > 0:
+        shown += f" and {rest} more"
+    return [
+        f"interfaces {shown} -- no unit of that one vlan-id takes the "
+        f"device's untagged frames, so the statement is not translated"
     ]
 
 

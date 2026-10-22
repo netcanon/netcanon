@@ -337,6 +337,17 @@ class CiscoIOSXECodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-native",
+                reason=(
+                    "Which routed sub-interface takes the untagged frames of "
+                    "its port (IOS-XE `encapsulation dot1Q N native`, Junos "
+                    "`native-vlan-id N` with the unit of that `vlan-id`): this "
+                    "codec writes no routed sub-interface (see "
+                    "`/interfaces/interface/dot1q-vlan`), so it has no form "
+                    "here either.  Declared so that it is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/dot1q-inner-vlan",
                 reason=(
                     "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "

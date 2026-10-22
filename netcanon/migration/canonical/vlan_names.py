@@ -457,6 +457,8 @@ def translate_vlan_ids(  # noqa: C901
                 )
                 iface.dot1q_vlan = None
                 iface.dot1q_inner_vlan = None
+                # The port's untagged frames went to the tag.
+                iface.dot1q_native = False
             elif iface.dot1q_vlan in renames:
                 iface.dot1q_vlan = renames[iface.dot1q_vlan]
 

@@ -397,10 +397,19 @@ translate it again from `show running-config` as the device prints it.
   six units of the carrier capture came out as six sub-interfaces of
   one tag, IOS-XE to IOS-XE included; translate such a config again.
   A statement that matches more than one inner tag (`second-dot1q
-  any`, a range, a list) and `encapsulation dot1Q N native` have no
-  form in the tree: the sub-interface is left out, with a row of the
-  Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
-  sub-interface is not translated`).  The `encapsulation` of a `service instance`
+  any`, a range, a list) has no form in the tree: the sub-interface is
+  left out, with a row of the Tier-3 banner (`... -- not one 802.1Q tag
+  and at most one inner tag, so the sub-interface is not translated`).
+  `encapsulation dot1Q N native` -- the sub-interface that takes the
+  untagged frames of its port ("the default handler of untagged
+  packets coming to the port", Cisco) -- is read and written, and
+  reaches Junos as `native-vlan-id N` under `flexible-vlan-tagging`;
+  onto every other target the job is `partial`
+  (`/interfaces/interface/dot1q-native`).  What such a sub-interface
+  sends untagged is not established on either platform.  ⚠️ Up to
+  0.7.7 it was left out with a row; and a Junos router's
+  `native-vlan-id` was written here as `switchport trunk native vlan`
+  on a routed port.  The `encapsulation` of a `service instance`
   is the instance's, not the port's.  A port's own address beside
   tagged sub-interfaces (router-on-a-stick) reaches Junos with a
   `# review:` line: see [`juniper_junos.md`](juniper_junos.md).
