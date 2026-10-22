@@ -42,10 +42,18 @@ the line above it gone: an account written there from another part of
 the config, say.  The same two halves: :func:`text_only_each` writes
 each run of them as one space and returns where, and the pipeline says
 so; :func:`first_control_character` is the render's check.  A space and
-not nothing: a secret that held one then holds white space, which a
-renderer whose lines are read a word at a time leaves out with a review
-line (:mod:`netcanon.migration._one_value`); taken out, the character
-would leave another secret.
+not nothing, so that the words on either side of it stay two.
+
+A secret is mended neither way: with a space in the place of a break
+or a control character, or with the character taken out, it is
+another secret, and a target that writes a secret with white space
+between quotes (AOS-S, FortiOS, Junos, RouterOS, OPNsense) wrote it.
+:func:`secrets_left_out` runs first: each secret (:data:`SECRETS`)
+that holds either is left out with what it composes -- a local user
+or an SNMPv3 user whole, a community with every trap host that would
+carry it, a RADIUS key or an FHRP authentication alone, the server and
+the group kept -- the granularity the credential rules set.  The
+pipeline says each place and holds the job ``partial``.
 """
 
 from __future__ import annotations
@@ -269,3 +277,92 @@ def said_of_a_control_character(where: str) -> str:
         "as a space, because no target is given a character a terminal "
         "acts on rather than shows"
     )
+
+
+#: The places of the tree that hold a secret, by field.  A test holds
+#: them to the schema, and :func:`secrets_left_out` to each.
+SECRETS = (
+    "snmp.community",
+    "snmp.v3_users.auth_passphrase",
+    "snmp.v3_users.priv_passphrase",
+    "local_users.hashed_password",
+    "radius_servers.key",
+    "interfaces.vrrp_groups.authentication",
+)
+
+
+def _not_text(value: Any) -> bool:
+    """Whether *value* holds a line break or a control character."""
+    return isinstance(value, str) and (
+        _A_RUN.search(value) is not None
+        or _A_CONTROL_RUN.search(value) is not None
+    )
+
+
+def _secret_said(where: str, what: str) -> str:
+    return (
+        f"{where} held a line break or a control character: with a "
+        f"space in its place it would be another secret, so {what}"
+    )
+
+
+def secrets_left_out(tree: Any) -> list[str]:
+    """Leave out, in place, each secret of *tree* (:data:`SECRETS`)
+    that holds a line break or a control character, with what it
+    composes.  The pipeline calls it before :func:`one_line_each`, which
+    would write such a secret with a space in its place.
+
+    Returns:
+        The job's warning for each, naming the place and never the
+        value.  Empty when no secret held one, and then *tree* is as it
+        was.
+    """
+    said: list[str] = []
+    snmp = getattr(tree, "snmp", None)
+    if snmp is not None:
+        if _not_text(snmp.community):
+            snmp.community = ""
+            snmp.trap_hosts = []
+            said.append(_secret_said(
+                "snmp.community",
+                "it is left out, with every trap host that would carry "
+                "it; re-create them on the device"))
+        kept = []
+        for index, user in enumerate(snmp.v3_users):
+            if _not_text(user.auth_passphrase) or _not_text(user.priv_passphrase):
+                said.append(_secret_said(
+                    f"snmp.v3_users[{_label(user, index)}]",
+                    "the user is left out, with every line that composes "
+                    "it; re-create it on the device"))
+            else:
+                kept.append(user)
+        if len(kept) != len(snmp.v3_users):
+            snmp.v3_users = kept
+    users = getattr(tree, "local_users", None) or []
+    kept_users = []
+    for index, user in enumerate(users):
+        if _not_text(user.hashed_password):
+            said.append(_secret_said(
+                f"local_users[{_label(user, index)}].hashed_password",
+                "the account is left out; re-create it on the device"))
+        else:
+            kept_users.append(user)
+    if len(kept_users) != len(users):
+        tree.local_users = kept_users
+    for index, server in enumerate(getattr(tree, "radius_servers", None) or []):
+        if _not_text(server.key):
+            server.key = ""
+            said.append(_secret_said(
+                f"radius_servers[{_label(server, index)}].key",
+                "the key is left out and the server kept; set the key on "
+                "the device"))
+    for index, iface in enumerate(getattr(tree, "interfaces", None) or []):
+        for number, group in enumerate(iface.vrrp_groups):
+            if _not_text(group.authentication):
+                group.authentication = ""
+                said.append(_secret_said(
+                    f"interfaces[{_label(iface, index)}].vrrp_groups"
+                    f"[{_label(group, number)}].authentication",
+                    "the authentication is left out and the group kept; "
+                    "set it on the device"))
+    return said

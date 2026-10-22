@@ -24,15 +24,16 @@ built as the one-line rule's test builds it
     and nothing of the value;
 (d) the sources that put one into the tree, onto every public codec: no
     control character in the output, and the job says where;
-(e) a secret that held one: never written without it, and where it is
-    written it is with a space -- another secret, on the targets pinned
-    here (a stated limitation);
+(e) a secret that held one, or a line break, is left out with what it
+    composes -- never written with a space in its place, which is
+    another secret -- and the job is ``partial``;
 (f) the sanitiser renders such a config;
 (g) each check, handed the defect it is for, fails.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 import unicodedata
 from pathlib import Path
@@ -45,13 +46,21 @@ from netcanon.migration import _one_line
 from netcanon.migration._one_line import (
     CONTROL_CHARACTERS,
     LINE_BREAKS,
+    SECRETS,
     first_control_character,
+    one_line_each,
     said_of_a_control_character,
+    secrets_left_out,
     text_only_each,
 )
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLocalUser,
+    CanonicalRADIUSServer,
+    CanonicalSNMP,
+    CanonicalSNMPv3User,
+    CanonicalVRRPGroup,
 )
 from netcanon.migration.codecs.base import RenderError
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
@@ -296,17 +305,89 @@ def test_no_output_holds_one(source: str, target: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# (e) A secret that held one
+# (e) A secret that held one, or a line break
 # ---------------------------------------------------------------------------
 
-#: The targets that write a community holding white space in quotes, and
-#: so write one that held a control character with a space in its place:
-#: another secret, said in the job's warnings and not left out.  A stated
-#: limitation (CHANGELOG, SECURITY.md); the change that leaves such a
-#: secret out empties this pin.
-_ANOTHER_SECRET_ON = {
-    "aruba_aoss", "fortigate_cli", "juniper_junos", "mikrotik_routeros", "opnsense",
-}
+#: What the schema calls a secret, read from its field names: a test of
+#: the module's table, typed apart from it.
+_A_SECRETS_NAME = re.compile(
+    r"password|passphrase|secret|community|psk|token|credential"
+    r"|(?:^|\.)key$|authentication$"
+)
+
+
+def _not_text(text: str) -> bool:
+    return bool(_controls(text)) or len(text.splitlines()) > 1
+
+
+class TestASecretIsLeftOut:
+    def test_the_table_is_the_schemas_secrets(self) -> None:
+        assert sorted(SECRETS) == sorted(p for p in _PLACES if _A_SECRETS_NAME.search(p))
+
+    @pytest.mark.parametrize("slots", [_Slots, _BrokenSlots], ids=["control", "break"])
+    @pytest.mark.parametrize("place", SECRETS)
+    def test_each_secret_is_left_out(self, place: str, slots: type) -> None:
+        tree = _record(CanonicalIntent, "", slots(_PLACES.index(place)))
+        said = secrets_left_out(tree)
+        assert len(said) == 1
+        # Nothing is left for either mend: the secret is gone.
+        assert [text for text in _held(tree) if _not_text(text)] == []
+        assert one_line_each(tree) == [] and text_only_each(tree) == []
+
+    def test_no_other_place_is_touched(self) -> None:
+        touched = []
+        for number, place in enumerate(_PLACES):
+            if place in SECRETS:
+                continue
+            tree = _record(CanonicalIntent, "", _Slots(number))
+            before = tree.model_dump_json(warnings=False)
+            if secrets_left_out(tree) or tree.model_dump_json(warnings=False) != before:
+                touched.append(place)
+        assert touched == []
+
+    def test_what_goes_with_each(self) -> None:
+        tree = CanonicalIntent(
+            hostname="r1",
+            snmp=CanonicalSNMP(
+                community="a" + _ESC + "b", trap_hosts=["192.0.2.9"],
+                v3_users=[
+                    CanonicalSNMPv3User(name="u1", priv_passphrase="p" + _ESC + "q"),
+                    CanonicalSNMPv3User(name="u2", auth_passphrase="fakeKey"),
+                ],
+            ),
+            local_users=[
+                CanonicalLocalUser(name="alice", hashed_password="x\ny"),
+                CanonicalLocalUser(name="bob", hashed_password="$6$fake$hash"),
+            ],
+            radius_servers=[CanonicalRADIUSServer(host="192.0.2.5", key="k" + chr(7))],
+            interfaces=[CanonicalInterface(name="vlan10", vrrp_groups=[
+                CanonicalVRRPGroup(group_id=10, authentication="plain:a" + _ESC + "b"),
+            ])],
+        )
+        said = secrets_left_out(tree)
+        assert [line.split(" held ")[0] for line in said] == [
+            "snmp.community",
+            "snmp.v3_users[u1]",
+            "local_users[alice].hashed_password",
+            "radius_servers[192.0.2.5].key",
+            "interfaces[vlan10].vrrp_groups[0].authentication",
+        ]
+        assert not [line for line in said if _not_text(line) or "fake" in line]
+        # A community with every trap host that would carry it.
+        assert tree.snmp.community == "" and tree.snmp.trap_hosts == []
+        # A user whole.
+        assert [user.name for user in tree.snmp.v3_users] == ["u2"]
+        assert [user.name for user in tree.local_users] == ["bob"]
+        # A RADIUS key and an FHRP authentication alone.
+        assert [(s.host, s.key) for s in tree.radius_servers] == [("192.0.2.5", "")]
+        (group,) = tree.interfaces[0].vrrp_groups
+        assert (group.group_id, group.authentication) == (10, "")
+
+    def test_a_tree_with_none_is_left_as_it_was(self) -> None:
+        tree, _ = _tree(-1)
+        before = tree.model_dump_json(warnings=False)
+        assert secrets_left_out(tree) == []
+        assert tree.model_dump_json(warnings=False) == before
 
 
 def _a_community_with_one() -> str:
@@ -316,18 +397,30 @@ def _a_community_with_one() -> str:
     return raw.replace(old, "snmp-server community ab" + _ESC + "cd RO")
 
 
-def test_a_secret_is_never_written_without_it() -> None:
-    """A space, not nothing: taken out, the character would leave
-    ``abcd``, a secret nobody set, written with no review line."""
-    another = set()
-    for target in _TARGETS:
-        job = run_plan(get_codec("cisco_iosxe_cli"), get_codec(target), _a_community_with_one())
-        out = job.rendered or ""
-        assert "abcd" not in out, target
-        assert said_of_a_control_character("snmp.community") in job.warnings, target
-        if "ab cd" in out:
-            another.add(target)
-    assert another == _ANOTHER_SECRET_ON
+def _a_community_with_a_break() -> str:
+    raw = (_FIXTURES / "opnsense" / "kitchen_sink.xml").read_text(encoding="utf-8")
+    old = "<rocommunity>kitchensink-ro</rocommunity>"
+    assert raw.count(old) == 1
+    return raw.replace(old, "<rocommunity>ab&#10;cd</rocommunity>")
+
+
+_COMMUNITIES = {
+    "cisco_iosxe_cli": _a_community_with_one,
+    "opnsense": _a_community_with_a_break,
+}
+
+
+@pytest.mark.parametrize("target", _TARGETS)
+@pytest.mark.parametrize("source", sorted(_COMMUNITIES))
+def test_a_community_that_held_one_is_left_out(source: str, target: str) -> None:
+    """Never with a space in its place, and never with the character
+    taken out: each is a secret nobody set."""
+    job = run_plan(get_codec(source), get_codec(target), _COMMUNITIES[source]())
+    out = job.rendered or ""
+    assert "ab cd" not in out and "abcd" not in out
+    assert job.status is MigrationJobStatus.partial
+    assert "left out with what they compose" in (job.error or "")
+    assert [line for line in job.warnings if line.startswith("snmp.community held a line ")]
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +448,34 @@ def _without_the_rule() -> Any:
     )
 
 
+#: Where a secret mended as any other value is written with a space in
+#: its place: the targets that write a community holding white space
+#: between quotes.
+_ANOTHER_SECRET_WITHOUT_THE_RULE = {
+    "aruba_aoss", "fortigate_cli", "juniper_junos", "mikrotik_routeros", "opnsense",
+}
+
+
 class TestTheChecksCanFail:
+    def test_with_no_leave_out_a_secret_is_another_secret(self) -> None:
+        another = set()
+        with mock.patch(
+            "netcanon.services.migration_pipeline.secrets_left_out", lambda tree: [],
+        ):
+            for target in _TARGETS:
+                job = run_plan(
+                    get_codec("cisco_iosxe_cli"), get_codec(target), _a_community_with_one(),
+                )
+                if "ab cd" in (job.rendered or ""):
+                    another.add(target)
+        assert another == _ANOTHER_SECRET_WITHOUT_THE_RULE
+
+    def test_the_table_test_reads_a_secrets_name(self) -> None:
+        for name in ("bgp.neighbors.password", "ospf.areas.key", "ike.psk"):
+            assert _A_SECRETS_NAME.search(name), name
+        for name in ("snmp.v3_users.auth_protocol", "snmp.v3_users.auth_kind"):
+            assert not _A_SECRETS_NAME.search(name), name
+
     def test_the_reader_of_the_output_sees_one(self) -> None:
         assert _controls(f" description Up{_ERASE}link\n") == ["U+001B"]
         assert _controls(f"a{chr(0x9B)}b\tc\r\n") == ["U+009B"]
