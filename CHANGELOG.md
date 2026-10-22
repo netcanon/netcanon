@@ -592,6 +592,22 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface's tag is a VLAN id.**  A frame of VID 0 carries
+  a priority and no VLAN, and VID 4095 is reserved (IEEE 802.1Q):
+  the tree's tag is a VLAN id, 1 to 4094.  The IOS-XE, IOS XR, EOS
+  and Junos parsers left a sub-interface with any other tag out,
+  with a row; four parsers did not.  VyOS read `vif 0` as a
+  sub-interface of tag 0, and NX-OS `encapsulation dot1q 0` the
+  same, and each was written so onto every target that writes a
+  tag -- from NX-OS in jobs that said `completed`.  RouterOS
+  refused the whole config for one `vlan-id=0`.  FortiOS made no
+  VLAN of a `set vlanid 0` and kept its interface, its address on
+  an interface of no tag.  Each now leaves such a sub-interface out, with its
+  addresses (a route or a DHCP server that names it keeps the
+  name), and a row of the Tier-3 banner names it; a RouterOS or
+  FortiOS VLAN interface on it goes with it.  The NX-OS parser
+  reads `encapsulation dot1q` whole: a line that is not one VLAN
+  id is left out the same way, where its first number was the tag.
 - **A RouterOS VLAN on a VLAN is two tags, and a FortiOS one is said.**
   "In RouterOS, Q-in-Q can be configured by adding one VLAN interface
   over another" (MikroTik, "VLAN"): `add interface=ether1 name=vlan1
@@ -4365,8 +4381,8 @@ timestamp if your timezone matters for an audit.
 
   What is not counted.  A Junos reference to unit 0 of an interface
   (`lo0.0` where the interface is `lo0`) is that interface and no
-  second one — unless the config gives unit 0 a stanza of its own
-  beside its port (a VyOS `vif 0`), which is two interfaces.  A VLAN
+  second one — unless the tree holds unit 0 as a stanza of its own
+  beside its port, which is two interfaces.  A VLAN
   interface on a target that writes it from its VLAN (AOS-S) keeps
   its name by design, and is neither dropped nor left for want of a
   name.  Between two configs of one vendor nothing is listed that an
@@ -4553,10 +4569,7 @@ timestamp if your timezone matters for an audit.
   `vif-s` block, and an 802.1ad tag from any source, is left out with
   a row.  A RouterOS VLAN interface on a BRIDGE that says
   `use-service-tag=yes` is read as the bridge's VLAN interface, as
-  before: the bridge's own tag type (`ether-type`) is not read.  A VyOS `vif 0` is read as a
-  sub-interface of tag 0, which no 802.1Q VLAN has, and is written
-  so onto the targets that write a tag; the IOS-XE, IOS XR and EOS
-  parsers leave such a stanza out, with a row, when they read it.
+  before: the bridge's own tag type (`ether-type`) is not read.
 - **The tree has no IPv6 MTU, and some IP MTUs are not carried.**
   IOS-XE and IOS XR `ipv6 mtu` and a Junos unit 0's `family inet6 mtu`
   are not read.  A Junos unit's `family inet6 mtu` above unit 0 is

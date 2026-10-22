@@ -76,11 +76,13 @@ from .._helpers import (
     _is_link_local_v6,
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
+    a_tag,
     address_key,
     sole_vlan_id,
     tags_every_native_vlan,
     tags_its_native_vlan,
     untags_its_native_vlan,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import (
@@ -165,7 +167,8 @@ _VRF_MEMBER_RE = re.compile(r"^\s+vrf\s+member\s+(\S+)\s*$", re.IGNORECASE)
 # canonical field — ``switchport_mode=None`` already means "routed".
 _NO_SWITCHPORT_RE = re.compile(r"^\s+no\s+switchport\s*$", re.IGNORECASE)
 #: GAP 7: routed sub-interface 802.1Q tag — NX-OS writes lowercase
-#: ``encapsulation dot1q <vlan>`` (e.g. under ``interface Ethernet1/1.100``).
+#: ``encapsulation dot1q <vlan>`` (e.g. under ``interface Ethernet1/1.100``),
+#: once :func:`_tag_read` has read the statement whole.
 _ENCAP_DOT1Q_RE = re.compile(
     r"^\s+encapsulation\s+dot1q\s+(\d+)\b", re.IGNORECASE,
 )
@@ -567,6 +570,34 @@ def _refuse_a_flat_text(raw: str) -> None:
         )
 
 
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement,
+    ``encapsulation dot1q ...`` (in any letter case)."""
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() == "dot1q"
+    )
+
+
+def _tag_read(statement: str) -> tuple[int, None] | None:
+    """The tag of ``encapsulation dot1q <vlan>``, read whole: one
+    VLAN id and nothing after it, else ``None``.
+
+    "encapsulation dot1q vlan-id: Configures IEEE 802.1Q VLAN
+    encapsulation on the subinterface" (Cisco Nexus 9000 Series NX-OS
+    Interfaces Configuration Guide, "Configuring a Subinterface"):
+    one id.  Anything else -- 0, a number above 4094, a range, a
+    second tag -- is not one the tree holds.
+    """
+    words = statement.split()
+    if len(words) != 3:
+        return None
+    vid = a_tag(words[2])
+    return None if vid is None else (vid, None)
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse NX-OS ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -605,6 +636,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent = CanonicalIntent(
         source_vendor="cisco_nxos",
         source_format="cli-nxos",
+    )
+    # A sub-interface whose tag statement is not one VLAN id
+    # (``encapsulation dot1q 0``, a range, a second tag) is taken out
+    # before any reader sees it, and a row says the statement: read
+    # for its first number it was tag 0, or a tag no VLAN has, on
+    # every target that writes one (the codec's ``parse()`` keeps the
+    # row beside the Tier-3 rows).
+    raw, intent.dropped_tier3_sections = without_unread_tags(
+        raw, _is_tag_statement, _tag_read,
     )
 
     intent.hostname = _extract_hostname(raw)

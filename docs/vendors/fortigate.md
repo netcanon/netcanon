@@ -345,7 +345,9 @@ loses the layout too.
   tags, Fortinet documents Q-in-Q with an 802.1ad outer tag ("QinQ",
   FortiOS Administration Guide), and whether a VLAN interface on an
   `8021q` one sends two 802.1Q tags is not established.  ⚠️ Up to
-  0.7.7 each was read as a VLAN interface of one 802.1Q tag.  A
+  0.7.7 each was read as a VLAN interface of one 802.1Q tag.  So is
+  a VLAN interface whose `set vlanid` is no VLAN id (0, 4095), which
+  up to 0.7.7 made no VLAN and kept the interface with no tag.  A
   source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS
   `inner`, Junos `vlan-tags`) has no form here, and is `partial`.
 - **Names no other vendor has** — a hardware switch (`internal`,

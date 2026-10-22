@@ -935,8 +935,9 @@ tests use these exclusively — never CSS classes or element structure.  See
   port's clash.  What shares a name is not always two interfaces —
   Junos refers to `lo0` as `lo0.0` — and what tells them apart is
   the tree that was RENDERED (how many interfaces it holds under the
-  name), not the shape of the names: a VyOS `vif 0` is unit 0 with a
-  stanza of its own.  **"Hardware port" was a narrowing too**: the
+  name), not the shape of the names: a tree can hold unit 0 as a
+  stanza of its own (a VyOS `vif 0` did, until 0 was read as no
+  VLAN id).  **"Hardware port" was a narrowing too**: the
   first version listed a dropped name only where it was a hardware
   port, and a FortiGate hardware switch that holds the LAN address —
   an aggregate, to its classifier — was dropped in a job that said

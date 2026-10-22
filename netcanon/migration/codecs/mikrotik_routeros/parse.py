@@ -54,7 +54,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import ticked
-from .._helpers import Uniques, a_few_named
+from .._helpers import Uniques, a_few_named, a_tag
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .port_names import classify_port_name, is_factory_port_name
@@ -118,6 +118,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]] = {}
     # The VLAN interfaces whose tag is an 802.1ad service tag.
     service_tagged: set[str] = set()
+    # The VLAN interfaces whose ``vlan-id=`` is no VLAN id.
+    no_id: dict[str, None] = {}
     # Every name ``/interface ethernet`` sets something on: a port,
     # whatever its name.
     ethernet_names: set[str] = set()
@@ -168,6 +170,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         elif section == "/interface vlan":
             _parse_interface_vlan(
                 lines, iface_by_name, intent, vlan_ifaces, service_tagged,
+                no_id,
             )
         elif section == "/interface bridge":
             _parse_interface_bridge(lines, iface_by_name)
@@ -217,7 +220,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         vlan_ifaces, iface_by_name, ethernet_names, intent,
     )
     intent.dropped_tier3_sections.extend(_a_vlan_on_a_vlan_is_two_tags(
-        vlan_ifaces, service_tagged, iface_by_name, intent,
+        vlan_ifaces, service_tagged, no_id, iface_by_name, intent,
     ))
     _name_the_hardware(iface_by_name.values())
 
@@ -646,6 +649,7 @@ def _parse_interface_vlan(
     intent: CanonicalIntent,
     vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
     service_tagged: set[str],
+    no_id: dict[str, None],
 ) -> None:
     """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions.
 
@@ -655,7 +659,12 @@ def _parse_interface_vlan(
     is a VLAN interface a second tag, which is decided when the whole
     config has been read (:func:`_a_vlan_on_a_port_is_a_sub_interface`,
     :func:`_a_vlan_on_a_vlan_is_two_tags`).  One that says
-    ``use-service-tag=yes`` is put in *service_tagged*.
+    ``use-service-tag=yes`` is put in *service_tagged*, and one whose
+    ``vlan-id=`` is no VLAN id (0, 4095, a word) in *no_id*, with a
+    record of its own that its addresses land on: it is left out
+    with them when the whole config has been read.  Read for its
+    number, a ``vlan-id=0`` made a VLAN of id 0 and the whole config
+    was refused.
     """
     for line in ticked(lines):
         if not line.startswith("add"):
@@ -665,9 +674,16 @@ def _parse_interface_vlan(
         if not name:
             continue
         vlan_id_str = kv.get("vlan-id")
-        if not vlan_id_str or not vlan_id_str.isdigit():
+        if not vlan_id_str:
             continue
-        vlan_id = int(vlan_id_str)
+        vlan_id = a_tag(vlan_id_str)
+        if vlan_id is None:
+            no_id[name] = None
+            iface_by_name.setdefault(
+                name,
+                CanonicalInterface(name=name, interface_type="ianaift:l3ipvlan"),
+            )
+            continue
         iface = iface_by_name.setdefault(
             name,
             CanonicalInterface(
@@ -788,6 +804,7 @@ def _a_vlan_on_a_port_is_a_sub_interface(
 def _a_vlan_on_a_vlan_is_two_tags(
     vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
     service_tagged: set[str],
+    no_id: dict[str, None],
     iface_by_name: dict[str, CanonicalInterface],
     intent: CanonicalIntent,
 ) -> list[str]:
@@ -815,7 +832,9 @@ def _a_vlan_on_a_vlan_is_two_tags(
     or a bond (one on a bridge's VLAN interface, a third tag) has no
     form in the tree.  Each such interface is left out, with its VLAN
     record and its addresses, and a row says which
-    (:data:`_LEFT_OUT_TAGS`), a few named and the rest counted.  A
+    (:data:`_LEFT_OUT_TAGS`), a few named and the rest counted.  So
+    is one whose ``vlan-id=`` is no VLAN id (*no_id*), and a VLAN
+    interface on it.  A
     route or a DHCP server that names it keeps the name, as one that
     names any interface the tree does not have does.  Read as one
     tag, it was another interface on every target.
@@ -833,12 +852,15 @@ def _a_vlan_on_a_vlan_is_two_tags(
         if iface_by_name[name].dot1q_vlan is not None
     }
     left_out: dict[str, list[str]] = {reason: [] for reason in _LEFT_OUT_TAGS}
+    left_out["id"] = list(no_id)
     two_tags: list[str] = []
     for name in ticked(vlan_ifaces):
+        if name in no_id:
+            continue
         parent = iface_by_name[name].vlan_parent
         if name in service_tagged and (name in one_tag or parent in vlan_ifaces):
             left_out["service"].append(name)
-        elif parent in vlan_ifaces and parent != name:
+        elif parent != name and (parent in vlan_ifaces or parent in no_id):
             if parent in one_tag and parent not in service_tagged:
                 two_tags.append(name)
             else:
@@ -852,8 +874,9 @@ def _a_vlan_on_a_vlan_is_two_tags(
     gone = {id(vlan) for name in two_tags for vlan in vlan_ifaces[name][1]}
     for names in left_out.values():
         for name in names:
-            gone.update(id(vlan) for vlan in vlan_ifaces[name][1])
-            del iface_by_name[name]
+            if name in vlan_ifaces:
+                gone.update(id(vlan) for vlan in vlan_ifaces[name][1])
+            iface_by_name.pop(name, None)
     if gone:
         intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in gone]
     return [
@@ -866,6 +889,7 @@ def _a_vlan_on_a_vlan_is_two_tags(
 
 #: Why a VLAN interface is left out (:func:`_a_vlan_on_a_vlan_is_two_tags`).
 _LEFT_OUT_TAGS = {
+    "id": "vlan-id= a number that is no VLAN id, 1 to 4094",
     "service": "use-service-tag=yes, an 802.1ad service tag",
     "stack": (
         "interface= a VLAN interface that is not one 802.1Q tag on a "
