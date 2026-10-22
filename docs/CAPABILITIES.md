@@ -1106,10 +1106,11 @@ was dropped or a VLAN interface left under its source name: with
 both devices declared the output has them the same, and the job is
 not held for them.  So the job's sentence offers the devices only
 where a hardware port is among what it lists, and says so where
-they would decide only some of it.  (The sentence does not know
-which vendors have a device described: it makes the offer for an
-NX-OS source too, for which none ships.  The rename modal does
-know, and does not.)
+they would decide only some of it -- and only where a device is
+described of the source's vendor and of the target's (a model
+family or a target profile), as the rename modal does.  For NX-OS,
+IOS-XR, OS10 and VyOS none ships, and the sentence ends with the
+entries.
 
 The same body gives the same status and the same fields on `/plan`
 and on every per-pane endpoint, and every one of them applies the

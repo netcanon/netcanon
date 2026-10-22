@@ -30,6 +30,8 @@ Public surface:
   translating every way it can be wrong into a 422.
 * :func:`resolve_port_inventories` — both sides of a request, or
   ``None`` when the request does not declare its source device.
+* :func:`a_device_is_described` — whether an operator can declare a
+  device of a codec's vendor: a model family or a target profile.
 * :func:`run_translation` — the one place every job-running handler
   dispatches from: model-aware when the request declares both
   devices, the rename-aware pipeline and its check of the finished
@@ -846,6 +848,25 @@ def resolve_port_inventories(
     )
 
 
+def a_device_is_described(request: Request, codec: CodecBase) -> bool:
+    """Whether a device of *codec*'s vendor can be declared: a model
+    family of that vendor, or a target profile.  The migrate page
+    asks the same of the same registries (``_modelsKnown``).
+
+    A job's sentence offers "declare both devices" only where this
+    holds for both sides: for a vendor nobody has described a
+    device of (NX-OS, IOS XR, OS10, VyOS as shipped) the offer was
+    advice nobody could take.
+    """
+    vendor = codec.capabilities.vendor_id
+    if get_model_families(request).model_keys(vendor):
+        return True
+    return any(
+        profile.vendor == vendor
+        for profile in get_target_profiles(request).values()
+    )
+
+
 def request_limits(request: Request) -> str | None:
     """The name of the limits this server is set to
     (``Settings.config_limits``), for :func:`~netcanon.migration.
@@ -1094,6 +1115,10 @@ def run_translation(
             if inventories is None:
                 return run_plan_with_checked_names(
                     source, target, raw_text, **overrides,
+                    devices_known=(
+                        a_device_is_described(request, source)
+                        and a_device_is_described(request, target)
+                    ),
                 )
             source_inventory, target_inventory = inventories
             return run_plan_with_models(

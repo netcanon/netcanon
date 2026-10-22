@@ -733,8 +733,8 @@ rule with one device already chosen: where no hardware port is
 among the names it says that choosing the other device "pairs
 hardware ports by position: that settles none of the names above".
 And for a vendor nobody has described a device of (NX-OS, IOS-XR,
-OS10 and VyOS as shipped) there is no device to choose: the strip
-does not offer one, though the job's sentence may.
+OS10 and VyOS as shipped) there is no device to choose: neither
+the strip nor the job's sentence offers one.
 
 Such a job said `completed` before this was part of the status, with
 the same output and the same warnings.  If you applied a config

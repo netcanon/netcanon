@@ -555,6 +555,22 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A job no longer offers "declare both devices" where no device
+  can be declared.**  The sentence of a job whose port names are not
+  settled offered the pairing wherever a hardware port was among
+  the names, also where no model family and no target profile is of
+  the source's vendor or the target's (NX-OS, IOS-XR, OS10 and VyOS
+  as shipped): advice nobody could take, which the rename modal did
+  not give.  The API now asks the same registries the modal asks
+  (`a_device_is_described`), and where either side has none the
+  sentence ends with the entries that settle the names.  Nothing
+  else about such a job changes: its status and its three lists are
+  as they were.  Guarded by
+  `TestPortNamesWithNoDevices` in
+  `tests/integration/test_migration_models_api.py` (an IOS-XR
+  capture onto AOS-S, on every plan endpoint, and which vendors have
+  a device, typed by hand) and `TestWhatTheJobSays` in
+  `tests/unit/migration/test_run_plan_checked_names.py`.
 - **Junos: a set line's bracket list is read, a statement a value.**
   The CLI takes `set ... vlan members [ DATA VOICE ]` (and `display
   set` prints it one value a line); the block form's list was
@@ -4813,11 +4829,6 @@ timestamp if your timezone matters for an audit.
   is `partial` until each has an entry, one row at a time.  The
   translator does not give it the target's own name
   (`{"Vlan10": "irb.10"}` is yours to send).
-- **The job's sentence offers "declare both devices" wherever a
-  hardware port is among the names**, also for a vendor no device
-  is described for (NX-OS, IOS-XR, OS10 and VyOS as shipped).  The
-  rename modal knows which vendors have a device to choose and does
-  not offer it there; the sentence does not.
 - **With both devices chosen the strip no longer says which names
   were not settled**, and the job that Apply then makes is the one
   the limitation above describes: a logical name is only warned

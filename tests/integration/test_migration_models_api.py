@@ -1366,6 +1366,45 @@ class TestPortNamesWithNoDevices:
         assert "198.51.100.9" not in job["rendered"], path
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_no_device_is_offered_where_none_is_described(
+        self, client: TestClient, path: str,
+    ) -> None:
+        """No model family and no target profile is of IOS XR's
+        vendor: two of its ports on one AOS-S name are settled by an
+        entry and by nothing else.  The sentence offered both
+        devices all the same -- advice nobody could take, which the
+        migrate page did not give."""
+        text = (REPO_ROOT / "tests/fixtures/real/cisco_iosxr/xrdtools_isis_r1.cfg").read_text(
+            encoding="utf-8",
+        )
+        resp = client.post(
+            f"/api/v1/migration{path}",
+            json={"source": "cisco_iosxr", "target": "aruba_aoss", "raw_text": text},
+        )
+        job = resp.json()
+        assert job["status"] == "partial" and job["fused_ports"], path
+        assert job["error"].endswith(
+            "An entry in port_rename_map settles each: a name of its own, "
+            "or null, for all but one of the names that share one."
+        ), path
+        assert "devices" not in job["error"], path
+
+    def test_which_vendors_have_a_device_to_declare(self, client: TestClient) -> None:
+        """Typed by hand from the shipped registries, as the migrate
+        page's device pickers show them."""
+        from types import SimpleNamespace
+
+        from netcanon.api.routes._migration_helpers import a_device_is_described
+        from netcanon.migration.codecs.registry import get_codec, list_public_codecs
+
+        request = SimpleNamespace(app=client.app)
+        none = {
+            name for name in list_public_codecs()
+            if not a_device_is_described(request, get_codec(name))
+        }
+        assert none == {"cisco_iosxr", "cisco_nxos", "dell_os10", "vyos"}
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_entries_settle_it_on_every_endpoint(
         self, client: TestClient, path: str,
     ) -> None:
