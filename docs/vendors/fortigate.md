@@ -48,7 +48,13 @@ firewall translation is your primary need, see
   advisory fires.  The bare aggregate (`internal` / `lan` with no
   number) has no cross-vendor equivalent at all and warns separately.
 - VLANs — VLAN sub-interface form (`config system interface` →
-  `set type vlan` + `set vlanid <N>`)
+  `set type vlan` + `set vlanid <N>`), on the interface its
+  `set interface` names.  The parent is kept onto FortiOS and
+  RouterOS; onto any other vendor it is not carried, and nothing
+  reports it.  Where the output has no interface of that name, a
+  parent is chosen and a `# review:` line in the VLAN's block names
+  the one the source stated.  A VLAN that states no parent, or one
+  from another vendor, is on the parent the renderer chooses
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
   member lists; a member with no `edit` of its own, as in a pasted
@@ -196,8 +202,51 @@ Provenance in
 Spans FortiOS 7.2.x and 7.6.x; FortiGate VM, 70G branch hardware,
 and 100E physical hardware.
 
+## A quoted value of several lines
+
+FortiOS prints a value of several lines as it is, between its quotes,
+as the committed captures show for a certificate (`set certificate
+"-----BEGIN CERTIFICATE-----` ... `-----END CERTIFICATE-----"`), a
+private key and a replacement message's HTML (`set buffer "<!DOCTYPE
+html>` ... `"`).  A quote, an apostrophe or a backslash in a value is printed
+with a backslash in front of it (`\"`, `\'`, `\\`), as the committed
+captures show; the parser takes a backslash as escaping the character
+after it, whichever character that is.
+
+The parser reads such a statement whole, up to the line whose quote no
+backslash escapes, so none of its lines is a statement of its own: a
+line `end` in a value closes nothing, and a line of HTML that reads
+`config system admin` is no account.  The Tier-3 detection and the
+release (`#config-version`) are read from the text with the value's
+lines emptied, each line keeping its number.  A line that begins with
+`#` is a comment, whatever quotes it holds.
+
+Refused, in words that name the line and quote nothing of the text:
+
+- **a value that no later line ends** -- the rest of the config would
+  be its text.  Paste the configuration whole, as the FortiGate prints
+  it (a backup file, or the output of `show`);
+- **a line of a value that ends in another character than a line feed**
+  (a form feed, a vertical tab, a carriage return on its own; `\r\n`
+  is a line feed) -- the device does not end a line there, so where the
+  value ends is not where the lines say.
+
+A value of several lines that the tree keeps -- an interface's alias,
+a static route's comment -- reaches every target on one line, each
+break as a space, and the job says where
+([`../CAPABILITIES.md`](../CAPABILITIES.md) § C1).  A FortiGate target
+loses the layout too.
+
 ## Common gotchas
 
+- **A RADIUS secret typed without `ENC` migrates; an `ENC` secret goes
+  to FortiOS only.**  FortiOS prints a stored secret as `set secret
+  ENC <blob>`, encrypted under the FortiGate's own key: it is written
+  back onto FortiOS, and onto any other target the server is written
+  with no key, beside a review line.  A `set secret <secret>` written
+  without `ENC` -- a config typed by hand, or a template -- is the
+  secret itself, and migrates.  With 0.7.7 or earlier such a secret
+  was refused on every other target as if it were encrypted.
 - **Names no other vendor has** — a hardware switch (`internal`,
   `lan`) and the SSL-VPN pseudo-interface (`ssl.root`) have no form
   on another vendor and are dropped, with whatever address they
@@ -212,6 +261,20 @@ and 100E physical hardware.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
+- **A password typed in the source** (AOS-S `plaintext`, AOS-CX
+  `password plaintext`, VyOS `plaintext-password`) is written as
+  FortiOS: `set password "<password>"`, for the FortiGate to encrypt
+  on save.  ⚠️ Up to 0.7.7 it was written `set password ENC
+  <password>` — a claim that it is a blob this FortiGate encrypted —
+  so the account did not hold the password; translate such a config
+  again.  Names and secrets FortiOS takes in quotes (an admin's name
+  and access profile, the SNMP community, an SNMPv3 user and its keys,
+  a VRRP key) are written with FortiOS's escape for a `"` and a `\`.
+- **An admin whose password cannot be carried is left out** as a
+  target, with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7
+  the admin was written without its password (`edit`, `set accprofile
+  "super_admin"`) — an admin with no password; read old outputs for
+  an `edit` after a `review:` line.
 - **Declaring a FortiGate as the source device** — with both devices
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still

@@ -110,6 +110,9 @@ Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
 > OPNsense's <virtualip> hosts CARP-only HA groups in the v1 wire-up.  CanonicalVRRPGroup records with mode='vrrp' or mode='hsrp' are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under <virtualip> is rarely deployed and not yet emitted by this codec.  Only mode='carp' round-trips.  Additionally, the advskew↔priority mapping (priority = 254 - advskew) preserves relative HA-pair ordering but not exact election timing — VRRP priorities are advisory weights, CARP advskews are advertisement-interval offsets, so cross-protocol migration loses the timing semantics.
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — a password as typed is refused on OPNsense.**  OPNsense takes a password into its config only as a hash; up to 0.7.7 a typed password was written into `<password>` as it stood, which opened nothing.  The two Azure Local ToR captures hold each of their 2 accounts' passwords as typed (a template placeholder), so those 4 accounts are now refused, a `review:` comment naming each in place of the account; the kitchen sink's 2 `$6$` accounts arrive.  Measured after the change: **2 of 6** accounts arrive across the 3 cells that populate users.  The counts below describe the code before the change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/dell_os10__opnsense.yaml`.
+
 ### `local_users` — lossy
 
 Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).

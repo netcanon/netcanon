@@ -520,33 +520,38 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Aruba SHA-1 hex (``sha1 "<40-hex>"``) and plaintext
-      (``plaintext "<...>"``) hashes are NOT bcrypt and OPNsense
-      will reject them on apply (FreeBSD ``crypt(3)`` accepts only
-      bcrypt-prefix forms).  Aruba's bcrypt form (``bcrypt
-      "$2y$..."``) MAY round-trip if the OPNsense backend accepts
-      ``$2y$`` (it accepts ``$2a$`` / ``$2b$`` / ``$2y$``
-      interchangeably) but the salt-engine differences may still
-      require re-keying.  Operators must reset passwords on the
-      OPNsense target in most cases.  Privilege number (15 -> 1)
-      collapses to OPNsense's binary admin / non-admin via group
-      membership: privilege >= 15 -> ``<groupname>admins</groupname>``,
-      otherwise ``<groupname>users</groupname>``.  Both codecs pass
-      hashes through verbatim; loss surfaces in the validation
-      report.
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as a `<user>` element
+      with no `<password>`; a refused secret now drops the whole account, as on
+      every other target. The survivors are 1 carrying 1 plaintext password.
+      Recorded `lossy` rather than `unsupported`: which account survives is
+      decided by its secret form, and accounts with a consumable secret do
+      arrive. Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target with
+      a fresh password.
     references: [opnsense-users, aruba-users]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Aruba ``radius-server host <ip> key "<secret>"`` (with
       separate ``radius-server key`` for the global default) ↔
       OPNsense ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
-      ``<radius_acct_port>``.  Round-trips host / port pair
-      cleanly with default ports 1812 / 1813.  Aruba's optional
-      ``radius-server retransmit`` / ``timeout`` directives have
-      no canonical model and drop on render.
+      ``<radius_acct_port>``.  Round-trips host / port pair and a
+      key written as typed, with default ports 1812 / 1813.
+      Aruba's optional ``radius-server retransmit`` / ``timeout``
+      directives have no canonical model and drop on render.
+      An AOS-S ``encrypted-key "<blob>"`` (``encrypt-credentials``
+      on) is a form only AOS-S reads: it is held behind ``aoss:``,
+      not decoded, and the server is written with no key, beside a
+      review line.  No committed capture has one, so every cell
+      round-trips; until 2026-10 the blob was read as the secret
+      itself, and this entry called the field good.
     references: [opnsense-radius, aruba-radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

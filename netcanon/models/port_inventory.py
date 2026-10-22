@@ -779,9 +779,9 @@ class MappingPlan(BaseModel):
     target, which the output then uses and nothing defines.  Or two
     ports of another vendor were given one name: the output finds
     the first by it, and the second is listed.  Or the port has a line
-    of its own, and a list that names it -- ``slaves=``, ``gateway=``,
-    written unquoted -- cuts the name an entry gave it at white space
-    or a comma.  Such a port is in
+    of its own, and a list that names it cuts the name an entry gave
+    it: ``slaves=`` at a comma, ``gateway=`` at a comma, an ``@`` or a
+    ``%``.  Such a port is in
     neither :attr:`target_hardware` nor :attr:`source_hardware`, nor
     is its entry listed in :attr:`off_target`, and the job is
     ``partial`` while this is not empty: name the port with a port of

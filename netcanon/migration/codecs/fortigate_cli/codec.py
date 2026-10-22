@@ -45,6 +45,7 @@ from .parse import (
     _parse_blocks,
     _prefix_to_mask,
     parse_intent,
+    without_quoted_values,
 )
 from .render import render_intent
 
@@ -537,8 +538,12 @@ class FortiGateCLICodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 `config` blocks the parser drops (firewall
         # policies, VIPs, VPN, UTM profiles, router policy/route-maps).
-        # Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_fortios(raw)
+        # Notification-only.  Read from the text the parser read: a line
+        # of a quoted value (a replacement message, a certificate) is
+        # text, not a stanza.
+        intent.dropped_tier3_sections = detect_tier3_sections_fortios(
+            without_quoted_values(raw),
+        )
         return intent
 
     def render(self, tree: Any) -> str:

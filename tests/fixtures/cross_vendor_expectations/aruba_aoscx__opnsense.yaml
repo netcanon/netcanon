@@ -26,7 +26,7 @@
 # What is lost is not structure but content: everything L2-switching
 # (port-to-VLAN membership), everything routing (static routes, VRFs),
 # everything overlay (VXLAN), the anycast/virtual-gateway addressing, SNMPv3
-# users, and the meaning — though not the bytes — of every local password.
+# users, and every local account.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations, a
 # full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
@@ -51,12 +51,11 @@ meta:
     state, MTU, and every IPv4 and IPv6 address -- except that a LACP
     member is written in its lagg alone, so its own description and MTU
     are not), LACP bundles and their member ports, VLAN IDs and VLAN
-    names, SNMP scalars and local usernames all survive.  What does not
-    survive:
+    names, and SNMP scalars all survive.  What does not survive:
     port-to-VLAN membership and the whole switchport surface, the VLAN-mounted
     SVI record (the subnet relocates, the anycast gateway does not), every
     static route, every VRF, VXLAN, the SNMPv3 user store, the anycast-gateway
-    MAC, and any working local credential.
+    MAC, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-opnsense-surface
@@ -542,48 +541,50 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users — the
-      account arrives as `<system><user><name>`.  The account exists on the
-      target; see `hashed_password` for why it cannot yet be logged into.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 7 across the 6 cells that populate local
+      users.  Each of the 7 holds an AOS-CX ciphertext (`password
+      ciphertext`), encrypted under the key of the switch that made it:
+      6 `AQB` blobs, and the GL CX 10.09 capture's `admin`, whose
+      publisher put a placeholder word where its ciphertext was.
+      OPNsense's `<password>` is the hash `password_verify()` checks a
+      password against (bcrypt `$2y$` / `$2b$` or SHA-512 crypt `$6$`),
+      so it takes neither an AOS-CX ciphertext nor a password as typed.
+      So each account is refused with a review comment naming it, in
+      place of the account, rather than written as an account with no
+      password.  Up to 0.7.7 the placeholder word was written into
+      `<password>` as it stood, which opened nothing, and an `AQB`
+      account was written as a `<user>` element with no `<password>`.
+      Recorded `unsupported` rather than `lossy`: no AOS-CX secret form
+      reaches OPNsense -- an account configured `password plaintext` is
+      read as typed, which OPNsense takes nowhere
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`) --
+      so no AOS-CX account does.  Re-create the accounts on the target.
     references: [aoscx-opnsense-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 6 populated cells, and the mechanism is a deliberate remap
-      rather than a loss: the AOS-CX `administrators` role renders to the
-      OPNsense `admins` group and re-parses as `admin`; `operators` maps to
-      `user`.  Measured on the kitchen sink, which carries both.  aruba_aoscx
-      also declares `/local-users/user/privilege-level` lossy in its own right.
-      The privilege intent is preserved and arguably correct, but two things
-      follow: any downstream tooling keyed on the literal role string stops
-      matching, and an OPNsense `admin` has unrestricted access to a box that
-      is now the security boundary.  Review the mapping before the account
-      becomes production.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so
+      there is no role on the target to compare.  Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here.
     references: [aoscx-opnsense-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 6 cells that populate local users, and this one was
-      settled by inspecting the render.  AOS-CX stores the user secret in its
-      own encrypted form — an `AQB...`-prefixed ciphertext blob — and the
-      OPNsense renderer writes that blob verbatim into `<system><user>
-      <password>`.  Re-parsing labels it as a bcrypt hash: the canonical string
-      grows by exactly the 7 characters of a `bcrypt:` scheme prefix on every
-      user on every cell and is otherwise byte-identical.
-      So nothing is deleted, which is why this is `lossy` and not
-      `unsupported` — but the bytes surviving is not the credential surviving.
-      OPNsense authenticates `<password>` as a crypt-format hash (the `$2y$`
-      bcrypt shape); an ArubaOS-CX ciphertext blob sitting in that element,
-      labelled bcrypt, is not a password any OPNsense box can ever verify.
-      Every migrated account arrives without a working credential: set
-      passwords on the target before cutover, or you will be locked out of the
-      firewall you just migrated.
-      The ciphertext is deliberately NOT quoted here — it is operator-traceable
-      key material even though it is encrypted (AGENTS.md).
+    disposition: good
+    note: >
+      No secret is written in a form OPNsense cannot consume.  7
+      accounts are refused for their secret (7 AOS-CX ciphertext, one of
+      them a placeholder word) and vanish with it; that loss is recorded
+      once, under `local_users[].name`.  No account with a stored secret
+      arrives, so there is no value to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [aoscx-opnsense-surface]
 
   # -- Fabric ---------------------------------------------------------------

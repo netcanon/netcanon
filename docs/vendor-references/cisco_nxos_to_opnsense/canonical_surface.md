@@ -1,5 +1,8 @@
 # NX-OS -> OPNsense: measured canonical surface
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **0 of 10** local accounts arrive across the 9 cells that populate users; 10 are refused for a secret OPNsense cannot consume (10 SHA-256 crypt (NX-OS type 5 over `$5$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__opnsense.yaml`.
+
 Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 `netcanon/migration/codecs/opnsense/codec.py` (`CapabilityMatrix`), joined
 against a full in-process `tools/run_full_mesh.py` run over the committed

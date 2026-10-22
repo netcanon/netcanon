@@ -347,12 +347,16 @@ per_field_expectation:
     references: [iosxe-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved into `vlan 10 / name <text>`.  The synthesiser takes the
-      VLAN name from the SVI's description, so the name that lands on the
-      Nexus is the SVI description from the source device, not a
-      VLAN-database name the parser never saw.
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): NX-OS
+      documents a VLAN name of letters, digits, `-` and `_` only.
+      The name is the SVI's description (the synthesiser takes it
+      from there): the kitchen sink's `User VLAN 10 SVI` lands as
+      `User_VLAN_10_SVI`.  A name with no white space is
+      preserved.
     references: [iosxe-nxos-surface]
 
   "vlans[].ipv4_addresses":

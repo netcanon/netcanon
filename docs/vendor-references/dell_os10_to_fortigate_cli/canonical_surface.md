@@ -133,6 +133,9 @@ Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
 ### `local_users` — lossy
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the FortiOS render wrote such an account as an `edit` with its access profile and no `set password` -- an admin with no password.  Measured after the change: **4 of 6** local accounts arrive across the 3 cells that populate users; 2 are refused for a secret FortiOS cannot consume (2 SHA-512 crypt (`$6$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/dell_os10__fortigate_cli.yaml`.
+
 Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
 ### `local_users[].hashed_password` — lossy
