@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The Docker image no longer carries pip.**  The base image's pip
+  (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
+  intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,
+  CRITICAL), and the gating image scan failed every pull request on
+  it.  netcanon never used that copy -- the server makes no outbound
+  HTTPS request through pip -- but it was in the image.  The runtime
+  stage now uninstalls pip once netcanon is installed, so no copy pip
+  vendors can ship.  If you install packages into the container
+  yourself, `python -m ensurepip` restores a pip, and with it the
+  copy it bundles; build an image of your own on top instead.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
