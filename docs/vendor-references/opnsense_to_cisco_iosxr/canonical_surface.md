@@ -54,7 +54,11 @@ zero dropped**, and on every one of those 30 records `description`, `enabled`,
 `mtu`, `ipv4_addresses` and `ipv6_addresses` are identical after the
 round-trip. OPNsense interface names (`em0`, `igc0`, `vlan0.20`) pass through
 the XR render unchanged — they are emitted verbatim as `interface <name>`
-stanzas rather than being normalised into XR 4-segment form.
+stanzas rather than being normalised into XR 4-segment form. (The interface
+counts in this file were taken before the VLAN-device change, since which the
+OPNsense parser gives each VLAN device that no zone assigns an interface record
+of its own, `ianaift:l3ipvlan`: the kitchen sink holds more records on both
+sides, still none dropped.)
 
 The consequence is that six of the nine `interfaces[].*` keys are honestly
 `good`, which is unusual for this mesh. The losses on this pair are
@@ -118,8 +122,10 @@ rendered IOS-XR text, not inferred from the drift shape.
    **The operationally important nuance:** the OPNsense *VLAN interfaces*
    (`vlan0.20`, `vlan0.100`, …) DO survive — as `interfaces[]` records with
    their addressing intact. What is lost is the standalone VLAN table: the ID,
-   the operator-assigned name (`USER VLAN`, `MGMT VLAN`, …) and the
-   description. Layer-3 reachability survives; the VLAN inventory does not.
+   the name (an OPNsense `<vlan>` has no name of its own, so the canonical
+   name is its device, `vlan0.10`) and the description — the operator's label
+   (`USER VLAN`, `MGMT VLAN`, …), from the `<vlan>`'s `<descr>`. Layer-3
+   reachability survives; the VLAN inventory does not.
 2. **DHCP server pools.** 4 in, 0 out. XR declares `/dhcp-servers/pool`
    unsupported: "Render emits no DHCP server pool."
 3. **RADIUS servers.** 2 in, 0 out. XR declares both

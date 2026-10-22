@@ -30,7 +30,9 @@ IPv4 Distributed Anycast Gateway.
   address held on the VLAN record (see Common gotchas)
 - Static routes — default VRF **and** per-VRF (`ip route … vrf X`)
 - LAGs (`port-channel<N>` reconciled with cross-vendor names like
-  `ae<N>` / `Port-channel<N>` / `trk<N>`)
+  `ae<N>` / `Port-channel<N>` / `trk<N>`); `port-channel<N>.<M>` is a
+  sub-interface of the LAG, read as an interface and not as a LAG of
+  its own
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
 translatable with caveats:
@@ -262,6 +264,11 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **One tag per sub-interface.**  The sub-interface statement this
+  codec reads and writes is `encapsulation dot1q <id>`, one tag: a
+  source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS
+  `inner`, Junos `vlan-tags`) is written with its outer tag, and the
+  job is `partial`, the validation report listing the inner tag.
 - **A VLAN's address with no interface of its own gets one.**  A
   source can hold a VLAN's address on the VLAN itself: Junos folds
   the address of an `irb` unit that a VLAN binds with `l3-interface`

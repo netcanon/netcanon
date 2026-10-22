@@ -55,6 +55,11 @@ on all 8 cells:
 | user_contrib_supergate_opn25 | 8 | 8 |
 | kitchen_sink (synthetic) | 7 | 7 |
 
+The kitchen-sink row was counted before the VLAN-device change: the OPNsense
+parser now gives each VLAN device that no zone assigns an interface record of
+its own (`ianaift:l3ipvlan`), so that cell holds more records on both sides —
+still preserved exactly.
+
 Because no record vanishes, **each `interfaces[].*` key was measured on its own
 merits** and six of the nine are honestly `good`. OPNsense-native names
 (`em0`, `vlan0.20`, `lagg0`) pass through the render verbatim rather than being
@@ -91,10 +96,17 @@ to this pair's `local_users` block — see below.
 
 Fields trivially empty on all 8 cells: `ntp_servers`, `timezone`,
 `syslog_servers`, `vlans[].ipv4_addresses`, `vlans[].untagged_ports`,
-`vlans[].tagged_ports`, `vlans[].description`, `vxlan_vnis[].vni`,
+`vlans[].tagged_ports`, `vxlan_vnis[].vni`,
 `vxlan_vnis[].vlan_id`, `vxlan_vnis[].mcast_group`, `evpn_type5_routes`,
 `routing_instances[].name`, `routing_instances[].description`, `raw_sections`,
 `apply_groups`, `group_content`, `anycast_gateway_mac`.
+
+`vlans[].description` was in that list before the VLAN-device change. An
+OPNsense `<vlan>` has no name of its own: the parser now names a VLAN after its
+device (`vlan0.10`), which AOS-CX writes as `name vlan0.10`, and reads the
+`<descr>` (`USER VLAN`) as its description, which AOS-CX writes as the VLAN's
+`description` line. Both come back, on the cells that hold VLANs; the pair's
+expectation YAML records `vlans[].description` `good`.
 
 ## Source-side gaps vs target-side drops vs symmetric gaps
 
@@ -301,7 +313,9 @@ direction is worth knowing before an operator goes hunting for missing config.
   silently acquires a generic name. Set the hostname explicitly.
 - **`interfaces[].interface_type`** — 30 interface records across all 8 cells,
   the single most-drifting sub-field on the pair. OPNsense declares no IANA
-  ifType so the source value is empty; the AOS-CX codec infers one from the
+  ifType so the source value is empty (on every interface but a VLAN device,
+  which the parser types `ianaift:l3ipvlan` since the VLAN-device change); the
+  AOS-CX codec infers one from the
   interface-name shape, and OPNsense-native names match none of the shapes it
   knows (`1/1/1`, `vlan N`, `lag N`, `loopback N`), so all 30 land on
   `ianaift:other`. Harmless on the wire — nothing keys off the canonical ifType

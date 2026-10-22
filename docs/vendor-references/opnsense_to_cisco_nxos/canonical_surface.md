@@ -67,6 +67,14 @@ same parent is preserved on every cell)
 | `radius_servers[]` (record) | 1 cell | `all 2 radius_servers dropped` |
 | `hostname` (scalar) | 1 cell | `""` -> `switch` |
 
+Both tables were measured before the VLAN-device change. Since it,
+`vlans[].description` drifts on both cells that hold VLANs (the operator's
+label, `USER VLAN`, is now the VLAN's description, and NX-OS writes none — see
+the `vlans` note below), and the OPNsense parser gives each VLAN device that
+no zone assigns an interface record of its own (`ianaift:l3ipvlan`), so the
+kitchen sink holds more interface records on both sides. The pair's
+expectation YAML holds the current disposition.
+
 ## Notes grounding the dispositions
 
 * **`hostname`** — the NX-OS renderer is `tree.hostname or "switch"`
@@ -160,14 +168,18 @@ same parent is preserved on every cell)
   re-keying on the target.
 
 * **`vlans`** — id and name round-trip on both populated cells (5 records
-  each). `description`, `tagged_ports`, `untagged_ports` and
+  each). An OPNsense `<vlan>` has no name of its own: the canonical name is
+  its device (`vlan0.10`), which NX-OS writes as `vlan <id> / name vlan0.10`.
+  The operator's label (`USER VLAN`) is the `<descr>`, read as the VLAN's
+  description, and is lost: the NX-OS render emits the VLAN name but no
+  description line (declared LOSSY on the NX-OS target, and listed for each
+  VLAN in the validation report). `tagged_ports`, `untagged_ports` and
   `ipv4_addresses` carry no data on any VLAN record in the corpus.
   `tagged_ports` / `untagged_ports` are declared unsupported on the OPNsense
-  source (no per-VLAN port concept), so they are structurally absent;
-  `description` and the SVI-on-VLAN `ipv4_addresses` are declared LOSSY on
-  the NX-OS target (its render emits the VLAN name but no description line,
-  and renders SVI L3 only from a sibling interface stanza), so they are
-  declared lossy on the strength of the target's own declaration with the
+  source (no per-VLAN port concept), so they are structurally absent; the
+  SVI-on-VLAN `ipv4_addresses` is declared LOSSY on the NX-OS target (it
+  renders SVI L3 only from a sibling interface stanza), so it is declared
+  lossy on the strength of the target's own declaration with the
   measurement stated plainly.
 
 * **Structurally absent on the source** (`ntp_servers`, `syslog_servers`,

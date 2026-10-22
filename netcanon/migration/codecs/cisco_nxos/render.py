@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import re
 
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
@@ -126,11 +127,25 @@ def _render_management_plane(tree: CanonicalIntent) -> list[str]:
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco NX-OS config text."""
+    # A name that is not one word where NX-OS reads one is written as
+    # one, at every place it goes; an address is left out; a contact,
+    # whose place Cisco's pages disagree on, is written and said.
+    # Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "NX-OS",
+        names=("hostname", "vlans[].name", "routing_instances[].name"),
+        addresses=(
+            "domain", "ntp_servers", "syslog_servers", "dns_servers",
+            "static_routes[].gateway",
+        ),
+        unread_text=("snmp.contact",),
+    )
     hostname = tree.hostname or "switch"
     lines: list[str] = []
 
     # ── Banner / version / vdc wrapper ──
     lines.append("!Command: show running-config")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append("")
     lines.append(f"version {_version_token(tree)} Bios:version")
     lines.append(f"hostname {hostname}")
@@ -358,6 +373,20 @@ def _render_local_user(user) -> str:
     role = user.role or (
         "network-admin" if user.privilege_level >= 15 else "network-operator"
     )
+    # Name, password and role are one word each on this line: a second
+    # word of a password is read as the next keyword (`secret scrypt` sets
+    # the password `secret`).  The account is left out whole rather than
+    # altered.  Policy: :mod:`netcanon.migration._one_value`.
+    payload = (
+        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
+    )
+    # A secret this target cannot take at all is the hash gate's to
+    # say (below); this asks only of one it would write.
+    if splits(user.name) or splits(role) or (
+        splits(payload)
+        and is_migratable(user.hashed_password, "cisco_nxos")
+    ):
+        return "! " + left_out(f"username {user.name}", "Cisco NX-OS")
     if not user.hashed_password:
         return f"username {user.name} role {role}"
     algorithm, payload = classify_hash(user.hashed_password)
@@ -379,7 +408,13 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     declared lossy).  ``engineID`` (colon-decimal) re-emits verbatim.
     """
     lines: list[str] = []
-    if snmp.community:
+    # A community is one word: `snmp-server community public rw` is a
+    # READ-WRITE community `public`.  One that holds white space is left
+    # out, with every trap host that would carry it.
+    community_splits = splits(snmp.community)
+    if community_splits:
+        lines.append("! " + left_out("an SNMP community", "Cisco NX-OS"))
+    elif snmp.community:
         lines.append(f"snmp-server community {snmp.community}")
     if snmp.location:
         lines.append(f"snmp-server location {snmp.location}")
@@ -390,6 +425,11 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     # snmp.community.  Authentic corpus form:
     # `snmp-server host 10.1.1.1 traps version 2c networktocode`.
     for host in snmp.trap_hosts:
+        if community_splits:
+            lines.append(
+                "! " + left_out(f"snmp-server host {host}", "Cisco NX-OS")
+            )
+            continue
         community = snmp.community or "public"
         lines.append(f"snmp-server host {host} traps version 2c {community}")
         if not snmp.community:
@@ -417,6 +457,17 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
                 f"bound to the source agent's engine ID and cannot be re-used "
                 f"on NX-OS; re-create this user and re-key it on the target"
+            )
+            continue
+        # Name, group and both passphrases are one word each here.
+        if any(
+            splits(v) for v in (
+                user.name, user.group, user.auth_passphrase,
+                user.priv_passphrase,
+            )
+        ):
+            lines.append(
+                "! " + left_out(f"snmpv3 user {user.name}", "Cisco NX-OS")
             )
             continue
         # One keyword covers the whole line, so it must describe the least
@@ -671,7 +722,14 @@ def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -
             block.append("    preempt")
         if group.authentication:
             scheme, _, key = group.authentication.partition(":")
-            if scheme == "md5":
+            if scheme in ("md5", "plain") and splits(key):
+                # The key is one word; the group is kept without it.
+                block.append(
+                    "    ! " + left_out(
+                        f"hsrp {group.group_id} authentication", "Cisco NX-OS",
+                    )
+                )
+            elif scheme == "md5":
                 block.append(f"    authentication md5 key-string {key}")
             elif scheme == "plain":
                 block.append(f"    authentication text {key}")

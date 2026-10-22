@@ -95,9 +95,20 @@ CanonicalVlan:
 
 - `vlans[].id`: **good** — Arista `vlan N` ↔ OPNsense
   `<vlan>/<tag>N</tag>`.  Both vendors share the 1-4094 range.
-- `vlans[].name`: **lossy** — Arista per-VLAN `name <x>` collapses
-  with `description` to OPNsense's single `<descr>` element.
-- `vlans[].description`: **lossy** — same rationale as `name`.
+- `vlans[].name`: **lossy** — the name does not come back.  An
+  OPNsense `<vlan>` has no name of its own: the render writes each
+  VLAN as a `<vlan>` device, under the name of the source's VLAN
+  interface where there is one (`Vlan100`), otherwise as
+  `<parent>_vlan<id>` on a port that carries the VLAN
+  (`Ethernet3_vlan10`), and writes the Arista `name <x>` as the
+  device's `<descr>`.  The OPNsense parser names a VLAN after its
+  device (`<vlanif>`) and reads `<descr>` as its description, so
+  `USERS` comes back as the description of a VLAN named
+  `Ethernet3_vlan10`.  A device name OPNsense's VLAN form would
+  refuse (`Vlan100`) gets a `<!-- review: -->` comment beside it.
+- `vlans[].description`: **lossy** — Arista states no VLAN
+  description; the round trip gives each named VLAN one, its name
+  (see `name`).  Drift by gaining the name, never by losing a value.
 - `vlans[].tagged_ports` / `untagged_ports`: **unsupported** —
   OPNsense has no per-VLAN port-membership concept.  The Arista
   `switchport access` / `trunk allowed` per-port intent (which the
@@ -108,6 +119,7 @@ CanonicalVlan:
   first-class `interface Vlan<N>` SVI with `ip address X/N` has no
   first-class OPNsense equivalent.  The OPNsense pattern is to
   assign the VLAN sub-interface to a zone (`<opt2>`) and put the
-  address on the zone.  The canonical model carries the SVI
-  address but the OPNsense render path does not synthesise the
-  corresponding zone — operator-curated.
+  address on the zone.  The render writes the SVI as a zone whose
+  `<if>` is the VLAN device written under the SVI's name
+  (`Vlan100`), with the address on the zone; read back, the address
+  is on that interface record, not on the VLAN.

@@ -271,10 +271,14 @@ per_field_expectation:
     references: [aoss-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      NX-OS renders `vlan <id> / name <name>` and re-parses it verbatim,
-      including names AOS-S wrote with embedded whitespace.
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): NX-OS
+      documents a VLAN name of letters, digits, `-` and `_` only.
+      The WC.16.07 capture's `internet sdsl` lands as
+      `internet_sdsl`.  A name with no white space is preserved.
     references: [aoss-nxos-surface]
 
   "vlans[].description":

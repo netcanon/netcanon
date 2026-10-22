@@ -26,7 +26,7 @@
 # What is lost is not structure but content: everything L2-switching
 # (port-to-VLAN membership), everything routing (static routes, VRFs),
 # everything overlay (VXLAN), the anycast/virtual-gateway addressing, SNMPv3
-# users, and the meaning — though not the bytes — of every local password.
+# users, and every local account.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations, a
 # full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
@@ -48,13 +48,16 @@ meta:
     Campus/aggregation-to-firewall re-home: an ArubaOS-CX switch replaced at
     the routed boundary by an OPNsense appliance.  Hostname, the complete
     interface inventory (all 157 records, with names, descriptions, admin
-    state, MTU, and every IPv4 and IPv6 address), LACP bundles and their member
-    ports, VLAN IDs and VLAN names, SNMP scalars and local usernames all
-    survive.  What does not survive:
+    state, MTU, and every IPv4 and IPv6 address -- except that a LACP
+    member is written in its lagg alone, so its own description and MTU
+    are not), LACP bundles and their member ports, VLAN IDs, and SNMP
+    scalars all survive.  What does not survive: a VLAN's name (it comes
+    back named after its OPNsense device, the name moved to the
+    description where the VLAN had none),
     port-to-VLAN membership and the whole switchport surface, the VLAN-mounted
     SVI record (the subnet relocates, the anycast gateway does not), every
     static route, every VRF, VXLAN, the SNMPv3 user store, the anycast-gateway
-    MAC, and any working local credential.
+    MAC, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-opnsense-surface
@@ -151,25 +154,36 @@ per_field_expectation:
   # parent list changing shape.
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells, 157 of 157 records, verbatim — AOS-CX port
-      names survive as-is (`1/1/1`, `lag 1`, `vlan 4000`, `loopback 0`) inside
-      the `<interfaces>` block's `<if>` element.  Do not generalise this: the
-      same field measures as a loss on seven of this codec's eight other
-      target pairs — only `aruba_aoscx__cisco_iosxe` shares the clean result.
+    disposition: lossy
+    reason: >
+      Every AOS-CX name survives verbatim (`1/1/1`, `lag 1`, `vlan 4000`,
+      `loopback 0`) inside the `<interfaces>` block's `<if>`, and no record is
+      lost — but the inventory GROWS on every cell (157 records in, 181 out).
+      The additions are VLAN devices: a VLAN that has no SVI in the source is
+      written as a `<parent>_vlan<id>` `<vlan>` device (`lag 1_vlan1`), which
+      the OPNsense parser reads back as an interface record of its own
+      (`ianaift:l3ipvlan`); a VLAN that has one is written as the device of
+      the SVI's name and adds nothing. Recorded `lossy` for the shape of the
+      inventory, not its contents. Neither name is one OPNsense takes (`lag
+      1_vlan1`, `vlan 101` hold a space): the port-name translator, which this
+      path does not engage, is what makes them OPNsense names, and the render
+      says so beside each device that keeps an SVI's name.
     references: [aoscx-opnsense-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells.  The AOS-CX port description renders to
-      `<descr>` and re-parses unchanged.  opnsense declares
-      `/interfaces/interface/config/description` LOSSY, but read its reason
-      before treating that as a caveat here: "OPNsense imposes no length limit
-      on description text; other vendors (Cisco 240 chars, Juniper 900) may
-      truncate on render."  The declaration is about what OTHER targets do, not
-      about this one — nothing was truncated on any of the 157 records.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 27 of the 66 records that carry a
+      description are LAG members and lose it.  Every other record
+      keeps its text: the AOS-CX port description renders to `<descr>`
+      and re-parses unchanged, and nothing is truncated (OPNsense
+      imposes no length limit).
     references: [aoscx-opnsense-surface]
 
   "interfaces[].enabled":
@@ -182,12 +196,17 @@ per_field_expectation:
     references: [aoscx-opnsense-surface]
 
   "interfaces[].mtu":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells; jumbo uplinks keep their value (`<mtu>9198`
-      on the `core1_1` access ports).  Because no interface record is dropped
-      on this pair, there is no silent revert-to-default hiding behind this
-      disposition.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 43 of the 50 records that carry an MTU are
+      LAG members and lose it.  Every other record keeps its value,
+      jumbo included.
     references: [aoscx-opnsense-surface]
 
   "interfaces[].ipv6_addresses":
@@ -231,13 +250,14 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      The one interface attribute that is lost on every record: all 157 of 157
-      canonical types across all 7 cells arrive empty
-      (`ianaift:ethernetCsmacd`, `ianaift:ieee8023adLag`, `ianaift:l3ipvlan`
-      and `ianaift:softwareLoopback` all become the empty string).  Verified by
+      The one interface attribute that is lost on nearly every record:
+      `ianaift:ethernetCsmacd`, `ianaift:ieee8023adLag` and
+      `ianaift:softwareLoopback` all arrive as the empty string.  Verified by
       round-trip, not inferred: OPNsense's `config.xml` `<interfaces>` grammar
       has no ifType element for the renderer to write, so nothing survives to
-      re-parse.  aruba_aoscx declares `/interfaces/interface/config/type` lossy
+      re-parse.  An SVI (`ianaift:l3ipvlan`) keeps its type: the render
+      writes it as a `<vlan>` device, which the OPNsense parser types
+      `ianaift:l3ipvlan`.  aruba_aoscx declares `/interfaces/interface/config/type` lossy
       in its own right; opnsense declares NOTHING at that path — a target
       matrix under-declaration, flagged here and left for a codec change rather
       than fixed in an expectation file.
@@ -288,16 +308,19 @@ per_field_expectation:
     references: [aoscx-opnsense-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells.  The operator label rides in the VLAN entry's
-      `<descr>` element (`PROD-WEB`, `CORE-ROUTING`) and re-parses onto
-      `name`.  Note the direct contrast with `aruba_aoscx__fortigate_cli`,
-      where all 30 names are replaced by a synthetic `vlan<id>` — the same
-      canonical field, opposite outcomes, one pair apart.
-      This is also the reason `vlans[].description` below is a loss: `<descr>`
-      is spoken for by the name, leaving the canonical description with nowhere
-      to render.
+    disposition: lossy
+    reason: >
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`vlan 101`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`lag 1_vlan1`); and it writes
+      the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So `PROD-WEB` comes back as the description of a VLAN
+      named `vlan 101`; and where a VLAN has a description as well, the
+      description is kept and the name is lost (`USERS`, beside `User access
+      VLAN`, on `kitchen_sink.cfg`). Drifts on every cell.
     references: [aoscx-opnsense-surface]
 
   "vlans[].ipv4_addresses":
@@ -360,18 +383,12 @@ per_field_expectation:
   "vlans[].description":
     disposition: lossy
     reason: >
-      Drifts on the 4 cells that populate it — 6 descriptions on the source, 0
-      on the target.  The vanish classifier reads that as a total drop, but the
-      VLAN record itself survives with its id AND its name, so nothing is
-      blocked, and opnsense declares `/vlans/vlan/description` LOSSY in its own
-      matrix ("Render emits the VLAN name but not a separate description line",
-      silent-loss guard, Bucket-C stage 2).  The two signals only appear to
-      disagree: the classifier is record-blind.  The mechanism is visible in
-      the render — the single `<descr>` element per VLAN entry is occupied by
-      `vlans[].name`, so the description has no second slot.
-      Recorded `lossy`.  Nothing breaks, but on a campus switch the VLAN
-      description is routinely how a VLAN is tied to a department or a site;
-      capture it before migrating.
+      The description comes back holding the VLAN's name where the source VLAN
+      had a name and no description: the OPNsense render writes the name as
+      the device's `<descr>` (see `vlans[].name`). That is the drift on 5
+      cells. A description the source states comes back unchanged, its VLAN's
+      name lost instead; on the other 2 cells no VLAN has a name without a
+      description, so they are preserved.
     references: [aoscx-opnsense-surface]
 
   # -- Routing --------------------------------------------------------------
@@ -531,48 +548,50 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users — the
-      account arrives as `<system><user><name>`.  The account exists on the
-      target; see `hashed_password` for why it cannot yet be logged into.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 7 across the 6 cells that populate local
+      users.  Each of the 7 holds an AOS-CX ciphertext (`password
+      ciphertext`), encrypted under the key of the switch that made it:
+      6 `AQB` blobs, and the GL CX 10.09 capture's `admin`, whose
+      publisher put a placeholder word where its ciphertext was.
+      OPNsense's `<password>` is the hash `password_verify()` checks a
+      password against (bcrypt `$2y$` / `$2b$` or SHA-512 crypt `$6$`),
+      so it takes neither an AOS-CX ciphertext nor a password as typed.
+      So each account is refused with a review comment naming it, in
+      place of the account, rather than written as an account with no
+      password.  Up to 0.7.7 the placeholder word was written into
+      `<password>` as it stood, which opened nothing, and an `AQB`
+      account was written as a `<user>` element with no `<password>`.
+      Recorded `unsupported` rather than `lossy`: no AOS-CX secret form
+      reaches OPNsense -- an account configured `password plaintext` is
+      read as typed, which OPNsense takes nowhere
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`) --
+      so no AOS-CX account does.  Re-create the accounts on the target.
     references: [aoscx-opnsense-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 6 populated cells, and the mechanism is a deliberate remap
-      rather than a loss: the AOS-CX `administrators` role renders to the
-      OPNsense `admins` group and re-parses as `admin`; `operators` maps to
-      `user`.  Measured on the kitchen sink, which carries both.  aruba_aoscx
-      also declares `/local-users/user/privilege-level` lossy in its own right.
-      The privilege intent is preserved and arguably correct, but two things
-      follow: any downstream tooling keyed on the literal role string stops
-      matching, and an OPNsense `admin` has unrestricted access to a box that
-      is now the security boundary.  Review the mapping before the account
-      becomes production.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so
+      there is no role on the target to compare.  Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here.
     references: [aoscx-opnsense-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 6 cells that populate local users, and this one was
-      settled by inspecting the render.  AOS-CX stores the user secret in its
-      own encrypted form — an `AQB...`-prefixed ciphertext blob — and the
-      OPNsense renderer writes that blob verbatim into `<system><user>
-      <password>`.  Re-parsing labels it as a bcrypt hash: the canonical string
-      grows by exactly the 7 characters of a `bcrypt:` scheme prefix on every
-      user on every cell and is otherwise byte-identical.
-      So nothing is deleted, which is why this is `lossy` and not
-      `unsupported` — but the bytes surviving is not the credential surviving.
-      OPNsense authenticates `<password>` as a crypt-format hash (the `$2y$`
-      bcrypt shape); an ArubaOS-CX ciphertext blob sitting in that element,
-      labelled bcrypt, is not a password any OPNsense box can ever verify.
-      Every migrated account arrives without a working credential: set
-      passwords on the target before cutover, or you will be locked out of the
-      firewall you just migrated.
-      The ciphertext is deliberately NOT quoted here — it is operator-traceable
-      key material even though it is encrypted (AGENTS.md).
+    disposition: good
+    note: >
+      No secret is written in a form OPNsense cannot consume.  7
+      accounts are refused for their secret (7 AOS-CX ciphertext, one of
+      them a placeholder word) and vanish with it; that loss is recorded
+      once, under `local_users[].name`.  No account with a stored secret
+      arrives, so there is no value to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [aoscx-opnsense-surface]
 
   # -- Fabric ---------------------------------------------------------------

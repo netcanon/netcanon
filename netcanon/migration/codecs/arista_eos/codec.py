@@ -121,6 +121,7 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
             "/interfaces/interface/dot1q-vlan",   # GAP 7: routed-subif `encapsulation dot1q vlan N`
+            "/interfaces/interface/dot1q-inner-vlan",  # `encapsulation dot1q vlan N inner M`
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -433,10 +434,13 @@ class AristaEOSCodec(CodecBase):
         # the parser deliberately drops — see
         # netcanon/migration/_tier3_detection.py.  Notification-only.
         # Read from the text the parser read: a banner's (or any other
-        # body's) lines up to its ``EOF`` are text, not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(
-            without_bodies(raw),
-        )
+        # body's) lines up to its ``EOF`` are text, not stanzas.  After
+        # them, the rows the parser itself made: a sub-interface whose
+        # tag statement it does not read whole.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_iosxe_cli(without_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

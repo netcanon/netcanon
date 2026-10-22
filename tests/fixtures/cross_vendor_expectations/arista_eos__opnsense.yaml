@@ -14,8 +14,9 @@
 #   * DNS / NTP / syslog / timezone — lossy until OPNsense parse +
 #     render wires up the corresponding `<system>` children
 #   * interfaces (IP, MTU, enable, descr) — good
-#   * VLANs — id good; name/description collapse; port-membership
-#     and SVI sub-fields unsupported
+#   * VLANs — id good; a VLAN comes back named after its OPNsense
+#     device, its name in the description; port-membership and SVI
+#     sub-fields unsupported
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     model is two-stage, codec doesn't currently render either)
 #   * DHCP server scopes — lossy (interface-keyed pool model on
@@ -254,23 +255,33 @@ per_field_expectation:
   interfaces[].name:
     disposition: lossy
     reason: >
-      Arista ``Ethernet1`` / ``Loopback0`` / ``Port-Channel10`` /
-      ``Vlan100`` / ``Vxlan1`` does not survive on OPNsense.  The
-      operator-facing label on OPNsense is the zone tag
-      (``<wan>`` / ``<lan>`` / ``<optN>``); the BSD device name
-      lives in ``<if>``.  Port-rename mesh handles the conversion
-      via the codec's ``classify_port_name`` /
-      ``format_port_identity`` delegates.  Canonical preserves
-      the source string verbatim.
+      Arista ``Ethernet1`` / ``Loopback0`` / ``Port-Channel10`` / ``Vlan100``
+      / ``Vxlan1`` does not survive on OPNsense. The operator-facing label on
+      OPNsense is the zone tag (``<wan>`` / ``<lan>`` / ``<optN>``); the BSD
+      device name lives in ``<if>``. Port-rename mesh handles the conversion
+      via the codec's ``classify_port_name`` / ``format_port_identity``
+      delegates. Canonical preserves the source string verbatim. What the
+      round trip measures on this key is an addition, not a loss: a VLAN the
+      render links to no VLAN interface of the source is written as a
+      `<parent>_vlan<id>` device, which the OPNsense parser reads back as an
+      interface record of its own (`ianaift:l3ipvlan`). No source record is
+      lost.
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Arista ``description "<text>"`` (240-char CLI limit) ↔
-      OPNsense ``<descr>`` (no length limit).  Round-trip
-      preserves text content.
-    references: [opnsense-interfaces, arista-iface-cg]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 15 of the 73 records that carry a
+      description are LAG members and lose it.  Every other record
+      keeps its text: Arista ``description "<text>"`` (240-char CLI
+      limit) ↔ OPNsense ``<descr>`` (no length limit).
+    references: [opnsense-interfaces, opnsense-laggs, arista-iface-cg]
 
   interfaces[].enabled:
     disposition: good
@@ -284,11 +295,13 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Arista codec capability matrix declares
-      ``/interfaces/interface/config/type`` lossy with rationale
-      "EOS interface names don't encode speed; the parser
-      defaults to 'gig' speed-hint for all Ethernet<N> ports."
-      OPNsense doesn't surface a type field; cross-pair drops the
-      type hint.
+      ``/interfaces/interface/config/type`` lossy with rationale "EOS
+      interface names don't encode speed; the parser defaults to 'gig'
+      speed-hint for all Ethernet<N> ports." OPNsense doesn't surface a type
+      field; cross-pair drops the type hint. The OPNsense parser types a
+      `<vlan>` device `ianaift:l3ipvlan`, so a VLAN interface the render
+      writes as one comes back with that type; every other interface comes
+      back untyped.
     references: [arista-iface-cg, opnsense-interfaces]
 
   interfaces[].mtu:
@@ -405,8 +418,9 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries
-      below.
+      sub-fields are lost or move (the name to the description,
+      the address to the VLAN's interface) — see ``vlans[].*``
+      entries below.
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].id:
@@ -419,18 +433,25 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Arista per-VLAN ``name <x>`` (32-char truncation, no
-      quoting required).  OPNsense's nearest equivalent is
-      ``<descr>`` — which is also where the canonical
-      ``description`` lands.  Two canonical fields collapse to
-      one OPNsense XML field; one drops on render.
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`Vlan110`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`Ethernet3_vlan10`); and it
+      writes the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So `Tenant_A_OP_Zone_1` comes back as the description
+      of a VLAN named `Vlan110`, and `USERS` as that of `Ethernet3_vlan10`.
+      Drifts on every cell that holds VLANs.
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.
+      Arista states no VLAN description; the round trip gives each named VLAN
+      one, its name, which the OPNsense render writes as the device's
+      `<descr>` (see `vlans[].name`). Drifts on every cell that holds VLANs,
+      by gaining the name, never by losing a value.
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].tagged_ports:
@@ -455,13 +476,14 @@ per_field_expectation:
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
-      Arista's first-class ``interface Vlan<N>`` SVI with an L3
-      address has no first-class OPNsense equivalent.  The
-      OPNsense pattern is to assign the VLAN sub-interface
-      (``em1_vlan100``) to a zone and put the address on the
-      zone (``<opt2>``).  The canonical model carries the SVI
-      address but the OPNsense render path doesn't synthesise
-      the corresponding zone — operator-curated.
+      Arista's `interface Vlan<N>` SVI address is carried on the canonical
+      VLAN record as well as on the SVI. The address reaches the output: the
+      render writes the VLAN interface the source states (`interface Vlan100`)
+      as a zone whose `<if>` is the VLAN's `<vlan>` device, with the address
+      on the zone. Read back, the OPNsense parser puts the address on that
+      interface record, not on the VLAN — an OPNsense `<vlan>` holds no
+      address — so the VLAN record comes back without it. Recorded `lossy` for
+      the record the address sits on, not for the output.
     references: [opnsense-vlans, arista-vlan-cg]
 
   static_routes:
@@ -542,34 +564,39 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense keeps every account: 12 of 12 arrive across the 6 cells that
-      populate users, measured by render and re-parse. Of the 9 that carry a
-      secret, the 7 SHA-512 crypt (`$6$`) secrets are carried into `<password>`
-      with the Arista tag stripped: PHP `password_verify()` consumes a `$6$`
-      string, and real OPNsense HA configs store exactly that form (#462). The 2
-      MD5 crypt (`$1$`) secrets are refused in place: the `<user>` element is
-      kept with a review comment and no `<password>`, so set those passwords on
-      the target before cutover. The other 3 accounts carry no secret on the
-      source. Privilege number (0-15) collapses to OPNsense's binary admin /
-      non-admin via group membership: privilege >= 15 ->
-      `<groupname>admins</groupname>`, otherwise `<groupname>users</groupname>`.
-      Arista role tokens (`network-admin` / `network-operator` / custom roles)
-      collapse to OPNsense's binary group surface. No secret value is quoted
-      here.
+      10 of 12 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 2 of them. The 2 accounts that vanish carry 2 MD5 crypt
+      (Cisco type 5). OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as a `<user>` element
+      with no `<password>`; a refused secret now drops the whole account, as on
+      every other target. The survivors are 7 carrying 7 SHA-512 crypt (`$6$`)
+      and 3 with no stored secret. Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, arista-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Arista ``radius-server host <ip> key <secret>`` (with
       separate ``radius-server key <secret>`` global default and
       optional ``auth-port`` / ``acct-port`` overrides) ↔
       OPNsense ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
       ``<radius_acct_port>``.  Round-trips host / port pair /
-      shared key cleanly with default ports 1812 / 1813.
+      a key written as typed, with default ports 1812 / 1813.
       Arista's optional ``timeout`` / ``retransmit`` per-server
       directives have no canonical model and drop on render.
+      EOS prints a key in its own form, ``key 7 <blob>``: it is
+      held behind ``eos:``, not decoded, and the server is written
+      with no key, beside a review line that names the form.  No
+      committed EOS capture has a RADIUS server; until 2026-10 a ``key
+      7`` was read as the secret ``7``, and this entry called the
+      field good.
     references: [opnsense-radius, arista-snmp-cg]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

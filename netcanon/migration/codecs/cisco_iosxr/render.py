@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _prefix_to_mask, same_vendor_version
@@ -107,11 +108,25 @@ def _render_ntp_syslog(tree: CanonicalIntent) -> list[str]:
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco IOS-XR config text."""
+    # A name that is not one word where IOS XR reads one is written as
+    # one, at every place it goes; an address is left out; a VRF
+    # description, whose place no Cisco page describes, is written and
+    # said.  Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "IOS XR",
+        names=("hostname", "routing_instances[].name"),
+        addresses=(
+            "domain", "ntp_servers", "syslog_servers", "dns_servers",
+            "static_routes[].gateway",
+        ),
+        unread_text=("routing_instances[].description",),
+    )
     hostname = tree.hostname or "Router"
     lines: list[str] = []
 
     # ── Banner ──
     lines.append(f"!! IOS XR Configuration {_version_token(tree)}")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append("!")
     lines.append(f"hostname {hostname}")
     if tree.domain:
@@ -164,6 +179,18 @@ def _render_local_user(user) -> list[str]:
     role = user.role or (
         "root-lr" if user.privilege_level >= 15 else "operator"
     )
+    # Name, group and secret are one word each; the block is left out
+    # whole rather than altered.  Policy: :mod:`netcanon.migration._one_value`.
+    payload = (
+        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
+    )
+    # A secret this target cannot take at all is the hash gate's to
+    # say (below); this asks only of one it would write.
+    if splits(user.name) or splits(role) or (
+        splits(payload)
+        and is_migratable(user.hashed_password, "cisco_iosxr")
+    ):
+        return ["! " + left_out(f"username {user.name}", "Cisco IOS-XR")]
     block = [f"username {user.name}", f" group {role}"]
     if user.hashed_password:
         algorithm, payload = classify_hash(user.hashed_password)
@@ -338,8 +365,16 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     # dedicated dot1q_vlan field (was previously inferred from the
     # sub-iface unit number matching a synthesised VLAN id, which dropped
     # the tag whenever unit != tag).
+    # A Q-in-Q sub-interface's inner tag is ``second-dot1q`` on the same
+    # line ("Configuring 802.1Q VLAN Interfaces", NCS 5000 7.10.x:
+    # ``encapsulation dot1q 100 second-dot1q 200`` with an ``ipv4
+    # address``).
     if iface.dot1q_vlan is not None:
-        block.append(f" encapsulation dot1q {iface.dot1q_vlan}")
+        second = (
+            f" second-dot1q {iface.dot1q_inner_vlan}"
+            if iface.dot1q_inner_vlan is not None else ""
+        )
+        block.append(f" encapsulation dot1q {iface.dot1q_vlan}{second}")
     for addr in iface.ipv4_addresses:
         line = f" ipv4 address {addr.ip} {_prefix_to_mask(addr.prefix_length, vendor='cisco_iosxr')}"
         if addr.is_secondary:

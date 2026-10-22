@@ -273,27 +273,34 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Cisco's numeric ``privilege 1-15`` versus RouterOS's named
-      groups (``full`` / ``write`` / ``read`` / custom) requires
-      operator-curated mapping.  Default mapping: privilege 15 ->
-      full, privilege 1 -> read.  Intermediate privilege levels
-      have no clean group analogue.  Password hash formats are NOT
-      cross-compatible: Cisco type-9 scrypt (``$9$...``) and
-      type-8 PBKDF2-SHA256 (``$8$...``) are Cisco-only; RouterOS
-      stores passwords in a vendor-private format that is not
-      surfaced in /export at all.  Operator must re-set passwords
-      on the target device after migration.
+      1 of 11 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 6 of them. The 10 accounts that vanish carry 5 Cisco
+      type-9 scrypt, 3 MD5 crypt (Cisco type 5), 1 Cisco type-7 reversible
+      obfuscation, 1 Cisco type-8 PBKDF2. RouterOS can consume a genuine
+      plaintext password only (it hashes the password itself); anything else is
+      refused with a review comment naming the account, in place of the account.
+      Up to 0.7.7 such an account was written as `/user add` with no
+      `password=`, which RouterOS gives a blank password; a refused secret now
+      drops the whole account, as on every other target. The survivors are 1
+      carrying 1 plaintext password. Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [mikrotik_user]
 
   radius_servers:
     disposition: lossy
     reason: >
-      Host / auth_port / acct_port round-trip cleanly.  Shared
-      secret encoding differs: Cisco's ``key 7 ...`` form (type-7
-      reversible obfuscation) versus RouterOS's opaque ``secret=``;
-      both codecs pass through verbatim, the receiving vendor's
-      RADIUS daemon will reject if it does not match the server's
-      expectation.  Service-binding (RouterOS ``service=login,ppp,
+      Host / auth_port / acct_port round-trip cleanly, and a key
+      written as typed (``key <secret>``, ``key 0 <secret>``) is
+      written ``secret=``.  A ``key 7`` or ``key 6`` (Cisco's
+      reversible cipher, or AES under the router's master key) is a
+      form only IOS-XE reads: it is held behind ``iosxe:``, not
+      decoded, and the RouterOS render writes the server with no
+      secret, beside a review comment that names the form; the
+      kitchen sink's ``key 7`` shows it.  Until 2026-10 the type-7
+      text was written as the secret.  Service-binding (RouterOS ``service=login,ppp,
       wireless``) versus method-list / server-group (Cisco ``aaa
       group server radius`` + ``aaa authentication login default
       group ... local``) is not modelled canonically — Cisco-side

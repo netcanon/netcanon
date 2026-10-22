@@ -464,6 +464,15 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "AOS-CX has no routed sub-interface construct (see "
+                    "`/interfaces/interface/dot1q-vlan`), so the inner tag of "
+                    "a Q-in-Q sub-interface has no form here either: a "
+                    "source's inner tag is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "AOS-CX VRRP is a deferred phase (the group anchor is "

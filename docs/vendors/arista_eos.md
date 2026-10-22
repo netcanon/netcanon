@@ -186,6 +186,29 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
+- **A RADIUS `key 7` is carried to EOS only.**  EOS prints a RADIUS
+  key in its own form, `key 7 <blob>`.  It is written back as it was
+  onto EOS; onto any other target the server is written with no key,
+  beside a review line that names the form: re-enter the secret there.
+  `key <secret>` and `key 0 <secret>` migrate everywhere.  Whether
+  EOS's type 7 is Cisco's is not established, so it is not written
+  into an IOS-XE `key 7`.  ⚠️ With 0.7.7 or earlier, `key 7 <blob>`
+  came out as the secret `7` on every target, EOS included, and `key
+  0 <secret>` as the secret `0`.  Look for such a key in an old
+  output.
+- **`secret 0 <password>` is read as a password as typed**, and is
+  written so onto every target that takes one.  Up to 0.7.7 it was
+  read as an algorithm `0` that no target takes, and the account was
+  left out everywhere, EOS included.  A printed EOS config holds no
+  `secret 0`: the switch hashes the password when it is entered.
+- **A tag statement is read whole.**  `encapsulation dot1q vlan 20
+  inner 30` is a sub-interface of two tags, and reaches IOS-XE, IOS XR,
+  EOS and Junos with both.  A range of inner tags and a FlexEncap
+  block (`encapsulation vlan`, with its `client` and `network` lines)
+  have no form in the tree: the sub-interface is left out, with a row
+  of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).  A tag of 0 is no 802.1Q VLAN id, and
+  a stanza tagged so is left out the same way.
 - **A VLAN's address with no interface of its own gets one, once.**
   A source can hold a VLAN's address on the VLAN itself: Junos folds
   the address of an `irb` unit that a VLAN binds with `l3-interface`
