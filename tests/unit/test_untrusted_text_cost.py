@@ -1427,7 +1427,8 @@ class TestParseFitsTheNumberOfItsStanzas:
             "juniper_junos: deactivated paths": lambda t: len(t.dropped_tier3_sections),
             "juniper_junos: comments that are never closed": lambda t: len(t.interfaces),
             # One port, whatever the count: it is behind every tag.
-            "juniper_junos: tags ahead of one statement": lambda t: 40 * [i.mtu for i in t.interfaces].count(9000),
+            # (``mtu 9000`` on the port: 8986 in the tree, the payload.)
+            "juniper_junos: tags ahead of one statement": lambda t: 40 * [i.mtu for i in t.interfaces].count(8986),
             # One word, whatever the count: as long as the text says.
             "juniper_junos: one long word in a line": lambda t: len(t.interfaces[0].description) // _WORD_A_UNIT,
             "juniper_junos: one long quoted string in a line": (

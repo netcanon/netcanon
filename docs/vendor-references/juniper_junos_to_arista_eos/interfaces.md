@@ -94,7 +94,9 @@ than Junos's per-unit family model.
   number is the VLAN id by convention.
 - **Loopback.** `lo0.0` (Junos) <-> `Loopback0` (Arista).  Junos
   always carries the unit; Arista doesn't.  Round-trip via the
-  port-rename mesh.
+  port-rename mesh.  Another unit of `lo0` is the loopback of a
+  routing instance (Juniper, *Loopback Interfaces*): `lo0.5` is
+  `Loopback5`, in the VRF of that routing instance.
 - **MTU.** Both accept integer MTU; Junos's `set interfaces X mtu N`
   -> Arista's `mtu N` directly.
 - **DHCP client.** Junos's `family inet dhcp` -> Arista's

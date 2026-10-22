@@ -1239,7 +1239,7 @@ class TestAnInterfaceIsANameSomeLineConfigures:
         device itself states is not a unit's to fold."""
         tree = get_codec("juniper_junos").parse(_JUNOS_UNIT_ZERO)
         (irb,) = [iface for iface in tree.interfaces if iface.name == "irb"]
-        assert irb.mtu == 9100
+        assert irb.mtu == 9086  # the media MTU less its Ethernet header
         assert [(a.ip, a.prefix_length) for a in irb.ipv4_addresses] == [("10.8.0.1", 24)]
         assert [(v.id, [a.ip for a in v.ipv4_addresses]) for v in tree.vlans] == [(100, ["10.1.100.1"])]
         own = _job("juniper_junos", _JUNOS_UNIT_ZERO, "juniper_junos").rendered.splitlines()
@@ -1282,6 +1282,6 @@ class TestAnInterfaceIsANameSomeLineConfigures:
             ("ge-0/0/1", ""), ("irb", "all-the-svis"), ("irb.100", ""),
         ]
         unit_zero = _own_output_read_back("juniper_junos", _JUNOS_UNIT_ZERO)
-        assert [(iface.name, iface.mtu) for iface in unit_zero.interfaces] == [("irb", 9100)]
+        assert [(iface.name, iface.mtu) for iface in unit_zero.interfaces] == [("irb", 9086)]
         assert [(a.ip, a.prefix_length) for a in unit_zero.interfaces[0].ipv4_addresses] == [("10.8.0.1", 24)]
         assert [(v.id, [a.ip for a in v.ipv4_addresses]) for v in unit_zero.vlans] == [(100, ["10.1.100.1"])]

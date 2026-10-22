@@ -14,28 +14,28 @@
 #
 # THIS IS ONE OF THE CLEANEST PAIRS IN THE MESH. Addressing, descriptions,
 # admin state, MTU, static routes, SNMP scalars, VRF identity and user
-# credentials all round-trip with ZERO drift. There are six losses and each
+# credentials all round-trip with ZERO drift. There are five losses and each
 # has a single identified mechanism, none of them a concept-level gap.
 #
 # READ THIS BEFORE READING THE INTERFACE BLOCK: the interface inventory does
-# shrink, 55 records -> 46 on 5 of 13 cells, but NOT by renaming and NOT by
-# losing configured state. Every one of the 9 vanished records is
+# shrink, 56 records -> 46 on 6 of 13 cells, but NOT by renaming and NOT by
+# losing configured state. Every one of the 10 vanished records is
 # attribute-free — no address, no description, no MTU, no VRF, no LAG
 # membership, not shut — and the IOS-XE CLI render emits no `interface`
 # stanza for a record with nothing to write inside it. Tested falsifiably:
 # 0 non-bare records vanished and 0 bare records survived. The control case
-# is `lo`, which vanishes on 5 cells and SURVIVES on `kitchen_sink.conf`,
+# is `lo`, which vanishes on 6 cells and SURVIVES on `kitchen_sink.conf`,
 # the one cell where it carries addresses. The prune is attribute-driven,
 # not name-driven. VyOS names pass through verbatim — 0 surviving records
 # were renamed.
 #
-# Because 5 cells change interface-record count, every `interfaces[].*`
+# Because 6 cells change interface-record count, every `interfaces[].*`
 # sub-field reports drift on those cells for that ONE reason. That signal is
 # claimed exactly once, by `interfaces[].name`. The other interface sub-fields
 # are `good` because they measure what happens to the VALUE when the record
 # survives, and on all 46 surviving records they drift zero times.
 # `interfaces[].interface_type` is the one exception and stands on its own
-# measurement — it drifts on all 46 SURVIVING records, including on the 8
+# measurement — it drifts on all 46 SURVIVING records, including on the 7
 # cells with no structural change at all.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
@@ -58,15 +58,14 @@ meta:
   primary_use_case: >
     Software-edge replacement: a VyOS router replaced by a Cisco IOS-XE
     branch/edge router carrying the same routed interfaces, addressing,
-    static routes, VRF and management plane.  Hostname, domain, DNS, the
+    static routes, VRF and management plane.  Hostname, domain, DNS, NTP, the
     surviving interface inventory with all of its addressing, description,
     MTU and admin state, static routes, SNMP scalars, VRF identity, VXLAN
     VNI bindings and local-user roles and credentials all survive unchanged.
     What does not: attribute-free interface records are pruned; the one
     passwordless account is lost; the IANA type hint is manufactured rather
-    than carried; the SNMPv3 engine ID is dropped; the LAG is renamed to its
-    IOS-XE-native form; and one fixture's NTP list is rewritten — in that
-    case to REMOVE a defect the VyOS parser introduced.
+    than carried; the SNMPv3 engine ID is dropped; and the LAG is renamed to
+    its IOS-XE-native form.
   certainty: medium
   references:
     - id: vyos-iosxe-cli-surface
@@ -112,26 +111,18 @@ per_field_expectation:
     references: [vyos-iosxe-cli-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Populated on 12 of 13 cells and drifts on exactly one,
-      `houdev_vyos_dhcpv6_pd_client.conf` — and the direction is favourable
-      enough that mis-reading it would be worse than missing it.
-      That fixture uses the VyOS 1.4-era `server <host> { }` form (an empty
-      options block on the same line).  The vyos PARSER captures the brace
-      residue into the hostname, producing canonical values of the shape
-      `time1.vyos.net { }`.  The render passes that through and the IOS-XE
-      CLI re-parse takes the first whitespace-delimited token, returning the
-      clean `time1.vyos.net`.  So the canonical value differs — which is why
-      this is recorded as a loss — but the round-trip STRIPS a defect the
-      source introduced, and all three NTP servers are correct on the target.
-      The other 11 populated cells use the bare `server <host>` form and
-      round-trip untouched.
-      Recorded `lossy` and not `unsupported`: no record vanishes (3 servers
-      in, 3 out) and cisco_iosxe_cli does render NTP servers, despite
-      declaring nothing for the field.  The underlying vyos brace-residue bug
-      belongs to a codec change, not to this file; it is written down here so
-      the next reader does not re-hunt it as an IOS-XE rendering problem.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the IOS-XE CLI
+      render wrote it out (`ntp server time1.vyos.net { }`), and that cell
+      drifted.  The parser now reads such a line as the node it is, the
+      reading the set form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      cisco_iosxe_cli declares nothing for the field; this `good` rests on the
+      measured round trip.
     references: [vyos-iosxe-cli-surface]
 
   timezone:
@@ -159,8 +150,8 @@ per_field_expectation:
 
   # -- Interfaces -- an empty-record prune, then a very clean surface --------
   #
-  # 55 source interface records across 13 cells, 46 after the round-trip.
-  # The 9 that vanish are ALL attribute-free; 0 non-bare records vanished and
+  # 56 source interface records across 13 cells, 46 after the round-trip.
+  # The 10 that vanish are ALL attribute-free; 0 non-bare records vanished and
   # 0 bare records survived.  Of the 46 that survive, ZERO were renamed —
   # `eth0`/`eth1`/`eth5` come back verbatim, not re-shaped into
   # `GigabitEthernet0/0`.  `interfaces[].name` claims the structural signal
@@ -170,11 +161,16 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      9 of 55 interface records vanish, on 5 of 13 cells: `eth1` + `lo`
+      10 of 56 interface records vanish, on 6 of 13 cells: `eth1` + `lo`
       (`metasploit-vyos-config.conf`), `eth2` + `eth3` + `eth4` + `lo`
       (`scottlaird-vyos-parser.conf`), and `lo` on
+      `houdev_vyos_dhcpv6_pd_client.conf`,
       `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
-      `wcni-kind-gw1.conf`.
+      `wcni-kind-gw1.conf`.  The houdev `lo` is printed as a node with
+      nothing under it (`loopback lo { }`) — an empty interface record,
+      nothing set — which the parser has read as a record since 2026-10;
+      it is pruned like the others, structural drift with no attribute
+      lost.
       The mechanism is an EMPTY-RECORD PRUNE, verified falsifiably rather
       than inferred: every vanished record is attribute-free (no IPv4, no
       IPv6, no description, no MTU, no VRF, no LAG membership, no DHCP
@@ -183,11 +179,11 @@ per_field_expectation:
       stanza only when there is something to write inside it, so a record
       with no attributes produces no text and the re-parse never sees it.
       The control case settles the tempting wrong reading, "loopbacks are
-      dropped": `lo` vanishes on 5 cells and SURVIVES on `kitchen_sink.conf`,
+      dropped": `lo` vanishes on 6 cells and SURVIVES on `kitchen_sink.conf`,
       the one cell where `lo` carries an IPv4 and an IPv6 address.  The prune
       is attribute-driven, not name-driven.
       Recorded `lossy` rather than `unsupported`: cisco_iosxe_cli plainly
-      models interfaces — 46 of 55 records survive with every attribute
+      models interfaces — 46 of 56 records survive with every attribute
       intact and no name rewritten — so this is a partial record loss inside
       a concept the target models, not the concept-level gap that
       `unsupported` blocks for (#436).  Recorded rather than waved through
@@ -220,7 +216,7 @@ per_field_expectation:
       of them carry an explicit state.  A VyOS interface marked `disable`
       arrives `shutdown` on IOS-XE.  Both matrices declare
       `/interfaces/interface/config/enabled` supported.
-      The 5 cells where this key also reports drift are the 5 where the
+      The 6 cells where this key also reports drift are the 6 where the
       interface list changes length; that is the prune recorded under
       `interfaces[].name`, not an admin-state loss.
     references: [vyos-iosxe-cli-surface]
@@ -263,7 +259,7 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on all 46 SURVIVING records, across all 13 cells — including the
-      8 cells with no structural change — so this measurement stands on its
+      7 cells with no structural change — so this measurement stands on its
       own and is not a knock-on effect of the record prune.
       The direction matters and is the opposite of the usual reading:
       source-empty -> target-populated on 46 records, source-populated ->
@@ -299,7 +295,7 @@ per_field_expectation:
       Recording it a second time here would double-count a single naming
       artifact — and this key is about what happens to the VALUE when the
       record survives, which is that it keeps pointing at the right LAG.
-      The 5 cells where this key also reports drift are the 5 where the
+      The 6 cells where this key also reports drift are the 6 where the
       interface list changes length; none of them populate `lag_member_of` at
       all.  That is the prune recorded under `interfaces[].name`.
     references: [vyos-iosxe-cli-surface]
@@ -311,7 +307,7 @@ per_field_expectation:
       `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
       priority, preempt, advertisement-interval, authentication, virtual-IPv6
       and description are all dropped at parse — so the canonical field is
-      empty on all 55 source records and on all 46 that survive.  Measured:
+      empty on all 56 source records and on all 46 that survive.  Measured:
       0 populated, 0 differing.
       cisco_iosxe_cli declares `/interfaces/interface/vrrp-groups/group`
       SUPPORTED (with `.../mode` and `.../address-family` lossy), so

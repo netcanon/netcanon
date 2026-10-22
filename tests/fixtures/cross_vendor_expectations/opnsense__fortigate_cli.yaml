@@ -552,22 +552,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense bcrypt hashes (``$2a$`` / ``$2b$`` / ``$2y$``) are
-      FreeBSD-``crypt(3)``-compatible; FortiOS uses ``ENC <opaque-
-      base64>`` with internal-key encryption.  Hashes are NOT
-      cross-compatible.  Both codecs preserve hashes verbatim with
-      vendor tags (``bcrypt:`` on OPNsense, ``fortios:`` on
-      FortiGate) so the loss surfaces in the validation report.
-      Operators must reset passwords on the FortiGate target.
-      Privilege number collapses to FortiGate's named accprofile:
-      privilege 15 -> ``super_admin``, otherwise -> ``prof_admin``.
-      OPNsense's binary admin / non-admin source already maps
-      directly to this two-role split, so privilege loss is
-      minimal in practice.  OPNsense ``<scope>`` / ``<uid>`` /
-      ``<descr>`` fields drop on canonical (no schema fields).
-      FortiGate ``set trusthost1...trusthost10`` IP-restricted
-      access controls have no canonical equivalent on the inverse
-      direction.
+      4 of 14 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 7 of them. The 10 accounts that vanish carry 8 bcrypt
+      (`$2y$` / `$2b$`), 2 SHA-512 crypt (`$6$`). FortiOS can consume its own
+      `ENC` ciphertext or a genuine plaintext password; anything else is refused
+      with a review comment naming the account, in place of the account. Up to
+      0.7.7 such an account was written as an `edit` with its access profile and
+      no `set password` -- an admin with no password; a refused secret now drops
+      the whole account, as on every other target. The survivors are 4 with no
+      stored secret. Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [opn-users, fgt-local-users]
 
   radius_servers:

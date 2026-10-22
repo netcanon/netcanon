@@ -516,8 +516,8 @@ def _captures() -> list[tuple[str, Path]]:
 
 #: The captures whose output onto OPNsense has a tag twice on one parent,
 #: and how many devices repeat one.  The IOS-XE carrier capture's six
-#: Q-in-Q units of `GigabitEthernet2/0/4` are read with their outer tag
-#: alone (2234), so five of them repeat the first.
+#: Q-in-Q units of `GigabitEthernet2/0/4` are written with their outer
+#: tag (2234), the inner one a drop, so five of them repeat the first.
 _REPEATS = {"ntc_carrier_interfaces.txt": 5}
 
 

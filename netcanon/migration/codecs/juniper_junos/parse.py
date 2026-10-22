@@ -92,10 +92,25 @@ from ...canonical.intent import (
 )
 from ...canonical.port_names import HARDWARE_PORT_KINDS
 from ...limits import LimitExceeded, charge, tick, ticked
-from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
+from .._helpers import (
+    GrowingIndex,
+    Tags,
+    Uniques,
+    a_tag,
+    ip_mtu_read,
+    mtu_read,
+    unread_tags_row,
+    unstated_trunk_list,
+    vlan_id_run,
+)
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .port_names import classify_port_name
+from .port_names import (
+    TAGGING_STATEMENT_TAGS,
+    classify_port_name,
+    media_mtu_counts_a_header,
+    media_mtu_counts_a_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -596,6 +611,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # vendor cells like fortigate_cli -> juniper_junos.  When the
     # operator IS configuring per-iface attrs under ae<N>, the
     # iface_state entry is non-empty and we materialise normally.
+    # A unit whose tag statements are not read whole is left out, and
+    # said (:func:`_tags_of_unit`); a routing instance that names it
+    # makes no record of it either.
+    unread_tags: list[str] = []
+    left_out_units: set[str] = set()
+    # How many 802.1Q tags each device's frames carry, which its media
+    # MTU counts as well as the Ethernet header.
+    device_tags = _tags_of_devices(iface_state, found.tagging)
     for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
         if name in lag_state and not state:
@@ -634,6 +657,25 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # ``xe-0/0/6:2``, ``so-0/0/0``, ``reth0`` -- is a name
             # like any other here.)
             continue
+        tags: Tags | None = None
+        if state.get("tag_statements"):
+            read = _tags_of_unit(state["tag_statements"])
+            if isinstance(read, str):
+                unread_tags.append(unread_tags_row(state["tags_of"], read))
+                left_out_units.add(name)
+                continue
+            tags = read
+        # interface-range / structural collapse: mtu may have been
+        # populated from a ``set interfaces interface-range <r> mtu
+        # <N>`` line via the range-fold pass.  A unit above 0 has no
+        # media MTU, and its ``family inet6 mtu`` -- the largest
+        # IPv6 packet, for which the tree has no field of its own --
+        # is read as its MTU; ``family inet mtu`` is its IP MTU.
+        payload = (
+            _media_mtu_read(name, state["mtu"], device_tags.get(name, 0))
+            if "mtu" in state
+            else state.get("inet6_mtu")
+        )
         iface = CanonicalInterface(
             name=name,
             enabled=state.get("enabled", True),
@@ -643,13 +685,18 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # GAP 7: the per-unit 802.1Q tag on a routed sub-interface
             # surfaces on the DEDICATED CanonicalInterface.dot1q_vlan
             # (not access_vlan).  None = untagged (the common case for
-            # unit 0) or not a tagged routed sub-interface.
-            dot1q_vlan=state.get("dot1q_vlan"),
-            # interface-range / structural collapse: mtu may
-            # have been populated from a ``set interfaces
-            # interface-range <r> mtu <N>`` line via the
-            # range-fold pass.
-            mtu=state.get("mtu"),
+            # unit 0) or not a tagged routed sub-interface.  A unit of
+            # two tags (``vlan-tags outer X inner Y``) has the inner one
+            # on dot1q_inner_vlan.
+            dot1q_vlan=tags[0] if tags else None,
+            dot1q_inner_vlan=tags[1] if tags else None,
+            mtu=payload,
+            # ``family inet mtu``, of unit 0 or of a unit above it:
+            # the IP MTU, the largest IP packet already.
+            ip_mtu=ip_mtu_read(
+                "juniper_junos", state.get("inet_mtu"), payload,
+                ipv4=bool(state.get("ipv4")) or state.get("dhcp_client", False),
+            ),
             # Phase 4 rank-4: L2 switchport semantics.
             switchport_mode=state.get("switchport_mode"),
             trunk_native_vlan=state.get("trunk_native_vlan"),
@@ -738,6 +785,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if not pending:
             continue
         for iface_name in pending:
+            if iface_name in left_out_units:
+                # Left out for its tags, and said: a stub of it
+                # would be a unit with no tag in the instance.
+                continue
             iface = iface_by_name.get(iface_name)
             # Phase 4 rank-5: routing-instances reference UNITs
             # (``Loopback0.0``); canonical stores parent (``Loopback0``).
@@ -877,7 +928,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     #      irb.<vid>`` binding (signalling SVI intent), AND
     #    * The irb.<vid> interface has no load-bearing fields
     #      beyond IPv4 (no VRF binding, no description, no IPv6,
-    #      no LAG membership).
+    #      no LAG membership, no MTU).
     #
     #    A real-capture fixture from Batfish (``junos2541``) carries
     #    irb.<vid> bindings inside ``routing-instances`` (VRF) — we
@@ -916,11 +967,16 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         # Check whether the irb.<vid> interface (if it exists) has
         # any load-bearing field that would be lost on prune.
         sub_iface = iface_by_name.get(f"irb.{vid}")
+        # An MTU is the unit's own as well: a VLAN record holds none,
+        # so a unit folded with one (``family inet mtu 9000``) lost it,
+        # Junos to Junos included.
         if sub_iface is not None and (
             sub_iface.vrf
             or sub_iface.description
             or sub_iface.ipv6_addresses
             or sub_iface.lag_member_of
+            or sub_iface.mtu is not None
+            or sub_iface.ip_mtu is not None
         ):
             # Load-bearing — leave the iface alone, don't fold to vlan.
             continue
@@ -978,7 +1034,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # 4. Prune any ``irb.<vid>`` sub-interface that was folded onto
     #    a CanonicalVlan in step 3.  ``bound_vids`` only contains
     #    vids that were safely foldable (no VRF / description / v6 /
-    #    LAG).  The bare ``irb`` is not pruned here: a record of that
+    #    LAG / MTU).  The bare ``irb`` is not pruned here: a record of that
     #    name exists only when a line configures the device itself or
     #    its unit 0 (``found.stated``), and what such a line states --
     #    an MTU, an address on unit 0 -- is not a unit's to fold.
@@ -1140,10 +1196,13 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     for number, gname, path in ticked(met_in_groups):
         if gname in applied:
             inactive_met[path] = min(number, inactive_met.get(path, number))
-    intent.dropped_tier3_sections = left_out_rows(
-        left_out.get(path, ("inactive", path))
-        for path in sorted(inactive_met, key=inactive_met.__getitem__)
-    )
+    intent.dropped_tier3_sections = [
+        *left_out_rows(
+            left_out.get(path, ("inactive", path))
+            for path in sorted(inactive_met, key=inactive_met.__getitem__)
+        ),
+        *unread_tags,
+    ]
     if not cut_lines:
         return intent, raw
     return intent, "\n".join(
@@ -1155,6 +1214,54 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
 # ---------------------------------------------------------------------------
 # Tokeniser + dispatch
 # ---------------------------------------------------------------------------
+
+
+def _media_mtu_read(device: str, stated: int, tags: int) -> int:
+    """The payload of a device whose config states media ``mtu``
+    *stated*: the number less the Ethernet header, and 4 bytes for each
+    of the *tags* its frames carry (:func:`_tags_of_devices`;
+    :func:`media_mtu_counts_a_header`).  The tree's MTU
+    is the largest IP packet, and a Junos media MTU counts the bytes
+    in front of it; copied as it stood, ``mtu 1514`` -- the default of
+    a Junos Ethernet port -- was written ``mtu 1514`` on IOS-XE, NX-OS,
+    EOS and AOS-CX, an IP MTU 14 bytes larger than the source's.
+    """
+    if not media_mtu_counts_a_header(device):
+        return stated
+    return mtu_read(
+        "juniper_junos", stated, tags=tags if media_mtu_counts_a_tag(device) else 0,
+    )
+
+
+def _tags_of_devices(
+    iface_state: dict[str, dict[str, Any]], statements: dict[str, str],
+) -> dict[str, int]:
+    """How many 802.1Q tags the frames of each device carry, for its
+    media MTU (:func:`_media_mtu_read`): the count the device's tagging
+    statement names (``TAGGING_STATEMENT_TAGS``) -- a unit of one tag
+    on a ``flexible-vlan-tagging`` port still leaves room for two --
+    and, where the device states none, the most tags one of its units
+    carries, since a pasted fragment can leave the statement out.  A
+    unit whose tags are not read whole (:func:`_tags_of_unit`) counts
+    none.
+
+    Args:
+        iface_state: The parser's state, by interface name; a unit
+            above 0 is ``<device>.<unit>``, unit 0 is the device.
+        statements: The tagging statement each device states.
+    """
+    tags = {device: TAGGING_STATEMENT_TAGS[word] for device, word in statements.items()}
+    for name, state in ticked(iface_state.items()):
+        if not state.get("tag_statements"):
+            continue
+        device = name.rsplit(".", 1)[0] if "." in name else name
+        if device in statements:
+            continue
+        read = _tags_of_unit(state["tag_statements"])
+        if isinstance(read, str):
+            continue
+        tags[device] = max(tags.get(device, 0), 1 if read[1] is None else 2)
+    return tags
 
 
 #: What the classifier calls a name whose interface record is made
@@ -1766,7 +1873,8 @@ class _Found:
     ``stated``, the name of every interface a line configures: the
     first word of an ``interfaces`` line on the device itself or on
     its unit 0, ``<name>.<N>`` of a line under unit N, a member of an
-    interface-range.
+    interface-range.  And, in ``tagging``, the tagging statement each
+    device states (``vlan-tagging`` and the like), by device.
 
     Each handler runs once per line.  Looking through the whole list
     each time (``next(...)``, ``any(...)``, ``value not in a_list``)
@@ -1790,6 +1898,7 @@ class _Found:
         )
         self.once = Uniques()
         self.stated: set[str] = set()
+        self.tagging: dict[str, str] = {}
 
 
 def _dispatch_set(
@@ -1942,6 +2051,74 @@ def _apply_system(
             existing.hashed_password = f"junos:{tokens[5]}"
 
 
+#: The statements of a unit that say which tags it matches (Juniper,
+#: "Binding VLAN IDs to Logical Interfaces": ``vlan-id``,
+#: ``vlan-tags``, ``vlan-id-range``, ``vlan-id-list``).
+_UNIT_TAG_STATEMENTS: frozenset[str] = frozenset({
+    "vlan-id", "vlan-tags", "vlan-id-range", "vlan-id-list",
+})
+
+
+def _a_vlan_tags_value(word: str) -> int | None:
+    """A ``vlan-tags`` value as an 802.1Q tag: ``<vlan-id>``, or
+    ``<tpid>.<vlan-id>`` with the 802.1Q TPID ``0x8100`` (the TPID
+    "set to a value of 0x8100 in order to identify the frame as an IEEE
+    802.1Q-tagged frame", Juniper's ``vlan-tags``).  Another TPID is
+    not an 802.1Q tag, and the tree has no form for it."""
+    tpid, dot, vid = word.rpartition(".")
+    if dot and tpid.lower() != "0x8100":
+        return None
+    return a_tag(vid)
+
+
+def _tags_of_unit(statements: list[list[str]]) -> Tags | str:
+    """The tags a unit's tag statements state, read whole; else the
+    statement that is not, for the unit's row.
+
+    ``vlan-id <tag>`` is a unit of one tag and ``vlan-tags outer <tag>
+    inner <tag>`` one of two (the TPID ``0x8100`` may be written
+    before a tag).  ``vlan-tags`` given an ``inner-range`` or an
+    ``inner-list``, or another TPID, and ``vlan-id-range`` /
+    ``vlan-id-list``, match more than the tree can say, and a unit
+    with both forms, or an inner tag and no outer one, is not one
+    unit Junos takes.  Each such unit is left out -- written with
+    fewer tags than it matches it is another unit -- and its row says
+    the statement.
+
+    Args:
+        statements: Each tag statement of the unit, as its words from
+            the statement's own keyword on, in the order met.
+    """
+    outer: int | None = None
+    inner: int | None = None
+    forms: set[str] = set()
+    for words in ticked(statements):
+        forms.add(words[0])
+        if words[0] == "vlan-id" and len(words) == 2:
+            vid = a_tag(words[1])
+            if vid is not None:
+                outer = vid
+                continue
+        elif words[0] == "vlan-tags" and len(words) in (3, 5):
+            keys, values = words[1::2], words[2::2]
+            read = [_a_vlan_tags_value(v) for v in values]
+            if (
+                len(set(keys)) == len(keys)
+                and set(keys) <= {"outer", "inner"}
+                and None not in read
+            ):
+                for key, vid in zip(keys, read, strict=True):
+                    if key == "outer":
+                        outer = vid
+                    else:
+                        inner = vid
+                continue
+        return " ".join(words)
+    if len(forms) > 1 or outer is None:
+        return "; ".join(" ".join(words) for words in statements[:2])
+    return (outer, inner)
+
+
 def _apply_interfaces(  # noqa: C901
     tokens: list[str],
     iface_state: dict[str, dict[str, Any]],
@@ -2014,6 +2191,14 @@ def _apply_interfaces(  # noqa: C901
     # ``interfaces <name> description "<desc>"``
     if second == "description" and len(tokens) >= 3:
         state["description"] = tokens[2]
+        return
+
+    # ``interfaces <name> vlan-tagging`` (``stacked-vlan-tagging``,
+    # ``flexible-vlan-tagging``): how many tags the device's frames
+    # carry, which its media MTU counts (:func:`_tags_of_devices`).
+    if second in TAGGING_STATEMENT_TAGS and len(tokens) == 2:
+        if found is not None:
+            found.tagging[name] = second
         return
 
     # ``interfaces <name> mtu <N>`` — shared attribute the
@@ -2132,6 +2317,24 @@ def _apply_interfaces(  # noqa: C901
             target_state = iface_state.setdefault(sub_name, {})
             stated.add(sub_name)
         if len(tokens) < 4:
+            return
+        # ``unit <N> family inet|inet6 mtu <M>``: the largest packet of
+        # the family, which Junos sets per family.  ``family inet``'s
+        # is the record's IP MTU, on any unit.  ``family inet6``'s is
+        # a unit's MTU above unit 0; unit 0 is the device's own
+        # record, whose ``mtu`` is the device's media MTU, and the
+        # tree has no IPv6 MTU, so it is not read there.
+        if (
+            len(tokens) == 7
+            and tokens[3] == "family"
+            and tokens[4] in ("inet", "inet6")
+            and tokens[5] == "mtu"
+        ):
+            if tokens[4] == "inet" or unit_num != 0:
+                try:
+                    target_state[f"{tokens[4]}_mtu"] = int(tokens[6])
+                except ValueError:
+                    pass
             return
         # ``unit <N> family inet address <ip>/<prefix>`` and the
         # Wave-B/C extensions on the same line:
@@ -2281,12 +2484,13 @@ def _apply_interfaces(  # noqa: C901
         # ``switchport access vlan N`` on a switchport-centric target.  Does
         # NOT set switchport_mode (these are L3-on-a-tagged-VLAN, not L2
         # access ports).  access_vlan stays reserved for the genuine L2
-        # ``family ethernet-switching`` access case.
-        if len(tokens) >= 5 and tokens[3] == "vlan-id":
-            try:
-                target_state["dot1q_vlan"] = int(tokens[4])
-            except ValueError:
-                pass
+        # ``family ethernet-switching`` access case.  ``vlan-tags`` is a
+        # unit of two tags, ``vlan-id-range`` / ``vlan-id-list`` one of
+        # many: every statement is kept, and read whole when the unit is
+        # made (:func:`_tags_of_unit`).
+        if tokens[3] in _UNIT_TAG_STATEMENTS:
+            target_state.setdefault("tag_statements", []).append(tokens[3:])
+            target_state["tags_of"] = f"interfaces {name} unit {unit_num}"
 
         # --- Phase 4 rank-4: L2 family ethernet-switching ---
         # ``unit 0 family ethernet-switching interface-mode access|trunk``

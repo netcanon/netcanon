@@ -39,7 +39,7 @@ Retrieved: 2026-04-30
 <laggs version="1.0.0">
   <lagg uuid="...">
     <laggif>lagg0</laggif>
-    <members>opt3,opt4</members>
+    <members>igb2,igb3</members>
     <proto>lacp</proto>
     <descr>Bonded uplink to core switch</descr>
   </lagg>
@@ -81,11 +81,16 @@ mesh canonicalises.
 
 ### members
 
-RouterOS ``slaves=ether3,ether4`` ↔ OPNsense ``<members>opt3,opt4
-</members>``.  Member lists round-trip via the rename mesh.  Note
-that OPNsense's ``<members>`` lists ZONE names rather than BSD
-device names in the synthetic kitchen-sink (so the parser's
-reverse-link to ``CanonicalInterface.name`` matches the zone tag).
+RouterOS ``slaves=ether3,ether4`` ↔ OPNsense ``<members>em2,em3
+</members>``.  Member lists round-trip via the rename mesh.
+OPNsense's ``<members>`` lists BSD device names, and a member is an
+UNASSIGNED interface: "Only unassigned interfaces can be added to
+LAGG" (OPNsense Devices manual, Other Types).  So a member is in no
+zone of ``<interfaces>``, and its own ``comment=``, ``mtu=`` and
+``disabled=`` have no place there: Netcanon writes the member in
+``<members>`` alone and names, in a comment in the ``<lagg>``, the
+elements not written (added 2026-10-20; the parser gives each member
+a record of its own that names its lagg).
 
 ### mode
 

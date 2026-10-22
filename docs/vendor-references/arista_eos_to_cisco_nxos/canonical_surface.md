@@ -1,5 +1,7 @@
 # Arista EOS -> Cisco NX-OS: measured canonical surface
 
+> **Update 2026-10-20 — the NX-OS render now writes a VLAN interface for an address held on a VLAN record, and its matrix no longer declares `/vlans/vlan/ipv4/address/ip` lossy.**  Where a VLAN carries an address and the tree has no interface for it in any spelling, the render writes `interface Vlan<N>` for it (`synthesize_svis_from_vlan_l3`).  No measurement of this pair moved: every VLAN of it that carries an address already has an `interface Vlan<N>`, so nothing is written beside it.  The VLAN-record drift on its two cells is the VARP gateways — an SVI with `ip address virtual` and no address of its own, which NX-OS has no form for — not a missing SVI.  Sentences below that quote the lossy declaration, or say the render never writes an SVI from the VLAN record, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__cisco_nxos.yaml`.
+
 Source of truth for this note is **this repository**, not a vendor page:
 
 * `netcanon/migration/codecs/arista_eos/codec.py` and

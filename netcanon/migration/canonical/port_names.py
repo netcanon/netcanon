@@ -42,6 +42,12 @@ This module defines the **vendor-agnostic bridge**:
    its port onto another vendor.  The translator sends
    such a name after its port, and ``run_plan_with_models`` reads
    back which ones went.
+8. :class:`LoopbackToPlace` — a loopback of the source config, as a
+   target that names its loopbacks as a set is given it
+   (``CodecBase.place_loopbacks``).  Junos has one loopback
+   interface, ``lo0``, and places a unit of it in each routing
+   instance, so its name for a loopback depends on the config's
+   other loopbacks, which no name formatted one at a time can know.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -83,7 +89,7 @@ import logging
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -255,6 +261,20 @@ class PortIdentity(BaseModel):
     #: ``{"role": "wan"}`` here.  Target codecs may consult this to
     #: pick better defaults but must not depend on it.
     meta: dict[str, str] = Field(default_factory=dict)
+
+
+class LoopbackToPlace(NamedTuple):
+    """A loopback of the source config, given to a target that places
+    loopbacks as a set (``CodecBase.place_loopbacks``)."""
+
+    #: The name the source config gives it.
+    name: str
+    #: Its number, as the source codec's classifier reads it
+    #: (``Loopback7`` and a Junos ``lo0.7`` are 7), or ``None`` where
+    #: its name has none.
+    number: int | None
+    #: The routing instance it is in; ``""`` for the global table.
+    instance: str
 
 
 class PortRenameResult(BaseModel):
@@ -1379,6 +1399,61 @@ def translate_port_names(  # noqa: C901
             applied[name] = out
         return out
 
+    def place_the_loopbacks() -> None:
+        """Ask the target once for every loopback no entry decides.
+
+        Where a target's name for a loopback depends on the config's
+        other loopbacks (Junos: one ``lo0``, a unit of it in each
+        routing instance), one name at a time cannot place them --
+        ``Loopback0`` and ``Loopback1`` came out as ``lo0`` and
+        ``lo1``, an interface Junos does not have, in a job that said
+        ``completed``.  What the target places is settled here; what
+        it refuses is dropped and said, as a name it has no form for
+        is (a name no entry decided, so the job is ``partial``); what
+        it leaves out of both is formatted one at a time.  A loopback
+        is an interface record the source classifier reads as one
+        (with the parser's own word for its kind, as below), in the
+        routing instance its record names.
+        """
+        loopbacks: dict[str, LoopbackToPlace] = {}
+        for iface in intent.interfaces:
+            name = iface.name
+            if name in loopbacks or name in user_map:
+                continue
+            split = port_and_unit(name)
+            if split is not None and follows_its_port(name, split[0]):
+                continue
+            ident = source_codec.classify_port_name(name)
+            if ident is None or ident.kind == "unknown":
+                continue
+            if (kind_overrides.get(name) or ident.kind) != "loopback":
+                continue
+            loopbacks[name] = LoopbackToPlace(name, ident.index, iface.vrf or "")
+        if not loopbacks:
+            return
+        placement = target_codec.place_loopbacks(
+            list(loopbacks.values()), frozenset(str_map.values()),
+        )
+        if placement is None:
+            return
+        placed, refused = placement
+        for name in loopbacks:
+            if name in placed:
+                out = placed[name]
+                memo[name] = out
+                if out != name:
+                    applied[name] = out
+            elif name in refused:
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} loopback "
+                    f"{name!r} {refused[name]}"
+                )
+                if strip_unmappable:
+                    auto_dropped.add(name)
+                else:
+                    untranslated[name] = None
+                memo[name] = name
+
     # (#49b) Snapshot every port name actually present in the tree BEFORE the
     # rewrite sweep mutates names in place — used to (a) warn on operator map
     # entries that named a port absent from the config, and (b) avoid
@@ -1408,6 +1483,8 @@ def translate_port_names(  # noqa: C901
     # string, also deleted a DIFFERENT port that had just been renamed
     # ONTO that string — the failure (#6) describes for operator drops,
     # reachable without one once a device model renames every port.
+    if not same_codec:
+        place_the_loopbacks()
     for name in list(_swept_names(intent)):
         resolve(name)
     if auto_dropped:

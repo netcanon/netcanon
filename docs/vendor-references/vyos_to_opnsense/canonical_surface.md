@@ -47,8 +47,8 @@ this pair as a **total drop**. It is not, and the difference matters for every
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 
 VyOS `ethN`, dot1q sub-interfaces (`eth1.100`, `eth1.200`), `lo`, bonds and
@@ -76,7 +76,7 @@ for f in cells:
     s = S.parse(f.read_text(encoding='utf-8')); t = T.parse(T.render(s))
     n += len(s.interfaces); m += len(t.interfaces)
     assert [i.name for i in s.interfaces] == [i.name for i in t.interfaces], f
-print(n, '->', m)   # 55 -> 55
+print(n, '->', m)   # 56 -> 56
 PY
 ```
 
@@ -110,8 +110,8 @@ PY
 
 | audited sub-field | populated records | drifted | shape |
 |---|---|---|---|
-| `name` | 55 | **0** | — |
-| `enabled` | 55 | **0** | — |
+| `name` | 56 | **0** | — |
+| `enabled` | 56 | **0** | — |
 | `description` | 15 | **0** | — |
 | `ipv4_addresses` | 21 | **0** | — |
 | `ipv6_addresses` | 20 | **0** | — |
@@ -159,7 +159,7 @@ Measured, not merely declared: on all 13 cells the vyos parser emitted **zero**
 VLAN records, **zero** DHCP pools, **zero** RADIUS servers, **zero** VRRP
 groups, **zero** EVPN type-5 routes, **zero** raw sections, no apply-groups, no
 group content, no anycast gateway MAC, no timezone, no syslog servers and no
-`interface_type` on any of the 55 interface records.
+`interface_type` on any of the 56 interface records.
 
 These are recorded `not_applicable`, not `unsupported` — except
 `vlans[].id` and `interface_type`, which the target's reading of a
@@ -185,7 +185,7 @@ a symmetric gap rather than a target limitation. Those are recorded
 `interfaces[].interface_type` is a fourth shape again: vyos declares
 `/interfaces/interface/config/type` **lossy** on its own side and opnsense
 declares no path for it either way — but vyos emitted the hint on none of the
-55 records, so there was never anything to lose. Recorded `not_applicable`.
+56 records, so there was never anything to lose. Recorded `not_applicable`.
 
 ## Four total drops the firewall cannot express
 

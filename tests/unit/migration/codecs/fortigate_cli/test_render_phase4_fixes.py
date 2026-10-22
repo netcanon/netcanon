@@ -105,24 +105,28 @@ class TestIssue1aHashPolicy:
         assert "$2y$10$opnsalty.payload" not in out
 
     def test_native_fortios_hash_passes_through(self) -> None:
-        """Same-vendor round-trip: ``fortios:<blob>`` hashes are the
-        FortiOS-native ENC form and must be emitted unchanged via
-        ``set password <blob>`` (no ``ENC`` re-prefix needed because
-        the blob already carries the FortiOS-internal envelope)."""
+        """Same-vendor round-trip: ``fortios:ENC <blob>`` is the
+        FortiOS-native form (the parser joins the ``ENC`` and blob tokens
+        of ``set password ENC <blob>`` with a space) and is emitted
+        unchanged, bare, as the device prints it."""
         out = self._render_with_user(
-            "fortios:ENCfakeFortiosEncryptedBlob123==",
+            "fortios:ENC fakeFortiosEncryptedBlob123==",
         )
-        assert "set password ENCfakeFortiosEncryptedBlob123==" in out
+        assert "set password ENC fakeFortiosEncryptedBlob123==" in out
         # No review comment should appear for native hashes.
         assert "review:" not in out
 
     def test_plaintext_password_not_flagged(self) -> None:
         """Plaintext passwords (no algorithm tag) are migratable to
-        every target -- no review comment, plain ENC emit."""
+        every target -- no review comment.  A typed password is written
+        as one quoted value for FortiOS to encrypt on save, never behind
+        ``ENC``: that claims a blob this device encrypted, which a typed
+        password is not (this test once pinned ``set password ENC
+        plain-text-password``)."""
         out = self._render_with_user("plain-text-password")
         assert "review:" not in out
-        # Plaintext goes through the ``elif raw:`` branch as ENC + value.
-        assert "set password ENC" in out
+        assert 'set password "plain-text-password"' in out
+        assert "set password ENC" not in out
 
 
 # ---------------------------------------------------------------------------

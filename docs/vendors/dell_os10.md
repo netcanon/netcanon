@@ -353,6 +353,15 @@ translate it again from `show running-configuration` as the switch prints it.
 
 ## Common gotchas
 
+- **A description that holds white space is written in quotes as a
+  target**, as Dell documents for `description` (up to 0.7.7 it was
+  written bare).  Dell documents no escape inside the quotes, so a `"`
+  in a description, a VLAN's name (written as its interface's
+  description) or the SNMP location or contact is written `'`.  A host
+  name or VRF name that holds white space or a `"` is written with `_`
+  and `'`, and a route whose gateway holds either is left out whole;
+  each with a `review:` line.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 ⚠️ **Auto-detection finds about three OS10 configs in four.**
 OS10 and IOS-XE share the `!`-delimited Cisco shape, so a capture that
 spends its opening bytes on a template header, a console login banner or
@@ -501,6 +510,29 @@ and no access line: check such trunks migrated then.  `interface range` is
 not read, so a trunk stated that way has no VLANs in any output.  The
 vendors' own sentences are in the
 [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
+
+**An interface's `mtu` is a frame size.**  Dell: `mtu` "Sets the link
+maximum transmission unit (MTU) frame size", and its example gives
+tagged members a link MTU of 1522 for an IP MTU of 1500.  The tree's
+MTU is the payload, so a port's `mtu 9216` is `mtu 9194` on IOS-XE,
+NX-OS, EOS and AOS-CX, and their `mtu 1500` is written `mtu 1522`
+here.  The tagged figure, 22 bytes, is used for every interface: the
+same example gives an untagged member 1518, and a frame 4 bytes
+larger than it needs cuts nothing.  A port, a breakout lane, the
+management port, a port-channel and a VLAN interface are converted;
+a loopback is copied as it stands.  ⚠️ Up to 0.7.7 the number was
+copied as it stood: an OS10 `mtu 9216` was a payload 22 bytes too
+large on the target, and an IOS-XE `mtu 1500` a link MTU here that
+cuts every 1500-byte packet.  Check MTUs migrated then.  The vendors'
+sentences are in the
+[vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
+
+**No IP MTU of its own is written.**  OS10's IP MTU is a setting apart
+from the link MTU (Dell's example prints `MTU 9216 bytes, IP MTU 1500
+bytes`), and the statement that sets it in a config is not
+established, so another vendor's IP MTU of its own (IOS-XE or AOS-CX
+`ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is not in the
+output, and the job's report says it is lost.
 
 ## Two things that would have been silent bugs
 

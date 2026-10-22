@@ -22,7 +22,7 @@ import ipaddress
 import re
 from bisect import bisect_left
 from collections.abc import Callable, Hashable, Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar
 
 from .._tier3_detection import left_out_rows
 from ..canonical.transforms import is_every_vlan
@@ -829,6 +829,205 @@ def switchport_trunk_allowed_value(
     if coalesce:
         return _coalesce_vlan_ids(sorted(set(allowed)))
     return ",".join(str(vid) for vid in allowed)
+
+
+class MtuCounts(NamedTuple):
+    """What an interface's ``mtu`` counts on a platform beyond the
+    payload: *header* bytes on an untagged Ethernet interface, and
+    *per_tag* bytes more for each 802.1Q tag the interface carries."""
+
+    header: int
+    per_tag: int = 0
+
+
+#: What a platform's interface ``mtu`` counts beyond the PAYLOAD, by
+#: codec.  The ONE place this is written.  ``CanonicalInterface.mtu``
+#: counts the payload: the largest IP packet the interface carries,
+#: with no Ethernet header, tag or FCS -- the number IOS-XE, NX-OS,
+#: EOS and AOS-CX print for the same link.  A parser takes a stated
+#: ``mtu`` to the payload (:func:`mtu_read`) and a renderer writes the
+#: payload as its platform counts it (:func:`mtu_written`), for an
+#: Ethernet interface: a loopback or a tunnel has no Ethernet header,
+#: and what its number counts is the codec's to say.
+#:
+#: * Junos: the media MTU counts the Ethernet header, 14 bytes, and
+#:   not the FCS; Juniper's "Encapsulation Overhead by Interface
+#:   Encapsulation Type" table gives "Ethernet version 2 | 14" and
+#:   "802.1Q/Ethernet version 2 | 18", and the media MTU has to hold
+#:   the protocol MTU and that overhead.  A device whose units carry
+#:   a VLAN tag is an 802.1Q device (a unit's ``vlan-id`` needs
+#:   ``vlan-tagging`` on it).
+#: * IOS XR: "the mtu command that configures the L2 MTU includes 14
+#:   bytes for an Ethernet interface", and on a sub-interface "add 4
+#:   bytes for each VLAN tag configured on the sub-interface" (Cisco,
+#:   the IOS XR MTU article).
+#: * OS10: the link MTU is a frame size, header and FCS included:
+#:   Dell's example puts "tagged members with Link MTU of 1522 and IP
+#:   MTU of 1500".  An untagged member is given 1518 in the same
+#:   example, and the tagged figure is the one used for both, so that
+#:   no tagged packet the payload allows is cut.  (The same page says
+#:   the IP MTU must be at least 32 bytes below the link MTU, which
+#:   its example does not keep.)
+#: * IOS-XE: "the interface mtu command configures the L2 payload
+#:   size, but does not include the L2 header".  NX-OS: the MTU
+#:   matches the IP MTU, "excluding the 14-18 Ethernet header size"
+#:   (Cisco's APIC guide, which names NX-OS).  EOS: ``mtu``
+#:   "configures the IPv4 and IPv6 Maximum Transmission Unit".
+#:   AOS-CX: "the maximum Ethernet payload, which represents the same
+#:   bytes as the Layer 3 MTU" (HPE's VSG).  RouterOS: "Layer3
+#:   Maximum transmission unit" (``l2mtu`` is another setting, not
+#:   read).
+#: * FortiOS, VyOS and OPNsense: the payload, inferred -- each vendor
+#:   computes a TCP MSS as the MTU less 40, which fits no other count;
+#:   no sentence says it, and VyOS's own pages disagree.
+#:
+#: The vendors' sentences, with their sources, are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md``.  A public codec is here, or it is
+#: named with its reason among the codecs that read no interface MTU in
+#: ``tests/unit/migration/test_an_mtu_counts_the_payload.py`` (AOS-S,
+#: whose frame size and IP MTU are global settings, and the IOS-XE
+#: NETCONF codec, which carries no MTU between OpenConfig's
+#: ``config/mtu`` and the tree); the test fails for one that is in
+#: neither.
+MTU_BEYOND_THE_PAYLOAD: dict[str, MtuCounts] = {
+    "arista_eos": MtuCounts(0),
+    "aruba_aoscx": MtuCounts(0),
+    "cisco_iosxe_cli": MtuCounts(0),
+    "cisco_iosxr": MtuCounts(14, per_tag=4),
+    "cisco_nxos": MtuCounts(0),
+    "dell_os10": MtuCounts(22),
+    "fortigate_cli": MtuCounts(0),
+    "juniper_junos": MtuCounts(14, per_tag=4),
+    "mikrotik_routeros": MtuCounts(0),
+    "opnsense": MtuCounts(0),
+    "vyos": MtuCounts(0),
+}
+
+
+def mtu_read(codec: str, stated: int, *, tags: int = 0) -> int:
+    """The payload of an Ethernet interface whose config states
+    ``mtu`` *stated* on *codec*, carrying *tags* 802.1Q tags.
+
+    Args:
+        codec: The registry name of the codec whose config it is.
+        stated: The number the config states.
+        tags: How many 802.1Q tags the interface carries.
+
+    Returns:
+        The largest IP packet the interface carries
+        (:data:`MTU_BEYOND_THE_PAYLOAD`).
+    """
+    counts = MTU_BEYOND_THE_PAYLOAD[codec]
+    return stated - counts.header - counts.per_tag * tags
+
+
+def mtu_written(codec: str, payload: int, *, tags: int = 0) -> int:
+    """The ``mtu`` an Ethernet interface carrying *tags* 802.1Q tags
+    is written with on *codec*, for a payload of *payload* bytes: the
+    inverse of :func:`mtu_read`.
+
+    Args:
+        codec: The registry name of the codec whose config is written.
+        payload: ``CanonicalInterface.mtu``, the largest IP packet.
+        tags: How many 802.1Q tags the interface carries.
+
+    Returns:
+        The number the target's ``mtu`` line states.
+    """
+    counts = MTU_BEYOND_THE_PAYLOAD[codec]
+    return payload + counts.header + counts.per_tag * tags
+
+
+#: The IP MTU of an interface whose config states none, on a platform
+#: where the IP MTU is a setting of its own with a fixed default --
+#: where raising ``mtu`` does not raise it.  ``CanonicalInterface.ip_mtu``
+#: is ``None`` where the IP MTU is the payload, so a parser of such a
+#: platform fills the default where the payload is larger
+#: (:func:`ip_mtu_read`), and its renderer writes the payload as the
+#: IP MTU where the tree says the IP MTU is the payload
+#: (:func:`ip_mtu_written`).
+#:
+#: * AOS-CX: ``ip mtu`` "Sets the IP MTU (maximum transmission unit) for
+#:   an interface. This defines the largest IP packet that can be sent
+#:   or received by the interface" ... "Default: 1500" (HPE, the AOS-CX
+#:   command reference); the page for ``mtu`` gives its own default of
+#:   1500 and says nothing of the IP MTU following it.
+#:
+#: Elsewhere an unstated IP MTU is taken to be the payload: IOS XR says
+#: so ("When Ethernet MTU and no IP MTU is configured, IP MTU value in
+#: the hardware is Ethernet MTU-14B"), and for IOS-XE and Junos it is
+#: not established.  The sentences are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md``.
+IP_MTU_THAT_IS_NOT_STATED: dict[str, int] = {
+    "aruba_aoscx": 1500,
+}
+
+
+def carries_ipv4(iface: CanonicalInterface) -> bool:
+    """Whether *iface* has an IPv4 address, stated or from DHCP: an
+    interface whose IP MTU is about something."""
+    return bool(iface.ipv4_addresses) or iface.dhcp_client
+
+
+def ip_mtu_read(
+    codec: str, stated: int | None, payload: int | None, *, ipv4: bool,
+) -> int | None:
+    """``CanonicalInterface.ip_mtu`` of an interface whose config on
+    *codec* states IP MTU *stated* (``None`` where no line states one)
+    and whose payload the parser read as *payload*.
+
+    Args:
+        codec: The registry name of the codec whose config it is.
+        stated: The IP MTU the config states, or ``None``.
+        payload: ``CanonicalInterface.mtu`` as the parser read it.
+        ipv4: Whether the interface carries IPv4
+            (:func:`carries_ipv4`).
+
+    Returns:
+        ``None`` where the IP MTU is the payload; else the IP MTU,
+        the platform's default included where the config states
+        none and the payload is larger
+        (:data:`IP_MTU_THAT_IS_NOT_STATED`).
+    """
+    if stated is not None:
+        return None if stated == payload else stated
+    default = IP_MTU_THAT_IS_NOT_STATED.get(codec)
+    if default is None or not ipv4 or payload is None or payload <= default:
+        return None
+    return default
+
+
+def ip_mtu_written(codec: str, iface: CanonicalInterface) -> int | None:
+    """The IP MTU *codec*'s renderer writes for *iface*, or ``None``
+    for no line: the inverse of :func:`ip_mtu_read`.  On a platform
+    whose unstated IP MTU is a fixed default, an interface that
+    carries IPv4 is given the payload where the tree says the IP MTU
+    is the payload, and no line where it is the default.
+
+    Args:
+        codec: The registry name of the codec whose config is written.
+        iface: The interface.
+
+    Returns:
+        The number the target's IP-MTU line states, or ``None``.
+    """
+    default = IP_MTU_THAT_IS_NOT_STATED.get(codec)
+    if default is None:
+        return iface.ip_mtu
+    wanted = iface.ip_mtu
+    if wanted is None and carries_ipv4(iface):
+        wanted = iface.mtu
+    return None if wanted is None or wanted == default else wanted
+
+
+def one_mtu_written(iface: CanonicalInterface) -> int | None:
+    """The ``mtu`` of *iface* on a platform with one MTU for the
+    payload and the IP packet (NX-OS, EOS, RouterOS, FortiOS, VyOS,
+    OPNsense): the payload, or the IP MTU where the tree states no
+    payload.  Where it states both, the IP MTU has no line; the
+    capability matrix says so
+    (``/interfaces/interface/config/ip-mtu-beside-mtu``)."""
+    return iface.ip_mtu if iface.mtu is None else iface.mtu
 
 
 def same_vendor_version(
@@ -1703,3 +1902,140 @@ def keyword_stanza_rows(headers: Iterable[str]) -> list[str]:
         else:
             sections.append(header)
     return [*left_out_rows(held, rest=_HELD_KEYWORD), *sections]
+
+
+#: The tags of a routed sub-interface, as its tag statement states them
+#: when the statement is read whole: the outer 802.1Q tag, and the inner
+#: one or ``None``.
+Tags = tuple[int, int | None]
+
+
+def a_tag(word: str) -> int | None:
+    """*word* as one 802.1Q VLAN id (1 to 4094, in ASCII digits), else
+    ``None``.
+
+    A word that is not one id -- ``any``, a range, a list, a keyword --
+    is not read as the id it begins with.
+    """
+    if not (word.isascii() and word.isdigit()) or len(word) > 4:
+        return None
+    vid = int(word)
+    return vid if 1 <= vid <= 4094 else None
+
+
+def second_dot1q_tags(statement: str) -> Tags | None:
+    """The tags of a Cisco ``encapsulation dot1q`` statement, read whole.
+
+    ``encapsulation dot1Q <outer>`` and ``encapsulation dot1Q <outer>
+    second-dot1q <inner>`` (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag
+    Termination"; IOS XR, "Configuring 802.1Q VLAN Interfaces").  Every
+    other form is ``None``: ``second-dot1q any``, a range or a list of
+    inner tags (an "ambiguous" sub-interface, in Cisco's word), and
+    ``native`` -- each a statement the tree has no form for.  Read for
+    its first value, an ambiguous sub-interface was a sub-interface of
+    the outer tag alone on every target, in jobs that said
+    ``completed``.
+
+    Args:
+        statement: The line, white space at its ends apart.
+    """
+    words = statement.split()
+    if [w.lower() for w in words[:2]] != ["encapsulation", "dot1q"]:
+        return None
+    if len(words) == 3:
+        outer = a_tag(words[2])
+        return None if outer is None else (outer, None)
+    if len(words) == 5 and words[3].lower() == "second-dot1q":
+        outer, inner = a_tag(words[2]), a_tag(words[4])
+        if outer is not None and inner is not None:
+            return (outer, inner)
+    return None
+
+
+def unread_tags_row(where: str, statement: str) -> str:
+    """The row of ``dropped_tier3_sections`` for a sub-interface left
+    out because its tag statement is not read whole.
+
+    The sub-interface is in force on the source and is not in the
+    output, so the row is a section's: where it is, and the statement.
+    A tag statement holds VLAN ids and keywords, nothing secret.
+    """
+    return (
+        f"{' '.join(where.split())}: {' '.join(statement.split())} -- not "
+        f"one 802.1Q tag and at most one inner tag, so the sub-interface "
+        f"is not translated"
+    )
+
+
+def without_unread_tags(
+    raw: str,
+    is_tag_statement: Callable[[str], bool],
+    tags_of: Callable[[str], Tags | None],
+) -> tuple[str, list[str]]:
+    """*raw* without each ``interface`` stanza whose tag statement is
+    not read whole, and a row for each.
+
+    A tag statement is read whole or not at all.  The readers took the
+    first id of one (``encapsulation dot1Q 2234 second-dot1q 15`` was
+    VLAN 2234, and so were the five other units of a committed capture
+    on that outer tag), and an inner tag that is a range, a list or
+    ``any`` has no form in the tree.  So a stanza whose own tag
+    statement *tags_of* cannot read is taken out before any reader sees
+    it -- its addresses and its VRF with it, since a sub-interface
+    written with fewer tags than it matches is another sub-interface --
+    and :func:`unread_tags_row` says which.
+
+    A stanza ends where :func:`without_keyword_stanzas` ends one.  Its
+    own lines are at the indent of its first body line; a line indented
+    deeper is a submode's (an IOS-XE ``service instance`` has an
+    ``encapsulation`` of its own) and is not the stanza's statement.
+
+    Args:
+        raw: The config text.
+        is_tag_statement: Whether a line, white space at its ends apart,
+            is a tag statement of the platform.
+        tags_of: Its tags, read whole, or ``None``.
+
+    Returns:
+        ``(text, rows)``: *raw* itself when no stanza is taken out.
+    """
+    kept: list[str] = []
+    rows: list[str] = []
+    stanza: list[str] = []
+    depth: int | None = None
+    unread = ""
+
+    def close() -> None:
+        if unread:
+            rows.append(unread_tags_row(stanza[0], unread))
+        else:
+            kept.extend(stanza)
+
+    for line in ticked(raw.splitlines(keepends=True)):
+        if stanza and line[:1].isspace():
+            stanza.append(line)
+            statement = line.strip()
+            if unread or not statement:
+                continue
+            width = len(line) - len(line.lstrip())
+            if depth is None:
+                depth = width
+            if (
+                width == depth
+                and is_tag_statement(statement)
+                and tags_of(statement) is None
+            ):
+                unread = statement
+            continue
+        if stanza:
+            close()
+            stanza, depth, unread = [], None, ""
+        if _HEADER_WORD_RE.match(line):
+            stanza = [line]
+        else:
+            kept.append(line)
+    if stanza:
+        close()
+    if not rows:
+        return raw, []
+    return "".join(kept), rows

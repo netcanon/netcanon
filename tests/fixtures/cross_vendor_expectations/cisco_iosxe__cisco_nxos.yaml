@@ -173,10 +173,8 @@ per_field_expectation:
       repeated `ip address A/N` lines — on a real Nexus the second such line
       REPLACES the first unless it carries the `secondary` keyword.  Add
       `secondary` by hand on any interface that needs more than one address.
-      Note also that the `Vlan10` SVI address survives even though the
-      cisco_nxos matrix declares `/vlans/vlan/ipv4/address/ip` lossy: that
-      LossyPath only bites when the address is carried on the VLAN record
-      with no sibling interface stanza, which is not this source's shape.
+      The `Vlan10` SVI address survives as well, written from its own
+      interface stanza.
     references: [iosxe-nxos-surface]
 
   "interfaces[].ipv6_addresses":
@@ -347,23 +345,25 @@ per_field_expectation:
     references: [iosxe-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved into `vlan 10 / name <text>`.  The synthesiser takes the
-      VLAN name from the SVI's description, so the name that lands on the
-      Nexus is the SVI description from the source device, not a
-      VLAN-database name the parser never saw.
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): NX-OS
+      documents a VLAN name of letters, digits, `-` and `_` only.
+      The name is the SVI's description (the synthesiser takes it
+      from there): the kitchen sink's `User VLAN 10 SVI` lands as
+      `User_VLAN_10_SVI`.  A name with no white space is
+      preserved.
     references: [iosxe-nxos-surface]
 
   "vlans[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved — and worth recording because the target matrix would
-      predict otherwise.  cisco_nxos declares `/vlans/vlan/ipv4/address/ip`
-      lossy ("renders VLAN SVI L3 only from a sibling interface stanza"),
-      but this source always produces the VLAN record FROM an SVI
-      interface, so the sibling stanza the NX-OS renderer needs is always
-      present.  The declared loss does not bite on this pair.
+      Preserved.  This source always produces the VLAN record FROM an SVI
+      interface, so the NX-OS render writes the address from that
+      `interface Vlan<N>` stanza (`synthesize_svis_from_vlan_l3` writes no
+      second one) and the re-parse folds it back onto the VLAN.
     references: [iosxe-nxos-surface]
 
   "vlans[].description":

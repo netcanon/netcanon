@@ -308,6 +308,24 @@ class CiscoIOSXECodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/config/ip-mtu",
+                reason=(
+                    "The NETCONF codec carries no IP MTU between OpenConfig and "
+                    "the tree: an interface's IP MTU (IOS-XE or AOS-CX `ip "
+                    "mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is not "
+                    "in the output."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "The NETCONF codec carries no IP MTU between OpenConfig and "
+                    "the tree: an interface's IP MTU (IOS-XE or AOS-CX `ip "
+                    "mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is not "
+                    "in the output."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
                     "Routed sub-interface 802.1Q tag (Cisco "
@@ -316,6 +334,16 @@ class CiscoIOSXECodec(CodecBase):
                     "(ship-before-wire, GAP 7) so a routed sub-interface "
                     "tag is flagged as a drop, not silently mis-rendered "
                     "as an L2 access-mode VLAN."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec, whose "
+                    "routed sub-interface tag is itself not wired: declared "
+                    "so that it is reported as a drop."
                 ),
             ),
             UnsupportedPath(

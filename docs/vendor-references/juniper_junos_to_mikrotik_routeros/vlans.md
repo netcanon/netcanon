@@ -68,6 +68,11 @@ record.  SVI addressing happens by adding `/ip address` to the
 
 * `vlans[].id`: Junos `set vlans <name> vlan-id N` -> RouterOS
   `/interface vlan add name=<name> vlan-id=N`.  Direct integer mapping.
+  Lossy all the same: a routed sub-interface (`unit N vlan-id M`) is a
+  VLAN interface on its port (`/interface vlan add interface=ge-0/0/1
+  name=ge-0/0/1.100 vlan-id=100`), which the RouterOS parser reads back
+  as a VLAN of its tag too, so the list gains a record no Junos `vlans`
+  stanza declared.
 * `vlans[].name`: Junos's named VLAN -> RouterOS L3 interface name.
   Lossy because Junos's name space (no underscores, no spaces, up to
   255 chars of `[A-Za-z0-9.-]`) and RouterOS's namespace
