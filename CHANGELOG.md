@@ -57,6 +57,27 @@ timestamp if your timezone matters for an audit.
   earlier, look in the old output for lines the source config did not
   have before it reaches a device.
 
+- **A control character a value held was written into every output,
+  where a terminal acts on it rather than shows it.**  A parser that
+  reads its config as text keeps a control character a value holds,
+  and every renderer wrote the value as it stood: an IOS-XE
+  description holding `ESC [1A ESC [2K` -- up a line, and erase it --
+  came out so onto every line-based target, and an operator reading
+  the output on a terminal did not see the line above it (an account
+  written there from another part of the config, say).  No target is
+  now given one: the pipeline (and the sanitiser) writes each run of
+  them -- every character Unicode calls a control character, but a
+  tab and the line breaks -- as a space and says where in the job's
+  warnings, as it does a line break, and `CodecBase.render` refuses a
+  tree that still holds one.  A space and not nothing: a secret with
+  a character taken out would be another secret, written with no
+  review line.  The RouterOS parser now reads `\a`, `\b` and a
+  control character's byte (`\1B`) as the character, and the same
+  rule mends it.  Guarded by
+  `tests/unit/migration/test_a_value_holds_no_control_character.py`.
+  If you reviewed an output of 0.7.7 or earlier on a terminal, read it
+  again with `cat -v` or an editor that shows control characters.
+
 - **A value of the config was written into a RouterOS output as
   script, and a description could run a command on the router that
   imported it.**  RouterOS reads an imported `.rsc` as a script:
@@ -567,10 +588,9 @@ timestamp if your timezone matters for an audit.
   UTF-8.  RouterOS keeps a string as bytes and the export does not
   say their encoding, so a run that is not UTF-8 (a comment typed in
   Windows-1251) is kept as the export wrote it, escapes and all,
-  rather than read in a guessed one; and so is a control character
-  a terminal acts on rather than shows (`\a`, `\b`, `\1B`), since the
-  tree is written into other vendors' configs and read on a
-  terminal.  Guarded by
+  rather than read in a guessed one.  `\a`, `\b` and a control
+  character's byte (`\1B`) are read as the character, which the
+  pipeline writes as a space and says (Security, above).  Guarded by
   `tests/unit/migration/codecs/mikrotik_routeros/test_an_escape_is_read.py`,
   which holds each row of the page's table, typed by hand, its own
   example, and runs of bytes of each kind to the parser, and an
@@ -5109,20 +5129,23 @@ timestamp if your timezone matters for an audit.
   are sourced separately: the four Arista profiles' `lags.max` is not a
   vendor figure (Arista publishes ports per LAG, not a LAG count), and the
   QFX5120 figures were read from a reseller's copy of Juniper's datasheet.
-- **A RouterOS string's bytes that are not UTF-8, and its control
-  characters, are kept as the export wrote them.**  The parser reads
-  them as the escape's text (`\CF\F0\E8`, `\1B`), so another vendor
-  is given that text, and RouterOS is given it as text too: written
-  back, the string holds a backslash and two digits where it held a
-  byte.
-- **A control character in a value reaches the output.**  A parser
-  that reads its config as text keeps a control character a value
-  holds -- an IOS-XE description holding `ESC [2K`, which a terminal
-  reads as "erase this line" -- and every renderer writes it as it
-  stands.  Only a line break is mended on the way (Security, above);
-  the RouterOS parser keeps one an export writes as an escape as
-  written.  Read an output for control characters (`cat -v`) before
-  you review it on a terminal.
+- **A RouterOS string's bytes that are not UTF-8 are kept as the
+  export wrote them.**  The parser reads them as the escape's text
+  (`\CF\F0\E8`), so another vendor is given that text, and RouterOS
+  is given it as text too: written back, the string holds a backslash
+  and two digits where it held a byte.
+- **A secret that held a line break or a control character is
+  written with a space in its place where the target quotes it.**
+  The pipeline writes each run as a space (Security, above).  Onto
+  AOS-S, FortiOS, Junos, RouterOS and OPNsense, which write an SNMP
+  community with white space between quotes, that is another secret
+  than the source held; the other targets leave it out.  The job's
+  warnings name the place; the secret is not left out.
+- **A format character is written as it stands.**  A zero-width
+  space or a bidirectional override (Unicode's `Cf`) is not a control
+  character, and no target is kept from one; it can make a line on a
+  terminal or in an editor read otherwise than it is.  Read an output
+  with an editor that shows such characters before you review it.
 - **The renderers whose lines a device reads a word at a time have not
   been read for a value with white space in it written bare.**  The
   RouterOS renderer writes such a value as one string (Security,

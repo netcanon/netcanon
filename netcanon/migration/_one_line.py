@@ -1,4 +1,4 @@
-"""A value of the canonical tree is written on one line.
+"""A value of the canonical tree is written on one line, as text.
 
 Every renderer writes a config a line at a time and puts a value into
 its line as it stands, so a value that holds a line break is written as
@@ -31,6 +31,21 @@ FortiOS inside its quotes -- is the layout of the text, and the warning
 says so.  It is the same rule for every target because the alternative
 is a list of which field of which target may hold a break, and a value
 in the wrong place on that list is an account.
+
+Nor is any target given a control character (:data:`CONTROL_CHARACTERS`:
+every code point Unicode calls one, but a tab and the line breaks).  A
+parser that reads its config as text keeps one a value holds, and a
+renderer writes it as it stands, so an IOS-XE description holding
+``ESC [1A ESC [2K`` -- up a line, and erase it -- was written into every
+target's output, and an operator who read that output on a terminal saw
+the line above it gone: an account written there from another part of
+the config, say.  The same two halves: :func:`text_only_each` writes
+each run of them as one space and returns where, and the pipeline says
+so; :func:`first_control_character` is the render's check.  A space and
+not nothing: a secret that held one then holds white space, which a
+renderer whose lines are read a word at a time leaves out with a review
+line (:mod:`netcanon.migration._one_value`); taken out, the character
+would leave another secret.
 """
 
 from __future__ import annotations
@@ -49,6 +64,21 @@ LINE_BREAKS = "\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"
 #: A run of them; the same characters, as a test holds.
 _A_RUN = re.compile(r"[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]+")
 
+#: The code points Unicode calls control characters (category ``Cc``)
+#: but a tab, which is white space, and :data:`LINE_BREAKS`, which have
+#: a rule of their own: what a terminal acts on rather than shows.  A
+#: test holds this to ``unicodedata`` over every code point.
+CONTROL_CHARACTERS = (
+    "".join(map(chr, range(0x09)))
+    + "".join(map(chr, range(0x0E, 0x1C)))
+    + "\x1f\x7f"
+    + "".join(map(chr, range(0x80, 0x85)))
+    + "".join(map(chr, range(0x86, 0xA0)))
+)
+
+#: A run of them; the same characters, as a test holds.
+_A_CONTROL_RUN = re.compile(r"[\x00-\x08\x0e-\x1b\x1f\x7f-\x84\x86-\x9f]+")
+
 #: The field that names a record in a place, first present first:
 #: ``interfaces[Gi1].description``, ``vlans[10].name``,
 #: ``static_routes[0.0.0.0/0].description``.
@@ -62,7 +92,7 @@ def _label(record: Any, index: int) -> str:
             continue
         if isinstance(value, (str, int)):
             text = str(value)
-            if not _A_RUN.search(text):
+            if not _A_RUN.search(text) and not _A_CONTROL_RUN.search(text):
                 return text
     return str(index)
 
@@ -72,8 +102,9 @@ _NO_TEXT = frozenset({int, float, bool, type(None)})
 
 
 class _Walk:
-    """One walk of a tree.  ``mend`` writes each run as a space;
-    ``named`` puts each record's name in the place, else ``[]``.
+    """One walk of a tree for the runs *pattern* finds.  ``mend`` writes
+    each run as a space; ``named`` puts each record's name in the
+    place, else ``[]``.
 
     It reads every field a record holds, whatever the schema says the
     field is (a parser that appends to a list is not validated), and a
@@ -81,7 +112,11 @@ class _Walk:
     in it, is read at once rather than value by value: a trunk's list
     of every VLAN is 4,094 of them."""
 
-    def __init__(self, *, mend: bool, named: bool, first: bool) -> None:
+    def __init__(
+        self, *, mend: bool, named: bool, first: bool,
+        pattern: re.Pattern[str] = _A_RUN,
+    ) -> None:
+        self.pattern = pattern
         self.mend = mend
         self.named = named
         self.first = first
@@ -91,10 +126,10 @@ class _Walk:
         return self.first and bool(self.found)
 
     def _one(self, value: str, where: str) -> str | None:
-        if _A_RUN.search(value) is None:
+        if self.pattern.search(value) is None:
             return None
         self.found.append(where)
-        return _A_RUN.sub(" ", value) if self.mend else None
+        return self.pattern.sub(" ", value) if self.mend else None
 
     def model(self, record: BaseModel, where: str) -> None:
         held = dict(record.__dict__)
@@ -132,7 +167,7 @@ class _Walk:
         kinds = set(map(type, values))
         if kinds <= _NO_TEXT:
             return
-        if kinds == {str} and not _A_RUN.search("".join(values)):
+        if kinds == {str} and not self.pattern.search("".join(values)):
             return
         for index, item in enumerate(ticked(values)):
             if isinstance(item, str):
@@ -202,4 +237,35 @@ def said(where: str) -> str:
         f"{where} held a line break: it is written on one line, each "
         "break as a space, because no target is given a value of more "
         "than one line"
+    )
+
+
+def text_only_each(tree: Any) -> list[str]:
+    """Write each run of :data:`CONTROL_CHARACTERS` in every text value
+    of *tree* as one space, in place.
+
+    Returns:
+        Where a value held one, as :func:`one_line_each` returns it.
+        Empty when no value did, and then *tree* is as it was.
+    """
+    walk = _Walk(mend=True, named=True, first=False, pattern=_A_CONTROL_RUN)
+    walk.value(tree, "")
+    return walk.found
+
+
+def first_control_character(tree: Any) -> str | None:
+    """The first place in *tree* whose value holds one of the
+    :data:`CONTROL_CHARACTERS`, by field, as :func:`first_line_break`
+    names it; or ``None``."""
+    walk = _Walk(mend=False, named=False, first=True, pattern=_A_CONTROL_RUN)
+    walk.value(tree, "")
+    return walk.found[0] if walk.found else None
+
+
+def said_of_a_control_character(where: str) -> str:
+    """The job's warning for a value :func:`text_only_each` mended."""
+    return (
+        f"{where} held a control character: each run of them is written "
+        "as a space, because no target is given a character a terminal "
+        "acts on rather than shows"
     )

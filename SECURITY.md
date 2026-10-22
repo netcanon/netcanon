@@ -422,10 +422,12 @@ server has already loaded; it never supplies a port name, a count or a path.
   reported as a target the model does not list rather than as two ports
   on one.
 - A name in a rename map is not otherwise restricted: it is written into
-  the generated config as typed, control characters included (a request
-  that declares devices strips white space from the ends of a target
-  first), so a name holding a line break comes out as a line break, with
-  and without a device declaration.  The map is the operator's own
+  the generated config as typed (a request that declares devices strips
+  white space from the ends of a target first), but for a line break or
+  a control character, which no value of the tree is written with: each
+  run is a space, and the job says so ("Config Text (what reaches the
+  output)").  A format character -- a zero-width space between two
+  letters -- is written as typed.  The map is the operator's own
   input to their own output; it is noted here because the output is a
   config someone may paste into a device.
 
@@ -1034,6 +1036,22 @@ in.  Guarded by `tests/unit/migration/test_a_value_is_one_line.py`,
 which puts a break into every place of a tree built from the schema,
 and sends the sources that can hold one onto every public codec.
 
+Nor is any target given a control character: every character Unicode
+calls one (`Cc`), but a tab and the line breaks.  A parser that reads
+its config as text keeps one a value holds, and a renderer wrote it as
+it stood, so an IOS-XE description holding `ESC [1A ESC [2K` (up a
+line, and erase it) reached the output, and an operator reviewing it
+on a terminal did not see the line above it.  The same two halves:
+the pipeline and the sanitiser write each run as a space and say
+where (`text_only_each`), and the render refuses a tree that still
+holds one (`first_control_character`).  A space and not nothing: a
+secret that held one then holds white space, which the renderers
+whose lines are read a word at a time leave out; taken out, the
+character would leave another secret.  Guarded by
+`tests/unit/migration/test_a_value_holds_no_control_character.py`.
+A format character (`Cf`), and a secret that a target writes between
+quotes, are known limitations (below).
+
 The parsers' half: a body of text the device prints inside its config
 (a banner, a FortiOS quoted value of several lines -- a certificate, a
 replacement message) is read as text, ended where the vendor ends it,
@@ -1071,15 +1089,12 @@ into a line a device reads a word at a time is a known limitation
 
 The parser reads a string by the same page's table of escapes.  A
 line break it reads (`\n`, `\r`, `\v`, `\f`, or its byte) is a line
-break of the tree, which no target is given ("Config Text (what
-reaches the output)", above); a control character a terminal acts
-on rather than shows (`\a`, `\b`, `\1B`) and a run of bytes that is
-not UTF-8 are kept as the export wrote them, as text, so no escape
-of an export puts such a character into another vendor's output.
+break of the tree, and `\a`, `\b` or a control character's byte
+(`\1B`) a control character of it, neither of which any target is
+given ("Config Text (what reaches the output)", above); a run of
+bytes that is not UTF-8 is kept as the export wrote it, as text.
 Guarded by
 `tests/unit/migration/codecs/mikrotik_routeros/test_an_escape_is_read.py`.
-A control character a value holds as it stands, from any parser, is
-a known limitation (below).
 
 ---
 
@@ -1462,7 +1477,8 @@ constrains the *application* (the container).
 | Translation requests in flight are limited only under `small` | Every config limit is for one request.  Under `small` (the public demo) one request that reads config text works at a time and 2 may wait; under `standard`, `large` and `unlimited` several large ones at once multiply the memory, and nothing counts them.  Under `small` a request is also counted before its body is read and an answer nobody reads is let go at the request's deadline; under the other sets every body is read and every answer kept.  Under every set nothing limits how many connections are opened and kept | Accepted | A deployment that takes text from people it does not trust puts a limit on connections, a memory limit that stops the worker and -- unless it runs `small` -- a limit on requests in flight, in front of the application.  See "Input Validation — Config Text" |
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
 | The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
-| A control character in a value reaches the output | A parser that reads its config as text keeps a control character a value holds (an IOS-XE description holding `ESC [2K`, which a terminal reads as "erase this line"), and every renderer writes it as it stands, so an output reviewed on a terminal can show less than it holds | Documented (not mended) | Only a line break is mended on the way ("Config Text (what reaches the output)"); the RouterOS parser keeps a control character an export writes as an escape as written.  Read an output with `cat -v` or an editor that shows control characters |
+| A format character in a value reaches the output | A zero-width space or a bidirectional override (Unicode's `Cf`) a value holds is written as it stands, and can make a line on a terminal or in an editor read otherwise than it is | Documented (not mended) | A control character and a line break are mended on the way ("Config Text (what reaches the output)"); a format character is also part of text in several scripts, and is not taken out.  Read an output with an editor that shows such characters |
+| A secret that held a line break or a control character, written between quotes | The pipeline writes each run as a space; onto a target that writes a secret with white space between quotes (an SNMP community on AOS-S, FortiOS, Junos, RouterOS and OPNsense) that is another secret than the source held | Documented (not mended) | The job's warnings name the place, and the other targets leave such a secret out.  See "Config Text (what reaches the output)" |
 | A value with white space written bare into a line read a word at a time | A target whose line a device reads a word at a time (IOS-XE CLI, NX-OS, EOS, AOS-CX, AOS-S, OS10, IOS XR) may read a value from another vendor with white space in it -- an SNMP community, a RADIUS key -- as more words on its line | Documented (not audited) | The RouterOS renderer writes such a value as a string; the other renderers have not been read for it.  See "Input Validation — Config Text (a value is not script)" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
 | A set-form Junos or VyOS text is read a line at a time | A line after a quote that no later quote on its line ends is read as a statement of its own, so a quoted value of several lines -- if either device prints one so, which is not established -- would be read as configuration of the source | Documented | No value of the tree is written on more than one line, so such a value cannot add a line to the output; what it can do is make the source's tree hold a statement the source does not.  FortiOS reads a quoted value of several lines whole.  See "Input Validation — Config Text (what reaches the output)" |

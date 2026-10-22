@@ -1613,6 +1613,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   `tests/unit/migration/codecs/fortigate_cli/test_a_quoted_value_is_text.py`,
   which holds where each quoted value of every committed input ends to
   a reader of its own, a character at a time.
+  **And a value is written as text, not as what a terminal does with
+  it.**  A control character a value holds -- every one Unicode names,
+  but a tab and the breaks -- was written as it stood: an IOS-XE
+  description holding `ESC [1A ESC [2K` erased the line above it on
+  the terminal an operator reviewed the output on.  The same two
+  halves (`text_only_each`, `first_control_character`), and a run is a
+  SPACE, never nothing: a secret with a character taken out is another
+  secret, written with no review line, while one that holds white
+  space is left out where a line is read a word at a time.  A parser
+  that DECODES an escape (RouterOS `\1B`) reads it as the character
+  and leaves the rule to the pipeline: one rule in one place, not a
+  list of what each parser keeps as written.  Not reached: a format
+  character (`Cf`: a zero-width space, a bidirectional override),
+  which is also part of text in several scripts; and a secret a
+  target writes between quotes, which the space makes another secret
+  (pinned in the test).  Guarded by
+  `tests/unit/migration/test_a_value_holds_no_control_character.py`.
 - **Never** write a value of the tree where the target reads it as
   more than a value.  RouterOS imports an `.rsc` as a script: outside
   a string white space parts two words, `;` ends the command, and

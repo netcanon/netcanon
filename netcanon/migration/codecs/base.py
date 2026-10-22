@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
-from .._one_line import first_line_break
+from .._one_line import first_control_character, first_line_break
 from ..limits import census, metered
 
 if TYPE_CHECKING:
@@ -419,6 +419,13 @@ class CodecBase(ABC):
                         "line break, and no value is written on more than "
                         "one line"
                     )
+                # Nor with a control character, which a terminal acts on.
+                where = first_control_character(tree)
+                if where is not None:
+                    raise RenderError(
+                        f"{codec_name}: a value of the tree ({where}) holds a "
+                        "control character, and no value is written with one"
+                    )
                 if self.vlans_have_only_a_name:
                     from .._vlan_labels import vlan_labels_as_names
 
@@ -474,8 +481,10 @@ class CodecBase(ABC):
                 ``RenderError`` is reserved for a tree the adapter
                 genuinely cannot serialise.  Also raised, for every
                 codec and before its own code runs, when a value of
-                *tree* holds a line break: no value is written on more
-                than one line (:mod:`netcanon.migration._one_line`).
+                *tree* holds a line break or a control character: no
+                value is written on more than one line, nor with a
+                character a terminal acts on
+                (:mod:`netcanon.migration._one_line`).
             LimitExceeded: When the output is longer than the limit in
                 force (:mod:`netcanon.migration.limits`).
         """

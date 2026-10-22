@@ -1001,6 +1001,26 @@ on the targets that could have held it too (an XML target, FortiOS
 between its quotes).  A caller that renders a tree without the
 pipeline is refused (`RenderError`), naming the field.
 
+### C2. A control character in a value (a job warning)
+
+Nor is any target given a control character: every character Unicode
+calls one, but a tab and the line breaks (an escape, a backspace, a
+bell, a C1 control such as U+009B).  A terminal acts on one rather
+than showing it -- `ESC [1A ESC [2K` erases the line above -- so an
+output that held one could show less than it holds.  Each run is
+written as one space, and the job says where:
+
+    interfaces[Port-channel1].description held a control character:
+    each run of them is written as a space, because no target is given
+    a character a terminal acts on rather than shows
+
+The job's status is not changed.  A secret that held one holds a
+space in its place: the targets whose lines are read a word at a time
+leave it out, and a target that writes it between quotes (AOS-S,
+FortiOS, Junos, RouterOS, OPNsense) writes another secret than the
+source held -- a known limitation.  A format character (a zero-width
+space, a bidirectional override) is written as it stands.
+
 ### D. Validation severity (`ok` / `warn` / `block`)
 
 Every `MigrationJob` carries a validation severity computed from the

@@ -15,11 +15,11 @@ reached every target as ``CafC3A9``, ``\\_`` as ``_`` and ``\\n`` as
 RouterOS keeps a string as bytes, and the text does not say which
 encoding they are in (UTF-8 and Windows-1251 are both met).  A run of
 bytes is read as UTF-8 where it is UTF-8 and kept as written where it
-is not; a control character a terminal acts on rather than shows is
-kept as written as well, since the tree is written into other vendors'
-configs and read on a terminal.  A line break is read as one, and the
-pipeline writes it as a space and says so, as it does any value's
-(:mod:`netcanon.migration._one_line`).
+is not.  A line break and a control character are read as what they
+are, and the pipeline writes each run as a space and says so, as it
+does any value's (:mod:`netcanon.migration._one_line`; what reaches
+every target is held in
+``tests/unit/migration/test_a_value_holds_no_control_character.py``).
 
 Tested here:
 
@@ -31,7 +31,7 @@ Tested here:
 (d) an export through the pipeline onto every public codec, its output
     read as text;
 (e) RouterOS to RouterOS: what is read is written and read back the
-    same;
+    same, but for a control character, which is written as a space;
 (f) each check, handed the old reading, fails.
 """
 
@@ -83,8 +83,7 @@ def _old_unescape(value: str) -> str:
 # ---------------------------------------------------------------------------
 
 #: Each row of the page's table, as an export writes it, and what the
-#: tree holds for it -- typed here, not taken from the parser.  The bell
-#: and the backspace are kept as written (a terminal acts on them); the
+#: tree holds for it -- typed here, not taken from the parser.  The
 #: page gives ``\f`` as "form feed (0xFF)", and it is read as the form
 #: feed.
 _THE_TABLE = [
@@ -96,8 +95,8 @@ _THE_TABLE = [
     ("\\$", "$"),
     ("\\?", "?"),
     ("\\_", " "),
-    ("\\a", "\\a"),
-    ("\\b", "\\b"),
+    ("\\a", "\x07"),
+    ("\\b", "\x08"),
     ("\\f", "\x0c"),
     ("\\v", "\x0b"),
     ("\\41", "A"),
@@ -129,20 +128,21 @@ _RUNS = [
     ("\\D0\\9F\\D1\\80\\D0\\B8", "При"),
     # The same word in Windows-1251: not UTF-8, so kept as written.
     ("\\CF\\F0\\E8", "\\CF\\F0\\E8"),
-    # Control characters a terminal acts on: escape, delete, NUL, and
-    # U+009B (a C1 control, two bytes in UTF-8).
-    ("\\1B[2J", "\\1B[2J"),
-    ("\\7F", "\\7F"),
-    ("\\00", "\\00"),
-    ("\\C2\\9B", "\\C2\\9B"),
-    # One run of several kinds: each character on its own.
-    ("\\C3\\A9\\07\\41", "é\\07A"),
+    # Control characters: escape, delete, NUL, and U+009B (a C1
+    # control, two bytes in UTF-8).  The tree holds them; the pipeline
+    # mends them.
+    ("\\1B[2J", "\x1b[2J"),
+    ("\\7F", "\x7f"),
+    ("\\00", "\x00"),
+    ("\\C2\\9B", "\x9b"),
+    # One run of several kinds.
+    ("\\C3\\A9\\07\\41", "é\x07A"),
     # White space by its byte.
     ("\\0A", "\n"),
     ("\\09", "\t"),
     # Lower case is no hex digit (the page): ``\c`` is ``c``, ``\a`` the
     # bell.
-    ("\\c3\\a9", "c3\\a9"),
+    ("\\c3\\a9", "c3\x079"),
     # A backslash of the value, then digits.
     ("\\\\41", "\\41"),
 ]
@@ -188,16 +188,22 @@ def test_every_target_is_tried() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "written", ["Caf\\C3\\A9\\_x", "\\CF\\F0\\E8", "a\\ab\\1B[2J", "tab\\there"],
-)
-def test_read_written_and_read_back(written: str) -> None:
+_TRIPS = [
+    ("Caf\\C3\\A9\\_x", "Café x"),
+    ("\\CF\\F0\\E8", "\\CF\\F0\\E8"),
+    ("tab\\there", "tab\there"),
+    # Bell, then escape: one run of control characters a space each.
+    ("a\\ab\\1B[2J", "a b [2J"),
+]
+
+
+@pytest.mark.parametrize(("written", "back_as"), _TRIPS, ids=[w for w, _ in _TRIPS])
+def test_read_written_and_read_back(written: str, back_as: str) -> None:
     codec = get_codec("mikrotik_routeros")
-    meant = _described(written)
     job = run_plan(codec, codec, _export(written))
     back = codec.parse(job.rendered)
     (port,) = [i for i in back.interfaces if i.name == "ether2"]
-    assert port.description == meant
+    assert port.description == back_as
 
 
 # ---------------------------------------------------------------------------

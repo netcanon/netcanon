@@ -219,10 +219,12 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   page gives `\f` as "form feed (0xFF)"; it is read as the form
   feed.  RouterOS keeps a string as bytes and an export does not say
   their encoding, so a run that is not UTF-8 -- a comment typed in
-  Windows-1251 -- is kept as written, and so is a control character a
-  terminal acts on (`\a`, `\b`, `\1B`): the target is given the
+  Windows-1251 -- is kept as written: the target is given the
   escape's text, and so is RouterOS, where the string then holds a
-  backslash and two digits in place of the byte.  ⚠️ Up to 0.7.7 a
+  backslash and two digits in place of the byte.  `\a` (bell), `\b`
+  (backspace) and a control character's byte (`\1B`) are read as the
+  character, which no target is given: each run is written as a
+  space, and said in the job.  ⚠️ Up to 0.7.7 a
   backslash took the character after it whatever it was, so
   `Caf\C3\A9` reached the target as `CafC3A9` and `\n` as `n`.
 - **A user whose password cannot be carried is left out** as a target,
