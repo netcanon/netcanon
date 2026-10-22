@@ -11,10 +11,12 @@ by the PARENT:
   port -- or on an aggregate that is not a FortiLink one, it is a
   sub-interface: typed as its parent, its tag its own, and no VLAN of
   the tag;
-* on a FortiLink aggregate, a hardware or software switch, another
-  VLAN interface (Q-in-Q), or anything that is neither (``internal``,
-  ``fortilink``), it is a VLAN interface and a VLAN of its tag, as
-  before.
+* on a FortiLink aggregate, a hardware or software switch, or
+  anything that is neither (``internal``, ``fortilink``), it is a VLAN
+  interface and a VLAN of its tag, as before;
+* on another VLAN interface (Q-in-Q) it is a second tag, and is left
+  out with a row (``tests/unit/migration/
+  test_a_tag_statement_is_read_whole.py``).
 
 Across vendors a sub-interface goes where its parent goes, named by its
 TAG whatever its own name looks like; between two FortiOS configs it
@@ -177,10 +179,9 @@ class TestWhatTheParserReads:
             ("VL_45", "ianaift:l3ipvlan", None, "sw1"),
             ("VL_50", "ianaift:l3ipvlan", None, "lan"),
             ("VL_55", "ianaift:l3ipvlan", None, "fortilink"),
-            # A VLAN interface on a VLAN interface (Q-in-Q), whose
-            # name looks like a port's: one tag on a VLAN interface.
+            # The VLAN interface under a second tag, whose name looks
+            # like a port's: a sub-interface of its port.
             ("wan2", "ianaift:ethernetCsmacd", 60, "port4"),
-            ("VL_65", "ianaift:l3ipvlan", None, "wan2"),
         ],
     )
     def test_each_parent(self, name: str, interface_type: str, tag, parent: str) -> None:
@@ -194,7 +195,18 @@ class TestWhatTheParserReads:
         tree = get_codec("fortigate_cli").parse(_EACH_PARENT)
         assert sorted((v.id, v.name) for v in tree.vlans) == [
             (30, "fsw30"), (40, "VL_40"), (45, "VL_45"), (50, "VL_50"), (55, "VL_55"),
-            (65, "VL_65"),
+        ]
+
+    def test_a_vlan_on_a_vlan_is_left_out_and_said(self) -> None:
+        """``VL_65`` rides on the VLAN interface ``wan2``: a second tag,
+        which the tree has no form for on FortiOS."""
+        tree = get_codec("fortigate_cli").parse(_EACH_PARENT)
+        assert "VL_65" not in {i.name for i in tree.interfaces}
+        assert [r for r in tree.dropped_tier3_sections if "VL_65" in r] == [
+            "config system interface edit VL_65: set interface <a VLAN "
+            "interface> -- a second tag; FortiOS documents Q-in-Q with an "
+            "802.1ad outer tag, and two 802.1Q tags are not established, so "
+            "the interface is not translated"
         ]
 
     def test_the_alias_is_the_sub_interfaces_description(self) -> None:

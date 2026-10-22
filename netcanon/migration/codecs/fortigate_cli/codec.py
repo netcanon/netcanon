@@ -400,10 +400,13 @@ class FortiGateCLICodec(CodecBase):
                 reason=(
                     "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
                     "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
-                    "outer N inner M`) has no form in this codec.  A FortiOS "
-                    "VLAN interface whose own interface is a VLAN interface is "
-                    "read as a VLAN interface of one tag, which is not this "
-                    "field.  Declared so that it is reported as a drop."
+                    "outer N inner M`) has no form in this codec: FortiOS "
+                    "documents Q-in-Q with an 802.1ad outer tag (`set "
+                    "vlan-protocol 8021ad`), and two 802.1Q tags are not "
+                    "established.  A FortiOS VLAN interface on a VLAN interface "
+                    "is left out of the parse with a row of "
+                    "dropped_tier3_sections.  Declared so that it is reported "
+                    "as a drop."
                 ),
             ),
             UnsupportedPath(
@@ -601,10 +604,12 @@ class FortiGateCLICodec(CodecBase):
         # policies, VIPs, VPN, UTM profiles, router policy/route-maps).
         # Notification-only.  Read from the text the parser read: a line
         # of a quoted value (a replacement message, a certificate) is
-        # text, not a stanza.
-        intent.dropped_tier3_sections = detect_tier3_sections_fortios(
-            without_quoted_values(raw),
-        )
+        # text, not a stanza.  After them, the rows the parser itself
+        # made: a VLAN interface whose tag the tree has no form for.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_fortios(without_quoted_values(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

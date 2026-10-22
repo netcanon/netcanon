@@ -13,9 +13,15 @@ a unit's tag mean anything (``vlan-tagging``), and VyOS QinQ
 (``vif-s``) went with nothing said.
 
 So the tree holds an inner tag (``dot1q_inner_vlan``, both tags
-802.1Q), four codecs read and write it, and a statement that is not
+802.1Q), five codecs read and write it, and a statement that is not
 one tag and at most one inner tag leaves its sub-interface out with a
 row of ``dropped_tier3_sections``.
+
+RouterOS states two tags as one VLAN interface on another, and its
+parser read the second as a VLAN interface of one tag: an SVI of the
+inner tag on every target, in jobs that said ``completed``.  FortiOS
+documents two tags with an 802.1ad outer tag, which the tree's tags
+are not, and was read the same way.
 
 Each source is typed by hand in its own grammar, and each output is
 read with a reader of the test's own per target, not with the target's
@@ -37,7 +43,9 @@ from netcanon.migration.canonical.intent import (
 )
 from netcanon.migration.canonical.vlan_names import translate_vlan_ids
 from netcanon.migration.codecs.cisco_iosxe_cli import parse as iosxe_parse
+from netcanon.migration.codecs.fortigate_cli import parse as fortios_parse
 from netcanon.migration.codecs.juniper_junos import render as junos_render
+from netcanon.migration.codecs.mikrotik_routeros import parse as routeros_parse
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
@@ -65,7 +73,10 @@ CAPTURE_UNITS = {
 #: How each target that has a form for the inner tag writes a
 #: sub-interface of two tags, from the vendor's grammar: the line, and
 #: whether the stanza is a Cisco-style ``interface`` block (``None``) or
-#: Junos ``set`` lines.
+#: Junos ``set`` lines.  RouterOS writes two VLAN interfaces, the inner
+#: one on the outer ("In RouterOS, Q-in-Q can be configured by adding
+#: one VLAN interface over another", MikroTik, "VLAN"): the line is an
+#: ``/interface vlan`` one, ``interface=`` the parent.
 TWO_TAGS = {
     "cisco_iosxe_cli": re.compile(r"^ encapsulation dot1Q (\d+) second-dot1q (\d+)$"),
     "cisco_iosxr": re.compile(r"^ encapsulation dot1q (\d+) second-dot1q (\d+)$"),
@@ -73,12 +84,19 @@ TWO_TAGS = {
     "juniper_junos": re.compile(
         r"^set interfaces (\S+) unit (\d+) vlan-tags outer (\d+) inner (\d+)$"
     ),
+    "mikrotik_routeros": re.compile(
+        r'^add (?:comment="(?:[^"\\]|\\.)*" )?interface=(\S+) name=(\S+) '
+        r"vlan-id=(\d+)(?: |$)"
+    ),
 }
 
 _ADDRESS = re.compile(r"\baddress (\d{1,3}(?:\.\d{1,3}){3})\b")
 _JUNOS_ADDRESS = re.compile(
     r"^set interfaces (\S+) unit (\d+) family inet address "
     r"(\d{1,3}(?:\.\d{1,3}){3})/\d+$"
+)
+_ROUTEROS_ADDRESS = re.compile(
+    r"^add address=(\d{1,3}(?:\.\d{1,3}){3})/\d+ interface=(\S+)"
 )
 
 
@@ -88,6 +106,22 @@ def units_of_two_tags(codec: str, text: str) -> dict[tuple[int, int], str]:
     parser."""
     found: dict[tuple[int, int], str] = {}
     lines = text.splitlines()
+    if codec == "mikrotik_routeros":
+        # name -> (parent, tag); two tags are a VLAN interface whose
+        # parent is one on what is no VLAN interface.
+        vlans: dict[str, tuple[str, int]] = {}
+        on: dict[str, str] = {}
+        for line in lines:
+            m = TWO_TAGS[codec].match(line)
+            if m:
+                vlans[m[2]] = (m[1], int(m[3]))
+            a = _ROUTEROS_ADDRESS.match(line)
+            if a:
+                on.setdefault(a[2], a[1])
+        for name, (parent, inner) in vlans.items():
+            if parent in vlans and vlans[parent][0] not in vlans:
+                found[(vlans[parent][1], inner)] = on.get(name, "")
+        return found
     if codec == "juniper_junos":
         tags: dict[tuple[str, str], tuple[int, int]] = {}
         addresses: dict[tuple[str, str], str] = {}
@@ -198,6 +232,15 @@ SOURCES = {
         "set interfaces ge-0/0/1 unit 40 vlan-id 40\n"
         "set interfaces ge-0/0/1 unit 40 family inet address 192.0.2.129/26\n"
     ),
+    "mikrotik_routeros": (
+        "/interface vlan\n"
+        "add interface=ether2 name=provider20 vlan-id=20\n"
+        "add interface=provider20 name=customer30 vlan-id=30\n"
+        "add interface=ether2 name=ether2.40 vlan-id=40\n"
+        "/ip address\n"
+        "add address=203.0.113.1/24 interface=customer30\n"
+        "add address=192.0.2.129/26 interface=ether2.40\n"
+    ),
 }
 
 
@@ -216,7 +259,7 @@ def test_each_grammar_onto_each_target(source: str, target: str) -> None:
 #: job onto one of them is held for it.
 NO_INNER_FORM = {
     "aruba_aoscx", "aruba_aoss", "cisco_iosxe", "cisco_nxos", "dell_os10",
-    "fortigate_cli", "mikrotik_routeros", "opnsense", "vyos",
+    "fortigate_cli", "opnsense", "vyos",
 }
 
 
@@ -356,6 +399,201 @@ def test_a_submodes_statement_is_not_the_stanzas() -> None:
     assert (port.dot1q_vlan, port.dot1q_inner_vlan) == (None, None)
     assert port.description == "to a customer"
     assert not [r for r in tree.dropped_tier3_sections if r.endswith(_ROW)]
+
+
+# --- RouterOS and FortiOS: a VLAN interface on a VLAN interface -----------
+
+
+def test_a_routeros_reader_sees_one_tag_on_the_port() -> None:
+    """The old reading, written back: the inner VLAN interface on the
+    port with its own tag alone is no sub-interface of two tags."""
+    text = (
+        "/interface vlan\nadd interface=ether2 name=customer30 vlan-id=30\n"
+        "/ip address\nadd address=203.0.113.1/24 interface=customer30\n"
+    )
+    assert units_of_two_tags("mikrotik_routeros", text) == {}
+
+
+def test_the_check_sees_a_routeros_second_tag_read_as_one(monkeypatch) -> None:
+    """With the pass gone, the inner VLAN interface is an SVI of its
+    own tag again, and no target writes two tags."""
+    monkeypatch.setattr(
+        routeros_parse, "_a_vlan_on_a_vlan_is_two_tags", lambda *_a: [],
+    )
+    rendered = _job("mikrotik_routeros", "cisco_iosxe_cli", SOURCES["mikrotik_routeros"]).rendered
+    assert units_of_two_tags("cisco_iosxe_cli", rendered) == {}
+
+
+@pytest.mark.parametrize("target", sorted(TWO_TAGS))
+def test_a_routeros_inner_tag_is_named_apart_from_its_outer(target: str) -> None:
+    """Across vendors a sub-interface whose config states its port is
+    named by its tag; the one of two tags by its INNER tag, or it was
+    the name of the sub-interface its outer tag rides on."""
+    text = SOURCES["mikrotik_routeros"].replace(
+        "/ip address\n",
+        "/ip address\nadd address=198.51.100.1/24 interface=provider20\n",
+    )
+    job = _job("mikrotik_routeros", target, text)
+    assert job.status == MigrationJobStatus.completed
+    if target != "mikrotik_routeros":
+        assert job.port_renames["customer30"].endswith(".30")
+        assert job.port_renames["provider20"].endswith(".20")
+    back = get_codec(target).parse(job.rendered)
+    tags = {
+        a.ip: (i.dot1q_vlan, i.dot1q_inner_vlan)
+        for i in back.interfaces for a in i.ipv4_addresses
+    }
+    assert tags["203.0.113.1"] == (20, 30)
+    assert tags["198.51.100.1"] == (20, None)
+
+
+def test_routeros_does_not_take_a_name_the_output_has_for_the_outer() -> None:
+    """RouterOS makes the VLAN interface of the outer tag where the
+    tree has none, ``<port>.<outer>``; a name another interface has is
+    not taken for it."""
+    text = (
+        "hostname r1\n!\ninterface GigabitEthernet0/0/1.20\n"
+        " encapsulation dot1Q 99\n ip address 192.0.2.1 255.255.255.0\n!\n"
+        "interface GigabitEthernet0/0/1.2030\n"
+        " encapsulation dot1Q 20 second-dot1q 30\n"
+        " ip address 203.0.113.1 255.255.255.0\n!\nend\n"
+    )
+    rendered = _job("cisco_iosxe_cli", "mikrotik_routeros", text).rendered
+    assert units_of_two_tags("mikrotik_routeros", rendered) == {(20, 30): "203.0.113.1"}
+    back = get_codec("mikrotik_routeros").parse(rendered)
+    tags = {
+        a.ip: (i.dot1q_vlan, i.dot1q_inner_vlan)
+        for i in back.interfaces for a in i.ipv4_addresses
+    }
+    assert tags == {"192.0.2.1": (99, None), "203.0.113.1": (20, 30)}
+
+
+def _ros(*lines: str) -> str:
+    return (
+        "/interface bridge\nadd name=bridge1\n/interface vlan\n"
+        + "".join(f"{line}\n" for line in lines)
+        + "add interface=ether3 name=ether3.40 vlan-id=40\n"
+        "/ip address\nadd address=203.0.113.1/24 interface=customer30\n"
+        "add address=192.0.2.129/26 interface=ether3.40\n"
+    )
+
+
+def _fgt(outer: list[str], inner_on: str = "provider20") -> str:
+    edit = "        set vdom root\n"
+    return (
+        "config system interface\n"
+        '    edit "port1"\n' + edit + "        set type physical\n    next\n"
+        '    edit "provider20"\n' + edit
+        + "".join(f"        {line}\n" for line in outer)
+        + '        set interface "port1"\n        set vlanid 20\n    next\n'
+        '    edit "customer30"\n' + edit
+        + "        set ip 203.0.113.1 255.255.255.0\n"
+        f'        set interface "{inner_on}"\n        set vlanid 30\n    next\n'
+        '    edit "vlan40"\n' + edit
+        + "        set ip 192.0.2.129 255.255.255.192\n"
+        '        set interface "port1"\n        set vlanid 40\n    next\n'
+        "end\n"
+    )
+
+
+_ROS_SERVICE = (
+    "/interface vlan {}: use-service-tag=yes, an 802.1ad service tag -- not "
+    "one 802.1Q tag and at most one inner tag, so the interface is not "
+    "translated"
+)
+_ROS_STACK = (
+    "/interface vlan {}: interface= a VLAN interface that is not one 802.1Q "
+    "tag on a port or a bond -- not one 802.1Q tag and at most one inner "
+    "tag, so the interface is not translated"
+)
+_FGT_SERVICE = (
+    "config system interface edit {}: set vlan-protocol 8021ad -- an 802.1ad "
+    "service tag, not an 802.1Q tag, so the interface is not translated"
+)
+_FGT_STACK = (
+    "config system interface edit {}: set interface <a VLAN interface> -- a "
+    "second tag; FortiOS documents Q-in-Q with an 802.1ad outer tag, and two "
+    "802.1Q tags are not established, so the interface is not translated"
+)
+
+#: (codec, text, the rows), typed by hand.  Each puts 203.0.113.1 on a
+#: VLAN interface whose tags the tree has no form for, beside a
+#: sub-interface of one tag that has 192.0.2.129.
+NO_FORM = [
+    ("mikrotik_routeros", _ros(
+        "add interface=ether2 name=provider20 use-service-tag=yes vlan-id=20",
+        "add interface=provider20 name=customer30 vlan-id=30",
+    ), [_ROS_SERVICE.format("provider20"), _ROS_STACK.format("customer30")]),
+    ("mikrotik_routeros", _ros(
+        "add interface=ether2 name=provider20 vlan-id=20",
+        "add interface=provider20 name=customer30 use-service-tag=yes vlan-id=30",
+    ), [_ROS_SERVICE.format("customer30")]),
+    ("mikrotik_routeros", _ros(
+        "add interface=ether2 name=provider20 vlan-id=20",
+        "add interface=provider20 name=middle25 vlan-id=25",
+        "add interface=middle25 name=customer30 vlan-id=30",
+    ), [_ROS_STACK.format("customer30")]),
+    ("mikrotik_routeros", _ros(
+        "add interface=bridge1 name=svi20 vlan-id=20",
+        "add interface=svi20 name=customer30 vlan-id=30",
+    ), [_ROS_STACK.format("customer30")]),
+    ("fortigate_cli", _fgt(["set vlan-protocol 8021ad"]),
+     [_FGT_SERVICE.format("provider20"), _FGT_STACK.format("customer30")]),
+    ("fortigate_cli", _fgt(["set vlan-protocol 8021q"]),
+     [_FGT_STACK.format("customer30")]),
+    ("fortigate_cli", _fgt([]), [_FGT_STACK.format("customer30")]),
+]
+_NO_FORM_IDS = [f"{c}-{n}" for n, (c, _t, _r) in enumerate(NO_FORM)]
+
+
+def no_form_problems(codec: str, text: str, rows: list[str]) -> list[str]:
+    problems = []
+    tree = get_codec(codec).parse(text)
+    addresses = {a.ip for i in tree.interfaces for a in i.ipv4_addresses}
+    if "203.0.113.1" in addresses:
+        problems.append("the interface is in the tree")
+    if "192.0.2.129" not in addresses:
+        problems.append("its neighbour of one tag is not")
+    if "customer30" in {v.name for v in tree.vlans}:
+        problems.append("its VLAN record is")
+    if [r for r in tree.dropped_tier3_sections if r in rows] != rows:
+        problems.append(f"rows: {tree.dropped_tier3_sections}")
+    return problems
+
+
+@pytest.mark.parametrize(("codec", "text", "rows"), NO_FORM, ids=_NO_FORM_IDS)
+def test_a_tag_with_no_form_leaves_it_out(codec, text, rows) -> None:
+    assert no_form_problems(codec, text, rows) == []
+
+
+@pytest.mark.parametrize(("codec", "text", "rows"), NO_FORM, ids=_NO_FORM_IDS)
+def test_on_every_target_a_tag_with_no_form_is_said_and_not_written(codec, text, rows) -> None:
+    for target in list_public_codecs():
+        job = _job(codec, target, text)
+        assert "203.0.113.1" not in job.rendered, target
+        assert [r for r in job.dropped_tier3_sections if r in rows] == rows, target
+
+
+@pytest.mark.parametrize(
+    ("module", "name", "case"),
+    [(routeros_parse, "_a_vlan_on_a_vlan_is_two_tags", 0),
+     (fortios_parse, "_tags_with_no_form", 4)],
+    ids=["routeros", "fortios"],
+)
+def test_the_no_form_check_sees_one_tag(monkeypatch, module, name, case) -> None:
+    """With the pass gone, the interface is in the tree as a VLAN
+    interface of one tag, and nothing says otherwise."""
+    monkeypatch.setattr(module, name, lambda *_a: [])
+    assert no_form_problems(*NO_FORM[case]) != []
+
+
+def test_a_bounded_row_counts_the_rest() -> None:
+    text = "/interface vlan\nadd interface=ether2 name=provider20 vlan-id=20\n" + "".join(
+        f"add interface=provider20 name=c{n} use-service-tag=yes vlan-id={n}\n"
+        for n in range(30, 40)
+    )
+    rows = get_codec("mikrotik_routeros").parse(text).dropped_tier3_sections
+    assert rows == [_ROS_SERVICE.format("c30, c31, c32 and 7 more")]
 
 
 # --- VyOS QinQ ---------------------------------------------------------------
