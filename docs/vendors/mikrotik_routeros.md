@@ -112,6 +112,14 @@ can appear BEFORE `/interface vrrp` in the source.
 
 ## Lossy paths
 
+- **Tunnels** — `/interface gre`, `/interface eoip`,
+  `/interface ipip`.  The canonical model holds no tunnel endpoints,
+  so a tunnel is written with a placeholder `remote-address=0.0.0.0`
+  (with a `review:` comment when it has no description of its own);
+  set `local-address` / `remote-address` before it carries anything.
+  A tunnel that is shut on the source is written `disabled=yes`
+  (MikroTik's GRE and EoIP pages list the property; for IPIP it is
+  inferred from the `X - disabled` flag that page prints).
 - **`/queue tree`** — QoS queue tree carry-through; cross-vendor QoS
   translation doesn't share semantics, so this drops on cross-
   vendor render (intra-MikroTik round-trip preserves it).
