@@ -49,6 +49,11 @@ def ports_in_capture(path: Path, vendor: str) -> tuple[set[str], str]:
     loopback or a bridge is not — and LAG names also arrive through
     VLAN membership, so they are subtracted after the union.
 
+    A port the operator gave a name of its own (RouterOS ``set [ find
+    default-name=sfp-sfpplus2 ] name="Access Point"``) is the hardware
+    its factory name says, and is counted by that name: the label is
+    not a port of the device.
+
     Asserts that some codec recognises the capture and that it is a
     capture of *vendor*: model data must not be proven against another
     vendor's file.
@@ -77,4 +82,8 @@ def ports_in_capture(path: Path, vendor: str) -> tuple[set[str], str]:
     # ``collect_hardware_port_names``.
     lag_names = {lag.name.lower() for lag in intent.lags or [] if lag.name}
     names = {name for name in names if name.lower() not in lag_names}
-    return names, raw.lower()
+    factory = {
+        iface.name: iface.default_name
+        for iface in intent.interfaces if iface.default_name
+    }
+    return {factory.get(name, name) for name in names}, raw.lower()

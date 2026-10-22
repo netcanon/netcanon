@@ -53,6 +53,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from ..._radius_secrets import IOSXE_ENVELOPE
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -1778,7 +1779,9 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
       * ``interface Port-channelN`` stanza declares the LAG exists
         (and carries the LAG's description / switchport / IP state
         via the existing interface parse path — that's already on
-        ``intent.interfaces``).
+        ``intent.interfaces``).  ``interface Port-channelN.M`` is a
+        sub-interface OF that LAG, an interface and no LAG of its own:
+        read as one, it was an empty LAG that Junos wrote as ``aeM``.
       * ``channel-group N mode M`` under a physical interface declares
         that physical port a member of Port-channelN.
 
@@ -1809,9 +1812,8 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
                 pcm = re.match(
                     r"^port-channel(\d+)$", current_iface, re.IGNORECASE
                 )
-                declared_lag_names.add(
-                    f"Port-channel{int(pcm.group(1))}" if pcm else current_iface
-                )
+                if pcm:
+                    declared_lag_names.add(f"Port-channel{int(pcm.group(1))}")
             continue
         if current_iface is None:
             continue
@@ -2138,7 +2140,9 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
 # Modern IOS-XE RADIUS: named stanza
 #   radius server <name>
 #    address ipv4 <ip> auth-port <N> acct-port <N>
-#    key [7] <secret>
+#    key [0|6|7] <secret>
+# 0 (or no type) is the secret as typed, 7 is Cisco's reversible type 7,
+# 6 is AES under the device's own master key (see _radius_key).
 _RADIUS_SERVER_HEADER_RE = re.compile(
     r"^radius\s+server\s+(\S+)", re.IGNORECASE,
 )
@@ -2165,14 +2169,34 @@ _RADIUS_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 # Legacy IOS: single line
-#   radius-server host <ip> [auth-port <N>] [acct-port <N>] [key <secret>]
+#   radius-server host <ip> [auth-port <N>] [acct-port <N>]
+#       [key [0|7] <secret>]
 _RADIUS_HOST_LEGACY_RE = re.compile(
     r"^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)"
     r"(?:\s+auth-port\s+(\d+))?"
     r"(?:\s+acct-port\s+(\d+))?"
-    r"(?:\s+key\s+(?:\d+\s+)?(\S+.*))?",
+    r"(?:\s+key\s+(?:(\d+)\s+)?(\S.*))?",
     re.IGNORECASE,
 )
+
+
+def _radius_key(key_type: str, key_val: str) -> str:
+    """The canonical value of ``key [<type>] <value>``.
+
+    Type 0, or none, is the secret as typed.  Any other type is a form
+    only an IOS-XE device reads -- 7 is Cisco's reversible type 7, 6 is
+    AES under the device's own master key -- and is carried behind
+    :data:`IOSXE_ENVELOPE` with its type, so that no other platform
+    takes it for the secret and an IOS-XE output writes it back as it
+    was.  Until 2026-10 the type was kept IN the value (``7 <blob>``),
+    which the RADIUS policy read as a literal secret, and the legacy
+    form dropped it, so an IOS-XE output wrote the blob as plaintext.
+    """
+    if not key_val:
+        return ""
+    if not key_type or key_type == "0":
+        return key_val
+    return f"{IOSXE_ENVELOPE}{key_type} {key_val}"
 
 
 def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
@@ -2204,7 +2228,9 @@ def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
             host = legacy.group(1)
             auth_port = int(legacy.group(2) or 1812)
             acct_port = int(legacy.group(3) or 1813)
-            key = (legacy.group(4) or "").strip()
+            key = _radius_key(
+                legacy.group(4) or "", (legacy.group(5) or "").strip(),
+            )
             servers.append(CanonicalRADIUSServer(
                 host=host,
                 auth_port=auth_port,
@@ -2232,12 +2258,7 @@ def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
             continue
         km = _RADIUS_KEY_RE.match(line)
         if km:
-            key_type = km.group(1) or ""
-            key_val = km.group(2).strip()
-            # Preserve the type digit prefix so a lossless render
-            # back to Cisco can reconstruct it; other codecs can
-            # strip the prefix.
-            current.key = f"{key_type} {key_val}" if key_type else key_val
+            current.key = _radius_key(km.group(1) or "", km.group(2).strip())
 
     if current is not None and current.host:
         servers.append(current)

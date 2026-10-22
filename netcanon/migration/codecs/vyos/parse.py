@@ -58,6 +58,13 @@ Grammar notes that shape the walker:
   pair so the canonical value is quote-agnostic (round-trip stable).
 * **Comments** — ``/* ... */`` node comments and ``//`` trailer lines
   (incl. the ``// vyos-config-version`` stamp) are skipped.
+* **A node with nothing under it is printed on one line** —
+  ``server time1.vyos.net { }``, ``loopback lo { }``, ``disable { }``.
+  Such a line opens a block and closes it, or, where its one word is a
+  leaf (:data:`_SETFORM_LEAVES`), is that leaf with no value: the same
+  reading the set-form reader gives the path.  Read as a leaf, the
+  braces were part of a name (an NTP server ``time1.vyos.net { }`` on
+  every target) and an empty ``loopback lo`` was no interface.
 
 Phase 2 added ``bonding`` LAGs, ``system login`` local users, and
 ``system`` / ``service`` NTP servers.  Phase 3 added ``service snmp``
@@ -513,6 +520,22 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         ):
             continue
 
+        # A node with nothing under it, printed on one line (``server
+        # time1.vyos.net { }``): a block that opens and closes at once,
+        # or -- where its one word is a leaf -- that leaf with no value.
+        closes_at_once = False
+        if line.endswith("}") and line != "}":
+            opened = line[:-1].rstrip()
+            if opened.endswith("{"):
+                head = opened[:-1].rstrip()
+                if not head:
+                    continue
+                if " " not in head and head in _SETFORM_LEAVES:
+                    line = head
+                else:
+                    line = f"{head} {{"
+                    closes_at_once = True
+
         if line == "}":
             if stack:
                 popped = stack.pop()
@@ -613,6 +636,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # A ``next-hop`` block under ``static route`` creates a route.
             elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
+            if closes_at_once:
+                stack.pop()
+                if node[0] == "next-hop":
+                    cur_route = None
             continue
 
         # ── Leaf line: "<key> <value...>" or bare "<key>" ──

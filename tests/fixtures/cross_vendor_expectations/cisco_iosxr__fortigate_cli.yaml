@@ -521,63 +521,50 @@ per_field_expectation:
   # -- Identity -- where the credentials go ----------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users — 14 user
-      records in, 14 out, same names, no account silently dropped.  They render
-      as `config system admin / edit "<name>"`.  Both matrices declare
-      `/local-users/user/name` supported.
-      The account arrives; see `local_users[].role` and
-      `local_users[].hashed_password` for what it arrives with, because the
-      answer to both is "not what you sent".
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 14 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 6 MD5 crypt (Cisco type 5), 5 Cisco
+      type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt. FortiOS can
+      consume its own `ENC` ciphertext or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as an `edit` with its
+      access profile and no `set password` -- an admin with no password; a
+      refused secret now drops the whole account, as on every other target.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source's secret form, not a gap in
+      the FortiOS user model: an account whose secret FortiOS can consume would
+      still migrate. Create a console admin on the target out of band before
+      cutover, then re-create every account with a native credential.
     references: [iosxr-fortigate-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 9 cells that populate local users — 13 of the 14 records —
-      and the mechanism is a deliberate remap rather than a loss: the IOS-XR
-      `root-lr` role renders to the FortiOS `super_admin` accessprofile
-      (`set accprofile "super_admin"`).  It is scoped, not blanket: the single
-      `operator` account (`readonly` on `kitchen_sink.cfg`) passes through
-      unchanged, which is what makes it a mapping rather than a hardcode.
-      Both matrices declare `/local-users/user/role` supported, so this is a
-      value substitution inside a modelled concept, which is why it is `lossy`
-      and not `unsupported`.  Two things follow.  Any downstream tooling keyed
-      on the literal role string stops matching.  And `super_admin` on a
-      FortiGate is unrestricted access — an IOS-XR `root-lr` operator lands on
-      the FortiGate with full write authority over every VDOM.  Review the
-      mapping before any migrated account becomes production.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxr-fortigate-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 9 cells that populate local users — all 14 records — and
-      the two failure modes are different enough that both need stating.
-      ELEVEN of 14 lose the credential entirely.  Every IOS-XR TYPE-5 (crypt
-      `$1$`) and TYPE-7 (the reversible vendor-obfuscated form) secret is
-      dropped.  The renderer is explicit about it rather than silent: in place
-      of the password line it emits a review comment of the form `# password
-      manager user-name "<name>" -- review: <type> hash from source vendor
-      cannot be re-used on FortiOS; reset this user password manually`, and the
-      re-parse yields an empty `hashed_password`.
-      THREE of 14 keep their bytes but not their meaning.  IOS-XR TYPE-10
-      (crypt `$6$`, SHA-512) secrets are re-emitted behind a FortiOS `set
-      password ENC` marker; measured, the canonical string grows by exactly the
-      12 characters of the `fortios:ENC ` prefix and is otherwise unchanged.  A
-      FortiGate decrypts `ENC` material with FortiOS-internal key material, so
-      a crypt hash presented as a FortiOS `ENC` blob is not a password any
-      FortiGate can authenticate.
-      Recorded `lossy` rather than `unsupported` because the target models the
-      concept and the user record survives with a name and a role — but do not
-      read `lossy`'s compatible=True as "the credential migrated".  Treat every
-      migrated account as having no usable credential and set passwords on the
-      target before cutover, or you will be locked out of the box you just
-      migrated.
-      Hash bodies and ciphertext are deliberately NOT quoted here or in the
-      reference doc — only the crypt-scheme marker, the type number and the
-      length are described (AGENTS.md).
+    disposition: good
+    note: >
+      No secret is written in a form FortiOS cannot consume. 14 accounts are
+      refused for their secret (6 MD5 crypt (Cisco type 5), 5 Cisco type-7
+      reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. No account
+      with a stored secret arrives, so there is no value to compare. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [iosxr-fortigate-surface]
 
   radius_servers:

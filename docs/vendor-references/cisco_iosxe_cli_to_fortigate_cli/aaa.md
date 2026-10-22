@@ -84,11 +84,12 @@ class CanonicalRADIUSServer(BaseModel):
 
 - **host** — `good`.  Direct preservation; FortiGate edit ID is
   operator-curated and the canonical host carries the IP.
-- **key** — `lossy`.  Cisco's `key SHARED-SECRET` (plaintext or
-  type-7-encoded) versus FortiOS's `ENC <opaque-base64>`.  Cross-
-  vendor migration of RADIUS shared secrets requires re-setting
-  the key on the target device.  Both codecs pass through verbatim
-  with vendor tags so the loss surfaces in the validation report.
+- **key** — `lossy`.  A key written as typed (`key <secret>`, `key
+  0 <secret>`) is written `set secret <secret>`.  A `key 7` or `key
+  6` is a form only IOS-XE reads: it is held behind `iosxe:`, not
+  decoded, and the FortiOS render writes the server with no secret,
+  beside a review line that names the form; re-set the key on the
+  target device.
 - **auth_port** — `good`.  Direct map to `set radius-port`.
 - **acct_port** — `lossy`.  FortiOS has no separate acct-port field;
   non-default values from Cisco drop on round-trip.

@@ -251,6 +251,9 @@ demonstrated success — see the methodology note.
 
 ## Credential material
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — no AOS-CX account reaches Junos.**  Two changes.  Junos takes a password into its config only as a hash, so a password as typed is now refused there, where up to 0.7.7 it was written as `encrypted-password "<typed>"`, which no password matches; and the AOS-CX parser now reads `password ciphertext <value>` by its keyword, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was is ciphertext, not a password as typed.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  Any statement below that an AOS-CX account arrives describes the code before these changes.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__juniper_junos.yaml`.
+
 `local_users[].name` and `local_users[].role` both round-trip on all 6
 populated cells (`admin` / `administrators`, `netops` / `operators`).
 

@@ -299,12 +299,13 @@ per_field_expectation:
     references: [vrf-not-modeled]
 
   vlans:
-    disposition: good
-    note: >
-      The canonical VLAN list round-trips across the pair (Wave
-      10β re-flip from lossy to good — per-VLAN sub-field
-      semantics are documented separately on the ``vlans[].*``
-      entries below).
+    disposition: lossy
+    reason: >
+      The VLAN list round-trips but for its names: a name that
+      holds white space is written as one word (see
+      `vlans[].name`), and the list is compared whole, so it
+      drifts wherever a name does.  Ids, port membership and
+      descriptions are as the `vlans[].*` entries below say.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].id:
@@ -321,6 +322,9 @@ per_field_expectation:
       fields are collapsed; the round-trip emits the OPNsense
       description into the Cisco ``name`` line.  No data loss but
       semantic conflation.
+      A name that holds white space is also written with `_` for
+      each run of it, with a review line (`one_value_tree`,
+      docs/CAPABILITIES.md section C).
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].description:

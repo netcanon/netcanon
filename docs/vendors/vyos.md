@@ -160,6 +160,25 @@ real set-form) capture are welcomed via
 
 ## Common gotchas
 
+- **A user or community whose NAME holds white space is left out as
+  a target.**  `user <name> {` and `community <name> {` are tag
+  nodes, one word, so such a record is left out with a `/* review */`
+  line that names it.  A password or SNMPv3 passphrase that holds a
+  space is written in quotes; one that holds a `"` is left out, since
+  VyOS refuses an embedded quote even escaped (vyos.dev/T1246) and a
+  secret with its quote replaced is another secret.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A host name or VRF name that holds white space or a `"` is
+  written with `_` and `'` as a target**, the VRF at every place it is
+  named, with a `review:` line.  A `"` in a description or the SNMP
+  location or contact is written `'` (VyOS refuses one even escaped).
+  An NTP or DNS server, the domain or a route's gateway that holds
+  either is left out and said, the route whole.
+- **A review comment shows `*/` in a name as `* /`.**  VyOS ends a
+  `/* */` comment at its first `*/`, so a name that held one (a source
+  account left out for its password) would have ended the comment, and
+  what followed was configuration.  The name in the comment is the
+  source's name with that one change.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership
@@ -178,6 +197,14 @@ real set-form) capture are welcomed via
   (curly-brace) is the native form; `show configuration commands`
   (set-form) is converted up front.  Distinct from the `juniper_junos`
   codec, which owns the Junos set-form.
+- **A node with nothing under it is printed on one line.**  VyOS
+  writes `server time1.vyos.net { }`, `loopback lo { }` or `disable
+  { }` for a node that holds nothing; such a line is read as a block
+  that opens and closes (`disable { }` as the leaf `disable`), the
+  reading the set form gives the same path.  ⚠️ Up to 0.7.7 it was
+  read as a word with ` { }` in it: an NTP server's name came out with
+  its braces, and an empty loopback, `vif` or `next-hop` was lost;
+  translate such a config again.
 - **A set line nested more than 64 levels deep is a parse failure.**
   A real path is a dozen words.  Set-form input is written out as
   nested blocks before it is read, each level indented once more, so

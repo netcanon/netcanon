@@ -24,7 +24,7 @@ side.
 | `dhcp.md` | Cisco `ip dhcp pool` versus OPNsense interface-keyed `<dhcpd>` block. |
 | `snmp.md` | v1/v2c surface round-trips; SNMPv3 USM lives in OPNsense plugin's snmpd.conf, not config.xml. |
 | `local_users.md` | Cisco type-9 scrypt versus OPNsense bcrypt; hash formats are NOT cross-compatible. |
-| `radius.md` | RADIUS server config — round-trips host / port pair; type-7 obfuscated keys are lossy. |
+| `radius.md` | RADIUS server config — round-trips host / port pair; a type-7 / type-6 key is refused (re-enter it). |
 | `lags.md` | Cisco `Port-channel<N>` versus OPNsense `lagg(4)` driver naming + LACP-mode collapse. |
 | `switchport_unsupported.md` | OPNsense has no switching fabric — switchport modes / STP / VTP are all unsupported. |
 | `vrf_unsupported.md` | OPNsense has no VRF model — Cisco multi-VRF migrations need redesign. |

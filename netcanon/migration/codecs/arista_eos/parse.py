@@ -46,6 +46,7 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
+from ..._radius_secrets import EOS_ENVELOPE
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -229,8 +230,31 @@ _RADIUS_SERVER_RE = re.compile(
 )
 _RADIUS_AUTH_PORT_RE = re.compile(r"\bauth-port\s+(\d+)")
 _RADIUS_ACCT_PORT_RE = re.compile(r"\bacct-port\s+(\d+)")
-# Key payload: bare token or quoted string.  EOS accepts both.
-_RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
+# Key payload: ``key [<type>] <secret>``, the secret a bare token or a
+# quoted string.  EOS prints ``key 7 <blob>``; 0, or no type, is the
+# secret as typed, and any other type a form only EOS reads, carried
+# behind EOS_ENVELOPE (see _radius_key).  Until 2026-10 this read
+# ``key 7 <blob>`` as the secret ``7``.
+_RADIUS_KEY_RE = re.compile(
+    r'(?<![\w-])key\s+(?:(\d+[a-z]?)\s+)?(?:"([^"]*)"|(\S+))'
+)
+
+
+def _radius_key(key_type: str, key_val: str) -> str:
+    """The canonical value of ``key [<type>] <secret>``.
+
+    Type 0, or none, is the secret as typed.  Any other type -- EOS
+    prints ``key 7`` -- is carried behind :data:`EOS_ENVELOPE` with its
+    type, so that no other platform takes it for the secret and an EOS
+    output writes it back as it was.  Whether EOS's type 7 is Cisco's
+    is not established, so an IOS-XE ``key 7`` is not written here
+    either.
+    """
+    if not key_val:
+        return ""
+    if not key_type or key_type == "0":
+        return key_val
+    return f"{EOS_ENVELOPE}{key_type} {key_val}"
 
 # Top-level VRF declaration.  Modern EOS (4.23+) uses ``vrf instance <name>``;
 # older EOS (<=4.22) uses ``vrf definition <name>`` for the identical stanza.
@@ -913,7 +937,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 # separation — the colon is our canonical
                 # interior delimiter and doesn't appear in any
                 # real EOS hash (they're base64-ish: alnum + .
-                # + / + $).
+                # + / + $).  Type 0 is the password as typed (EOS
+                # hashes it), which the shared policy calls
+                # ``plaintext``: tagged ``0`` it was an algorithm no
+                # target takes, and EOS refused its own account.
+                if alg == "0":
+                    alg = "plaintext"
                 hashed = f"arista:{alg}:{parts[2]}"
         intent.local_users.append(CanonicalLocalUser(
             name=name,
@@ -947,7 +976,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 pass
         km = _RADIUS_KEY_RE.search(rest)
         if km:
-            key = km.group(1) if km.group(1) is not None else km.group(2)
+            key = _radius_key(
+                km.group(1) or "",
+                km.group(2) if km.group(2) is not None else km.group(3),
+            )
         intent.radius_servers.append(CanonicalRADIUSServer(
             host=host, key=key,
             auth_port=auth_port, acct_port=acct_port,

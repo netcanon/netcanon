@@ -1251,6 +1251,9 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
       * a ``bundle id <N> mode <m>`` line under a physical port declares
         that port a member of ``Bundle-Ether<N>``.
 
+    ``interface Bundle-Ether<N>.<M>`` is a sub-interface of the bundle,
+    an interface and no LAG of its own.
+
     Mode is the first member's mode (XR ``on`` → canonical ``static``);
     an empty bundle keeps :attr:`CanonicalLAG.mode` default.
     """
@@ -1264,7 +1267,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     depth: dict = {"body_indent": None}
 
     def _note_header(name: str) -> None:
-        if name.lower().startswith("bundle-ether"):
+        if re.fullmatch(r"bundle-ether\d+", name, re.IGNORECASE):
             declared.add(name)
 
     for line in ticked(raw.splitlines()):
