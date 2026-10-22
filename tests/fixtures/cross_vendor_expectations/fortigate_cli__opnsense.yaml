@@ -571,21 +571,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      FortiGate ``set password ENC <opaque-base64>`` is FortiOS-
-      internal-key-encrypted; OPNsense bcrypt is FreeBSD-
-      ``crypt(3)``-compatible (``$2a$`` / ``$2b$`` / ``$2y$``
-      prefixes).  Hash formats are NOT cross-compatible.  Both
-      codecs preserve hashes verbatim with vendor tags
-      (``fortios:`` on FortiGate, ``bcrypt:`` on OPNsense) so the
-      loss surfaces in the validation report.  Operators must reset
-      passwords on the OPNsense target.  Privilege number collapses
-      to OPNsense's binary admin / non-admin via group membership:
-      FortiGate ``super_admin`` (canonical privilege 15) ->
-      ``<groupname>admins</groupname>``, other profiles ->
-      ``<groupname>users</groupname>``.  Granular per-profile detail
-      is lost.  FortiGate ``set trusthost1...trusthost10`` IP-
-      restricted access controls are not modelled in canonical;
-      drop on parse.
+      2 of 8 accounts arrive across the 4 cells that populate local users; the
+      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
+      `ENC` ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as a `<user>` element
+      with no `<password>`; a refused secret now drops the whole account, as on
+      every other target. The survivors are 2 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [fgt-local-users, opn-users]
 
   radius_servers:
@@ -595,9 +593,10 @@ per_field_expectation:
       internal-key-encrypted; OPNsense expects cleartext in
       ``<radius_secret>``.  Cross-vendor migration requires
       re-keying — operators must paste the cleartext shared secret
-      into OPNsense after migration.  The codec passes the FortiOS-
-      encoded form through verbatim with a vendor tag so the loss
-      surfaces in the validation report.  ``auth_port`` / ``host``
+      into OPNsense after migration.  The OPNsense render writes the
+      server with no secret, beside a review element.  A ``set secret
+      <secret>`` written without ``ENC`` is the secret as typed, and
+      lands in ``<radius_secret>``.  ``auth_port`` / ``host``
       / ``name`` preserve cleanly.  ``acct_port``: FortiGate has no
       separate field (canonical defaults to 1813, which is
       OPNsense's default too).  FortiOS ``set auth-type`` /

@@ -310,26 +310,31 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Aruba's two-role model (``manager`` / ``operator``) maps
-      to RouterOS named groups: ``manager`` -> ``full``,
-      ``operator`` -> ``read``.  RouterOS ``write`` group has no
-      Aruba equivalent (Aruba is strictly two-role); inverse
-      direction collapses ``write`` -> ``manager``.  Password
-      hash formats are NOT cross-compatible: Aruba SHA-1 hex /
-      bcrypt / plaintext are Aruba-only; RouterOS uses a vendor-
-      private password format that is not surfaced in /export.
-      Cross-vendor migration of user accounts requires re-setting
-      passwords on the target.  The codec passes the source-side
-      hash through verbatim into a RouterOS ``comment=`` so the
-      operator has it available during re-key.
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. RouterOS can consume a genuine plaintext password only (it
+      hashes the password itself); anything else is refused with a review
+      comment naming the account, in place of the account. Up to 0.7.7 such an
+      account was written as `/user add` with no `password=`, which RouterOS
+      gives a blank password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 1 carrying 1 plaintext password.
+      Recorded `lossy` rather than `unsupported`: which account survives is
+      decided by its secret form, and accounts with a consumable secret do
+      arrive. Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target with
+      a fresh password.
     references: [local_users]
 
   radius_servers:
     disposition: lossy
     reason: >
-      Host / key / auth_port / acct_port round-trip cleanly.
-      Shared secret encoding pass-through verbatim (Aruba quoted-
-      string form vs RouterOS bare/quoted both lift cleanly).
+      Host / key / auth_port / acct_port round-trip cleanly for a
+      key written as typed (Aruba quoted-string form vs RouterOS
+      bare/quoted both lift cleanly).  An AOS-S ``encrypted-key
+      "<blob>"`` is a form only AOS-S reads: it is held behind
+      ``aoss:``, and the RouterOS render writes the server with no
+      secret, beside a review comment.  Until 2026-10 the blob was
+      written as the secret.
       Service binding (RouterOS ``service=login,ppp,wireless,
       hotspot,dhcp,ipsec``) is RouterOS-rich and not modelled
       canonically; cross-vendor render to RouterOS defaults to

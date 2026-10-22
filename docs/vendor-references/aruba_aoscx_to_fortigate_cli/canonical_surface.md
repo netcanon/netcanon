@@ -247,6 +247,12 @@ never survives.
 
 ## Identity: roles and credentials
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto FortiOS as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__fortigate_cli.yaml`.
+
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the FortiOS render wrote such an account as an `edit` with its access profile and no `set password` -- an admin with no password.  Measured after the change: **1 of 7** local accounts arrive across the 6 cells that populate users; 6 are refused for a secret FortiOS cannot consume (6 AOS-CX `AQB` device-keyed ciphertext), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__fortigate_cli.yaml`.
+
 <!-- snmpv3-key-gate-468 -->
 > **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `set auth-pwd "ENC <v>"` CLAIMS the value is encrypted under this FortiGate's key, which is true only of a value this device produced.  This source supplies an AOS-CX `auth-pass ciphertext` blob, encrypted under the source device's key.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
 

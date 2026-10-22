@@ -447,38 +447,60 @@ per_field_expectation:
     references: [nxos-fortigate-surface]
 
   "local_users[].name":
-    disposition: good
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). FortiOS can consume its own `ENC` ciphertext or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436) and a `lossy` warning would understate
+      a target with no local accounts. It is a property of the source's secret
+      form, not a gap in the FortiOS user model: an account whose secret FortiOS
+      can consume would still migrate. Create a console admin on the target out
+      of band before cutover, then re-create every account with a native
+      credential.
     references: [nxos-fortigate-surface]
 
   "local_users[].privilege_level":
     disposition: good
-    note: "The numeric privilege level round-trips unchanged on every cell."
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Recorded `good` rather than
+      `lossy`: the only drift on this key is the parent record-count collapse,
+      which the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with their
+      privilege level and are counted once, under `local_users[].name`.
     references: [nxos-fortigate-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on every cell that carries a user (9).  NX-OS RBAC role names are
-      mapped onto FortiOS accprofile names: `network-admin` becomes the
-      built-in `super_admin`, which grants full read-write across every VDOM —
-      a privilege WIDENING relative to a scoped Nexus role, so review it
-      rather than accepting it.  A role with no mapping is passed through
-      verbatim (`network-operator` stays `network-operator` on the kitchen-sink
-      fixture) and will not resolve to a FortiOS built-in accprofile unless
-      the operator creates one with that exact name.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-fortigate-surface]
 
   "local_users[].hashed_password":
-    disposition: unsupported
-    reason: >
-      The credential does not survive at all: shape `5 $5$<salt>$<digest>` ->
-      `""` on every one of the 10 populated user records.  FortiOS stores
-      admin passwords as a device-key-wrapped `ENC` blob and cannot accept a
-      foreign crypt hash, so the render emits NO password line — only a review
-      comment telling the operator to reset the password manually.  Every
-      migrated admin account therefore arrives on the FortiGate with no
-      credential; set passwords on all of them before the config is applied,
-      or the box is administratively unreachable.
+    disposition: good
+    note: >
+      No secret is written in a form FortiOS cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account with a stored secret arrives, so there is no value to compare.
+      Recorded `good` rather than `lossy`: the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7
+      such an account was written as an `edit` with its access profile and no
+      `set password` -- an admin with no password; a refused secret now drops
+      the whole account, as on every other target. No secret value is quoted
+      here or in the reference doc; only shapes and counts.
     references: [nxos-fortigate-surface]
 
   # -- LAGs --

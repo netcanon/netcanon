@@ -193,6 +193,12 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **An account whose password the source holds as typed is left out**
+  as a target, with a review line in its place.  Junos takes a
+  password into its config only as a hash (`encrypted-password`;
+  `plain-text-password` asks at a prompt), and up to 0.7.7 the typed
+  string was written as `encrypted-password "<typed>"`, which no
+  password matches.
 - **Block-form input is counted in the set commands it becomes.**  A
   block-form config is converted to set commands before it is read,
   and the whole path is written again for every statement under it, so
@@ -364,15 +370,29 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   where a unit beside it was folded onto its VLAN.  ⚠️ Up to
   0.7.7 a unit was written ONTO its port, also in a translation from
   Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
-  translate such a config again.  `vlan-tagging` on the parent port
-  is not read and not written: add it to an output that has tagged
-  units.
+  translate such a config again.  A unit of any device is written
+  under its device (`set interfaces lo0 unit 10`, `set interfaces
+  st0 unit 100`, `set interfaces ae1 unit 10 vlan-id 10`).  ⚠️ Up to
+  0.7.7 that was so only for a device shaped like a port: a unit of
+  `lo0`, `st0`, `ae`, `reth`, `me0`, `em0`, `fxp0` or `vme` was
+  written `set interfaces lo0.10 unit 0 ...`, which Junos refuses,
+  and a unit of an aggregate lost its `vlan-id`; translate such a
+  config again.  A unit's MTU is written and read per family
+  (`family inet mtu`, `family inet6 mtu`; on `family inet` where the
+  unit has no address).  Where both families state one, inet's is
+  kept, and unit 0's family MTU is not read: its record holds the
+  device's own (media) MTU.  Juniper requires the device's media MTU
+  to hold a family MTU and its encapsulation overhead, so where the
+  device states no MTU (and the unit's is above 1500) or one no
+  larger than the unit's, a `# review:` line says so.  ⚠️ Up to
+  0.7.7 a unit's MTU was not read, and was written only under a name
+  Junos refuses.  `vlan-tagging` on the parent port is not
+  read and not written: add it to an output that has tagged units.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
   (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second
   interface.  A non-zero unit of a management port (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`); map it by hand.  See
+  follows its port (`set interfaces em0 unit 5 ...`).  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor

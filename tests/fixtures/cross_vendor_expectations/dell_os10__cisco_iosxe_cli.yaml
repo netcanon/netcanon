@@ -363,10 +363,16 @@ per_field_expectation:
     references: [os10-iosxe-surface]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): Cisco
+      documents the `name` under `vlan <id>` by its length only,
+      and a place no page says reads the rest of the line is
+      written as one word.  The azlocal ToR captures' `oob-mgmt
+      10.0.0.0/24` lands as `oob-mgmt_10.0.0.0/24`.  A name with
+      no white space is preserved.
     references: [os10-iosxe-surface]
 
   vlans[].tagged_ports:

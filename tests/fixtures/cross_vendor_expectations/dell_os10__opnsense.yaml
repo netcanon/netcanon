@@ -207,32 +207,55 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      2 of 6 accounts arrive across the 3 cells that populate local
+      users.  The two Azure Local ToR captures hold each of their 2
+      accounts' passwords as typed (`username <name> password <...>`, a
+      template placeholder where the password goes).  OPNsense's
+      `<password>` is the hash `password_verify()` checks a password
+      against, so each of those 4 is refused with a review comment
+      naming the account, in place of the account
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      Up to 0.7.7 a typed password was written into `<password>` as it
+      stood, which opened nothing.  The synthetic kitchen sink's 2
+      accounts hold a SHA-512 crypt (`$6$`, the form the switch stores)
+      and arrive.  Recorded `lossy`: which account arrives is decided by
+      its secret form.  Re-create each refused account on the target.
     references: [os10-opnsense-surface]
 
   local_users[].hashed_password:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      Drifts on the 3 populated cells.  On the two Azure Local captures
+      every account is refused for its secret (see `local_users`): this
+      key carries that record-count collapse, and the name and role keys
+      are reclassified STRUCTURAL_ONLY against it.  On the kitchen sink
+      the `$6$` hash arrives and is read back tagged `bcrypt:` (the
+      OPNsense parser tags every stored hash so; the policy reads the
+      `$6$` body) -- the same hash under another canonical string.  No
+      secret value is quoted here or in the reference doc; only shapes
+      and counts.
     references: [os10-opnsense-surface]
 
   local_users[].name:
     disposition: good
     note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+      An account that arrives keeps its name: 2 of 2 on the kitchen
+      sink.  On the two Azure Local captures no account arrives (see
+      `local_users`); the only drift on this key there is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].hashed_password` and reclassifies STRUCTURAL_ONLY.
     references: [os10-opnsense-surface]
 
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      An account that arrives has its role mapped onto the two OPNsense
+      groups (`admins` for an admin-tier account, `users` otherwise),
+      which the parser reads back as `admin` / `user`: on the kitchen
+      sink `sysadmin` comes back `admin` and `netoperator` `user`.  On
+      the two Azure Local captures no account arrives (see
+      `local_users`); the drift there is the parent record-count
+      collapse, reclassified STRUCTURAL_ONLY.
     references: [os10-opnsense-surface]
 
   ntp_servers:
