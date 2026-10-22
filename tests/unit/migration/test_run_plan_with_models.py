@@ -4618,10 +4618,15 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert job.status == MigrationJobStatus.completed
 
     def test_a_port_the_source_config_states_no_factory_name_for(self) -> None:
+        """No line states one for the SFP ports.  The parser gives each
+        the name its own is -- a port no line renames keeps the name
+        the device gave it (``test_a_factory_name_is_the_devices.py``)
+        -- and once read only of ``etherN``, which left these two with
+        none."""
         mikrotik = get_codec("mikrotik_routeros")
         tree = mikrotik.parse(_ROUTEROS_PORTS_WITH_NO_ETHERNET_LINE)
         assert {iface.name: iface.default_name for iface in tree.interfaces} == {
-            "ether1": "ether1", "sfp-sfpplus1": "", "sfp-sfpplus2": "",
+            "ether1": "ether1", "sfp-sfpplus1": "sfp-sfpplus1", "sfp-sfpplus2": "sfp-sfpplus2",
         }
         same = _profile(_CCR2004)
         job = run_plan_with_models(

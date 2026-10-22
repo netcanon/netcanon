@@ -1982,13 +1982,15 @@ nothing, as before.
   looks two interfaces up by one factory name, no pairing is made at
   all.  **Without devices declared an entry never moves a port**: it
   names it.  The output then finds the port by the factory name it
-  had where the config states one (a `set [ find default-name= ]`
-  line, or a name of the form `etherN`); a port the export mentions
-  only elsewhere has none recorded, and naming it renders a lookup by
-  the new name (`set [ find name=WAN ]`), which matches no port —
-  declare both devices, or add the port's `/interface ethernet` line.
+  had: a `set [ find default-name= ]` line's, or the port's own name
+  where that is one a MikroTik device gives a port (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, the QSFP lanes; whole and in
+  lower case).  A port known only by a name of yours, with no such
+  line, has none recorded, and naming it renders a lookup by the new
+  name (`set [ find name=WAN ]`), which matches no port — declare
+  both devices, or add the port's `/interface ethernet` line.
 * A RouterOS port named so that it reads as another port (a bridge
-  called `SFP-SFPPLUS1`) is translated by that reading, as it is
+  called `sfp-sfpplus1`) is translated by that reading, as it is
   without devices declared, and is displaced if that puts it on a
   port of the target.  And a port named so that it reads as a LAG, a
   VLAN, a bridge or a loopback is paired as the port it is, but the
