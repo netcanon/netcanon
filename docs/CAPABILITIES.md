@@ -349,7 +349,8 @@ text").
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/routing/static-route/vrf` | Unsupported | AOS-S has no VRF (HPE's routing guide names none): a route in a VRF is left out under a `; review:` line rather than written into the switch's one table. |
+| `/routing/static-route/interface` | Lossy (error) | AOS-S takes an address, `vlan <id>`, `reject` or `blackhole` as a next hop.  A route to `Null0` is written `blackhole` and one out a VLAN interface `vlan <id>`; a route out any other interface is left out under a `; review:` line.  The job is `partial` for any route that names an interface, since the matrix reads the field and not its value. |
 | `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
 | `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's passphrase and AOS-S derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmpv3 user` line, and the `snmpv3 group` binding drops with it) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
@@ -376,6 +377,15 @@ text").
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
 
 #### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
+
+A quoted value printed over several lines -- a certificate, a private
+key, a replacement message's HTML -- is read whole, up to
+the line whose quote no backslash escapes, and none of its lines is
+read as configuration: not by the parser, not by the Tier-3 detector,
+and not for the release.  One that no later line ends, or with a line
+that ends in a form feed or the like, is refused (see
+[`vendors/fortigate.md`](vendors/fortigate.md) § "A quoted value of
+several lines").  Such a value reaches every target on one line (§ C1).
 
 | Path | Class | Reason |
 |---|---|---|
@@ -762,6 +772,24 @@ in rendered output find every such site.
      since #462 both defer to the crypt(3) id inside the payload (`$9$`
      excepted, being both Juniper-reversible and Cisco type-9).  OPNsense
      accepts bcrypt and SHA-512 crypt.
+  4. The account goes with its secret, on every target: the review line
+     stands in place of the account, never inside it.  FortiOS, RouterOS
+     and OPNsense used to write the account without its password, and a
+     RouterOS user added with no password has a blank one.
+  5. A password a human typed (`plaintext` to the policy: IOS-XE
+     `password 0`, AOS-CX `password plaintext`, VyOS
+     `plaintext-password`) is an algorithm like any other, accepted only
+     where the target has a line that takes a typed password and hashes
+     it itself.  Junos and OPNsense have none (`encrypted-password` and
+     `<password>` hold a hash; Junos's `plain-text-password` asks at a
+     prompt), so there such an account is left out with a review line:
+
+         # password manager user-name "<name>" -- review: the source
+         holds this password as typed, and Junos takes a password into
+         its config only as a hash; the account is left out: add it on
+         the device and set its password there
+
+     They used to write the typed string as the hash.
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth
@@ -834,6 +862,21 @@ in rendered output find every such site.
   FortiGate re-render of its own config would refuse its own key — FortiOS
   values classify `encrypted`, which no target accepts from a foreign source.
 
+* **RADIUS shared-secret portability**
+  ([`_radius_secrets.py`](../netcanon/migration/_radius_secrets.py)).  A
+  shared secret written as typed (`key <secret>`, `key 0 <secret>`,
+  FortiOS `set secret <secret>`, OPNsense `<radius_secret>`, RouterOS
+  `secret=`) migrates to every target.  A secret the source stored in a
+  form of its own -- IOS-XE `key 7` / `key 6`, EOS `key 7`, AOS-S
+  `encrypted-key`, FortiOS `set secret ENC` -- is written back as it was
+  onto its own platform only.  Onto any other target the server is kept
+  with no key, beside a review line in the target's comment syntax:
+
+      ; radius-server host 192.0.2.10 -- review: the source device stored this shared secret in its own encoded form (Cisco IOS-XE type 7), which is not carried to Aruba AOS-S; re-enter the secret manually
+
+  The secret is not decoded (Cisco type 7 could be, and is not), and the
+  job still says `completed`: the review line is where it is said.
+
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
@@ -850,6 +893,56 @@ in rendered output find every such site.
   syntax but unverified IPv6 syntax; the renderer emits the IPv6
   address as a comment-form review line rather than guessing.
 
+* **A credential that would not be one value**
+  ([`_one_value.py`](../netcanon/migration/_one_value.py)).  A local
+  user's name, password or role, an SNMP community, an SNMPv3 user's
+  name, group or keys, and a VRRP/HSRP key that holds white space or a
+  `"` is not written where the target reads one word (IOS-XE CLI,
+  NX-OS, EOS, AOS-CX, OS10, IOS XR, and a VyOS user or community name)
+  or where it quotes with no escape (AOS-S, for a `"`), and is never
+  altered to fit.  The record is left out with a line of the form:
+
+      username <name> -- review: a value of it holds white space or a
+      quote, which <target> does not read as one value; it is left out,
+      re-create it on the device
+
+  A local user and an SNMPv3 user go whole; a community goes with every
+  trap host that would carry it; a VRRP/HSRP key goes alone and the
+  group stays.  The line never holds the secret.  RADIUS keys are not
+  yet under this rule.
+
+* **A name, an address or a line of text that would not be one
+  value** (`one_value_tree`, same module).  The same test for what is
+  not a secret, made once on the tree before any line is written:
+
+  - a host name, VLAN name, VRF name or a route's name that holds white
+    space or a `"` where the target reads one word (IOS-XE CLI, NX-OS,
+    EOS, AOS-CX, OS10, IOS XR, VyOS) is written with `_` for each run
+    of white space and `'` for each `"`, at every place it goes -- a
+    renamed VRF takes its interfaces and routes with it, with a number
+    after it where another VRF has that name.  AOS-CX writes a VLAN's
+    name whole: the switch reads it to the end of the line;
+  - an address -- the domain, an NTP, syslog or DNS server, a route's
+    gateway, a DHCP pool's domain, gateway or DNS servers -- that holds
+    white space or a `"` is left out on every line target, and a route
+    whose gateway is left out goes whole;
+  - a description or the SNMP location or contact is written to the
+    end of the line where the vendor says that place reads it so; OS10
+    quotes a description that holds white space; AOS-S, OS10 and VyOS,
+    which quote with no escape, write a `"` as `'`; and a place no
+    vendor page says reads the whole line (the NX-OS SNMP contact, the
+    EOS SNMP location, an IOS XR VRF description) is written as it
+    stands.
+
+  Each is said in a line at the top of the output, of the form:
+
+      the name of VLAN 10 -- review: it holds white space or a quote,
+      which <target> does not read as one word; each run of white space
+      is written _ and each double quote '
+
+  The line names the place and never holds the value.  RouterOS is not
+  yet under this rule.
+
 * **MikroTik IPsec tunnel placeholders**.  When the canonical
   carries an IPsec peer with an empty/placeholder address, the
   renderer emits the line plus `comment="review: tunnel endpoint
@@ -864,6 +957,27 @@ in rendered output find every such site.
   `classify_port_name` can't place it, the renderer emits
   `! interface <name> -- review: foreign port` rather than
   emitting an interface stanza for an unknown chassis position.
+
+### C1. A value of several lines (a job warning)
+
+No target is given a value of more than one line, whatever the field.
+A description, a name or any other text value that holds a line break
+-- which the OPNsense and IOS-XE NETCONF parsers keep from an
+element's text, and the FortiOS parser from a value printed between
+quotes over several lines -- is written on one line, each run of
+breaks (any character `str.splitlines` ends a line at) as one space,
+and the job says where, one warning a value:
+
+    interfaces[em0].description held a line break: it is written on
+    one line, each break as a space, because no target is given a
+    value of more than one line
+
+Written as it stood, the text after the break was a line of its own in
+the output, and so a command on the target.  The job's status is not
+changed: the value's words are all there.  What is lost is the layout,
+on the targets that could have held it too (an XML target, FortiOS
+between its quotes).  A caller that renders a tree without the
+pipeline is refused (`RenderError`), naming the field.
 
 ### D. Validation severity (`ok` / `warn` / `block`)
 
@@ -1909,9 +2023,6 @@ nothing, as before.
   gateways or a routing-table suffix, and — across vendors — a Junos
   unit next hop.  The plan lists the route (`stale_next_hops`) and the
   job is `partial`.
-* **A non-zero unit of a Junos management port** (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`).  Map it by hand.
 * A FortiGate VLAN interface the codec reads as a physical port
   (`DMZ` beside a port `dmz`) or as a management port (`MGMT`), and
   its stock `fortilink` aggregate,
@@ -2476,10 +2587,12 @@ matter; the matrix is honest about both.
     VLAN 1 device.
     Their matrices declare the native VLAN unsupported; nothing in
     the output marks which device was untagged at the source.  On
-    `mikrotik_routeros` every VLAN device of an output is on ONE
-    parent -- the config's one port with an address or an allowed
-    list, or `bridge1` where there is not exactly one -- whether or
-    not that port carries the VLAN.
+    `mikrotik_routeros` every VLAN device of an output from a vendor
+    other than RouterOS or FortiOS is on ONE parent -- the config's one port with an address
+    or an allowed list, or `bridge1` where there is not exactly one --
+    whether or not that port carries the VLAN.  (From RouterOS or
+    FortiOS, a VLAN device is written on the parent its config
+    states.)
   * **A Junos output is ELS grammar** (`interface-mode trunk`,
     `native-vlan-id` on the physical interface, the native VLAN among
     the `vlan members`).  On a switch that takes the older grammar

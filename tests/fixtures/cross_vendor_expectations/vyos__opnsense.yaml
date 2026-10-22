@@ -15,7 +15,7 @@
 #
 # READ THIS BEFORE COMPARING WITH THE DRIFT SHAPE: a mechanical "is the
 # target side empty?" pass reports `interfaces` on this pair as a total drop.
-# It is not. The interface inventory is FULLY PRESERVED: 55 records in, 55
+# It is not. The interface inventory is FULLY PRESERVED: 56 records in, 56
 # out, identical name sets on all 13 cells, and zero drift on every one of
 # the nine audited `interfaces[].*` keys. Nothing in the interface block is
 # correlated drift, so each interface key below is `good` on its own
@@ -136,8 +136,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, and every audited attribute with it ---
   #
-  # The measured record count is the headline: 55 interface records across
-  # the 13 cells, 55 after the round-trip, with identical name sets on every
+  # The measured record count is the headline: 56 interface records across
+  # the 13 cells, 56 after the round-trip, with identical name sets on every
   # cell.  VyOS `ethN`, dot1q sub-interfaces (`eth1.100`), `lo`, bond and
   # bridge members all survive the OPNsense config.xml render.  Not one of
   # the nine audited sub-fields drifts on any cell, so nothing below is a
@@ -146,7 +146,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, same names in the same order.  The
       OPNsense render does not collapse dot1q sub-interfaces, does not drop
       the loopback, and does not rename bond members.
@@ -171,7 +171,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 55 of 55 records — zero differing on any
+      Admin state preserved on 56 of 56 records — zero differing on any
       cell.  An interface marked `disable` in `config.boot` arrives disabled
       in the OPNsense config, and an enabled one arrives enabled.
     references: [vyos-opnsense-surface]
@@ -179,7 +179,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  Coverage is thin and worth naming:
+      Preserved on 56 of 56 records.  Coverage is thin and worth naming:
       MTU is actually populated on exactly ONE record in the whole corpus,
       and that one round-trips unchanged.  The measurement is clean; it is
       simply narrow.
@@ -192,7 +192,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records; IPv6 is populated on 20 of them and
+      Preserved on 56 of 56 records; IPv6 is populated on 20 of them and
       every address plus prefix-length survives.  Both codecs model IPv6
       interface addressing at the same canonical path.
       One declared caveat that no committed cell reaches: opnsense declares
@@ -204,7 +204,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records, and the widest-populated interface
+      Preserved on 56 of 56 records, and the widest-populated interface
       attribute on the pair at 21 records.  This is the field the migration
       most depends on and it is clean.
       Same declared caveat as IPv6 and the same non-coverage: opnsense
@@ -219,7 +219,7 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Source-side gap, measured rather than assumed: the vyos parser emitted
-      NO interface type hint on any of the 55 records across all 13 cells.
+      NO interface type hint on any of the 56 records across all 13 cells.
       vyos declares `/interfaces/interface/config/type` LOSSY on its own
       side, so it could in principle carry one, but on this corpus it never
       does — and opnsense declares no path for the field either way.  There
@@ -229,7 +229,7 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  Two records populate it — `eth4` and
+      Preserved on 56 of 56 records.  Two records populate it — `eth4` and
       `eth5`, both members of `bond0` on the kitchen sink — and both come
       back pointing at `bond0`.  vyos declares
       `/interfaces/interface/lag-member-of` supported.
@@ -246,7 +246,7 @@ per_field_expectation:
       `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
       priority, preempt, advertisement-interval, authentication, virtual-IPv6
       and description are all dropped at parse — so nothing reaches the
-      target.  Measured: 0 of 55 records carry a group on any cell.
+      target.  Measured: 0 of 56 records carry a group on any cell.
       opnsense declares `/interfaces/interface/vrrp-groups/group` LOSSY
       rather than absent: it renders BSD CARP `<vip>` entries, skipping
       non-CARP source modes and dropping the preempt flag.  So first-hop

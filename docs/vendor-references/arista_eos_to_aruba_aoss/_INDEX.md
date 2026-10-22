@@ -45,7 +45,7 @@ their CLI lineage from Cisco IOS.
 | `vrf_unsupported.md` | Arista has rich VRF surface; Aruba has no VRF concept.  Major asymmetric loss. |
 | `vxlan_unsupported.md` | Arista has rich VXLAN/EVPN surface; Aruba has no VXLAN concept.  Major asymmetric loss. |
 | `routing_protocols_unsupported.md` | BGP/OSPF/IS-IS already parse-and-ignore on canonical; Aruba has no render path. |
-| `radius.md` | Both vendors share Cisco-derived `radius-server host` form; round-trips cleanly. |
+| `radius.md` | Both vendors share Cisco-derived `radius-server host` form; a key written as typed round-trips, a `key 7` is refused. |
 
 Retrieved 2026-04-30 to 2026-05-01.
 

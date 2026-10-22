@@ -124,16 +124,19 @@ def test_is_migratable_bcrypt_to_opnsense() -> None:
     assert is_migratable("bcrypt:$2y$10$salt$hash", "opnsense") is True
 
 
-def test_is_migratable_plaintext_universal() -> None:
-    """Plaintext passwords are universally migratable across all targets."""
-    for target in (
-        "aruba_aoss",
-        "fortigate_cli",
-        "juniper_junos",
-        "opnsense",
-        "mikrotik_routeros",
-    ):
+def test_is_migratable_plaintext_where_the_target_takes_one() -> None:
+    """A typed password is migratable where the target takes one.
+
+    Junos and OPNsense keep a password in their config only as a hash,
+    and a typed one written there was the hash itself
+    (``test_a_typed_password_is_not_a_hash.py``).  An empty secret has
+    nothing to write, and is migratable everywhere.
+    """
+    for target in ("aruba_aoss", "fortigate_cli", "mikrotik_routeros"):
         assert is_migratable("hello", target) is True, target
+    for target in ("juniper_junos", "opnsense"):
+        assert is_migratable("hello", target) is False, target
+        assert is_migratable("", target) is True, target
 
 
 def test_is_migratable_unknown_target_only_plaintext() -> None:

@@ -60,10 +60,13 @@ auth_port: int = 1812
 acct_port: int = 1813
 ```
 
-- `radius_servers`: **good** — Arista `radius-server host <ip>
+- `radius_servers`: **lossy** — Arista `radius-server host <ip>
   key <secret>` ↔ OPNsense `<authserver>` with
   `<host>` / `<radius_secret>` / `<radius_auth_port>` /
-  `<radius_acct_port>`.  Round-trips host / port pair / secret
-  cleanly with default ports 1812 / 1813.  Arista's optional
+  `<radius_acct_port>`.  Round-trips host / port pair and a
+  secret written as typed, with default ports 1812 / 1813.  EOS
+  prints a key in its own form, `key 7 <blob>`: that is held behind
+  `eos:`, not decoded, and the server is written with no secret,
+  beside a review element.  Arista's optional
   `timeout` / `retransmit` per-server directives have no
   canonical model and drop on render.

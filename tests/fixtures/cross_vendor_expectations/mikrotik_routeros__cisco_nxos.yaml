@@ -123,12 +123,21 @@ per_field_expectation:
   # sub-fields marked lossy below. --
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Names are carried verbatim by design — this audit scores name
-      STABILITY, and native translation (`ether2` -> `Ethernet1/2`) is the
-      orchestrator's port-rename layer, which this bare render path does not
-      engage.
+    disposition: lossy
+    reason: >
+      A RouterOS interface name is free text, and a port an operator has
+      named can hold a space (`Access Point`, `CLUSTER - PVE3` on the
+      CRS310 capture); an NX-OS interface name holds none.  This bare
+      round-trip does not run `translate_port_names`, so the name is
+      written as it stands -- `interface Access Point` -- and read back as
+      its first word: `Access`, and the three `CLUSTER - ...` ports as one
+      `CLUSTER`.  A name with no space round-trips verbatim by design --
+      this audit scores name STABILITY, and native translation (`ether2` ->
+      `Ethernet1/2`) is the orchestrator's port-rename layer, which this
+      bare render path does not engage.  Through
+      the pipeline the translator lists a name it cannot read -- every name
+      with a space among them -- as untranslated, and the job is `partial`
+      until a port-rename map entry decides it.
     references: [routeros-nxos-surface]
 
   "interfaces[].default_name":

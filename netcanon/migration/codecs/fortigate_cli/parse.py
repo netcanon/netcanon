@@ -11,6 +11,16 @@ Public surface (consumed by codec.py's ``parse()`` method):
 
 * :func:`parse_intent` — one-shot parse entry: raw text in, fully-
   populated :class:`CanonicalIntent` out.
+* :func:`without_quoted_values` — the text with the lines of every
+  quoted value of several lines emptied, each line keeping its number;
+  what the Tier-3 detection and the release are read from.
+* ``UNENDED_VALUE_MESSAGE`` — the refusal for a quoted value no later
+  line ends.
+
+A statement is read whole, up to the line whose quote no backslash
+escapes (:func:`_statements`), so no line of a quoted value -- a
+certificate, a key, a replacement message's HTML -- is a statement of
+its own.
 
 Wave B: also handles **VRRP groups** nested as ``config vrrp /
 edit N / set vrip X / set priority / set preempt / set adv-interval
@@ -48,8 +58,10 @@ import ipaddress
 import logging
 import re
 import shlex
+from collections.abc import Iterator
 from typing import ClassVar
 
+from ..._radius_secrets import FORTIOS_ENVELOPE
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -68,6 +80,7 @@ from ...limits import ticked
 from .._helpers import _mask_to_prefix
 from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
+from .._scanner import Body, without_text_bodies
 from ..base import ParseError
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
 
@@ -172,8 +185,100 @@ class _EditBlock:
 #: pattern is behaviour-identical.
 _CONFIG_HEADER_RE = re.compile(r"^config\s+(\S.*)$", re.IGNORECASE)
 _EDIT_HEADER_RE = re.compile(r"^edit\s+(\S.*)$", re.IGNORECASE)
-_SET_RE = re.compile(r"^set\s+(\S+)\s*(.*)$", re.IGNORECASE)
+#: ``re.DOTALL``: a statement whose quoted value runs over several lines
+#: (:func:`_statements`) is one ``set``, its line breaks inside the value.
+_SET_RE = re.compile(r"^set\s+(\S+)\s*(.*)$", re.IGNORECASE | re.DOTALL)
 _COMMENT_RE = re.compile(r"^\s*#")
+#: A double quote, or an escape: a backslash and the character after it,
+#: which is never a quote that opens or ends a value (``\"``, ``\\``).
+_QUOTE_OR_ESCAPE = re.compile(r'\\.|"')
+
+#: Said of a quoted value that no later line ends.  It quotes nothing of
+#: the text: a parse failure is logged.
+UNENDED_VALUE_MESSAGE = (
+    "fortigate_cli: line {line} opens a quoted value that no later line "
+    "ends, so where the value ends, and where the configuration goes on, "
+    "cannot be told.  Paste the configuration whole, as the FortiGate "
+    "prints it (a backup file, or the output of `show`)."
+)
+
+
+def _quotes(line: str) -> int:
+    """How many double quotes of *line* open or end a quoted value.
+
+    A line with no backslash holds no escape, and its quotes are
+    counted as they stand: the pattern is for the other lines, and
+    every line of a config is asked, twice.
+    """
+    if "\\" not in line:
+        return line.count('"')
+    return sum(1 for m in _QUOTE_OR_ESCAPE.finditer(line) if m.group() == '"')
+
+
+def _leaves_a_value_open(line: str) -> bool:
+    """Does *line* open a quoted value that runs on over later lines?
+
+    FortiOS prints a value of several lines -- a replacement message's
+    HTML, a certificate, a key, as the captures show -- as it is,
+    between its quotes, a quote or a backslash in it escaped with a
+    backslash.  A ``#`` line is a comment, whatever it holds.
+    """
+    return _quotes(line) % 2 == 1 and not _COMMENT_RE.match(line)
+
+
+def _opens_a_quoted_value(text: str, number: int) -> Body | None:
+    """``opens`` for :func:`without_text_bodies`: a quoted value that
+    runs on is text, and ends with the line that ends its quote."""
+    if not _leaves_a_value_open(text):
+        return None
+    return Body(ends=lambda line, number: _quotes(line) % 2 == 1)
+
+
+def without_quoted_values(raw: str) -> str:
+    """*raw* with every line of a quoted value that runs over several
+    lines made empty, each line keeping its number: what the readers of
+    the text other than :func:`_parse_blocks` read.
+
+    A line of a replacement message or a certificate is text, never a
+    stanza: read as one, ``config firewall policy`` in an HTML page was
+    a row of firewall policies the config did not have.
+
+    Raises:
+        ParseError: A quoted value is still open at the end of the text
+            (:data:`UNENDED_VALUE_MESSAGE`).
+    """
+    return without_text_bodies(
+        raw, _opens_a_quoted_value, UNENDED_VALUE_MESSAGE,
+        codec="fortigate_cli", command="show",
+    )
+
+
+def _statements(raw: str) -> Iterator[str]:
+    """Each statement of *raw*: a line, or a line whose quoted value runs
+    on, with the lines up to the one that ends the value, joined by line
+    feeds.
+
+    Read a line at a time, a line of a value is a statement of its own:
+    a replacement message that held ``config system admin`` and ``edit``
+    was an administrator, and a line of one that read ``end`` closed the
+    block it was in.  Where a value ends is decided as in
+    :func:`without_quoted_values`, which refuses a value no line ends --
+    and is read first.
+    """
+    # One iterator, which both loops take lines from.
+    lines = iter(raw.splitlines())
+    for line in ticked(lines):
+        if not _leaves_a_value_open(line):
+            yield line
+            continue
+        pieces = [line]
+        for more in ticked(lines):
+            pieces.append(more)
+            if _quotes(more) % 2 == 1:
+                break
+        yield "\n".join(pieces)
+
+
 #: FortiOS release from the ``#config-version`` header, e.g.
 #: ``#config-version=FG100E-7.2.13-FW-build1762-...`` → ``7.2.13``.  The
 #: model token has no fixed length (FGT70G / FGVM64 / FG100E) but is always
@@ -215,14 +320,13 @@ def _parse_blocks(raw: str) -> list[_ConfigBlock]:
     enclosing :class:`_EditBlock.sub_blocks`; otherwise they become
     new top-level entries.
     """
-    lines = raw.splitlines()
     blocks: list[_ConfigBlock] = []
 
     # Stack of "open containers" — either ``_ConfigBlock`` or
     # ``_EditBlock``.  Top of stack is the one receiving new tokens.
     stack: list[_ConfigBlock | _EditBlock] = []
 
-    for raw_line in ticked(lines):
+    for raw_line in _statements(raw):
         line = raw_line.strip()
         if not line or _COMMENT_RE.match(line):
             continue
@@ -485,6 +589,12 @@ def _apply_system_interface(  # noqa: C901
         )
         if looks_like_vlan and vlanid:
             iface.interface_type = "ianaift:l3ipvlan"
+            # The interface the VLAN rides on, as the config states it:
+            # without it the renderer chose one, and every VLAN of the
+            # committed captures came back on another port -- a loopback
+            # among them.
+            if parent_iface and parent_iface[0]:
+                iface.vlan_parent = parent_iface[0]
             try:
                 vid = int(vlanid[0])
                 # Use the iface name as the canonical VLAN name so the
@@ -890,7 +1000,13 @@ def _apply_user_radius(
         next
 
     The ``ENC`` prefix is preserved on the canonical key so a lossless
-    round-trip back to FortiGate reconstructs the original command.
+    round-trip back to FortiGate reconstructs the original command, and
+    the whole ``ENC <blob>`` is carried behind ``FORTIOS_ENVELOPE``: it
+    is encrypted under this FortiGate's own key.  ``set secret <secret>``
+    without ``ENC`` is the secret as typed (FortiOS takes it so, and
+    prints it encrypted), and carries no envelope.  Until 2026-10 every
+    secret was put behind the envelope, and the RADIUS policy refused a
+    typed secret on every other target.
     """
     for edit in ticked(block.edits):
         server_tokens = edit.settings.get("server")
@@ -899,8 +1015,10 @@ def _apply_user_radius(
         host = server_tokens[0]
         secret_tokens = edit.settings.get("secret")
         key = ""
-        if secret_tokens:
-            key = f"fortios:{' '.join(secret_tokens)}"
+        if secret_tokens and secret_tokens[0] == "ENC":
+            key = f"{FORTIOS_ENVELOPE}{' '.join(secret_tokens)}"
+        elif secret_tokens:
+            key = " ".join(secret_tokens)
         auth_port = 1812
         acct_port = 1813
         port_tokens = edit.settings.get("radius-port")
@@ -1053,7 +1171,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_vendor="fortigate",
         source_format="cli-fortigate",
     )
-    intent.source_version = _extract_version(raw)
+    # Refuses a quoted value no line ends, before any statement is read.
+    intent.source_version = _extract_version(without_quoted_values(raw))
 
     blocks = _parse_blocks(raw)
     # Track which top-level paths we saw vs which we dispatched — the

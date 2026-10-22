@@ -542,34 +542,39 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense keeps every account: 12 of 12 arrive across the 6 cells that
-      populate users, measured by render and re-parse. Of the 9 that carry a
-      secret, the 7 SHA-512 crypt (`$6$`) secrets are carried into `<password>`
-      with the Arista tag stripped: PHP `password_verify()` consumes a `$6$`
-      string, and real OPNsense HA configs store exactly that form (#462). The 2
-      MD5 crypt (`$1$`) secrets are refused in place: the `<user>` element is
-      kept with a review comment and no `<password>`, so set those passwords on
-      the target before cutover. The other 3 accounts carry no secret on the
-      source. Privilege number (0-15) collapses to OPNsense's binary admin /
-      non-admin via group membership: privilege >= 15 ->
-      `<groupname>admins</groupname>`, otherwise `<groupname>users</groupname>`.
-      Arista role tokens (`network-admin` / `network-operator` / custom roles)
-      collapse to OPNsense's binary group surface. No secret value is quoted
-      here.
+      10 of 12 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 2 of them. The 2 accounts that vanish carry 2 MD5 crypt
+      (Cisco type 5). OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as a `<user>` element
+      with no `<password>`; a refused secret now drops the whole account, as on
+      every other target. The survivors are 7 carrying 7 SHA-512 crypt (`$6$`)
+      and 3 with no stored secret. Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, arista-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Arista ``radius-server host <ip> key <secret>`` (with
       separate ``radius-server key <secret>`` global default and
       optional ``auth-port`` / ``acct-port`` overrides) ↔
       OPNsense ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
       ``<radius_acct_port>``.  Round-trips host / port pair /
-      shared key cleanly with default ports 1812 / 1813.
+      a key written as typed, with default ports 1812 / 1813.
       Arista's optional ``timeout`` / ``retransmit`` per-server
       directives have no canonical model and drop on render.
+      EOS prints a key in its own form, ``key 7 <blob>``: it is
+      held behind ``eos:``, not decoded, and the server is written
+      with no key, beside a review line that names the form.  No
+      committed EOS capture has a RADIUS server; until 2026-10 a ``key
+      7`` was read as the secret ``7``, and this entry called the
+      field good.
     references: [opnsense-radius, arista-snmp-cg]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
