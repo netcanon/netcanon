@@ -2504,10 +2504,11 @@ matter; the matrix is honest about both.
     VLAN 1 device.
     Their matrices declare the native VLAN unsupported; nothing in
     the output marks which device was untagged at the source.  On
-    `mikrotik_routeros` every VLAN device of an output is on ONE
-    parent -- the config's one port with an address or an allowed
-    list, or `bridge1` where there is not exactly one -- whether or
-    not that port carries the VLAN.
+    `mikrotik_routeros` every VLAN device of an output from another
+    vendor is on ONE parent -- the config's one port with an address
+    or an allowed list, or `bridge1` where there is not exactly one --
+    whether or not that port carries the VLAN.  (From RouterOS, a VLAN
+    device is written on the parent its config states.)
   * **A Junos output is ELS grammar** (`interface-mode trunk`,
     `native-vlan-id` on the physical interface, the native VLAN among
     the `vlan members`).  On a switch that takes the older grammar

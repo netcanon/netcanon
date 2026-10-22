@@ -925,9 +925,11 @@ class TestCasedNamesWithDevicesDeclared:
                 port_rename_map=port_map, force=True,
             )
 
-        undecided, typed = job({}), job({"ETHER1": value})
-        assert "ether1" in collect_port_names(routeros.parse(CAPTURE_ROUTEROS))
+        # The capture's one port with no name of its own: the others
+        # are called by the names the operator gave them.
+        undecided, typed = job({}), job({"SFP-SFPPLUS2": value})
+        assert "sfp-sfpplus2" in collect_port_names(routeros.parse(CAPTURE_ROUTEROS))
         assert typed.port_renames == undecided.port_renames
         assert typed.port_drops == undecided.port_drops
         assert typed.rendered == undecided.rendered
-        assert [line for line in typed.warnings if "'ETHER1' does not exist" in line]
+        assert [line for line in typed.warnings if "'SFP-SFPPLUS2' does not exist" in line]

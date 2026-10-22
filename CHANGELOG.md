@@ -501,6 +501,37 @@ timestamp if your timezone matters for an audit.
   replacement messages; where each value ends is held to a reader of
   the test's own, a character at a time, and no capture's tree moves.
 
+- **A RouterOS line broken by an export was joined with a space, and
+  a value carried onto the next line was lost.**  An `export` breaks
+  a long line at any column -- between two words, right after a key
+  (`name=\`), inside a quoted value, inside a word (`100M-\` and
+  then `baseT-half`) -- and the device reads the line back as it was
+  before the break.  The parser stripped the next line and joined it
+  on with a space, which is right only between two words: a `name=`
+  an export carried over was read as no name, and every port of the
+  committed CRS310 capture kept its factory name while every other
+  line of the config used the operator's -- the address the capture
+  puts on `"Access Point"` was on no interface of the tree, in jobs
+  that said `completed`.  The backslash, the line break and the next
+  line's indentation are now dropped and nothing is put in their
+  place; white space before the backslash is the line's own, and is
+  kept.  Onto another vendor such a port is now what it is, a name
+  the translator cannot read: the job lists it and is `partial` until
+  an entry decides it (Known limitations, below).
+- **A RouterOS VLAN interface was written on a parent the renderer
+  chose, not on the one its config states.**  `/interface vlan add
+  interface=bridge ...` names the interface the VLAN rides on, and
+  the parser did not keep it: a RouterOS config translated to
+  RouterOS came back with each VLAN of the CRS310 capture on a
+  `bridge1` the config does not have, and the routeros-diff
+  capture's `gn-mgmt` moved off `ether3` onto it.  The tree now holds
+  the parent (`CanonicalInterface.vlan_parent`), the port-name sweep
+  renames it with the interface it names and clears it where that
+  interface is dropped -- said in the job's warnings, since the
+  renderer then chooses -- and the renderer chooses a parent only for
+  a VLAN that has none of its own.  A tree from another vendor holds
+  no parent, and renders as before.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
@@ -2871,10 +2902,10 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  213 of the 588 jobs that said `completed` are `partial`.  67 of
+  213 of the 588 jobs that said `completed` are `partial`.  61 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
   logical name that was dropped and 111 a name left as the source
-  has it (90 of those a hardware port); 48 list more than one kind.
+  has it (98 of those a hardware port); 45 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
   and none to or from `failed`; 401 jobs that were already `partial`
   carry the sentence as well.  Each of the 213 is `completed` again,
@@ -3673,13 +3704,15 @@ timestamp if your timezone matters for an audit.
   the port, and its address on a `bridge1` nothing defines; with
   `"vlan5"`, the port becomes VLAN 5 of the other port.  Give the
   port another name.
-- **The RouterOS codec does not read a value an export wraps onto
-  the line after its key** (`name=\` and the name on the next line).
-  The port's own line is then known by its factory name, while every
-  other line of the config still uses the operator's name — which
-  comes back as an interface nothing defines and, with devices
-  declared, as a name that is not a port of the declared source.  A
-  verbose export wraps this way for most ports.
+- **The interface a RouterOS VLAN rides on is not carried onto
+  another vendor**, and nothing reports it: no other codec writes a
+  VLAN interface on a parent the config names.  From another vendor,
+  every VLAN interface of a RouterOS output is on one parent the
+  renderer chooses.
+- **A RouterOS port an operator named is not placed by its factory
+  name onto another vendor.**  With no devices declared it is
+  translated only by an entry of `port_rename_map`; the job lists it
+  (`untranslated_ports`) and is `partial` until one decides it.
 - **An override target is understood by case and spacing only.**  An
   abbreviation the device would accept (`Gi1/0/1`) is not recognised
   as the port it names: it is reported as a target the model does not
