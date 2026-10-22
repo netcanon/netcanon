@@ -169,6 +169,11 @@ _WALK_EXEMPT: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalStaticRoute", "destination"): ("DISCRIMINATOR_TRAVELS", "/routing/static-route anchor is the dest"),
     # ── Envelope-covered sub-leaves: anchor walked; loss caught by the offline
     #    cross-mesh model_dump audit (live migrate-report blind, audit is not) ──
+    # The interface a VLAN interface rides on (RouterOS ``interface=``):
+    # carried onto RouterOS only; across vendors its loss is a CHANGELOG
+    # known limitation the live report does not list, and the mesh's
+    # per-record interface drift does.
+    ("CanonicalInterface", "vlan_parent"): ("ENVELOPE_AUDIT_BACKSTOPPED", "/interfaces/interface envelope walked"),
     ("CanonicalDHCPPool", "network"): ("ENVELOPE_AUDIT_BACKSTOPPED", "/dhcp-servers/pool envelope walked"),
     ("CanonicalDHCPPool", "start_ip"): ("ENVELOPE_AUDIT_BACKSTOPPED", "DHCP pool option; audit-backstopped"),
     ("CanonicalDHCPPool", "end_ip"): ("ENVELOPE_AUDIT_BACKSTOPPED", "DHCP pool option; audit-backstopped"),

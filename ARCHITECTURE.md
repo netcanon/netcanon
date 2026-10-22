@@ -857,6 +857,28 @@ in hostname / domain / VRF-name tokens; renderers call
 target's own parser.  Source state preserved on canonical, sanitised
 only at the wire boundary.
 
+**A value is written on one line** (`netcanon/migration/_one_line.py`).
+Every renderer puts a value into its line as it stands, so a value that
+held a line break was written as lines of its own, and the text after
+the break was a command: a description that held `username ...
+nopassword` after a break was that account on every line-based target.
+The XML parsers keep a break that an element's text holds, and FortiOS
+prints a value of several lines between its quotes, so the tree can
+hold one.  No target is given a value of more than one line, whatever
+the field: the pipeline (`run_plan`, and the sanitiser before it
+renders) writes each run of breaks -- any character `str.splitlines`
+ends a line at -- as one space, after the transforms, and says each
+place in the job's warnings; `CodecBase.render` refuses a tree that
+still holds one, so a caller that renders without the pipeline cannot
+write one either.  It is one rule for every target, not a list of
+which field of which target may hold a break, because a value in the
+wrong place on such a list is an account; what a target that could
+have held the break loses (an XML target, FortiOS between its quotes)
+is the layout of the text.  `raw_sections`, the one field built to
+carry lines, is filled by no parser: one that fills it has to settle
+what its lines become, since the IOS-XE CLI renderer writes each as a
+command.
+
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The
 canonical model carries L2 membership both ways: per-iface

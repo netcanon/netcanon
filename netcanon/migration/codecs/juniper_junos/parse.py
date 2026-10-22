@@ -649,7 +649,11 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # have been populated from a ``set interfaces
             # interface-range <r> mtu <N>`` line via the
             # range-fold pass.
-            mtu=state.get("mtu"),
+            mtu=(
+                state["mtu"] if "mtu" in state
+                # A unit's MTU, read from its family (inet's first).
+                else state.get("inet_mtu", state.get("inet6_mtu"))
+            ),
             # Phase 4 rank-4: L2 switchport semantics.
             switchport_mode=state.get("switchport_mode"),
             trunk_native_vlan=state.get("trunk_native_vlan"),
@@ -2132,6 +2136,24 @@ def _apply_interfaces(  # noqa: C901
             target_state = iface_state.setdefault(sub_name, {})
             stated.add(sub_name)
         if len(tokens) < 4:
+            return
+        # ``unit <N> family inet|inet6 mtu <M>``: a unit's MTU, which
+        # Junos sets per family; the renderer writes it so for a unit
+        # above 0.  The record holds one MTU, and where both families
+        # state one, inet's is kept.  Unit 0 is the device's own
+        # record, whose ``mtu`` is the device's media MTU, so a family
+        # MTU is not read there.
+        if (
+            unit_num != 0
+            and len(tokens) == 7
+            and tokens[3] == "family"
+            and tokens[4] in ("inet", "inet6")
+            and tokens[5] == "mtu"
+        ):
+            try:
+                target_state[f"{tokens[4]}_mtu"] = int(tokens[6])
+            except ValueError:
+                pass
             return
         # ``unit <N> family inet address <ip>/<prefix>`` and the
         # Wave-B/C extensions on the same line:

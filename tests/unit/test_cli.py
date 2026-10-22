@@ -205,6 +205,11 @@ class TestCLISanitizeLimits:
         from netcanon.migration import limits
 
         monkeypatch.delenv("NETCANON_CONFIG_LIMITS", raising=False)
+        # A first run in a fresh process pays for what it loads (225-310 ms
+        # on a laptop, on main), which is not waiting: pay it before the
+        # deadline below, or a slow runner refuses the run for it.
+        rc, _out, err, _target = self._run(tmp_path, capsys, 2, "--limits", "standard")
+        assert rc == 0, err
         # If the run did wait, it would be refused in a third of a second.
         monkeypatch.setitem(limits.PROFILES, "small", replace(limits.SMALL, seconds=0.3))
         held, let_go = threading.Event(), threading.Event()

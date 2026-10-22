@@ -28,6 +28,55 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The Docker image no longer carries pip.**  The base image's pip
+  (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
+  intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,
+  CRITICAL), and the gating image scan failed every pull request on
+  it.  netcanon never used that copy -- the server makes no outbound
+  HTTPS request through pip -- but it was in the image.  The runtime
+  stage now uninstalls pip once netcanon is installed, so no copy pip
+  vendors can ship.  If you install packages into the container
+  yourself, `python -m ensurepip` restores a pip, and with it the
+  copy it bundles; build an image of your own on top instead.
+
+- **A value of several lines was written as lines of the config, and
+  the text after a line break was a command on the target.**  Every
+  renderer puts a value into its line as it stands.  An interface
+  description that held a line break and then `username intruder
+  privilege 15 nopassword` -- which the OPNsense and IOS-XE NETCONF
+  parsers keep from an element's text (`&#10;`), and the FortiOS parser
+  from a value printed between quotes over several lines -- came out
+  with that line on its own onto 12 of the 13 public codecs, many of
+  the jobs saying `completed`.  And the FortiOS parser read each line
+  of such a value as a statement: a replacement message whose HTML
+  held a line `end` and then `config system admin` made an account
+  with no password on the IOS-XE and EOS targets, in jobs that said
+  `completed`.  No value is now written on more than one line, and
+  FortiOS reads a quoted value whole (Fixed, below).  If you translated
+  an OPNsense, IOS-XE NETCONF or FortiGate config with 0.7.7 or
+  earlier, look in the old output for lines the source config did not
+  have before it reaches a device.
+
+- **A value of the config was written into a RouterOS output as
+  script, and a description could run a command on the router that
+  imported it.**  RouterOS reads an imported `.rsc` as a script:
+  outside a string white space parts two words, `;` ends the command,
+  and `$`, `[ ]` and `( )` substitute a variable or run a command or
+  an expression -- and inside a string `$[...]` and `$(...)` run as
+  well.  The RouterOS renderer escaped only `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source came out as that command on
+  the router that imported the output, in a job that said
+  `completed`, and a value with a `;` in it -- a RADIUS secret, an
+  SNMP community, a user's name, a DHCP domain -- ended its command
+  there, and what followed was read as the next one.  A value is now
+  written as it stands only when it is made of letters, digits and
+  `- . _ / : , %` (what an export leaves bare), and as a string
+  otherwise, with `\`, `"` and `$` escaped, as an export escapes `$`
+  (Fixed, below).  If you translated a config onto RouterOS with 0.7.7
+  or earlier, read the old output for `$`, `;`, `[` and `(` outside a
+  quoted string, and for `$` inside one, before it reaches a router.
+
 - **A RADIUS key that IOS-XE, EOS or AOS-S had stored in a form of its
   own was written into the target's config as the secret itself, and
   the server authenticated nobody.**  IOS-XE `key 7 <blob>` and `key 6
@@ -447,6 +496,158 @@ timestamp if your timezone matters for an audit.
   --limits standard"), where it spoke of a server.
 
 ### Fixed
+
+- **A value is written on one line, on every target, and the job says
+  where** (Security, above).  The pipeline writes each run of line
+  breaks in a value -- any character `str.splitlines` ends a line at,
+  not only a line feed -- as one space, after the transforms (an
+  operator's map puts values into the tree too), and says each place
+  in the job's warnings: `interfaces[em0].description held a line
+  break: it is written on one line, ...`.  The sanitiser does the same
+  before it renders.  And `CodecBase.render` refuses a tree that still
+  holds one, naming the field and nothing of the value, so a caller
+  that renders without the pipeline cannot write one either
+  (`netcanon/migration/_one_line.py`).  It is one rule for every field
+  of every target, not a list of which field of which target may hold
+  a break, because a value in the wrong place on such a list is an
+  account; an XML target, or FortiOS between its quotes, loses the
+  layout of such a value.  The walk reads every field a record holds,
+  whatever the schema says it is, and was measured on the largest tree
+  the `standard` limits admit: a small part of what the parse of the
+  same text takes.  No committed capture's tree, nor any of the
+  development corpus's, holds a line break, and every job of every
+  committed input onto every public codec is as it was.
+
+- **FortiOS: a quoted value of several lines is read as one value, not
+  as lines of the config** (Security, above).  FortiOS prints a
+  certificate, a private key or a replacement message's HTML as it is,
+  between its quotes, a quote or a backslash in it escaped with a
+  backslash, and the parser read the text a line at a time.  Besides
+  the account: a line `end` in a value closed the block it was in, and
+  the configuration after it was read
+  as nothing (the job `partial`, with "no source constructs were
+  recognized"); a line of HTML that read `config firewall policy` was
+  a Tier-3 row the config did not have; and a `#config-version` line
+  in a buffer was the config's release.  A statement whose quoted value
+  runs on is now read whole, up to the line whose quote ends it, and
+  the Tier-3 rows and the release are read from the text with that
+  value's lines emptied (`without_quoted_values`).  A value that no
+  later line ends is refused in words, naming the line that opens it
+  and quoting nothing: read, the rest of the config would be the
+  value's text.  So is a line of a value that ends in a character a
+  device does not end a line at (a form feed, a carriage return on its
+  own ...).  The committed captures hold certificates, keys and
+  replacement messages; where each value ends is held to a reader of
+  the test's own, a character at a time, and no capture's tree moves.
+
+- **A RouterOS line broken by an export was joined with a space, and
+  a value carried onto the next line was lost.**  An `export` breaks
+  a long line at any column -- between two words, right after a key
+  (`name=\`), inside a quoted value, inside a word (`100M-\` and
+  then `baseT-half`) -- and the device reads the line back as it was
+  before the break.  The parser stripped the next line and joined it
+  on with a space, which is right only between two words: a `name=`
+  an export carried over was read as no name, and every port of the
+  committed CRS310 capture kept its factory name while every other
+  line of the config used the operator's -- the address the capture
+  puts on `"Access Point"` was on no interface of the tree, in jobs
+  that said `completed`.  The backslash, the line break and the next
+  line's indentation are now dropped and nothing is put in their
+  place; white space before the backslash is the line's own, and is
+  kept.  Onto another vendor such a port is now what it is, a name
+  the translator cannot read: the job lists it and is `partial` until
+  an entry decides it (Known limitations, below).
+- **A RouterOS VLAN interface was written on a parent the renderer
+  chose, not on the one its config states.**  `/interface vlan add
+  interface=bridge ...` names the interface the VLAN rides on, and
+  the parser did not keep it: a RouterOS config translated to
+  RouterOS came back with each VLAN of the CRS310 capture on a
+  `bridge1` the config does not have, and the routeros-diff
+  capture's `gn-mgmt` moved off `ether3` onto it.  The tree now holds
+  the parent (`CanonicalInterface.vlan_parent`), the port-name sweep
+  renames it with the interface it names and clears it where that
+  interface is dropped -- said in the job's warnings, since the
+  renderer then chooses -- and the renderer chooses a parent only for
+  a VLAN that has none of its own.  A tree that holds no parent
+  renders as before.
+- **A FortiGate VLAN interface was written on a parent the renderer
+  chose, not on the one its config states.**  `set interface
+  "LAG_INTERNAL"` under a VLAN's `edit` names the interface it rides
+  on, and the parser did not keep it: the renderer gave every VLAN
+  the port its scorer liked best, which does not look at the VLAN.
+  FortiGate to FortiGate, both VLANs of the 70G capture came back on
+  its loopback `LO_BGP` and the five of the 100E capture on `dmz`
+  instead of the aggregate `lacp trunk`; onto RouterOS they were on
+  `LO_BGP` and on a made-up `bridge1`; and from RouterOS every VLAN of
+  the CRS310 capture was on the port `Access Point` -- in jobs that
+  said `completed`.  The parser keeps the parent
+  (`CanonicalInterface.vlan_parent`), and the renderer writes it where
+  the output has that interface; where it does not, a parent is
+  chosen as before and a `# review:` line in the VLAN's block names
+  the one the source stated.  Between FortiOS and RouterOS the parent
+  now goes both ways.
+
+- **A unit of a Junos loopback, tunnel, aggregate or management port
+  was written under a name Junos refuses.**  The parser reads `set
+  interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the
+  renderer wrote such a name back as `set interfaces lo0 unit 10`
+  only where the device was shaped like a port (`ge-0/0/0`).  Every
+  other device was written `set interfaces lo0.10 unit 0 ...`, which
+  Junos refuses at commit -- no Junos interface has a dot in its
+  name.  So were the `lo0` units that the routing instances of both
+  committed Junos captures take, and the `st0` units of a VPN, so
+  that every routing instance and security zone named a unit no line
+  of the output defined; so was a unit of `ae`, `reth`, `me0`, `em0`,
+  `fxp0` or `vme`, and a unit of an aggregate lost its `vlan-id` as
+  well, from Junos and from an IOS-XE, EOS or NX-OS
+  `Port-channel1.10` alike.  All in jobs that said `completed`.  A
+  unit above 0 of any device is now written under it (`set
+  interfaces lo0 unit 10`, `set interfaces ae1 unit 10 vlan-id 10`),
+  and so is the unit of a management port that follows its port onto
+  a declared device (`em0 unit 5`; it was a known limitation).  A
+  unit 0 is split on a port shape only, as before: of another device
+  it would be that device's own unit 0 (`irb.0` is still the IRB's).
+  A unit's MTU, which the parser did not read and the renderer wrote
+  only under such a name, is written and read per family (`set
+  interfaces st0 unit 100 family inet mtu 1420`, on `family inet`
+  where the unit has no address), and where the device states no MTU
+  that holds it, a `# review:` line says so: Juniper requires the
+  device's media MTU to hold a family MTU and its encapsulation
+  overhead.  A Junos unit's MTU now reaches the other targets too,
+  and onto RouterOS a tunnel's `add` line, which carried no MTU from
+  any source, now writes it (`mtu=1420`) and the parser reads it
+  back.
+  On the bare pipeline (the demo's and
+  the cross-mesh audit's), where no port name is translated, a
+  sub-interface of another vendor is written as `set interfaces
+  GigabitEthernet0/0/0/1 unit 35 vlan-id 35`, the form the port
+  translator's path already gave it under the translated name.  If
+  you translated a Junos config with units of `lo0`, `st0`, an
+  aggregate or a management port, or a port-channel sub-interface,
+  onto Junos with 0.7.7 or earlier, translate it again.
+
+- **A RouterOS value with white space or script in it was cut, or
+  read as more than a value** (Security, above).  A LAG's members, a
+  route's next hop, an SNMP community, a RADIUS secret, a list of NTP
+  or DNS servers or a user's name that held a space was written bare,
+  and the router -- and the parser -- read its first word:
+  `slaves=my port,sfp-sfpplus2` was a member `my` and a stray word,
+  `secret=7 <blob>` a secret `7`.  An SNMPv3 passphrase or a
+  description that held `$` was written into a string unescaped, and
+  the router substituted a variable for it.  Every value the renderer
+  takes from the tree is now written bare only when it is made of
+  letters, digits and `- . _ / : , %`, and as a string otherwise, with
+  `\`, `"` and `$` escaped; the parser reads a quoted `[ find
+  name="..." ]` and `[ find default-name="..." ]` back whole.  The
+  read-back that reports a placed port no line of the output finds
+  (`unbound_ports`) now allows only for what the parser still cuts a
+  list at -- a comma in `slaves=`, and a comma, `@` and `%` in
+  `gateway=` -- so a port given a name with white space is reported by
+  that name.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`,
+  which reads the output with a reader of its own, typed from
+  MikroTik's "Scripting" page, for a tree with such text in every
+  place the schema has, and for every committed input.
 
 - **A RADIUS key is read in the form its platform stored it**
   (Security, above).  The IOS-XE CLI parser reads `key [0|6|7]
@@ -2844,10 +3045,10 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  213 of the 588 jobs that said `completed` are `partial`.  67 of
+  213 of the 588 jobs that said `completed` are `partial`.  61 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
   logical name that was dropped and 111 a name left as the source
-  has it (90 of those a hardware port); 48 list more than one kind.
+  has it (98 of those a hardware port); 45 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
   and none to or from `failed`; 401 jobs that were already `partial`
   carry the sentence as well.  Each of the 213 is `completed` again,
@@ -3043,6 +3244,14 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **An IOS-XE Q-in-Q sub-interface is read as its outer tag alone.**
+  `encapsulation dot1Q 2234 second-dot1q 15` is read as `dot1q 2234`,
+  and a target that writes a sub-interface's tag (EOS, NX-OS and
+  Junos among them) is written that one tag: the six units the
+  carrier capture has on `GigabitEthernet2/0/4` come out with one tag
+  between them, in jobs that say `completed`.  Write the inner tags
+  by hand.
+
 - **A RADIUS key stored in a platform's own form is not decoded, and
   goes only to its own platform.**  Cisco type 7 is a reversible
   cipher and could be decoded to the secret; Netcanon does not decode
@@ -3120,9 +3329,20 @@ timestamp if your timezone matters for an audit.
   taken for its text: none of them is read, and none is translated, in
   a job that says nothing else of it.  The banner's row counts its
   lines.  Nor is the value of `crypto key generate rsa ... pubkey`
-  passed over: no source shows how it is printed.  Whether the parsers
-  of the other grammars (Junos, VyOS, FortiOS, RouterOS) read a
-  multi-line free-text value as configuration is not measured.
+  passed over: no source shows how it is printed.  (FortiOS reads a
+  quoted value of several lines whole; Junos, VyOS and RouterOS are
+  the next bullet.)
+- **The Junos and VyOS parsers read a set-form text a line at a
+  time**: a line after a quote that no later quote on its line ends is
+  read as a statement of its own.  Whether either device prints a
+  value of several lines so is not established.  RouterOS prints a
+  line break in a quoted value as `\n`, and its parser reads that as
+  the letter `n`: the value is written with an `n` where the break
+  was.
+- **A value of several lines loses its layout on every target**, the
+  ones that could hold it included (OPNsense and IOS-XE over NETCONF,
+  in an element's text, and FortiOS between its quotes): it is written
+  on one line, each run of breaks as a space, and the job says where.
 - **AOS-S `banner exec` is read as `banner motd` is**, though no HPE
   page shows the type; and whether an OS10 banner ends at its
   delimiter in the middle of a line is not established (Dell names "a
@@ -3627,9 +3847,6 @@ timestamp if your timezone matters for an audit.
   10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
   `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
   RouterOS and VyOS).
-- **A non-zero unit of a Junos management port follows its port under
-  a name Junos does not accept.**  `me0 unit 5` comes out as
-  `set interfaces me0.5 unit 0 ...`.  Map it by hand.
 - **On RouterOS only a declared target device can move a port onto
   other hardware.**  Without one, an entry of `port_rename_map` names
   the port.  The output then finds it by the factory name it had
@@ -3649,13 +3866,16 @@ timestamp if your timezone matters for an audit.
   the port, and its address on a `bridge1` nothing defines; with
   `"vlan5"`, the port becomes VLAN 5 of the other port.  Give the
   port another name.
-- **The RouterOS codec does not read a value an export wraps onto
-  the line after its key** (`name=\` and the name on the next line).
-  The port's own line is then known by its factory name, while every
-  other line of the config still uses the operator's name — which
-  comes back as an interface nothing defines and, with devices
-  declared, as a name that is not a port of the declared source.  A
-  verbose export wraps this way for most ports.
+- **The interface a VLAN rides on is carried between RouterOS and
+  FortiOS only**, and its loss onto another vendor is not reported:
+  no other codec writes a VLAN interface on a parent the config
+  names.  From another vendor, a VLAN interface of a RouterOS or
+  FortiOS output is on a parent the renderer chooses.  OPNsense's
+  `<vlan><if>` is not kept either; no committed capture has one.
+- **A RouterOS port an operator named is not placed by its factory
+  name onto another vendor.**  With no devices declared it is
+  translated only by an entry of `port_rename_map`; the job lists it
+  (`untranslated_ports`) and is `partial` until one decides it.
 - **An override target is understood by case and spacing only.**  An
   abbreviation the device would accept (`Gi1/0/1`) is not recognised
   as the port it names: it is reported as a target the model does not
@@ -3686,6 +3906,17 @@ timestamp if your timezone matters for an audit.
   are sourced separately: the four Arista profiles' `lags.max` is not a
   vendor figure (Arista publishes ports per LAG, not a LAG count), and the
   QFX5120 figures were read from a reseller's copy of Juniper's datasheet.
+- **The RouterOS parser reads `\` and the character after it as that
+  character.**  An export writes a character outside ASCII as hex
+  escapes (`\C3\A9`), a line break as `\n` and a space as `\_`; the
+  parser reads them as the letters (`C3A9`, `n`, `_`), so such a
+  description or name reaches the target spelt so.
+- **The renderers whose lines a device reads a word at a time have not
+  been read for a value with white space in it written bare.**  The
+  RouterOS renderer writes such a value as one string (Security,
+  above); whether an IOS-XE, NX-OS, EOS, AOS-CX, AOS-S, OS10 or IOS XR
+  line can be given more words by a value from another vendor -- an
+  SNMP community, a RADIUS key -- is not established here.
 
 ## [0.7.7] - 2026-10-07
 
