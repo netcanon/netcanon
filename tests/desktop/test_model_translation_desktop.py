@@ -384,12 +384,15 @@ class TestModelTranslationServedByEmbeddedServer:
                 "set system host-name r1",
                 "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
                 "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
-                "set interfaces lo0 unit 2 family inet address 192.0.2.2/32",
+                # An ``irb`` and a ``vlan`` unit of one VLAN: both are
+                # ``Vlan100`` on IOS-XE.
+                "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+                "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
                 "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
                 "",
             ]),
         }
-        decided = {**body, "port_rename_map": {"lo0.2": "Loopback2", "fxp0": None}}
+        decided = {**body, "port_rename_map": {"vlan.100": "Loopback2", "fxp0": None}}
         # A name the translator cannot read (the port of a virtual
         # router, which has no slot) and a tunnel AOS-S has no form
         # for: left as the source has it, and dropped.
@@ -450,7 +453,7 @@ class TestModelTranslationServedByEmbeddedServer:
 
         for header, answer in ((said, job), (pane_said, pane)):
             assert header == "partial" and answer["status"] == "partial"
-            assert answer["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+            assert answer["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
             assert answer["unresolved_ports"] == ["fxp0"]
             assert answer["error"].startswith(
                 "Port names are not settled: 1 name(s) in the output received "

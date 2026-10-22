@@ -37,7 +37,9 @@ from .._one_line import first_line_break
 from ..limits import census, metered
 
 if TYPE_CHECKING:
-    from ..canonical.port_names import PortIdentity
+    from collections.abc import Sequence
+
+    from ..canonical.port_names import LoopbackToPlace, PortIdentity
 
 
 class CodecError(Exception):
@@ -546,6 +548,39 @@ class CodecBase(ABC):
               last-resort fallback — the whole point of going through
               :class:`PortIdentity` is that we DON'T leak vendor-
               specific source names into the target render.
+        """
+        return None
+
+    def place_loopbacks(
+        self,
+        loopbacks: Sequence[LoopbackToPlace],
+        taken: frozenset[str],
+    ) -> tuple[dict[str, str], dict[str, str]] | None:
+        """Name a config's loopbacks as a set, or ``None``.
+
+        For a target whose name for a loopback depends on the config's
+        OTHER loopbacks, which :meth:`format_port_identity` -- given
+        one name at a time -- cannot know.  Junos has one loopback
+        interface, ``lo0``, whose unit 0 is the global table's
+        loopback and of which each routing instance takes one unit of
+        its own; formatted one at a time, ``Loopback1`` was ``lo1``.
+
+        Args:
+            loopbacks: Every loopback the translator is to name: an
+                interface record of the source config that the source
+                classifier reads as a loopback, that no entry of the
+                rename map decides, between configs of two codecs.
+            taken: The names the entries of the rename map give, which
+                a loopback placed here would share.
+
+        Returns:
+            ``(placed, refused)``: the name of each loopback placed,
+            and for each that has no place, the reason, which the job
+            reports after the loopback's name (the loopback is dropped
+            and listed as a name no entry decided).  A loopback in
+            neither is formatted by :meth:`format_port_identity`.
+            ``None`` (the default): every loopback is formatted one at
+            a time.
         """
         return None
 

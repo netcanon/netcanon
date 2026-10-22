@@ -889,6 +889,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   across vendors one of more than ten digits (`UNIT_MAX_DIGITS`) is
   not sent after its port: no longer run of digits reaches another
   vendor's renderer by this rule.
+  **And a name formatted alone cannot say what the target's name for
+  it depends on.**  Junos has one loopback interface, `lo0`: its unit
+  0 is the global table's loopback, and each routing instance takes a
+  unit of its own.  Formatted a name at a time, `Loopback2` came out
+  as `lo2`, an interface Junos does not have -- the VTEP source of a
+  committed EVPN leaf among them -- in jobs that said `completed`;
+  and read a name at a time, every unit of `lo0` was `lo0` itself, so
+  each routing instance's loopback came out on the one `Loopback0` of
+  every other platform.  Where a target's name for a thing depends on
+  the config's other things, the translator gives the target all of
+  them at once (`CodecBase.place_loopbacks`), and what has no place
+  is dropped and said with its reason, never picked: which of two
+  loopbacks of the global table is `lo0` is the operator's choice.
+  Guarded by `tests/unit/migration/test_a_loopback_is_a_unit_of_lo0.py`,
+  which reads the Junos output by a reader of its own -- each
+  loopback's address on its unit of `lo0`, the unit in its source's
+  routing instance -- and the other platforms' outputs by address.
   **And a warning is not a status.**  Every check above was built
   where devices are declared.  With none, what the translator found
   reached the job as warning lines and the status was the validation

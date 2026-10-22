@@ -53,4 +53,10 @@ Logical:
   IRB) is the documented mapping for EVPN-VXLAN bridging.
 - **Loopback unit.** `Loopback0` ↔ `lo0.0` — Junos always carries
   the unit number; the canonical name carries the operator-form
-  string and the rename surface bridges them.
+  string and the rename surface bridges them.  Junos has no second
+  loopback interface: another unit of `lo0` is the loopback of a
+  routing instance ("you must place each additional unit in a
+  separate routing instance", Juniper, *Loopback Interfaces*), so
+  `Loopback5` in a VRF is `lo0.5` there, and a second loopback of
+  the global table has no Junos name (the translator drops and
+  lists it).

@@ -146,6 +146,20 @@ NAMES after its parent (`ether1.55` on RouterOS) is classified
 every public codec's captures, and a sub-interface from each grammar
 that names one onto every codec.
 
+**Where a name depends on the other names, the target places them
+together.**  `format_port_identity` is given one name at a time, and
+a target whose name for a loopback depends on the config's other
+loopbacks cannot be right that way: Junos has one loopback
+interface, `lo0`, whose unit 0 is the global table's loopback and of
+which each routing instance takes a unit of its own.  Such a codec
+overrides `CodecBase.place_loopbacks`, which the orchestrator calls
+once, across vendors, with every loopback no entry decides (its
+name, its number and its routing instance) and the names the entries
+give; it answers the name of each it places and, for each that has
+no place, the reason, which the job reports as it drops the name.
+Every other codec keeps the default (`None`: each loopback is
+formatted alone).  See `tests/unit/migration/test_a_loopback_is_a_unit_of_lo0.py`.
+
 **Two codecs may SHARE one bridge when they are the same platform in
 different wire formats.**  `cisco_iosxe` (NETCONF / OpenConfig)
 delegates both methods to `cisco_iosxe_cli.port_names` rather than
