@@ -39,7 +39,7 @@ canonical VLAN records at all.
 The headline for this pair is unusual and worth stating up front: **this is one
 of the cleanest pairs in the mesh.** Addressing, descriptions, admin state,
 MTU, static routes, SNMP scalars, VRF identity and user credentials all
-round-trip with **zero** drift. The six losses are narrow and each has a
+round-trip with **zero** drift. The five losses are narrow and each has a
 single, identified mechanism.
 
 ## The structural finding — an empty-record prune, not a naming collapse
@@ -48,10 +48,10 @@ The interface inventory shrinks, but not in the way the drift shape suggests.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
+| source interface records, all 13 cells | **56** |
 | records after parse → render → re-parse | **46** |
-| records that vanish | **9** |
-| cells where the interface name set differs | **5** of 13 |
+| records that vanish | **10** |
+| cells where the interface name set differs | **6** of 13 |
 | surviving records whose **name** was rewritten | **0** |
 
 VyOS names pass through the IOS-XE CLI render **verbatim** — `eth0`, `eth1`,
@@ -65,7 +65,7 @@ VRRP) and compare against what survives.
 
 | class | count | outcome |
 |---|---|---|
-| vanished **and** bare | 9 | consistent with the hypothesis |
+| vanished **and** bare | 10 | consistent with the hypothesis |
 | vanished but **not** bare | **0** | would have falsified it |
 | survived but bare | **0** | would have falsified it |
 
@@ -74,7 +74,7 @@ something to write inside it, so a record with no attributes produces no text
 and the re-parse never sees it.
 
 The control case makes this conclusive. `lo` is among the vanished records on
-five cells — which invites the wrong reading, "loopbacks are dropped". On
+six cells — which invites the wrong reading, "loopbacks are dropped". On
 `kitchen_sink.conf`, `lo` carries one IPv4 and one IPv6 address, and it
 **survives**. It is the only `lo` in the corpus that carries any address, and
 it is the only `lo` that survives. The prune is attribute-driven, not
@@ -82,12 +82,15 @@ name-driven.
 
 Vanished records, in full: `eth1` and `lo` (`metasploit-vyos-config.conf`);
 `eth2`, `eth3`, `eth4` and `lo` (`scottlaird-vyos-parser.conf`); `lo`
-(`vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf`,
-`wcni-kind-gw1.conf`).
+(`houdev_vyos_dhcpv6_pd_client.conf`, `vyos_forum_snmpv3_user_eq13.conf`,
+`wcni-kind-gw0.conf`, `wcni-kind-gw1.conf`). The houdev `lo` is printed as a
+node with nothing under it (`loopback lo { }`), which the VyOS parser has read
+as an empty interface record since 2026-10: nothing set, so it is pruned like
+the others — structural drift, no attribute lost.
 
 **Operationally this is close to harmless** — no configured state is lost,
 because the pruned records had none. It is recorded `lossy` rather than
-`unsupported` because the target plainly models interfaces: 46 of 55 records
+`unsupported` because the target plainly models interfaces: 46 of 56 records
 survive with every attribute intact. It is recorded rather than waved through
 because a port that exists in the source inventory and not in the target
 inventory is a real difference an operator should see before cutover.
@@ -102,8 +105,8 @@ records survive to be matched; 16 local-user records; 7 static routes).
 | `hostname` | 13 cells | 0 | good |
 | `domain` | 1 cell | 0 | good |
 | `dns_servers` | 1 cell | 0 | good |
-| `ntp_servers` | 12 cells | **1 cell** | lossy |
-| `interfaces[].name` | 55 records | **9 records vanish / 5 cells** | lossy |
+| `ntp_servers` | 12 cells | 0 | good |
+| `interfaces[].name` | 56 records | **10 records vanish / 6 cells** | lossy |
 | `interfaces[].description` | 15 records | 0 | good |
 | `interfaces[].enabled` | 44 records | 0 | good |
 | `interfaces[].mtu` | 1 record | 0 | good |
@@ -134,7 +137,7 @@ Trivially empty on all 13 cells: `timezone`, `syslog_servers`, all six
 
 ## Correlated drift, isolated once
 
-Five of the thirteen cells change interface-record count. On those cells the
+Six of the thirteen cells change interface-record count. On those cells the
 comparator cannot align records, so **every** `interfaces[].*` sub-field
 reports drift for that one reason. That signal is claimed exactly once, by
 `interfaces[].name`, which is where the records actually vanish.
@@ -146,7 +149,7 @@ and `vrrp_groups` drift **zero** times. Recording a loss on any of them would
 count one disappearance up to seven times.
 
 `interfaces[].interface_type` is the exception, and legitimately so: it drifts
-on all 46 *surviving* records, on every cell including the eight with no
+on all 46 *surviving* records, on every cell including the seven with no
 structural change. Its measurement stands on its own.
 
 ## Findings worth carrying forward
@@ -213,33 +216,22 @@ would treat the crypt-hash text as a literal plaintext password. Set passwords
 on the target before cutover rather than trusting the rendered `username`
 lines.
 
-### 3. The one NTP drift is a source-side parse artifact the round-trip cleans
+### 3. `ntp_servers` crosses whole
 
-`ntp_servers` is populated on 12 of 13 cells and drifts on exactly one:
-`houdev_vyos_dhcpv6_pd_client.conf`.
-
-That fixture uses the VyOS 1.4-era `server <host> { }` form — a server with an
-empty options block on the same line:
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
 ```
 server         time1.vyos.net { }
 ```
 
-The VyOS parser captures the brace residue as part of the hostname, producing
-canonical values `time1.vyos.net { }`, `time2.vyos.net { }`,
-`time3.vyos.net { }`. The render passes that through
-(`ntp server time1.vyos.net { }`) and the IOS-XE CLI re-parse takes the first
-whitespace-delimited token, yielding the clean `time1.vyos.net`.
-
-So the canonical value differs, which is why the key is `lossy` — but the
-direction is favourable: **the round-trip strips a defect the source
-introduced**, and the three NTP servers are correct on the target. The other 11
-populated cells use the bare `server <host>` form and round-trip untouched.
-
-The underlying `vyos` parser bug is real and belongs to a codec change, not to
-this file: the brace-block suffix should not survive into
-`CanonicalIntent.ntp_servers`. Recorded here so the next reader does not
-re-hunt it as an IOS-XE rendering problem.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the IOS-XE CLI render
+wrote it out (`ntp server time1.vyos.net { }`), and that cell drifted. The
+parser now reads such a line as the node it is, the reading the set form gives
+the same path
+(`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and the
+YAML declares `ntp_servers` good.
 
 ### 4. The LAG rename is one mechanism, recorded once
 
@@ -325,7 +317,7 @@ neither supported, lossy nor unsupported — for:
 
 …while demonstrably rendering and re-parsing the first five. Measured: `domain`
 and `dns_servers` round-trip cleanly on the one cell that populates each,
-`ntp_servers` on 11 of 12, `lags` survives as a renamed record, and
+`ntp_servers` on 12 of 12, `lags` survives as a renamed record, and
 `local_users` survives on 16 of 17 records. The `good` dispositions on those
 keys therefore rest on the **measured round-trip**, not on a target
 declaration, and the YAML says so at each one.
@@ -353,7 +345,7 @@ disagreement by round-tripping all 13 cells rather than trusting the
 classifier's per-cell verdict.
 
 **"`interface_type` lost the type hints."** It did not — see finding 1. The
-source never carried a type on any of the 55 records. The round-trip
+source never carried a type on any of the 56 records. The round-trip
 *manufactures* `ianaift:other`. The row is `lossy` because the value changed,
 not because information was destroyed.
 

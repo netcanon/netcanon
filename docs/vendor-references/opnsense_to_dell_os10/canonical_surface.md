@@ -70,7 +70,7 @@ Across the 8 cells, 30 source interface records produce 40 re-parsed records —
 | `static_routes` | lossy | 2 | 1 | 5 |
 | `syslog_servers` | unsupported | 0 | 0 | 8 |
 | `timezone` | unsupported | 0 | 0 | 8 |
-| `vlans[].description` | good | 0 | 0 | 8 |
+| `vlans[].description` | lossy | — | — | — |
 | `vlans[].id` | good | 2 | 0 | 6 |
 | `vlans[].ipv4_addresses` | good | 0 | 0 | 8 |
 | `vlans[].name` | good | 2 | 0 | 6 |
@@ -80,6 +80,8 @@ Across the 8 cells, 30 source interface records produce 40 re-parsed records —
 | `vxlan_vnis[].mcast_group` | unsupported | 0 | 0 | 8 |
 | `vxlan_vnis[].vlan_id` | unsupported | 0 | 0 | 8 |
 | `vxlan_vnis[].vni` | unsupported | 0 | 0 | 8 |
+
+This table was measured before the VLAN-device change, which moved `vlans[].description` from `good` to `lossy` (its counts are left out rather than restated); the disposition summary above predates it too, and the pair's expectation YAML holds the current disposition. An OPNsense `<vlan>` has no name of its own: the parser now names a VLAN after its device (`vlan0.10`) and reads the `<descr>` (`USER VLAN`) as its description. OS10 has one label for a VLAN, its SVI's description, which the render spends on the name (`interface vlan10` / `description vlan0.10`), so the operator's label is lost on both cells that hold VLANs. The OPNsense parser also gives each VLAN device that no zone assigns an interface record of its own (`ianaift:l3ipvlan`), so the kitchen sink holds more interface records than the structural finding counts.
 
 ## Observed loss mechanisms
 

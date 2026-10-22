@@ -399,9 +399,13 @@ class TestRoundTrip:
         ids_first = sorted(v.id for v in first.vlans)
         ids_second = sorted(v.id for v in second.vlans)
         assert ids_first == ids_second == [10, 20, 100]
-        names_first = sorted(v.name for v in first.vlans)
-        names_second = sorted(v.name for v in second.vlans)
-        assert names_first == names_second == ["CLUSTER VLAN", "SERVER VLAN", "USER VLAN"]
+        # A <vlan>'s <descr> is the VLAN's description; its name is
+        # its device (<vlanif>), which these <vlan>s do not state.
+        descr_first = sorted(v.description for v in first.vlans)
+        descr_second = sorted(v.description for v in second.vlans)
+        assert descr_first == descr_second == [
+            "CLUSTER VLAN", "SERVER VLAN", "USER VLAN",
+        ]
 
 
 # ---------------------------------------------------------------------------

@@ -28,9 +28,10 @@ Field-typed rules (counter-per-session):
   the username is operator-identifying when chosen by the operator,
   e.g. ``alice``, ``john.smith``, or ``user12``)
 * ``CanonicalLocalUser.hashed_password`` → format-preserving fake hash
-  (e.g. ``$9$...`` Junos form preserved; FortiGate ``ENC ...`` form
-  preserved; Cisco type-7 hex preserved; Linux ``$5$`` / ``$6$`` /
-  bcrypt ``$2y$`` shapes preserved)
+  of the same kind (e.g. ``$9$...`` Junos form preserved; FortiGate
+  ``ENC ...`` form preserved; Cisco type-7 hex preserved; every crypt(3)
+  ``$id$`` and bcrypt ``$2y$`` shape preserved; AOS-CX ``AQB`` ciphertext
+  preserved; a parser's tag such as ``arista:sha512:`` or ``5 `` kept)
 * ``CanonicalSNMP.community`` → ``public_redacted_N``
 * ``CanonicalSNMP.contact`` → ``<contact redacted>`` (operator PII —
   email / name)
@@ -135,6 +136,7 @@ from dataclasses import dataclass, field
 
 from ..ip_transition import embedded_ipv4s
 from ..migration._derived_values import is_derivation_keyword
+from ..migration._one_line import one_line_each
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
@@ -268,6 +270,10 @@ def sanitize_text(
             substitutions=substitutions,
         )
 
+    # Every value on one line, as the pipeline writes it: the renderer
+    # refuses a tree that holds a line break (`migration._one_line`).
+    # Most of the text values that can hold one are redacted above.
+    one_line_each(sanitized_intent)
     sanitized_text = codec.render(sanitized_intent)
     return SanitizationResult(
         sanitized_text=sanitized_text,
@@ -1457,43 +1463,103 @@ class _SubstitutionTable:
     def redact_hash(self, original: str) -> str:
         """Format-preserving fake hash so the codec's render produces valid syntax.
 
-        Recognises the major prefix-keyed formats — Junos ``$9$``,
-        crypt ``$5$``/``$6$``, bcrypt ``$2y$``, FortiGate ``ENC``,
-        Cisco type-7 (hex), and falls back to opaque-hex / generic
-        for unrecognised formats.
+        The fake is the same KIND of secret as the original: the shared
+        policy (``classify_hash`` in ``netcanon/migration/_user_secrets.py``)
+        reads the two alike, so a stored hash stays a hash of its algorithm,
+        a ciphertext a ciphertext, a digest nobody models stays refused, and
+        only a password as typed becomes a typed placeholder.  A parser's
+        tag in front of the payload is kept (:func:`_secret_envelope`) and
+        the payload alone is faked.  Faked whole, every tagged secret --
+        EOS ``arista:sha512:``, NX-OS and IOS-XE ``5 `` / ``9 ``, AOS-S
+        ``sha1:``, Junos ``junos:``, AOS-CX ``AQB`` -- came out as a
+        password as typed, written behind the device's cleartext marker
+        (``secret 0 fake-hash-0001``), and was left out where the device
+        takes no typed password: a sanitised config that was not the
+        config, and a translation of it that was not the translation.
+
+        Recognises the major prefix-keyed payloads — Junos ``$9$``, every
+        crypt(3) ``$id$``, FortiGate ``ENC``, AOS-CX ``AQB`` ciphertext,
+        Cisco type-7 (hex) — and falls back to opaque-hex / generic for
+        unrecognised formats.
         """
         self._hash_counter += 1
-        n = self._hash_counter
+        envelope, payload = _secret_envelope(original)
+        return envelope + _fake_secret_payload(payload, self._hash_counter)
 
-        # Junos $9$
-        if original.startswith("$9$"):
-            return f"$9$fakeSalt$fakeHash{n:04d}ExampleValue"
 
-        # Linux crypt
-        for prefix in ("$1$", "$5$", "$6$"):
-            if original.startswith(prefix):
-                return f"{prefix}fakeSalt$fakeHash{n:04d}ExampleHashValue"
+#: The tags a parser writes in front of a stored secret: ``<vendor>:``
+#: ahead of ``<algorithm>:<payload>``, or ``<tag>:<payload>`` alone.  A
+#: redacted secret keeps such a tag.  Any other text before a colon may be
+#: part of a password, and is redacted with the rest.
+_SECRET_VENDOR_TAGS = frozenset({"arista", "aoscx"})
+_SECRET_TAGS = frozenset({"plaintext", "sha1", "sha256", "junos", "fortios", "bcrypt"})
 
-        # bcrypt (OPNsense, FreeBSD)
-        if original.startswith(("$2y$", "$2a$", "$2b$")):
-            keep = original[:7] if len(original) >= 7 else "$2y$11$"
-            return f"{keep}fakeBcryptHashValue{n:04d}AAAAAAAAAAAAAAAA"
+#: The Cisco type numbers written ahead of a secret (``5 $1$...``).
+_SECRET_TYPE_DIGITS = frozenset({"5", "7", "8", "9", "10"})
 
-        # FortiGate ENC <base64>
-        if original.startswith("ENC "):
-            return f"ENC fakeEncodedSecret{n:04d}"
+#: A crypt(3) id at the start of a payload: kept, so that the fake is of
+#: the same algorithm, or as unmodelled as the original.
+_CRYPT_ID_RE = re.compile(r"\$[A-Za-z0-9]{1,8}\$")
 
-        # Cisco type-7 (uppercase hex)
-        if re.match(r"^[0-9A-F]{4,}$", original) and len(original) <= 64:
-            return f"070C285F4D{n:04X}"
 
-        # Aruba SHA-1 / generic-hex (lowercase or mixed-case hex blob)
-        if re.match(r"^[0-9a-fA-F]+$", original):
-            length = len(original)
-            return ("deadbeef" * (length // 8 + 1))[:length]
+def _secret_envelope(value: str) -> tuple[str, str]:
+    """Split a stored secret into the tag a parser wrote and its payload.
 
-        # Unknown format — generic placeholder
-        return f"fake-hash-{n:04d}"
+    Read where ``classify_hash`` reads it, but only for the tags a parser
+    writes: the tag is kept, the payload is faked.
+    """
+    first, colon, rest = value.partition(":")
+    if colon:
+        if first.lower() in _SECRET_VENDOR_TAGS and ":" in rest:
+            algorithm, _, payload = rest.partition(":")
+            return f"{first}:{algorithm}:", payload
+        if first.lower() in _SECRET_TAGS:
+            return f"{first}:", rest
+        return "", value
+    head, space, tail = value.partition(" ")
+    if space and head in _SECRET_TYPE_DIGITS:
+        return f"{head} ", tail
+    return "", value
+
+
+def _fake_secret_payload(original: str, n: int) -> str:
+    """A fake of the same shape as *original*, numbered *n*."""
+    # Junos $9$
+    if original.startswith("$9$"):
+        return f"$9$fakeSalt$fakeHash{n:04d}ExampleValue"
+
+    # bcrypt (OPNsense, FreeBSD)
+    if original.startswith(("$2y$", "$2a$", "$2b$", "$2x$")):
+        keep = original[:7] if len(original) >= 7 else "$2y$11$"
+        return f"{keep}fakeBcryptHashValue{n:04d}AAAAAAAAAAAAAAAA"
+
+    # Every other crypt(3) id, modelled or not: the id is kept, so a
+    # digest nobody models stays one, and stays refused.
+    crypt_id = _CRYPT_ID_RE.match(original)
+    if crypt_id:
+        return f"{crypt_id.group(0)}fakeSalt$fakeHash{n:04d}ExampleHashValue"
+    if original.startswith("$"):
+        return f"$x$fakeHash{n:04d}ExampleHashValue"
+
+    # FortiGate ENC <base64>
+    if original.startswith("ENC "):
+        return f"ENC fakeEncodedSecret{n:04d}"
+
+    # AOS-CX device-keyed ciphertext
+    if original.startswith("AQB"):
+        return f"AQBfakeCiphertext{n:04d}ExampleValue"
+
+    # Cisco type-7 (uppercase hex)
+    if re.match(r"^[0-9A-F]{4,}$", original) and len(original) <= 64:
+        return f"070C285F4D{n:04X}"
+
+    # Aruba SHA-1 / generic-hex (lowercase or mixed-case hex blob)
+    if re.match(r"^[0-9a-fA-F]+$", original):
+        length = len(original)
+        return ("deadbeef" * (length // 8 + 1))[:length]
+
+    # Unknown format — generic placeholder
+    return f"fake-hash-{n:04d}"
 
 
 # ---------------------------------------------------------------------------

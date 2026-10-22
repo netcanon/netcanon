@@ -35,8 +35,10 @@ implicit (every ``<vlan>`` whose ``<if>`` matches a parent rides
 that parent).  No SVI / interface-Vlan equivalent — the L3 face of
 the tag is the ZONE that owns the ``<vlanif>`` device.
 
-The OPNsense codec parses ``<vlan>/<tag>`` into ``CanonicalVlan.id``
-and ``<vlan>/<descr>`` into ``CanonicalVlan.name`` (per ``parse.py``).
+The OPNsense codec parses ``<vlan>/<tag>`` into ``CanonicalVlan.id``,
+``<vlan>/<vlanif>`` (the device; a ``<vlan>`` has no name of its own)
+into ``CanonicalVlan.name`` and ``<vlan>/<descr>`` into
+``CanonicalVlan.description`` (per ``parse.py``).
 
 ## Cisco IOS-XE
 
@@ -75,12 +77,15 @@ ipv4_addresses: list[CanonicalIPv4Address],
 OPNsense -> Cisco:
 
 - ``id``: **good** — OPNsense ``<tag>`` ↔ Cisco ``vlan N``.
-- ``name``: **lossy** — OPNsense's ``<descr>`` lands in the
-  canonical ``name`` field via ``parse.py``; Cisco's separate
-  ``name`` and ``description`` distinction is collapsed.  Round-trip
-  to Cisco emits the description into the ``name`` line.
-- ``description``: **lossy** — same source field as ``name``;
-  OPNsense doesn't model a separate description.
+- ``name``: **good** — the canonical name is the OPNsense device
+  name (``vlan0.10``), which Cisco writes as ``name vlan0.10`` and
+  reads back.
+- ``description``: **lossy** — the OPNsense ``<descr>`` (the
+  operator's label, e.g. ``USER VLAN``) is the canonical
+  description, and the Cisco render writes a VLAN's ``name`` line
+  and no description, so the label is lost.  IOS-XE CLI declares
+  ``/vlans/vlan/description`` lossy, which the validation report
+  lists for each VLAN.
 - ``tagged_ports`` / ``untagged_ports``: **not_applicable** —
   OPNsense never populates these lists on parse (no VLAN-centric
   port-membership concept).  The Cisco renderer can emit
@@ -93,6 +98,6 @@ OPNsense -> Cisco:
   OPNsense parser today.  Cisco render therefore emits no
   ``interface Vlan<N>`` stanza on the cross-pair.
 
-Disposition: ``id`` round-trips cleanly; ``name`` / ``description``
-collapse; port-membership and SVI sub-fields are
+Disposition: ``id`` and ``name`` round-trip cleanly; ``description``
+is lost; port-membership and SVI sub-fields are
 ``not_applicable`` from an OPNsense source.

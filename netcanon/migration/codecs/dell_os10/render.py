@@ -83,6 +83,7 @@ exists in the ``cisco_nxos`` render for the same reason.
 
 from __future__ import annotations
 
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
@@ -155,6 +156,21 @@ def _version_token(tree: CanonicalIntent) -> str:
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Dell OS10 config text."""
+    # A name that is not one word where OS10 reads one is written as
+    # one, at every place it goes; a gateway is left out with its route.
+    # A description (a VLAN's name is written as its interface's) and
+    # the SNMP location and contact are written between quotes, which
+    # Dell documents no escape for, so a ``"`` in one is written ``'``.
+    # Each is said.  Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "OS10",
+        names=("hostname", "routing_instances[].name"),
+        addresses=("static_routes[].gateway",),
+        no_escape=(
+            "interfaces[].description", "vlans[].name", "snmp.location",
+            "snmp.contact",
+        ),
+    )
     lines: list[str] = []
 
     # ── Banner ──
@@ -164,6 +180,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # the exact string that made `cisco_iosxe_cli` claim every Dell
     # config at confidence 95 before PR #475.
     lines.append(f"! Version {_version_token(tree)}")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append("!")
 
     # ── VRFs ──
@@ -229,6 +246,19 @@ def _render_local_user(user) -> str:
     role = user.role or (
         "sysadmin" if user.privilege_level >= 15 else "netoperator"
     )
+    # Name, password and role are one word each (OS10 documents them as
+    # alphanumeric); the account is left out whole rather than altered.
+    # Policy: :mod:`netcanon.migration._one_value`.
+    payload = (
+        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
+    )
+    # A secret this target cannot take at all is the hash gate's to
+    # say (below); this asks only of one it would write.
+    if splits(user.name) or splits(role) or (
+        splits(payload)
+        and is_migratable(user.hashed_password, "dell_os10")
+    ):
+        return "! " + left_out(f"username {user.name}", "Dell OS10")
     if not user.hashed_password:
         # A cross-vendor account with no secret.  The parser reads this
         # form back (the password clause is optional), so the account
@@ -264,7 +294,12 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     emitted WITHOUT the keyword and OS10 localises it on commit.
     """
     lines: list[str] = []
-    if snmp.community:
+    # A community is one word; one that holds white space is left out,
+    # with every trap host that would carry it.
+    community_splits = splits(snmp.community)
+    if community_splits:
+        lines.append("! " + left_out("an SNMP community", "Dell OS10"))
+    elif snmp.community:
         lines.append(f"snmp-server community {snmp.community}")
     if snmp.location:
         lines.append(f'snmp-server location "{snmp.location}"')
@@ -278,6 +313,11 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     # surfaced this class on the three Cisco/Arista targets could not see
     # this site -- it was found by reading the render paths.
     for host in snmp.trap_hosts:
+        if community_splits:
+            lines.append(
+                "! " + left_out(f"snmp-server host {host}", "Dell OS10")
+            )
+            continue
         community = snmp.community or "public"
         lines.append(f"snmp-server host {host} traps version 2c {community}")
         if not snmp.community:
@@ -297,6 +337,17 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
                 f"bound to the source agent's engine ID and cannot be re-used "
                 f"on Dell OS10; re-create this user and re-key it on the target"
+            )
+            continue
+        # Name, group and both passphrases are one word each here.
+        if any(
+            splits(v) for v in (
+                user.name, user.group, user.auth_passphrase,
+                user.priv_passphrase,
+            )
+        ):
+            lines.append(
+                "! " + left_out(f"snmpv3 user {user.name}", "Dell OS10")
             )
             continue
         # One keyword governs the whole line, so it must describe the
@@ -527,7 +578,14 @@ def _render_interface(
     """
     block = [f"interface {iface.name}"]
     if iface.description:
-        block.append(f" description {iface.description}")
+        # "Spaces between characters are not preserved ... unless you
+        # enclose the entire description in quotation marks" (Dell OS10
+        # User Guide, ``description (Interface)``); the parser strips
+        # them again.
+        described = iface.description
+        if any(ch.isspace() for ch in described):
+            described = f'"{described}"'
+        block.append(f" description {described}")
     block.append(" no shutdown" if iface.enabled else " shutdown")
 
     if iface.lag_member_of:

@@ -14,7 +14,7 @@
 # local-user identity — and NOT the overlay or the management plane.
 #
 # THE STRUCTURAL HEADLINE, stated once so no key has to re-argue it: the
-# interface inventory is FULLY PRESERVED.  55 interface records in, 55 out,
+# interface inventory is FULLY PRESERVED.  56 interface records in, 56 out,
 # identical name sets on all 13 cells.  Nothing in the `interfaces[]` block
 # below is correlated drift — every interface loss stands on its own
 # measurement, and every interface sub-field that survives is `good` on merit
@@ -26,9 +26,8 @@
 #   * `snmp`        — the whole block drops to None on 4 cells -> unsupported
 #   * `vlans`       — the target GAINS 2 records on 1 cell     -> lossy
 # Everything else that drifts is a per-attribute drift: the fabricated
-# `interface_type` hint, the `bond0` -> `Bundle-Ether0` LAG rename (ONE
-# mechanism spanning two keys), and one NTP cell whose drift is a source-side
-# parse artifact.
+# `interface_type` hint and the `bond0` -> `Bundle-Ether0` LAG rename (ONE
+# mechanism spanning two keys).
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
 # a full `run_full_mesh.py` pass over the committed corpus (13 fixture cells,
@@ -102,24 +101,17 @@ per_field_expectation:
     references: [vyos-iosxr-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Drifts on exactly 1 of 13 cells
-      (`houdev_vyos_dhcpv6_pd_client.conf`), and the cause is a SOURCE-side
-      parse artifact rather than an IOS-XR drop.  That fixture writes its
-      servers with an inline empty brace block —
-      `server         time1.vyos.net { }` — and the vyos brace parser carries
-      the whole remainder into the canonical value, so the source list is
-      `['time1.vyos.net { }', …]`.  The IOS-XR render emits the value
-      verbatim and its NTP line regex captures only the first token, so the
-      target list is the clean `['time1.vyos.net', …]`.
-      All three server hostnames survive; what disappears is the trailing
-      ` { }` token, and the target value is the usable one.  Recorded `lossy`
-      rather than waved through because the audit compares strings and a real
-      value difference exists on that cell — but the punctuation is what
-      changed, not the content, and no operator-authored server was lost.
-      The other 11 populated cells round-trip byte-exact.  Both matrices
-      declare `/system/ntp-server` supported.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the IOS-XR render
+      wrote it out (`server time1.vyos.net { }` under `ntp`), and that cell
+      drifted.  The parser now reads such a line as the node it is, the
+      reading the set form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-iosxr-surface]
 
   timezone:
@@ -146,8 +138,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, three attributes affected -------------
   #
-  # The measured record count is the headline: 55 interface records across the
-  # 13 cells, 55 after parse -> render -> re-parse, with identical name sets on
+  # The measured record count is the headline: 56 interface records across the
+  # 13 cells, 56 after parse -> render -> re-parse, with identical name sets on
   # every cell.  VyOS `ethN`, `ethN.NNN` dot1q sub-interfaces, `bondN`, `dumN`
   # and `lo` all survive the IOS-XR render verbatim (the mesh renders without
   # port translation, so names cross unrenamed rather than being re-shaped into
@@ -164,7 +156,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, identical name sets on every cell.  The
       IOS-XR render does not collapse `ethN.NNN` dot1q sub-interfaces, does
       not drop `dumN` or `lo`, and does not renumber `bondN`.  Both matrices
@@ -174,7 +166,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Zero drift on 55 of 55 records; 15 of them carry a description and all
+      Zero drift on 56 of 56 records; 15 of them carry a description and all
       15 round-trip byte-exact.  Both matrices declare
       `/interfaces/interface/config/description` supported.  Note that the
       vyos double-quote rewrite (embedded `"` replaced with `'`, per
@@ -186,7 +178,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 55 of 55 records — zero differing.  53 are up
+      Admin state preserved on 56 of 56 records — zero differing.  54 are up
       and 2 are `shutdown`; both shut ports arrive shut on the target,
       rendered as a ` shutdown` line inside the interface stanza.  Both
       matrices declare `/interfaces/interface/config/enabled` supported.
@@ -195,7 +187,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  MTU is actually populated on exactly 1
+      Preserved on 56 of 56 records.  MTU is actually populated on exactly 1
       of them (`kitchen_sink.conf` `eth0`, 1500) and it round-trips
       unchanged.  Both matrices declare `/interfaces/interface/config/mtu`
       supported, so the declaration carries most of the weight here — one
@@ -205,7 +197,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records: 20 IPv6 addresses in, 20 out, address
+      Preserved on 56 of 56 records: 20 IPv6 addresses in, 20 out, address
       and prefix-length intact.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.
@@ -214,7 +206,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records: 21 IPv4 addresses in, 21 out.  The
+      Preserved on 56 of 56 records: 21 IPv4 addresses in, 21 out.  The
       IOS-XR render emits dotted-mask form (`ipv4 address 10.10.10.1
       255.255.255.0`) and the re-parse converts it back to prefix-length
       without loss.  Both matrices declare
@@ -226,14 +218,14 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      The widest drift on the pair — all 55 records on all 13 cells — and it
+      The widest drift on the pair — all 56 records on all 13 cells — and it
       runs in the GAIN direction, which is worth stating plainly because the
       opposite reading is the intuitive one.
-      The SOURCE value is the empty string on all 55 records: the vyos parser
+      The SOURCE value is the empty string on all 56 records: the vyos parser
       never populates `interface_type` (the strings `interface_type` and
       `ianaift` do not appear anywhere in
       `netcanon/migration/codecs/vyos/*.py`).  The TARGET value is
-      `ianaift:other` on all 55: `cisco_iosxr/parse.py` infers a type from
+      `ianaift:other` on all 56: `cisco_iosxr/parse.py` infers a type from
       the interface-name prefix via `_TYPE_HINTS`, and `ethN` / `bondN` /
       `dumN` / `lo` match no IOS-XR prefix, so `_infer_type` returns its
       fallback.
@@ -279,7 +271,7 @@ per_field_expectation:
       virtual-IPv6 and description.  vyos drops FHRP at parse, and cisco_iosxr
       states its side outright ("VRRP / FHRP redundancy groups are out of the
       v1 IOS-XR scope; the group is dropped on migration").
-      Measured: 0 differing of 55 records, because both sides are empty on all
+      Measured: 0 differing of 56 records, because both sides are empty on all
       of them — no committed cell populates it, so the gap is declared rather
       than observed.  Recover first-hop redundancy from the source config by
       hand; nothing in this migration will carry it, in either direction.

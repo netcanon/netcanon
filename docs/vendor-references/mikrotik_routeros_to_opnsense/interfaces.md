@@ -161,7 +161,7 @@ RouterOS ``/ip dhcp-client add interface=etherN`` ↔ OPNsense
 
 RouterOS ``/interface bonding add slaves=ether3,ether4 name=bond1``
 back-points each member to ``bond1``.  OPNsense ``<laggs>/<lagg>/
-<members>opt3,opt4</members>`` carries the back-pointer in a
+<members>igb2,igb3</members>`` carries the back-pointer in a
 comma-separated string under ``<members>``.  Both codecs round-trip
 the back-pointer but the LAG name itself differs (``bond1`` ↔
 ``lagg0``); port-rename mesh canonicalises.

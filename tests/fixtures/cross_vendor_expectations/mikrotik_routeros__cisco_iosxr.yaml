@@ -146,16 +146,24 @@ per_field_expectation:
   # a matrix declaration.  Only `interface_type` and `lag_member_of` drift.
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Preserved on 5 of 5 cells.  Record counts match exactly (2->2, 9->9,
-      7->7, 16->16, 12->12) and every name round-trips verbatim: the IOS-XR
+    disposition: lossy
+    reason: >
+      A RouterOS interface name is free text, and a port an operator has
+      named can hold a space (`Access Point`, `CLUSTER - PVE3` on the
+      CRS310 capture); an IOS-XR interface name holds none.  This bare
+      round-trip does not run `translate_port_names`, so the name is
+      written as it stands -- `interface Access Point` -- and read back as
+      its first word: `Access`, and the three `CLUSTER - ...` ports as one
+      `CLUSTER`.  A name with no space round-trips verbatim: the IOS-XR
       codec accepts and re-emits `ether1`, `bridge1`, `bond1`, `vlan100`,
-      `sfp-sfpplus1` unchanged rather than mapping them onto native 4-segment
-      IOS-XR port names.  Note the separate `CanonicalInterface.default_name`
-      (the RouterOS factory port label) IS dropped on 27 of 46 records; it is
-      not covered by this key and is recorded in the reference doc rather than
-      declared here.
+      `sfp-sfpplus1` unchanged rather than mapping them onto native
+      4-segment IOS-XR port names.  Note the separate
+      `CanonicalInterface.default_name` (the RouterOS factory port label)
+      IS dropped; it is not covered by this key and is recorded in the
+      reference doc rather than declared here.  Through
+      the pipeline the translator lists a name it cannot read -- every name
+      with a space among them -- as untranslated, and the job is `partial`
+      until a port-rename map entry decides it.
     references: [mikrotik-iosxr-surface]
 
   "interfaces[].description":
