@@ -82,9 +82,10 @@ FortiGate -> OPNsense:
 - `key`: **lossy** — FortiOS `ENC <opaque-base64>` is FortiOS-
   internal-key-encrypted; OPNsense expects cleartext.  Cross-vendor
   migration requires re-keying — operators must paste the cleartext
-  shared secret into OPNsense after migration.  The codec passes
-  the FortiOS-encoded form through verbatim with a vendor tag so
-  the loss surfaces in the validation report.
+  shared secret into OPNsense after migration.  The OPNsense render
+  writes the server with no secret, beside a review element.  A `set
+  secret <secret>` written without `ENC` is the secret as typed, and
+  lands in `<radius_secret>`.
 - `auth_port`: **good** — direct integer transfer.  FortiOS
   placeholder `0` is normalised to 1812 at parse-time.
 - `acct_port`: **lossy** — FortiOS has no separate field

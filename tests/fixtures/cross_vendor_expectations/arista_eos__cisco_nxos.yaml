@@ -272,14 +272,15 @@ per_field_expectation:
   "vlans[].ipv4_addresses":
     disposition: lossy
     reason: >
-      Drifts on 2 cells, 14 VLAN records: an L3 address carried on the VLAN
-      record itself renders as an empty list.  Same root cause as
-      `interfaces[].ipv4_addresses` seen from the VLAN side -- the Arista
-      parser folds SVI addressing onto the VLAN record, and the NX-OS matrix
-      declares `/vlans/vlan/ipv4/address/ip` lossy because the render emits an
-      SVI only from a sibling `interface Vlan<N>` stanza, never from the VLAN
-      record.  Re-create the SVI addressing on the target as explicit
-      `interface Vlan<N>` stanzas.
+      Drifts on 2 cells, 14 VLAN records, and each of the 14 is a VARP
+      gateway: the Arista SVI carries `ip address virtual <X>` and no address
+      of its own, which the Arista parser folds onto the VLAN record as an
+      address with no IP and `virtual_gateway_address` set.  NX-OS has no
+      form for a virtual address with no primary beside it (see
+      `interfaces[].ipv4_addresses`), so the record re-parses with an empty
+      list.  Every VLAN whose SVI has an address of its own keeps it, on the
+      bare path and with port names translated.  Give those SVIs their
+      gateway on the target by hand.
     references: [eos-nxos-surface]
 
   # -- Static routes.  Record-level key kept (the whole record round-trips);

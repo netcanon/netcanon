@@ -99,6 +99,19 @@ _LOGICAL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
 )
 
 
+def mtu_counts_a_header(name: str) -> bool:
+    """Whether the ``mtu`` of the IOS XR interface *name* counts an
+    Ethernet header (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``):
+    a port, a management port or a ``Bundle-Ether``, or a sub-interface
+    of one.  Cisco: "the mtu command that configures the L2 MTU
+    includes 14 bytes for an Ethernet interface".  A loopback, a tunnel,
+    a ``BVI`` or a name the classifier does not read is copied as it
+    stands: what its number counts is not established here.
+    """
+    base = name.split(".", 1)[0]
+    return classify_port_name(base).kind in ("physical", "mgmt", "lag")
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Cisco IOS-XR port name into a :class:`PortIdentity`.
 

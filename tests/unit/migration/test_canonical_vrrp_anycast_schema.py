@@ -413,6 +413,9 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # Wave B — see commit feat(mikrotik_routeros): wire VRRP.
         "mikrotik_routeros": {
             "/interfaces/interface/vrrp-groups/group",
+            # GAP 7 -- a routed sub-interface is a VLAN interface on
+            # its port (lossy: read back as a VLAN interface).
+            "/interfaces/interface/dot1q-vlan",
         },
         # Wave B (CARP variant) — see commit feat(opnsense): wire
         # CARP groups with mode="carp" discriminator.

@@ -1239,6 +1239,9 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
       * a ``channel-group <N> mode <m>`` line under a physical port
         declares that port a member of ``port-channel<N>``.
 
+    ``interface port-channel<N>.<M>`` is a sub-interface of the LAG, an
+    interface and no LAG of its own.
+
     Mode is the first member's mode (NX-OS ``on`` → canonical
     ``static``); an empty LAG keeps :attr:`CanonicalLAG.mode` default.
     """
@@ -1256,7 +1259,8 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             # member binding collapse to ONE CanonicalLAG instead of two
             # case-differing twins.
             m = re.match(r"^port-channel(\d+)$", name, re.IGNORECASE)
-            declared.add(f"port-channel{int(m.group(1))}" if m else name.lower())
+            if m:
+                declared.add(f"port-channel{int(m.group(1))}")
 
     for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)

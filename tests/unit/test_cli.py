@@ -205,8 +205,16 @@ class TestCLISanitizeLimits:
         from netcanon.migration import limits
 
         monkeypatch.delenv("NETCANON_CONFIG_LIMITS", raising=False)
-        # If the run did wait, it would be refused in a third of a second.
-        monkeypatch.setitem(limits.PROFILES, "small", replace(limits.SMALL, seconds=0.3))
+        # If the run did wait, it would be refused as busy at its deadline,
+        # well before the request below lets go (30 s).  The deadline is
+        # what tells waiting from not waiting, and nothing else, so it
+        # leaves the run room.  The run is some 35 ms of work, but the
+        # deadline counts everything that happens meanwhile: in the unit
+        # tier run as one process, a full collection of the cyclic garbage
+        # collector over every object the tier keeps alive by then
+        # (0.2-0.3 s on CI runners, and growing with the tier) fell inside a
+        # 0.3 s deadline now and then, and refused a run that never waited.
+        monkeypatch.setitem(limits.PROFILES, "small", replace(limits.SMALL, seconds=5.0))
         held, let_go = threading.Event(), threading.Event()
 
         def a_request_at_work() -> None:

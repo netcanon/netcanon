@@ -43,10 +43,10 @@ The interface inventory shrinks, and the rule behind it is exact.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
+| source interface records, all 13 cells | **56** |
 | records after parse → render → re-parse | **45** |
-| cells where the interface name set differs | **5** of 13 |
-| records lost | **10** |
+| cells where the interface name set differs | **6** of 13 |
+| records lost | **11** |
 
 The AOS-S render applies a tiered-elision rule (`render.py::_has_body`, mirrored
 from the Junos renderer): an interface stanza is emitted only when the record
@@ -55,20 +55,24 @@ binding or LAG membership. `enabled=True` alone is the implicit admin-up state
 and is **not** body — so an interface whose only canonical content is its name
 renders nothing at all, and the re-parse cannot see it.
 
-Every one of the 10 lost records fits that rule:
+Every one of the 11 lost records fits that rule:
 
 | cell | vanished |
 |---|---|
+| `houdev_vyos_dhcpv6_pd_client.conf` | `lo` |
 | `metasploit-vyos-config.conf` | `eth1`, `lo` |
 | `scottlaird-vyos-parser.conf` | `eth2`, `eth3`, `eth4`, `eth5`, `lo` |
 | `vyos_forum_snmpv3_user_eq13.conf` | `lo` |
 | `wcni-kind-gw0.conf` | `lo` |
 | `wcni-kind-gw1.conf` | `lo` |
 
-Nine of the ten carry `name` + `enabled=True` and nothing else. The tenth,
-`scottlaird` `eth5`, additionally carries `dhcp_client=True` — which the
-elision rule does not count as body either, so a DHCP-client port with no
-static address disappears along with the bare ones.
+Ten of the eleven carry `name` + `enabled=True` and nothing else. The
+eleventh, `scottlaird` `eth5`, additionally carries `dhcp_client=True` — which
+the elision rule does not count as body either, so a DHCP-client port with no
+static address disappears along with the bare ones. The houdev `lo` is printed
+as a node with nothing under it (`loopback lo { }`), which the VyOS parser has
+read as an empty interface record since 2026-10: nothing set, so it is elided
+like the others — structural drift, no attribute lost.
 
 Operationally that is mild: a VyOS `lo` with no address and an unconfigured
 `ethN` are placeholders, not forwarding state. It is not nothing, though — the
@@ -88,7 +92,7 @@ much cleaner.
 | hostname | 13 | 0 | 0 |
 | domain | 0 | 1 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces | 0 | 13 | 0 |
 | static_routes | 4 | 0 | 9 |
 | snmp | 2 | 2 | 9 |
@@ -242,7 +246,7 @@ Measured across all 13 cells:
 
 | side | `interface_type` values |
 |---|---|
-| source (`vyos`), 55 records | `""` on **all 55** |
+| source (`vyos`), 56 records | `""` on **all 56** |
 | target (`aruba_aoss`), 45 records | `ianaift:ethernetCsmacd` on **all 45** |
 
 The VyOS parser never populates the IANA ifType at all. The AOS-S parser
@@ -307,22 +311,26 @@ is **the same mechanism, not a second finding**. It is reported in the table
 above for completeness and is not cited as evidence for the routing-instance
 drop; neither corroborates the other.
 
-### 6. Two drifts that are actually the target cleaning up after the source
+### 6. `ntp_servers` crosses whole, and the `lags` drift is a rename
 
-Both are declared `lossy` because the canonical value genuinely changes and the
-audit compares values — but calling either a "loss" without saying which way it
-points would be misleading.
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
-**`ntp_servers`.** One cell of 12 drifts:
-`houdev_vyos_dhcpv6_pd_client.conf`. The VyOS `config.boot` writes its NTP
-servers as `server time1.vyos.net { }` — a node with an empty inline brace
-block — and the brace-stack parser captures the whole token run, so the
-**source-side canonical value is already `"time1.vyos.net { }"`**. The AOS-S
-render emits that verbatim (`sntp server priority 1 time1.vyos.net { }`) and the
-AOS-S parser, whose regex captures a single `(\S+)`, hands back
-`"time1.vyos.net"`. All three server hostnames survive; what is stripped is a
-VyOS parse artifact. The defect here is on the **source** side, and it is the
-only thing this cell's NTP drift is evidence of.
+```
+server         time1.vyos.net { }
+```
+
+Until 2026-10 the VyOS parser kept ` { }` in the name, the AOS-S render wrote
+it out (`sntp server priority 1 time1.vyos.net { }`), and that cell drifted.
+The parser now reads such a line as the node it is, the reading the set form
+gives the same path
+(`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and the
+YAML declares `ntp_servers` good.
+
+`lags` is declared `lossy` because the canonical value changes and the audit
+compares values; calling it a loss without saying which way it points would be
+misleading.
 
 **`lags`.** One cell of 13 populates it (`kitchen_sink`). The bundle survives
 with its member list (`eth4`, `eth5`) and its mode (`active`) intact; the

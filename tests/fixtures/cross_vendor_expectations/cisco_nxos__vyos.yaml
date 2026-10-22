@@ -373,8 +373,7 @@ per_field_expectation:
       `vlans[].id`; a second loss here would be correlated drift, not
       independent evidence.
       The measurement that makes this benign rather than merely bookkeeping:
-      14 of the 84 VLAN records carry L3 on the VLAN mount, and cisco_nxos
-      declares `/vlans/vlan/ipv4/address/ip` LOSSY on its own side.  The same
+      14 of the 84 VLAN records carry L3 on the VLAN mount.  The same
       addressing also lands on the `Vlan<N>` interface record, and THAT
       survives — see `interfaces[].ipv4_addresses`, which is where the
       SVI-mounted address is measured and where its one real loss (the anycast

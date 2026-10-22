@@ -169,15 +169,13 @@ per_field_expectation:
       key drifts on the 4 VLAN-bearing cells, but that is the parent list
       changing length — already claimed by `interfaces[].name` — so a loss
       declared here could never be evidenced by a cell and would fail the
-      per-pair ratchet by construction.  One genuine artefact is recorded in
-      the reference note rather than swept into a disposition: three routed
-      dot1q sub-interfaces (`GigabitEthernet0/0/0/1.35` on both
-      `batfish_ebgp_border*`, `GigabitEthernet0/0/0/1.100` on `kitchen_sink`)
-      lose their description because the render emits a sub-interface only as
-      the target of an `/ip address` row, with no interface row to hang a
-      comment on.  All three fall on the same VLAN-bearing cells — one root
-      cause with the count growth, not a second independent one.  The other 152
-      surviving records keep their description exactly.
+      per-pair ratchet by construction.  Every surviving record keeps its
+      description, the three routed dot1q sub-interfaces that have one
+      included (`GigabitEthernet0/0/0/1.35` on both `batfish_ebgp_border*`,
+      `GigabitEthernet0/0/0/1.100` on `kitchen_sink`): each is a VLAN
+      interface on its port with a `comment=`.  Up to 0.7.7 the render
+      emitted a sub-interface only as the target of an `/ip address` row,
+      with no interface row to hang a comment on, and the three lost it.
     references: [iosxr-routeros-surface]
 
   "interfaces[].enabled":
@@ -198,7 +196,8 @@ per_field_expectation:
       and 2 of the 3 affected cells (`batfish_ibgp_border01` 17->17,
       `batfish_ibgp_rr` 16->16) have no interface-count change at all.  The
       mechanism is in the render: `/interface ethernet` rows carry `mtu=`
-      (`set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9216` survives) while
+      (`set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9202` survives -- the
+      payload of IOS XR's `mtu 9216`, which counts the Ethernet header) while
       `/interface bonding` rows do not, so MTU on a physical port survives and
       MTU on a bundle does not.  On an SP box where the jumbo setting lives on
       the bundle rather than its members, that is the entire jumbo
@@ -282,10 +281,19 @@ per_field_expectation:
   # below safe rather than lazy.
 
   "vlans[].id":
-    disposition: good
-    note: >
-      VLAN IDs preserved on all 4 cells that populate them (35, 35, 200, 100).
-      The id survives as `vlan-id=` on the synthesised `/interface vlan` row.
+    disposition: lossy
+    reason: >
+      No id is lost, and the list grows by one record on each of the 4 cells
+      that populate it (1 -> 2: 35, 35, 200, 100).  The IOS-XR codec makes a
+      VLAN record of each sub-interface tag, which the render writes as
+      `vlan<id>` on the synthesised `bridge1`; the sub-interface itself is a
+      VLAN interface on its port (`/interface vlan add
+      interface=GigabitEthernet0/0/0/1 name=GigabitEthernet0/0/0/1.35
+      vlan-id=35`), and the RouterOS parser reads every VLAN interface as a
+      VLAN of its tag, so the re-parse holds two records of one id.  The
+      target declares `/interfaces/interface/dot1q-vlan` lossy for exactly
+      this read-back: a VLAN interface on a port and one on a bridge are one
+      line shape to its parser.
     references: [iosxr-routeros-surface]
 
   "vlans[].name":
@@ -458,48 +466,50 @@ per_field_expectation:
   # -- Identity -- nothing arrives usable -----------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users; the account
-      records themselves survive the round-trip intact.  That is precisely why
-      the two keys below are `lossy` rather than `unsupported` — the user
-      arrives, just not usably.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 14 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 6 MD5 crypt (Cisco type 5), 5 Cisco
+      type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt. RouterOS
+      can consume a genuine plaintext password only (it hashes the password
+      itself); anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was written
+      as `/user add` with no `password=`, which RouterOS gives a blank password;
+      a refused secret now drops the whole account, as on every other target.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source's secret form, not a gap in
+      the RouterOS user model: an account whose secret RouterOS can consume
+      would still migrate. Create a console admin on the target out of band
+      before cutover, then re-create every account with a native credential.
     references: [iosxr-routeros-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Privilege is coerced through RouterOS's fixed group set on 9 of 12 cells.
-      The IOS-XR task-group `root-lr` renders as `group=full` and re-parses as
-      `admin`, so the source's task-group identity is gone even though an
-      administrative account remains administrative.  `operator` happens to
-      survive as `operator`.  Verified by round-trip on `kitchen_sink.cfg`
-      (netops root-lr -> admin, readonly operator -> operator) and
-      `iosxr_design_cst_pa3_xr752.cfg` (all three users root-lr -> admin).
-      Recorded `lossy` because the record survives with a coerced value.
-      Re-check every account's privileges on the target before cutover;
-      IOS-XR task-group granularity has no RouterOS equivalent.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxr-routeros-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Every migrated account arrives WITHOUT a working credential — the field is
-      empty after the round-trip on all 9 cells that populate users.  The
-      mechanism is structural in the target parser and documented in its own
-      source (`mikrotik_routeros/parse.py`): "RouterOS `/export` intentionally
-      omits password hashes ... `hashed_password` will be empty from this
-      parser."  The render side behaves well and this is worth stating: when the
-      source hash is not re-usable on RouterOS it deliberately does NOT emit it
-      as `password=` — that would set the account's password to the literal hash
-      string — and instead emits a `# password manager user-name "..." --
-      review: ... reset this user password manually` comment.  So the loss is
-      loud, not silent.  Recorded `lossy` rather than `unsupported` because the
-      account record itself survives (`local_users[].name`); only the credential
-      is emptied.  Set passwords on the target before cutover or the accounts
-      are unusable.  The source hash values are deliberately NOT quoted here —
-      they are IOS-XR type-tagged crypt strings and remain operator-traceable
-      even hashed.
+    disposition: good
+    note: >
+      No secret is written in a form RouterOS cannot consume. 14 accounts are
+      refused for their secret (6 MD5 crypt (Cisco type 5), 5 Cisco type-7
+      reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. No account
+      with a stored secret arrives, so there is no value to compare. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was
+      written as `/user add` with no `password=`, which RouterOS gives a blank
+      password; a refused secret now drops the whole account, as on every other
+      target. No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [iosxr-routeros-surface]
 
   radius_servers:

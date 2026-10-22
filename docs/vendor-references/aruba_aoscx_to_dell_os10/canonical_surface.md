@@ -163,6 +163,9 @@ Drifted on 7 of 7 cells (preserved on 0, both sides empty on 0).
 
 Sample: `all 1 lags dropped`
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto OS10 as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__dell_os10.yaml`.
+
 ### `local_users` — lossy
 
 Drifted on 5 of 7 cells (preserved on 1, both sides empty on 1).

@@ -225,43 +225,55 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 5, preserved on 1, both
-      sides empty on 1.
+      0 of 7 accounts arrive across the 6 cells that populate local
+      users; the list is emptied on each.  Each of the 7 holds an AOS-CX
+      ciphertext (`password ciphertext`), encrypted under the key of the
+      switch that made it: 6 `AQB` blobs, and the GL CX 10.09 capture's
+      `admin`, whose publisher put a placeholder word where its
+      ciphertext was.  Up to 0.7.7 the AOS-CX parser read that word by
+      its shape, as a password as typed, and it was written onto this
+      target as one; the parser now reads a value by its keyword, so it
+      is refused like the rest
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      OS10 can consume a `$1$`, `$5$` or `$6$` crypt string, or a
+      password as typed; anything else is refused on purpose (#461) with
+      a review comment naming the account and no user entry.  Recorded
+      `lossy` rather than `unsupported`: an AOS-CX account configured
+      `password plaintext` is read as typed and arrives, as `username
+      <name> password <password> role <role>`; no committed capture has
+      one.  Before cutover, list the source accounts, search the render
+      for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [aoscx-os10-surface]
 
   local_users[].hashed_password:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 5, preserved on 1, both
-      sides empty on 1.
+      Every account of the corpus is refused for its secret (see
+      `local_users`); this key carries the record-count collapse, and
+      the name and role keys are reclassified STRUCTURAL_ONLY against
+      it.  No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [aoscx-os10-surface]
 
   local_users[].name:
     disposition: good
     note: >
-      Preserved on 1 of 7 cells. On 5 further cells the whole
-      `local_users` list drifted at once (records added or dropped),
-      and the reconciler attributes that single structural event to
-      one owner sub-field rather than counting it against every
-      sibling. So this field shows no loss of its own on this pair:
-      the parent-level drift is recorded against that owner key, and
-      declaring it lossy here would over-claim a second, independent
-      loss that the corpus does not exhibit.
+      An account that arrives keeps its name.  On the corpus none
+      arrives (see `local_users`); the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].hashed_password` and reclassifies STRUCTURAL_ONLY
+      here.
     references: [aoscx-os10-surface]
 
   local_users[].role:
     disposition: good
     note: >
-      Preserved on 1 of 7 cells. On 5 further cells the whole
-      `local_users` list drifted at once (records added or dropped),
-      and the reconciler attributes that single structural event to
-      one owner sub-field rather than counting it against every
-      sibling. So this field shows no loss of its own on this pair:
-      the parent-level drift is recorded against that owner key, and
-      declaring it lossy here would over-claim a second, independent
-      loss that the corpus does not exhibit.
+      An account that arrives keeps its role, written verbatim as `role
+      <role>`.  On the corpus none arrives (see `local_users`); the only
+      drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].hashed_password` and
+      reclassifies STRUCTURAL_ONLY here.
     references: [aoscx-os10-surface]
 
   ntp_servers:

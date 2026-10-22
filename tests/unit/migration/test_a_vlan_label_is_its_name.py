@@ -248,7 +248,9 @@ def _junos_names(text: str) -> dict[int, str]:
 def _os10_descriptions(text: str) -> dict[int, str]:
     """``interface vlan<id>`` in column 0 (any letter case, as the
     bare path writes the source's spelling), then an indented
-    ``description <value>``: the last one, as OS10 applies them."""
+    ``description <value>``: the last one, as OS10 applies them.  A
+    value that holds white space is between quotes, which OS10 does
+    not keep (``description (Interface)``, Dell OS10 User Guide)."""
     out: dict[int, str] = {}
     current: int | None = None
     for line in text.splitlines():
@@ -261,7 +263,9 @@ def _os10_descriptions(text: str) -> dict[int, str]:
             continue
         found = re.fullmatch(r" description (.*?)\s*", line)
         if current is not None and found:
-            out[current] = found.group(1)
+            value = found.group(1)
+            quoted = len(value) > 1 and value[0] == value[-1] == '"'
+            out[current] = value[1:-1] if quoted else value
     return out
 
 
@@ -294,9 +298,15 @@ READERS = {
 }
 
 
+#: The targets that write a VLAN's name as one word, each run of white
+#: space ``_`` with a review line (``one_value_tree``); AOS-S quotes it.
+ONE_WORD = ("arista_eos", "cisco_iosxe_cli", "cisco_nxos")
+
+
 def _as_written(target: str, label: str) -> str:
-    """The label as the target writes a name: EOS takes no white space."""
-    return re.sub(r"\s+", "_", label) if target == "arista_eos" else label
+    """The label as the target writes a name: EOS, IOS-XE and NX-OS
+    read no white space in one."""
+    return re.sub(r"\s+", "_", label) if target in ONE_WORD else label
 
 
 def _render(source: str, text: str, target: str, path: str) -> str:

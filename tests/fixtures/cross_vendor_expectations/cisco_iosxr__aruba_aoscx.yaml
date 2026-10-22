@@ -282,9 +282,10 @@ per_field_expectation:
       Source-side gap: IOS-XR mounts L3 on a sub-interface or a BVI, never on
       the VLAN record itself, so the field is trivially empty on all 12 cells.
       Recorded rather than guessed at.  Worth knowing for a source that does
-      carry it: both codecs independently declare
-      `/vlans/vlan/ipv4/address/ip` LOSSY, so a VLAN-mounted SVI address would
-      not survive this pair either — but no committed cell exercises that path.
+      carry it: aruba_aoscx writes such an address as `interface vlan <N>`
+      (`synthesize_svis_from_vlan_l3`), and cisco_iosxr declares
+      `/vlans/vlan/ipv4/address/ip` LOSSY for the other direction.  No
+      committed cell exercises that path.
     references: [iosxr-aoscx-surface]
 
   "vlans[].untagged_ports":

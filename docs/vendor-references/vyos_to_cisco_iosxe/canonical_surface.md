@@ -69,7 +69,7 @@ is the two matrices side by side in this repo.
 `vyos` in this corpus is a **Linux-based software router / edge gateway**:
 `ethN` and `ethN.M` interface naming, `bondN` aggregation, `dumN` dummy
 interfaces, `lo`, DHCP client on WAN ports, DHCPv6-PD, a small local-user set
-and a curly-brace `config.boot`. The cells are small — 55 interface records
+and a curly-brace `config.boot`. The cells are small — 56 interface records
 across 13 configs, a median of 3 per cell — and **none of them populates
 `vlans` at all**, so there is no campus L2 database on this pair to migrate.
 
@@ -81,8 +81,8 @@ descriptions, admin state, IPv4/IPv6 addressing — and that surface is clean.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 
 VyOS `ethN`, dot1q sub-interfaces (`eth1.100`, `eth1.200`), `lo`, the dummy
@@ -138,7 +138,7 @@ Fields trivially empty on all 13 cells: `timezone`, `syslog_servers`, `vlans`
 
 | sub-field | records affected | of populated | shape |
 |---|---|---|---|
-| `name` / `enabled` | 0 | 55 | — |
+| `name` / `enabled` | 0 | 56 | — |
 | `description` | 0 | 15 | — |
 | `ipv4_addresses` | 0 | 21 | — |
 | `ipv6_addresses` | 0 | 20 | — |
@@ -290,7 +290,7 @@ these zero-observation keys is the same one the rest of the mesh uses:
   `anycast_gateway_mac`, `interfaces[].vrrp_groups` and `vlans[].id`.
 - only the **source** cannot emit it → `not_applicable`. That covers
   `interfaces[].interface_type` (vyos declares
-  `/interfaces/interface/config/type` lossy and populates it on **0 of 55**
+  `/interfaces/interface/config/type` lossy and populates it on **0 of 56**
   records, while `cisco_iosxe` declares the same path **supported**), the
   remaining five `vlans[].*` keys, `evpn_type5_routes`, `raw_sections`,
   `apply_groups` and `group_content`.

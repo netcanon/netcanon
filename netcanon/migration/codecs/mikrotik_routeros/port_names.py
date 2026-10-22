@@ -7,14 +7,18 @@ Pure functions — no parser / renderer state — extracted from
 translation primitives directly without pulling in the parse/
 render machinery.
 
-Recognised RouterOS factory-default forms:
+Recognised RouterOS port forms (the factory names among them are
+listed, with where each is shown, at :func:`is_factory_port_name`):
 
     * ``ether<N>``                  — gigabit Ethernet (CRS/CCR).
     * ``sfp-sfpplus<N>`` /
       ``sfpplus<N>``                — 10G SFP+ cage.
+    * ``sfp28-<N>``                 — 25G SFP28 cage.
     * ``sfp<N>``                    — 1G SFP cage.
+    * ``combo<N>``                  — a combo port (copper or SFP).
     * ``qsfpplus<N>`` /
       ``qsfpplus<N>-<lane>``        — 40G QSFP+, optional breakout.
+    * ``qsfp28-<N>-<lane>``         — 100G QSFP28 and its lanes.
     * ``bond<N>`` / ``bonding<N>``  — LAG.
     * ``bridge`` / ``br-<name>``    — bridge (classified as
                                        ``virtual``; no direct cross-
@@ -48,13 +52,28 @@ from ...canonical.port_names import PortIdentity
 # Regex patterns — module-level so they compile once per import
 # ---------------------------------------------------------------------------
 
-_ETHER_RE = re.compile(r"^ether(\d+)$", re.IGNORECASE)
+# A port's own name is matched in its own case: RouterOS names are
+# free text (the codec states ``port_names_case_sensitive``), and
+# every name the vendor shows for a port is lower case, so
+# ``SFP-SFPPLUS1`` or ``Ether1`` is a name an operator chose, which no
+# shape here says anything about.
+_ETHER_RE = re.compile(r"^ether(\d+)$")
 #: ``sfp-sfpplus<N>`` / ``sfpplus<N>`` — MUST be tried before the
 #: bare ``sfp<N>`` pattern, otherwise the bare form eats it.
-_SFPPLUS_RE = re.compile(r"^(?:sfp-sfpplus|sfpplus)(\d+)$", re.IGNORECASE)
-_SFP_RE = re.compile(r"^sfp(\d+)$", re.IGNORECASE)
+_SFPPLUS_RE = re.compile(r"^(?:sfp-sfpplus|sfpplus)(\d+)$")
+_SFP28_RE = re.compile(r"^sfp28-(\d+)$")
+_SFP_RE = re.compile(r"^sfp(\d+)$")
+_COMBO_RE = re.compile(r"^combo(\d+)$")
 #: QSFP+ 40G with optional ``-<lane>`` breakout suffix.
-_QSFPPLUS_RE = re.compile(r"^qsfpplus(\d+)(?:-(\d+))?$", re.IGNORECASE)
+_QSFPPLUS_RE = re.compile(r"^qsfpplus(\d+)(?:-(\d+))?$")
+#: QSFP28: always a lane, ``-1`` the one a 100G link runs on.
+_QSFP28_RE = re.compile(r"^qsfp28-(\d+)-(\d+)$")
+#: The names a MikroTik device gives its own Ethernet ports: see
+#: :func:`is_factory_port_name`.
+_FACTORY_PORT_RE = re.compile(
+    r"(?:ether|sfp|combo|sfp-sfpplus|sfp28-)\d+"
+    r"|(?:qsfpplus|qsfp28-|qsfp56-|qsfp56-dd-)\d+-\d+"
+)
 _BOND_RE = re.compile(r"^bond(?:ing)?(\d+)$", re.IGNORECASE)
 _LOOPBACK_RE = re.compile(r"^loopback(\d+)$", re.IGNORECASE)
 #: Tunnel subtypes — preserved in meta so same-vendor round-trip
@@ -72,6 +91,39 @@ _VLAN_DOT_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*)\.(\d+)$")
 #: Bridge virtual interface: named ``br-<label>``.  Bare literal
 #: ``bridge`` is matched via string equality.
 _BRIDGE_RE = re.compile(r"^br-[A-Za-z0-9-]+$", re.IGNORECASE)
+
+
+def is_factory_port_name(name: str) -> bool:
+    """Is *name* one a MikroTik device gives one of its own ports?
+
+    Such a name is written into a ``set [ find default-name=... ]``
+    line, which finds the port whatever it has since been called; a
+    name that is not one finds nothing there.  So the shapes are the
+    ones the vendor shows, each from its documentation or an export of
+    a real device, and nothing near them:
+
+    * ``ether<N>``, ``sfp<N>``, ``combo<N>`` -- "IP address
+      192.168.88.1/24 is set on ether1, or combo1, or sfp1" (RouterOS
+      manual, "Default configurations"); ``sfp3`` on the "Ethernet"
+      page.
+    * ``sfp-sfpplus<N>`` -- ``set [ find default-name=sfp-sfpplus1 ]``
+      ("Ethernet").
+    * ``sfp28-<N>`` -- ``set [ find default-name=sfp28-1 ]`` in an
+      export of a CCR2004-1G-12S+2XS (MikroTik forum, thread 266127).
+    * ``qsfpplus<N>-<L>``, ``qsfp28-<N>-<L>``, ``qsfp56-<N>-<L>``,
+      ``qsfp56-dd-<N>-<L>`` -- ``qsfpplus1-1``, ``qsfp28-2-1``,
+      ``qsfp56-1-1``, ``qsfp56-dd-1-1`` ("MikroTik wired interface
+      compatibility"); ``default-name=qsfp28-1-1`` ("Ethernet").
+
+    Every one is lower case with nothing after its number.  A name in
+    another case, or with more after the number -- ``ether1_ADMIN`` is in
+    that same export, ``sfp28-1_UPLINK`` is its kind -- is one the operator
+    gave a port, and says nothing of which port it is.  ``sfpplus<N>``
+    and a ``qsfpplus<N>`` with no lane are read as ports by
+    :func:`classify_port_name`, but no page or export shows a device
+    that names a port so, and they are not factory names here.
+    """
+    return _FACTORY_PORT_RE.fullmatch(name) is not None
 
 
 def classify_port_name(name: str) -> PortIdentity:
@@ -105,6 +157,15 @@ def classify_port_name(name: str) -> PortIdentity:
             meta={"mikrotik_cage": "sfpplus"},
             original=name,
         )
+    m = _SFP28_RE.match(stripped)
+    if m:
+        return PortIdentity(
+            kind="physical",
+            port=int(m.group(1)),
+            name_speed_hint="25gig",
+            meta={"mikrotik_cage": "sfp28"},
+            original=name,
+        )
     m = _SFP_RE.match(stripped)
     if m:
         return PortIdentity(
@@ -112,6 +173,28 @@ def classify_port_name(name: str) -> PortIdentity:
             port=int(m.group(1)),
             name_speed_hint="gig",
             meta={"mikrotik_cage": "sfp"},
+            original=name,
+        )
+    m = _COMBO_RE.match(stripped)
+    if m:
+        # Copper or an SFP, whichever is plugged in: the name says
+        # nothing of the speed.
+        return PortIdentity(
+            kind="physical",
+            port=int(m.group(1)),
+            meta={"mikrotik_cage": "combo"},
+            original=name,
+        )
+    m = _QSFP28_RE.match(stripped)
+    if m:
+        port = int(m.group(1))
+        return PortIdentity(
+            kind="breakout",
+            port=port,
+            breakout_lane=int(m.group(2)),
+            breakout_parent=f"qsfp28-{port}",
+            name_speed_hint="25gig",  # 4x25G breakout lanes
+            meta={"mikrotik_cage": "qsfp28"},
             original=name,
         )
     m = _QSFPPLUS_RE.match(stripped)
@@ -290,6 +373,10 @@ def format_port_identity(identity: PortIdentity) -> str | None:
             return f"sfp{flat}"
         if cage == "sfpplus":
             return f"sfp-sfpplus{flat}"
+        if cage == "sfp28":
+            return f"sfp28-{flat}"
+        if cage == "combo":
+            return f"combo{flat}"
         if identity.name_speed_hint in ("40gig", "100gig"):
             return f"qsfpplus{flat}"
         if identity.name_speed_hint == "25gig":
@@ -302,8 +389,9 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         # suffix on the parent QSFP name.  The QSFP port number itself
         # still goes through the multi-module flatten so cross-vendor
         # breakout parents from non-zero modules don't collide.
+        cage = "qsfp28-" if identity.meta.get("mikrotik_cage") == "qsfp28" else "qsfpplus"
         return (
-            f"qsfpplus{_flat_port_index(identity)}"
+            f"{cage}{_flat_port_index(identity)}"
             f"-{identity.breakout_lane or 1}"
         )
     if identity.kind == "lag":

@@ -196,7 +196,22 @@ class CanonicalInterface(BaseModel):
         enabled: ``True`` if the interface is administratively up.
         interface_type: IANA-ifType discriminator (e.g.
             ``"ethernetCsmacd"``, ``"softwareLoopback"``).
-        mtu: Interface MTU in bytes; ``None`` = use vendor default.
+        mtu: Interface MTU in bytes, counting the PAYLOAD: the
+            largest IP packet the interface carries, with no Ethernet
+            header, tag or FCS (IOS-XE ``mtu 1500``, Junos ``mtu
+            1514``).  A codec whose platform counts more converts at
+            its edge (``MTU_BEYOND_THE_PAYLOAD`` in
+            ``codecs/_helpers.py``).  ``None`` = use vendor default.
+        ip_mtu: The largest IPv4 packet the interface sends, where it
+            is not the payload ``mtu`` says: IOS-XE and AOS-CX ``ip
+            mtu``, IOS XR ``ipv4 mtu``, Junos ``family inet mtu``.  It
+            counts the IP packet, its header included, on every
+            platform.  ``None`` = the payload (``mtu``, or the
+            platform's default where that is ``None``); a parser
+            leaves it ``None`` where the config states the payload
+            itself, and fills it where its platform's IP MTU is a
+            setting of its own that the config does not state
+            (``IP_MTU_THAT_IS_NOT_STATED`` in ``codecs/_helpers.py``).
         ipv4_addresses: IPv4 address records on this interface.
         ipv6_addresses: IPv6 address records on this interface.
         switchport_mode: Switchport state.  ``"access"`` | ``"trunk"`` |
@@ -214,6 +229,21 @@ class CanonicalInterface(BaseModel):
             Kept separate so a routed sub-interface never mis-renders as
             ``switchport access vlan N`` on a switchport-centric target
             (GAP 7).
+        dot1q_inner_vlan: The inner 802.1Q tag of a routed
+            sub-interface that matches two (Q-in-Q): the tag inside
+            the outer one, which is ``dot1q_vlan``.  Cisco
+            ``encapsulation dot1Q <outer> second-dot1q <inner>``,
+            Arista ``encapsulation dot1q vlan <outer> inner <inner>``,
+            Junos ``vlan-tags outer <outer> inner <inner>``.  Both
+            tags are 802.1Q tags (TPID 0x8100): an 802.1ad service
+            tag (VyOS ``vif-s``, IOS XR ``dot1ad``, a Junos TPID of
+            ``0x88a8``) is not this field.  ``None`` = one tag, or
+            none.  Never set without ``dot1q_vlan``.  A statement
+            that matches more than one inner tag (``any``, a range,
+            a list) has no form here: the parser leaves such a
+            sub-interface out, with a row of
+            ``dropped_tier3_sections``, rather than keep its first
+            value.
         trunk_allowed_vlans: VLAN IDs allowed on trunk.  On a trunk
             the list means what it says: ``[]`` is NO VLAN, every id
             (1-4094) is EVERY VLAN, and any other list is the list.
@@ -330,11 +360,13 @@ class CanonicalInterface(BaseModel):
     enabled: bool = True
     interface_type: str = ""
     mtu: int | None = None
+    ip_mtu: int | None = None
     ipv4_addresses: list[CanonicalIPv4Address] = Field(default_factory=list)
     ipv6_addresses: list[CanonicalIPv6Address] = Field(default_factory=list)
     switchport_mode: str | None = None
     access_vlan: int | None = None
     dot1q_vlan: int | None = None
+    dot1q_inner_vlan: int | None = None
     trunk_allowed_vlans: list[int] = Field(default_factory=list)
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None

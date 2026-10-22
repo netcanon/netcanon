@@ -172,7 +172,8 @@ class TestParse:
             if i.name == "GigabitEthernet0/0/0/0"
         )
         assert gi.description == "core uplink to P1"
-        assert gi.mtu == 9192
+        # ``mtu 9192`` counts the Ethernet header; the tree's MTU is the payload.
+        assert gi.mtu == 9178
         assert [(a.ip, a.prefix_length) for a in gi.ipv4_addresses] == [
             ("198.51.100.1", 30),
         ]

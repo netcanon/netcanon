@@ -50,22 +50,26 @@ pair, and it is narrower than it looks.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
+| source interface records, all 13 cells | **56** |
 | records after parse → render → re-parse | **46** |
-| cells where the interface name set differs | **5** |
+| cells where the interface name set differs | **6** |
 | surviving records that were **renamed** | **0** |
 
-The 9 vanished records are `eth1` + `lo` (`metasploit-vyos-config.conf`),
+The 10 vanished records are `eth1` + `lo` (`metasploit-vyos-config.conf`),
 `eth2` + `eth3` + `eth4` + `lo` (`scottlaird-vyos-parser.conf`), and `lo` on
-`vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
-`wcni-kind-gw1.conf`.
+`houdev_vyos_dhcpv6_pd_client.conf`, `vyos_forum_snmpv3_user_eq13.conf`,
+`wcni-kind-gw0.conf` and `wcni-kind-gw1.conf`. The `lo` of
+`houdev_vyos_dhcpv6_pd_client.conf` is an empty interface record: the capture
+prints it on one line (`loopback lo { }`) with nothing set, which the VyOS
+parser reads as the empty interface it is (until 2026-10 it made no record of
+it). Its loss is structural drift on that cell; no attribute is lost.
 
 The mechanism is an **empty-record prune**, and it was tested falsifiably
 rather than inferred:
 
 | class | count |
 |---|---|
-| vanished **and** carrying no renderable attribute | **9** |
+| vanished **and** carrying no renderable attribute | **10** |
 | vanished **and** carrying at least one attribute | **0** |
 | survived **and** carrying at least one attribute | **45** |
 | survived **and** carrying no attribute but an explicit `disable` | **1** |
@@ -79,7 +83,7 @@ record's name returns **0 lines** (checked on
 
 Two controls settle the tempting wrong readings:
 
-- **"loopbacks are dropped"** — `lo` vanishes on 5 cells and **survives** on
+- **"loopbacks are dropped"** — `lo` vanishes on 6 cells and **survives** on
   `kitchen_sink.conf`, the one cell where `lo` carries an IPv4 and an IPv6
   address. The prune is attribute-driven, not name-driven.
 - **"only addressed ports survive"** — `kitchen_sink.conf:eth3` has no address,
@@ -87,7 +91,7 @@ Two controls settle the tempting wrong readings:
   emits `set interfaces eth3 disable`, and the record survives. One renderable
   attribute is enough.
 
-The consequence for the expectation file: because 5 cells change interface
+The consequence for the expectation file: because 6 cells change interface
 record count, every `interfaces[].*` sub-field reports drift on those cells for
 that **one** reason. That signal is claimed exactly once, by
 `interfaces[].name`. The other interface sub-fields are scored on **surviving
@@ -100,7 +104,7 @@ records only**, and all of them except `interface_type` drift zero times.
 | hostname | 13 | 0 | 0 |
 | domain | 1 | 0 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces | 6 | 7 | 0 |
 | static_routes | 3 | 1 | 9 |
 | snmp | 2 | 2 | 9 |
@@ -285,25 +289,22 @@ declares **nothing** for `/lags/lag/name`, `/lags/lag/members` or
 demonstrably rendering, renaming and re-parsing all three. That is a matrix
 under-declaration and belongs to a codec change rather than to this file.
 
-### 4. The NTP drift removes a defect rather than causing one
+### 4. `ntp_servers` crosses whole
 
-`ntp_servers` is populated on 12 of 13 cells and drifts on exactly one,
-`houdev_vyos_dhcpv6_pd_client.conf`. Reading the direction backwards would be
-worse than missing it entirely.
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
-That fixture uses the VyOS 1.4-era `server <host> { }` form — an empty options
-block on the same line. The **vyos parser** captures the brace residue into the
-hostname, producing canonical values of the shape `time1.vyos.net { }`. The
-render passes the residue straight through
-(`set system ntp server time1.vyos.net { }`), and the Junos re-parse takes the
-first whitespace-delimited token, returning the clean `time1.vyos.net`. Three
-servers in, three out, all three correct on the target.
+```
+server         time1.vyos.net { }
+```
 
-So the canonical value differs — which is why it is recorded as a loss — but
-the round-trip **strips** a defect the source introduced. The other 11
-populated cells use the bare `server <host>` form and round-trip untouched. The
-underlying vyos brace-residue bug belongs to a codec change; it is written down
-here so the next reader does not re-hunt it as a Junos rendering problem.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the Junos render wrote
+it out (`set system ntp server time1.vyos.net { }`), and that cell drifted. The
+parser now reads such a line as the node it is, the reading the set form gives
+the same path
+(`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and the
+YAML declares `ntp_servers` good.
 
 ### 5. The static-route metric is the only routing loss
 
@@ -367,7 +368,7 @@ rename from a drop.
 
 **"The migration lost the interface types."** `interfaces[].interface_type` is
 recorded `lossy`, and the row is easy to misread. The source carried **zero**
-interface types across all 55 records. The single drifting record gained one it
+interface types across all 56 records. The single drifting record gained one it
 never had. Read the row as "the canonical type hint is not stable across this
 pair", not as "type information was destroyed".
 

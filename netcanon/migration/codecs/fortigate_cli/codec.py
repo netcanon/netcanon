@@ -45,6 +45,7 @@ from .parse import (
     _parse_blocks,
     _prefix_to_mask,
     parse_intent,
+    without_quoted_values,
 )
 from .render import render_intent
 
@@ -117,6 +118,7 @@ class FortiGateCLICodec(CodecBase):
         version_range="7.x",
         device_classes=[DeviceClass.firewall, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
@@ -170,6 +172,19 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "FortiOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/ipv6/address/scope",
                 reason=(
@@ -368,6 +383,17 @@ class FortiGateCLICodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  A FortiOS "
+                    "VLAN interface whose own interface is a VLAN interface is "
+                    "read as a VLAN interface of one tag, which is not this "
+                    "field.  Declared so that it is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "FortiGate models tenancy as VDOMs, not VRFs, and renders no "
@@ -560,8 +586,12 @@ class FortiGateCLICodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 `config` blocks the parser drops (firewall
         # policies, VIPs, VPN, UTM profiles, router policy/route-maps).
-        # Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_fortios(raw)
+        # Notification-only.  Read from the text the parser read: a line
+        # of a quoted value (a replacement message, a certificate) is
+        # text, not a stanza.
+        intent.dropped_tier3_sections = detect_tier3_sections_fortios(
+            without_quoted_values(raw),
+        )
         return intent
 
     def render(self, tree: Any) -> str:

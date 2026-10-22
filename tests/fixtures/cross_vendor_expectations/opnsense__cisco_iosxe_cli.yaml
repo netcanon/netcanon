@@ -312,16 +312,18 @@ per_field_expectation:
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on both cells that hold VLANs. An OPNsense `<vlan>` has no
-      name of its own: the canonical name is its device's (`vlan0.10`), and
-      its `<descr>` (`USER VLAN`) the description. IOS-XE has one
-      label for a VLAN, and a VLAN whose name is only an interface's is
-      written with its description as its name (`_vlan_labels`): `name USER VLAN`,
-      read back as the name. The reconciler reads that move as preserved
-      (`_vlan_label_moved`); the device keeps its own name as the VLAN
-      interface's.
+    disposition: lossy
+    reason: >
+      An OPNsense `<vlan>` has no name of its own: the canonical name
+      is its device's (`vlan0.10`), and its `<descr>` (`USER VLAN`) the
+      description. IOS-XE has one label for a VLAN, and a VLAN whose
+      name is only an interface's is written with its description as
+      its name (`_vlan_labels`), read back as the name -- a move the
+      reconciler reads as preserved (`_vlan_label_moved`). A label that
+      holds white space is then written with `_` for each run of it,
+      with a review line (`one_value_tree`, docs/CAPABILITIES.md
+      section C): `USER VLAN` is `name USER_VLAN`, which is drift. The
+      device keeps its own name as the VLAN interface's.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].description:

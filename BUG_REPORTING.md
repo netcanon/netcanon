@@ -139,7 +139,7 @@ the same redacted value all 5 times).
 | Public IPv4 | RFC 5737 docs ranges (`192.0.2.x` / `198.51.100.x` / `203.0.113.x`) |
 | Private IPs (RFC 1918, ULA, link-local, loopback, multicast, CGNAT) | Preserved |
 | Local user names | `localuserN` (iterative per-class numbering, cross-reference-stable so AAA / sudo / role references resolve to the same placeholder) |
-| Local user hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
+| Local user hashed passwords | Format-preserving fakes of the same kind (Junos `$9$`, FortiGate `ENC`, every crypt(3) `$id$`, bcrypt `$2y$`, AOS-CX `AQB` ciphertext, Cisco type-7 hex, Aruba SHA-1).  A parser's tag (`arista:sha512:`, `junos:`, `5 `) is kept and only the payload is faked, so a stored hash is never faked as a password as typed; text before a colon that no parser writes is faked with the rest |
 | SNMP communities | `public_redacted_N` |
 | SNMP contact / location (operator PII — email / name / site) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 user names (USM securityName) | `snmpv3userN` (independent counter from local-user-name) |

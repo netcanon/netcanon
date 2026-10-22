@@ -444,6 +444,15 @@ _JUNOS_ONLY_A_LOOPBACK = (
     "set interfaces lo0 unit 0 family inet address 192.0.2.1/32\n"
 )
 
+#: A VyOS router with a port, its loopback and a dummy interface.  On
+#: RouterOS the loopback is ``lo``, and the dummy is written ``lo`` too.
+_VYOS_LO_AND_A_DUMMY = (
+    "set system host-name r1\n"
+    "set interfaces ethernet eth0 address 10.1.0.1/24\n"
+    "set interfaces loopback lo address 192.0.2.1/32\n"
+    "set interfaces dummy dum0 address 192.0.2.2/32\n"
+)
+
 #: An EOS port-channel with two members.
 _EOS_PORT_CHANNEL = """hostname sw
 !
@@ -672,19 +681,19 @@ class TestRenameModalNamesThatAreNoPort:
     def test_a_warning_quoting_one_is_on_its_row(
         self, page: Page, live_server_url: str,
     ):
-        """Junos to OPNsense: the unit ``lo0.2`` is put on ``lo0``,
+        """VyOS to RouterOS: the dummy ``dum0`` is put on ``lo``,
         which is the loopback's name there too, and the job warns
         that two names share it.  The name the warning quotes is
         where a rename ENDS, and such a name is taken for a target's
         and given no row -- unless the job says it is a source name,
         which for a loopback only the list of names that are no
-        port does."""
-        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
-        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
-        row = page.locator(_tid("migrate-rename-row-lo0"))
+        port does.  (A Junos unit of ``lo0`` was this example, and is
+        a loopback of its own now.)"""
+        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
+        row = page.locator(_tid("migrate-rename-row-lo"))
         expect(row).to_have_count(1)
         expect(row).to_have_class(re.compile(r"\bhas-warning\b"))
-        expect(page.locator(_tid("migrate-rename-row-lo0.2"))).to_have_count(1)
+        expect(page.locator(_tid("migrate-rename-row-dum0"))).to_have_count(1)
 
     def test_the_rail_counts_its_row(self, page: Page, live_server_url: str):
         _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
@@ -771,16 +780,15 @@ class TestRenameModalNamesThatAreNoPort:
     def test_a_fusion_nobody_typed_holds_nothing(
         self, page: Page, live_server_url: str,
     ):
-        """Junos to OPNsense once more: the translator itself puts
-        ``lo0.2`` on ``lo0``, which keeps its name.  That is the job
+        """VyOS to RouterOS once more: the translator itself puts
+        ``dum0`` on ``lo``, which keeps its name.  That is the job
         as it came back, and its row carries the warning.  It is not
         counted as a collision, though a name that keeps its name is
         tallied: only against an entry of the operator's own, or
         Apply would be held before anything was typed, and every
         other edit with it."""
-        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
-        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
-        expect(page.locator(_tid("migrate-rename-auto-lo0.2"))).to_have_text("lo0")
+        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
+        expect(page.locator(_tid("migrate-rename-auto-dum0"))).to_have_text("lo")
         summary = page.locator(_tid("migrate-rename-summary"))
         expect(summary).to_contain_text("auto")
         expect(summary).not_to_contain_text("collision")
@@ -792,13 +800,14 @@ class TestRenameModalNamesThatAreNoPort:
 # A job that is partial for its port names, with no devices declared
 # ---------------------------------------------------------------------------
 
-#: A Junos router: a port, the loopback and the loopback of a routing
-#: instance, and the management port.  Onto IOS-XE both loopbacks are
-#: written ``Loopback0``, and the management port has no name there.
+#: A Junos router: a port, the loopback, an ``irb`` and a ``vlan``
+#: unit of one VLAN, and the management port.  Onto IOS-XE both units
+#: are written ``Vlan100``, and the management port has no name there.
 _JUNOS_NOT_SETTLED = """set system host-name r1
 set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
 set interfaces lo0 unit 0 family inet address 192.0.2.1/32
-set interfaces lo0 unit 2 family inet address 192.0.2.2/32
+set interfaces irb unit 100 family inet address 192.0.2.65/26
+set interfaces vlan unit 100 family inet address 192.0.2.2/32
 set interfaces fxp0 unit 0 family inet address 198.51.100.9/24
 """
 
@@ -903,16 +912,20 @@ vlan 1
    exit
 """
 
-#: A Junos router with the loopback of a routing instance beside its
-#: own: two loopbacks, one ``Loopback0`` on EOS.
-_JUNOS_TWO_LOOPBACKS = """set system host-name r1
+#: A Junos router with an ``irb`` and a ``vlan`` unit of one VLAN: two
+#: VLAN interfaces, one ``Vlan100`` on EOS.  (A unit of ``lo0`` was this
+#: example, and is a loopback of its own now.)
+_JUNOS_TWO_ON_VLAN100 = """set system host-name r1
 set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
-set interfaces lo0 unit 0 family inet address 192.0.2.1/32
-set interfaces lo0 unit 2 family inet address 192.0.2.2/32
+set interfaces irb unit 100 family inet address 192.0.2.65/26
+set interfaces vlan unit 100 family inet address 192.0.2.2/32
 """
 
-#: ... and a line that refers to the first as Junos does, with its unit.
-_JUNOS_THREE_ON_ONE = _JUNOS_TWO_LOOPBACKS + """set switch-options vtep-source-interface lo0.0
+#: ... and the loopback, with a line that refers to it as Junos does,
+#: with its unit: ``lo0`` and ``lo0.0`` both end on ``Loopback0``, and
+#: they are one interface.
+_JUNOS_ONE_TWICE_AND_TWO_ON_ONE = _JUNOS_TWO_ON_VLAN100 + """set interfaces lo0 unit 0 family inet address 192.0.2.1/32
+set switch-options vtep-source-interface lo0.0
 set vlans VLAN100 vlan-id 100
 set vlans VLAN100 vxlan vni 10100
 """
@@ -1011,9 +1024,9 @@ class TestRenameModalNamesNotSettled:
         assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
             "1 needs your decision"
         )
-        # A pair of devices would decide the port; the two loopbacks
-        # it would leave as they are, and the strip does not send the
-        # operator there for them.
+        # A pair of devices would decide the port; the two VLAN
+        # interfaces it would leave as they are, and the strip does
+        # not send the operator there for them.
         assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
             "Give all but one of the rows that share a name a target of their "
             "own, or drop them. Give each dropped name a target, or drop it. "
@@ -1035,25 +1048,26 @@ class TestRenameModalNamesNotSettled:
         # interface are drawn as a collision, each naming the other,
         # and counted on their section ...
         failed = painted_token(page, _TABLE, "--badge-failed-bg")
-        for name, other in (("lo0", "lo0.2"), ("lo0.2", "lo0")):
+        for name, other in (("irb.100", "vlan.100"), ("vlan.100", "irb.100")):
             mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
             expect(mark).to_be_visible()
             assert mark.inner_text() == "⛔"
             assert mark.get_attribute("title") == (
-                f"Written as one interface (Loopback0) with: {other}"
+                f"Written as one interface (Vlan100) with: {other}"
             )
             assert alike(
                 painted_background(page.locator(_tid(f"migrate-rename-source-{name}"))), failed,
             ), name
-        for name in ("lo0", "lo0.2"):  # each in a section of its own
-            shared = page.locator(_tid(f"migrate-rename-row-{name}")).locator(
-                "xpath=ancestor::details"
-            )
-            assert "1 collisions" in shared.locator("summary").inner_text(), name
+        shared = page.locator(_tid("migrate-rename-row-irb.100")).locator(
+            "xpath=ancestor::details"
+        )
+        assert "2 collisions" in shared.locator("summary").inner_text()
+        # The loopback, which nothing shares, is not one of them.
+        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_have_count(0)
         # ... and they hold Apply, with the reason beside it.
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
         assert page.locator(_tid("migrate-rename-apply-why")).inner_text() == (
-            "Apply is held: two rows end on one target name (Loopback0) — give "
+            "Apply is held: two rows end on one target name (Vlan100) — give "
             "one another target, or drop it."
         )
         # ... and the dropped port asks for a decision: a mark, a bar
@@ -1070,13 +1084,13 @@ class TestRenameModalNamesNotSettled:
         section = page.locator(_tid("migrate-rename-row-fxp0")).locator("xpath=ancestor::details")
         assert "1 needs a decision" in section.locator("summary").inner_text()
 
-        # Deciding each.  One of the two loopbacks gets a name of its own.
-        override = page.locator(_tid("migrate-rename-override-lo0.2"))
+        # Deciding each.  One of the two units gets a name of its own.
+        override = page.locator(_tid("migrate-rename-override-vlan.100"))
         override.click()
         override.press_sequentially("Loopback2")
         override.press("Tab")
-        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_have_count(0)
-        expect(page.locator(_tid("migrate-rename-collision-lo0.2"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-collision-irb.100"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-collision-vlan.100"))).to_have_count(0)
         # The dropped port: "drop" makes the drop the operator's own.
         acknowledge = page.locator(_tid("migrate-rename-ack-drop-fxp0"))
         assert acknowledge.inner_text() == "drop"
@@ -1089,7 +1103,7 @@ class TestRenameModalNamesNotSettled:
         # Not sent yet: the job on screen is as it was, and so is the strip.
         assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-failed-bg"))
 
-        assert _apply(page)["port_rename_map"] == {"lo0.2": "Loopback2", "fxp0": None}
+        assert _apply(page)["port_rename_map"] == {"vlan.100": "Loopback2", "fxp0": None}
         expect(strip).to_be_hidden()
         assert page.locator(_tid("migrate-rename-status")).inner_text() == (
             "Applied. Rendered output refreshed."
@@ -1213,13 +1227,12 @@ class TestRenameModalNamesNotSettled:
     def test_an_apply_that_settles_nothing(
         self, page: Page, live_server_url: str,
     ):
-        """Junos to OPNsense: ``lo0.2`` is put on ``lo0``, which keeps
+        """VyOS to RouterOS: ``dum0`` is put on ``lo``, which keeps
         its name.  Nothing holds Apply; pressed with nothing decided,
         it comes back as it went, and the footer does not say
         "Rendered output refreshed" over a job that is still not
         settled."""
-        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
-        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
+        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
         strip = _strip(page)
         assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
             "1 name of the output given more than one source name"
@@ -1230,12 +1243,12 @@ class TestRenameModalNamesNotSettled:
         )
         expect(strip).to_be_visible()
         assert "status: partial" in _status_line(page)
-        # A loopback of its own settles it.
-        override = page.locator(_tid("migrate-rename-override-lo0.2"))
+        # A name of its own settles it.
+        override = page.locator(_tid("migrate-rename-override-dum0"))
         override.click()
         override.press_sequentially("lo1")
         override.press("Tab")
-        assert _apply(page)["port_rename_map"] == {"lo0.2": "lo1"}
+        assert _apply(page)["port_rename_map"] == {"dum0": "lo1"}
         expect(strip).to_be_hidden()
         assert "status: completed" in _status_line(page)
 
@@ -1637,8 +1650,8 @@ class TestRenameModalNamesLeftAsTheyWere:
 
 class TestRenameModalWhereDevicesSettleNothing:
     """The pairing by position is of hardware ports.  With both
-    devices declared a job does not hold for two loopbacks on one
-    loopback or for a VLAN interface under a foreign name -- the same
+    devices declared a job does not hold for two VLAN interfaces on
+    one or for a VLAN interface under a foreign name -- the same
     output is ``completed`` there -- so the strip sends nobody to the
     device pickers for names like those, and tells nobody to choose a
     device of a vendor that has none."""
@@ -1677,10 +1690,10 @@ class TestRenameModalWhereDevicesSettleNothing:
         expect(hint).to_have_text("Choose the target device to pair ports by position.")
 
     def test_a_target_device_and_no_port_listed(self, page: Page, live_server_url: str):
-        """A target device is chosen and the job lists two loopbacks
-        on one loopback.  The strip used to add "Choose the source
+        """A target device is chosen and the job lists two VLAN
+        interfaces on one.  The strip used to add "Choose the source
         device as well to pair ports by position."."""
-        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_TWO_LOOPBACKS)
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_TWO_ON_VLAN100)
         assert "status: partial" in _status_line(page)
         page.locator(_tid("migrate-rename-target-vendor-select")).select_option(
             value="arista_eos"
@@ -1706,7 +1719,7 @@ class TestRenameModalWhereDevicesSettleNothing:
     ):
         """The other way about: a hardware port among the names is
         what the pairing is for, and the offer stands -- here beside
-        two loopbacks on one, which it says it leaves."""
+        two VLAN interfaces on one, which it says it leaves."""
         _open_modal_on(
             page, live_server_url, "juniper_junos", "cisco_iosxe_cli", _JUNOS_NOT_SETTLED,
         )
@@ -1846,22 +1859,28 @@ class TestRenameModalWhatTheStripCounts:
         assert "1 other name(s) the target has no form for" in banner
 
     def test_the_summary_counts_the_jobs_rows(self, page: Page, live_server_url: str):
-        """Three rows end on ``Loopback0``: ``lo0``, the loopback of
-        a routing instance ``lo0.2``, and ``lo0.0``, which is ``lo0``
-        written with its unit.  The job lists the first two as two
-        interfaces written as one, and the summary counts those."""
-        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_THREE_ON_ONE)
-        for name in ("lo0", "lo0.2", "lo0.0"):
+        """Two rows end on ``Vlan100``: an ``irb`` and a ``vlan`` unit.
+        Two more end on ``Loopback0``: ``lo0``, and ``lo0.0``, which is
+        ``lo0`` written with its unit.  The job lists the first two as
+        two interfaces written as one, and the summary counts those."""
+        _open_modal_on(
+            page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_ONE_TWICE_AND_TWO_ON_ONE,
+        )
+        for name, auto in (
+            ("irb.100", "Vlan100"), ("vlan.100", "Vlan100"),
+            ("lo0", "Loopback0"), ("lo0.0", "Loopback0"),
+        ):
             row = page.locator(_tid(f"migrate-rename-row-{name}"))
             section = row.locator("xpath=ancestor::details")
             if not section.evaluate("el => el.open"):
                 section.locator("summary").click()
-            assert page.locator(_tid(f"migrate-rename-auto-{name}")).inner_text() == "Loopback0"
+            assert page.locator(_tid(f"migrate-rename-auto-{name}")).inner_text() == auto
+        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_have_count(0)
         expect(page.locator(_tid("migrate-rename-collision-lo0.0"))).to_have_count(0)
-        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_be_visible()
-        expect(page.locator(_tid("migrate-rename-collision-lo0.2"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-collision-irb.100"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-collision-vlan.100"))).to_be_visible()
         summary = page.locator(_tid("migrate-rename-summary")).inner_text()
-        assert "2 collisions" in summary and "3 collisions" not in summary
+        assert "2 collisions" in summary and "4 collisions" not in summary
 
 
 class TestRenameModalModuleDropdown:

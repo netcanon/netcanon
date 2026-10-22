@@ -266,8 +266,12 @@ per_field_expectation:
       Default-VRF static routes round-trip cleanly via dotted-mask
       <-> CIDR conversions: FortiOS ``set dst 10.0.0.0
       255.255.0.0`` -> Aruba ``ip route 10.0.0.0/16``.
-      ``interface`` field requires the rename mesh to map
-      FortiGate's ``port1`` to an Aruba-shape interface name.
+      AOS-S names only an address, ``vlan <id>`` or ``blackhole`` as
+      a next hop: a route's ``interface`` beside a gateway is not
+      written (``port1``, ``agg1`` on the kitchen-sink cell), and a
+      route with neither a gateway nor an interface -- which a
+      FortiOS ``set blackhole enable`` route parses to, the discard
+      itself lost on parse -- is left out under a ``; review:`` line.
       Metric semantics differ (FortiGate distance / AD-ordering vs
       Aruba per-route preference) so the integer preserves but its
       meaning differs.  Description / comment (FortiGate ``set

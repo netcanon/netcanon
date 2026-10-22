@@ -487,9 +487,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             intent.lags.append(CanonicalLAG(
                 name=name, members=members, mode=mode,
             ))
-            # Reverse-link members to this LAG.
+            # Reverse-link members to this LAG.  OPNsense adds only an
+            # UNASSIGNED interface to a LAGG ("Only unassigned
+            # interfaces can be added to LAGG", docs.opnsense.org,
+            # Other Types), so a member has no ``<interfaces>`` zone and
+            # is named here alone: it is given the record a zone with
+            # nothing in it would make.  Without one, every target that
+            # writes a member from its interface record wrote the LAG
+            # with no member at all.
             for m in members:
-                for iface in named.get(m, ()):
+                if m not in named:
+                    record = CanonicalInterface(name=m, lag_member_of=name)
+                    intent.interfaces.append(record)
+                    named[m] = [record]
+                for iface in named[m]:
                     if iface.lag_member_of is None:
                         iface.lag_member_of = name
 

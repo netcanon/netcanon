@@ -18,17 +18,16 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: there the
 # interface inventory was fully preserved (156 in, 156 out) and every
 # interface loss stood on its own measurement.  Here the inventory shrinks —
-# 55 records in, 46 out, on 6 of 13 cells — so `interfaces[].name` carries a
+# 56 records in, 46 out, on 7 of 13 cells — so `interfaces[].name` carries a
 # structural loss and the interface sub-fields below it inherit that ONE
 # signal.  They are declared `good` on what was measured on the records that
 # SURVIVE, which is the only thing those keys can honestly measure.  The
-# decisive number: all 10 elided records were BARE — no description, no
+# decisive number: all 11 elided records were BARE — no description, no
 # address, no MTU, admin-up, no VRF, no LAG membership, no VRRP group.
 # Nothing an operator configured left with them.
 #
-# The four real losses on this pair are local-user credentials (universal and
-# severe), the SNMPv3 engineID, the LAG identity rename, and a one-cell NTP
-# parser artefact.
+# The three real losses on this pair are local-user credentials (universal
+# and severe), the SNMPv3 engineID, and the LAG identity rename.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
 # and a 13-cell round-trip over the committed corpus (0 render errors, 0
@@ -103,24 +102,17 @@ per_field_expectation:
     references: [vyos-arista-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Drifts on exactly 1 of 13 cells, and the drift is punctuation the
-      SOURCE parser attached — not a server that went missing.
-      `houdev_vyos_dhcpv6_pd_client.conf` writes its servers as one-line
-      empty-body blocks (`server         time1.vyos.net { }`).  The VyOS
-      brace parser captures the whole token run, so the canonical value is
-      `time1.vyos.net { }`.  The EOS render emits that verbatim as
-      `ntp server time1.vyos.net { }`, and the EOS parser reads only the
-      first token after `ntp server`, so the round trip returns the clean
-      `time1.vyos.net`.
-      All three hostnames are present on both sides, in order — the text
-      survives, the stray brace pair does not.  Recorded as a loss because
-      the audit compares canonical strings and this one is not preserved, but
-      an operator reading a migration report should know the target value is
-      the more correct of the two.  On the other 11 populated cells the lists
-      are byte-identical.  Both matrices declare `/system/ntp-server`
-      supported.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the EOS render
+      wrote it out (`ntp server time1.vyos.net { }`), and that cell drifted.
+      The parser now reads such a line as the node it is, the reading the set
+      form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-arista-surface]
 
   timezone:
@@ -146,9 +138,9 @@ per_field_expectation:
 
   # -- Interfaces -- bare stubs elided, configured attributes intact ---------
   #
-  # 55 source interface records across 13 cells, 46 after the round trip: 10
+  # 56 source interface records across 13 cells, 46 after the round trip: 11
   # elided, 1 synthesised (`Port-Channel0` on the kitchen sink).  The name set
-  # differs on 6 cells, and those 6 cells are why every `interfaces[].*` key
+  # differs on 7 cells, and those 7 cells are why every `interfaces[].*` key
   # below shows drift in the mesh — a list that changes length reports the
   # WHOLE record as drifted and stops diffing sub-fields.  That is ONE
   # structural loss, claimed once, by `interfaces[].name`.  It is correlated
@@ -158,12 +150,17 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      The interface inventory shrinks: 55 records in, 46 out, with the name
-      set differing on 6 of 13 cells.  10 records are elided —
+      The interface inventory shrinks: 56 records in, 46 out, with the name
+      set differing on 7 of 13 cells.  11 records are elided —
       `metasploit-vyos-config.conf` loses `eth1` and `lo`,
       `scottlaird-vyos-parser.conf` loses `eth2`, `eth3`, `eth4`, `eth5` and
-      `lo`, and `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
-      `wcni-kind-gw1.conf` each lose `lo`.
+      `lo`, and `houdev_vyos_dhcpv6_pd_client.conf`,
+      `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
+      `wcni-kind-gw1.conf` each lose `lo`.  The houdev `lo` is printed as a
+      node with nothing under it (`loopback lo { }`) — an empty interface
+      record, nothing set — which the parser has read as a record since
+      2026-10; it is elided like the others, structural drift with no
+      attribute lost.
       The mechanism is the arista_eos render's empty-stub elision policy
       (`arista_eos/render.py`, the block around the `has_renderable_attr` /
       `is_native_port` / `is_referenced` test): a content-free canonical
@@ -176,12 +173,12 @@ per_field_expectation:
       and a /128, which is the proof that the rule is about content plus name
       shape and not about the name alone.
       What this costs is bounded, and it is the reason the interface
-      sub-fields below are `good` rather than dragged down: ALL 10 elided
+      sub-fields below are `good` rather than dragged down: ALL 11 elided
       records were bare — zero descriptions, zero IPv4, zero IPv6, no MTU,
       admin-up, no VRF, no LAG membership, no VRRP group.  The port
       inventory thins; no configured attribute leaves with it.
       Recorded `lossy` rather than `unsupported`: arista_eos declares
-      `/interfaces/interface/name` SUPPORTED and renders 46 of 55 records, so
+      `/interfaces/interface/name` SUPPORTED and renders 46 of 56 records, so
       this is a partial record loss inside a concept the target models fully
       — not the concept-level gap that would justify `unsupported` (#436).
       One caveat that does bite: the render never MAPS a VyOS name onto an
@@ -195,7 +192,7 @@ per_field_expectation:
     disposition: good
     note: >
       Measured on the records that survive: 15 populated descriptions across
-      7 cells, ZERO drift on any of them, and none of the 10 elided records
+      7 cells, ZERO drift on any of them, and none of the 11 elided records
       carried a description.  Both matrices declare
       `/interfaces/interface/config/description` supported.
       Stated because it invites a wrong assumption: the vyos codec's
@@ -204,7 +201,7 @@ per_field_expectation:
       — `vyos/render.py`) is a TARGET-side behaviour.  On this pair VyOS is
       the SOURCE, so no description is rewritten by it.  This `good` is a
       real round-trip result, not an untested one.
-      The record-level disappearance on 6 cells belongs to
+      The record-level disappearance on 7 cells belongs to
       `interfaces[].name` and is counted there once.
     references: [vyos-arista-surface]
 
@@ -224,7 +221,7 @@ per_field_expectation:
     disposition: good
     note: >
       Preserved on every surviving record.  Coverage is thin and worth saying
-      so plainly: exactly 1 of the 55 source records sets an MTU
+      so plainly: exactly 1 of the 56 source records sets an MTU
       (`kitchen_sink.conf` `eth0`, 1500), it renders as `mtu 1500` and
       re-parses unchanged, and the other 12 cells set none at all.  vyos
       declares `/interfaces/interface/config/mtu` supported; arista_eos
@@ -238,7 +235,7 @@ per_field_expectation:
       Preserved on every surviving record: 20 records carry IPv6 across 5
       cells (the four `pc5-round3b-*` fixtures are IPv6-only lab links, plus
       one on the kitchen sink) and every address and prefix-length
-      round-trips.  None of the 10 elided records carried an IPv6 address.
+      round-trips.  None of the 11 elided records carried an IPv6 address.
       Both matrices declare `/interfaces/interface/ipv6/address/ip` and
       `.../prefix-length` supported.
     references: [vyos-arista-surface]
@@ -249,7 +246,7 @@ per_field_expectation:
       Preserved on every surviving record and the widest-populated field on
       the pair: 21 records across 9 cells, all clean, including the
       dot1q sub-interfaces whose `encapsulation dot1q vlan <id>` and address
-      both survive.  None of the 10 elided records carried an IPv4 address —
+      both survive.  None of the 11 elided records carried an IPv4 address —
       that is the measurement that keeps the structural loss on
       `interfaces[].name` from touching the addressing this migration
       actually depends on.
@@ -267,7 +264,7 @@ per_field_expectation:
     disposition: good
     note: >
       Nothing is lost because nothing is carried: the VyOS parser emits an
-      IANA type hint on ZERO of the 55 source records, so the field is empty
+      IANA type hint on ZERO of the 56 source records, so the field is empty
       on both sides of every surviving record on all 13 cells.
       Both matrices declare `/interfaces/interface/config/type` LOSSY in
       their own right — vyos because a Linux interface name encodes no media
@@ -307,7 +304,7 @@ per_field_expectation:
       mode, priority, preempt, advertisement-interval, authentication,
       virtual-IPv6 and description are all dropped at parse — so no VRRP
       state ever enters the canonical tree from this source.  Measured 0 of
-      55 records populated, empty on both sides of every surviving record.
+      56 records populated, empty on both sides of every surviving record.
       arista_eos declares `/interfaces/interface/vrrp-groups/group`
       SUPPORTED (only `.../mode` lossy), so re-authoring first-hop redundancy
       on the EOS side will stick.  Recover it from the VyOS source config by
