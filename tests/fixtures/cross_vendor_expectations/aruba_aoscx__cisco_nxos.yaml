@@ -296,11 +296,12 @@ per_field_expectation:
       the sibling SVI interface record instead: `interface vlan 101 / ip
       address 10.12.101.2/24` is present in the NX-OS render and re-parses
       onto `interfaces[]`, so the subnet is not lost from the migration, only
-      from this mounting point.  cisco_nxos declares
-      `/vlans/vlan/ipv4/address/ip` LOSSY for exactly that reason (it renders
-      an SVI only from a sibling interface stanza, not from the VLAN record),
-      which is why this is `lossy` and not `unsupported` — it must warn, not
-      block.
+      from this mounting point.  This path translates no name, so the render
+      writes the AOS-CX `interface vlan 101` as it stands, and the NX-OS
+      parser reads it as an interface called `vlan` rather than as the
+      VLAN's; `synthesize_svis_from_vlan_l3` writes no second `Vlan101` for
+      a VLAN that has an interface in any spelling.  That is why this is
+      `lossy` and not `unsupported` — it must warn, not block.
       On the `translate_port_names` path all 18 addresses stay on the VLAN
       record as well (18 -> 18), so the VLAN-record drop is part of the naming
       family.  The genuine, translation-independent loss inside this key is

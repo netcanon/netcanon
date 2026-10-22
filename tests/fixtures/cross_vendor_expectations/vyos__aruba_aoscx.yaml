@@ -326,10 +326,10 @@ per_field_expectation:
       interface record (an `ethN` or a `vif` sub-interface), never on a VLAN
       record, and vyos declares the `/vlans/vlan/ipv4/address/*` secondary,
       virtual-gateway-address and virtual-gateway-mac paths unsupported.
-      aruba_aoscx declares `/vlans/vlan/ipv4/address/ip` LOSSY — it renders
-      an SVI only from a sibling interface stanza, not from L3 carried on the
-      VLAN record — which would matter for a source that actually produces
-      one.  The corresponding addressing lives in
+      aruba_aoscx writes an address carried on the VLAN record as `interface
+      vlan <N>` (`synthesize_svis_from_vlan_l3`), which would matter for a
+      source that actually produces one.  The corresponding addressing lives
+      in
       `interfaces[].ipv4_addresses`, which is `good`.
     references: [vyos-aoscx-surface]
 

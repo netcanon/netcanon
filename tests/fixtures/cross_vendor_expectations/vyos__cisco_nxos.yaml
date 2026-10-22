@@ -344,10 +344,10 @@ per_field_expectation:
       `vlans[].id`.
       Worth noting the declarations do not disagree with that: vyos declares
       the VLAN-SVI L3 mount unsupported (`.../secondary-ip`,
-      `.../virtual-gateway-address`, `.../virtual-gateway-mac`) and cisco_nxos
-      declares `/vlans/vlan/ipv4/address/ip` lossy because it renders no SVI
-      from a VLAN record.  Neither matters when no source record reaches the
-      path.  The corresponding addressing lives in
+      `.../virtual-gateway-address`, `.../virtual-gateway-mac`), and
+      cisco_nxos writes a VLAN record's address as `interface Vlan<N>`.
+      Neither matters when no source record reaches the path.  The
+      corresponding addressing lives in
       `interfaces[].ipv4_addresses`, which is `good`.
     references: [vyos-nxos-surface]
 

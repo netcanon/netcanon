@@ -690,6 +690,20 @@ the policy locally:
   doesn't match the shared CLI-oriented signature; aligning the
   two is a separate follow-up.
 
+* **`netcanon/migration/canonical/transforms.py::synthesize_svis_from_vlan_l3`**
+  — the other direction: an interface for each VLAN that holds an
+  address on its record and has no interface of its own in the tree
+  (the Junos parser folds an `irb` unit's address onto the VLAN it
+  binds, and keeps no interface for the unit).  Called by the four
+  renderers that state a VLAN's address only on a VLAN interface:
+  `arista_eos`, `cisco_iosxe_cli`, `cisco_nxos` and `aruba_aoscx`,
+  each naming the interface its own way.  An interface of the VLAN is
+  recognised in any spelling (`Vlan10`, `vlan10`, `vlan 10`), so a
+  tree another codec parsed gets no second one, and the addresses
+  after the first are marked `is_secondary`.
+  `tests/unit/migration/test_a_vlan_records_address_is_written.py`
+  reads each of the four outputs as text and with its parser.
+
 * **`netcanon/migration/canonical/transforms.py::_natural_port_sort_key`**
   — natural-sort key for port-name strings (`1/1, 1/2, 1/10` rather
   than lex `1/1, 1/10, 1/2`).  Used by `project_switchport_to_vlan`

@@ -450,7 +450,9 @@ its indentation").
 
 Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
 HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
-Anycast Gateway).  A banner, ended at the next occurrence of its
+Anycast Gateway).  An address held on a VLAN record (the address of a
+Junos `irb` unit a VLAN binds) is written as `interface Vlan<N>`;
+its anycast virtual gateway is not.  A banner, ended at the next occurrence of its
 delimiter anywhere, and a `scheduler job`'s commands, ended by a line
 `end-job`, are text and are not read as configuration; one with no
 end, or with a line that ends in a form feed or the like, is refused
@@ -530,7 +532,10 @@ without its indentation").
 
 Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
 v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
-Distinct from the campus `aruba_aoss` (AOS-S) codec.  A banner, ended
+Distinct from the campus `aruba_aoss` (AOS-S) codec.  An address held
+on a VLAN record (the address of a Junos `irb` unit a VLAN binds) is
+written as `interface vlan <N>`; its anycast virtual gateway is not.
+A banner, ended
 at the first later line that ENDS with its one delimiter (one with
 text after it is the banner's text), is text and is not read as
 configuration; one with no end, more than one character after its

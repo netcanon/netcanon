@@ -209,6 +209,17 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
   sub-interface is not translated`).  A tag of 0 is no 802.1Q VLAN id, and
   a stanza tagged so is left out the same way.
+- **A VLAN's address with no interface of its own gets one, once.**
+  A source can hold a VLAN's address on the VLAN itself: Junos folds
+  the address of an `irb` unit that a VLAN binds with `l3-interface`
+  onto the VLAN.  As a target, EOS writes `interface Vlan<N>` for it,
+  and writes the addresses after the first `secondary`; release
+  0.7.7 and earlier wrote them with no `secondary`, as primary
+  addresses.  An interface of the VLAN the source already has is
+  found in any spelling, so an AOS-CX `interface vlan 101` that
+  reaches the renderer untranslated no longer gets an `interface
+  Vlan101` beside it (the API and the demo translate the name, and
+  were not affected).
 - **Paste the config as the switch prints it, with its
   indentation.**  This parser tells which lines belong to a stanza by
   their indentation.  A text with no line indented but a comment, the

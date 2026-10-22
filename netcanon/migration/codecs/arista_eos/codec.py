@@ -172,12 +172,14 @@ class AristaEOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
-                    "VLAN-SVI mount render gap: this codec renders a VLAN's L3 "
-                    "by synthesizing an `interface Vlan<N>` "
-                    "(synthesize_svis_from_vlan_l3), which copies only "
-                    "ip+prefix_length, so the is_secondary flag on a VLAN-"
-                    "record address is dropped. The SVI L3 itself round-trips, "
-                    "so declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount: this codec renders a VLAN's L3 by "
+                    "synthesizing an `interface Vlan<N>` "
+                    "(synthesize_svis_from_vlan_l3), which writes an address "
+                    "after the first `secondary` by its position; the "
+                    "record's own is_secondary flag is not read, and the parse "
+                    "folds only ip+prefix_length back onto the VLAN. The SVI "
+                    "L3 itself round-trips, so declared lossy (blind-audit "
+                    "f92e97a T0-2)."
                 ),
                 severity="warn",
             ),

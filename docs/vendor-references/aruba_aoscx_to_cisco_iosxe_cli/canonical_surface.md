@@ -1,5 +1,7 @@
 # AOS-CX → Cisco IOS-XE CLI: measured canonical surface
 
+> **Update 2026-10-20 — the IOS-XE render no longer writes a second VLAN interface beside an AOS-CX `interface vlan <N>`.**  `synthesize_svis_from_vlan_l3` now recognises a VLAN interface however a codec spells it (`Vlan10`, `vlan10`, `vlan 10`), so a VLAN whose address is already on `interface vlan 101` gets no `interface Vlan101` as well.  That duplicate carried the VLAN's address on two interfaces, the second without the first's description or shutdown.  Measured after the change: `mgmt` is not rendered, so five cells drift by one interface record (9 -> 8 on two, 18 -> 17, 42 -> 41, 13 -> 12), and the other two now align record by record, which shows the active gateway lost on the address it belongs to (`vlan 1` on `canu_csm17_spine001_ipv6_vrf`).  What is said below of the synthesized `Vlan101` / `Vlan102`, and the interface counts, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
 

@@ -35,6 +35,7 @@ from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
+from ...canonical.transforms import synthesize_svis_from_vlan_l3
 from .._helpers import (
     _coalesce_vlan_ids,
     every_native_vlan_tagged,
@@ -154,8 +155,15 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Management plane — domain / DNS / NTP / syslog (promotion #4) ──
     lines.extend(_render_management_plane(tree))
 
+    # An address the tree holds on a VLAN record (a Junos ``irb`` unit
+    # folded onto its VLAN, an AOS-S VLAN's ``ip address``) with no
+    # ``Vlan<N>`` interface beside it is written as one, as EOS and
+    # IOS-XE do: NX-OS states a VLAN's L3 on ``interface Vlan<N>``
+    # only.  Non-mutating -- rendered alongside ``tree.interfaces``.
+    synth_svis = synthesize_svis_from_vlan_l3(tree)
+
     # ── Render-derived feature block ──
-    features = _derive_features(tree)
+    features = _derive_features(tree, synth_svis)
     for feat in features:
         lines.append(f"feature {feat}")
     if features:
@@ -256,7 +264,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # say the line for every trunk, and no record of its interface
     # has a native VLAN.
     stated = native_vlan_stated(tree.interfaces)
-    for iface in _sort_interfaces_nxos(tree.interfaces):
+    for iface in _sort_interfaces_nxos([*tree.interfaces, *synth_svis]):
         lines.extend(_render_interface(
             iface, lag_mode_by_name, not tag_every_native and iface.name not in stated,
         ))
@@ -272,16 +280,27 @@ def render_intent(tree: CanonicalIntent) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _derive_features(tree: CanonicalIntent) -> list[str]:
+def _derive_features(
+    tree: CanonicalIntent, synth_svis: list | tuple = (),
+) -> list[str]:
     """Return the sorted ``feature`` list the render must emit.
 
     NX-OS feature-gates are derived from the canonical-tree shape (not a
     canonical primitive — see ``03-canonical-mapping.md`` § 5): any SVI →
     ``interface-vlan``, any LAG → ``lacp``, any FHRP group → ``hsrp``, and
     any VXLAN VNI / L3VNI → ``nv overlay`` + ``vn-segment-vlan-based``.
+
+    Args:
+        tree: The tree being rendered.
+        synth_svis: The SVIs written for VLAN records' addresses
+            (:func:`synthesize_svis_from_vlan_l3`), which need
+            ``interface-vlan`` as the tree's own do.
+
+    Returns:
+        The feature names, sorted.
     """
     features: set[str] = set()
-    if any(_is_svi(i.name) for i in tree.interfaces):
+    if any(_is_svi(i.name) for i in [*tree.interfaces, *synth_svis]):
         features.add("interface-vlan")
     # A tunnel interface is invalid on a real Nexus without ``feature
     # tunnel``.  Fire on EITHER the ``Tunnel`` name prefix (a bare ``interface

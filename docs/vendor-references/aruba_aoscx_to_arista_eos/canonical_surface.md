@@ -1,5 +1,7 @@
 # AOS-CX → Arista EOS: measured canonical surface
 
+> **Update 2026-10-20 — the EOS render no longer writes a second VLAN interface beside an AOS-CX `interface vlan <N>`, and on this path the VLAN's address is now lost.**  `synthesize_svis_from_vlan_l3` now recognises a VLAN interface however a codec spells it, so a VLAN whose address is already on `interface vlan 101` gets no `interface Vlan101` as well.  That duplicate was the only line that carried the address back on the mesh path, which translates no name: the EOS parser reads no `interface vlan 101`, the same loss as every spaced AOS-CX name (`lag 1`, `loopback 0`).  `vlans[].ipv4_addresses` is therefore recorded `unsupported` on all five cells, and each cell parses back fewer interface records than before.  With port names translated, as the API and the demo do, `vlan 101` arrives as `Vlan101` with its address; the active gateway is not kept on the VLAN.  Statements below that the address survives on this path describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
 

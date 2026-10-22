@@ -10,19 +10,22 @@
 # identity field, both VXLAN bindings, VRF names, the anycast MAC, hostname,
 # static routes and the SNMP scalars.
 #
-# The dominant loss is structural and has ONE cause: the fidelity mesh
-# renders bare (`target_codec.render(intent)`), which does not engage the
-# cross-vendor port-name bridge, so AOS-CX port names (`1/1/49`, `lag 1`,
-# `vlan 101`, `loopback 0`) reach the IOS-XE render verbatim.  On re-parse the
-# IOS-XE line scanner truncates them at the first space and
-# `synthesize_svis_from_vlan_l3` adds duplicate `Vlan<N>` records, so the
-# interface record sets never align — count drift on all 7 cells, in both
-# directions (9 -> 8 on the two leaf cells, 18 -> 20 / 42 -> 44 / 22 -> 27 /
-# 44 -> 49 / 13 -> 14 on the rest).  EVERY `interfaces[].*` key is therefore
-# measured as drifted for that single reason.  Declaring any of them `good`
-# would manufacture a false CODEC_BUG; none of them is independent evidence
-# for another.  (`interfaces[].vrrp_groups` is `unsupported` on its own
-# merits — AOS-CX declares that whole subtree unsupported.)
+# The dominant loss is structural: the fidelity mesh renders bare
+# (`target_codec.render(intent)`), which does not engage the cross-vendor
+# port-name bridge, so AOS-CX port names (`1/1/49`, `lag 1`, `vlan 101`,
+# `loopback 0`) reach the IOS-XE render verbatim, and the IOS-XE parser
+# reads them back with the space taken out (`lag101`, `vlan101`).  The
+# AOS-CX `mgmt` port is not rendered at all, so the five cells that have
+# one drift on record count (9 -> 8 on the two leaf cells, 18 -> 17,
+# 42 -> 41 and 13 -> 12 on the rest), and on those cells every
+# `interfaces[].*` key is measured as drifted for that single reason.  The
+# two cells with no `mgmt` port (`canu_csm17_spine001_ipv6_vrf`,
+# `netutils_aoscx_snmpv3_glcx1009`) align record for record, and the keys
+# below are declared on what those two measure.  (Before
+# `synthesize_svis_from_vlan_l3` knew an AOS-CX `vlan <N>` for a VLAN
+# interface, it wrote a second `Vlan<N>` beside each, and no cell aligned.)
+# (`interfaces[].vrrp_groups` is `unsupported` on its own merits — AOS-CX
+# declares that whole subtree unsupported.)
 #
 # A control run with `translate_port_names` engaged is recorded in the vendor
 # reference: the same fixtures then align record-for-record (8 -> 8, 17 -> 17)
@@ -139,92 +142,84 @@ per_field_expectation:
 
   # -- Interfaces -- the structural loss on this pair ------------------------
   #
-  # All nine keys below drift on all 7 cells because of ONE comparator
-  # observation: `count drift: N -> M (interfaces)`.  They are one measurement
-  # counted nine times, not nine corroborating measurements.  Where a key ALSO
-  # has an independently observed loss, the reason says so and names it.
+  # On the five cells with a `mgmt` port, all nine keys below drift because
+  # of ONE comparator observation: `count drift: N -> M (interfaces)`.  That
+  # is one measurement counted nine times, not nine corroborating
+  # measurements.  What a key does on the two cells that align is its own
+  # evidence, and the reason says what it is.
 
   "interfaces[].name":
     disposition: lossy
     reason: >
-      The interface record sets never align — all 7 cells drift on record
-      count, and in both directions: 9 -> 8 on the two `aoscx_dcn_arch3_*leaf1a`
-      cells, 18 -> 20, 42 -> 44, 22 -> 27, 44 -> 49 and 13 -> 14 on the rest.
-      Round-tripping `aoscx_dcn_arch3_ebgp_leaf1a.cfg` shows why: the bare
-      render emits AOS-CX names verbatim (`interface lag 1`,
-      `interface loopback 0`, `interface 1/1/49`), the IOS-XE re-parse
-      truncates each at the first space so `lag 1`/`lag 2`/`lag 101` collapse
-      onto one record named `lag` and `loopback 0`/`loopback 1` both become
-      `loopback`, and `synthesize_svis_from_vlan_l3` adds `Vlan101`-style
-      records alongside the passthrough `vlan 101` stanzas.  The AOS-CX `mgmt`
-      OOB port is not emitted at all on any cell.  Build the port-name mapping
-      before cutover — AOS-CX `1/1/49` is not an IOS-XE interface name — and
-      plan the out-of-band management port separately.
+      Drifts on all 7 cells.  The AOS-CX `mgmt` OOB port is not emitted at
+      all, so the five cells that have one lose a record (9 -> 8 on the two
+      `aoscx_dcn_arch3_*leaf1a` cells, 18 -> 17, 42 -> 41 and 13 -> 12 on the
+      rest).  On the other two every record survives and its NAME changes:
+      the bare render emits AOS-CX names verbatim (`interface lag 101`,
+      `interface loopback 0`, `interface vlan 1`) and the IOS-XE re-parse
+      reads them with the space taken out (`lag101`, `loopback0`, `vlan1`).
+      Build the port-name mapping before cutover — AOS-CX `1/1/49` is not an
+      IOS-XE interface name — and plan the out-of-band management port
+      separately.
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].description":
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Both matrices declare `/interfaces/interface/config/description`
-      supported, and every record that keeps its name keeps its description
-      intact on the round-trip.  It is lossy here only because the record it
-      belongs to may not survive under its own name — see `interfaces[].name`.
-      One independent gap: the synthesized `interface Vlan<N>` carries only
-      ip + prefix_length, so the SVI description survives on the passthrough
-      stanza and is absent on the synthesized duplicate.
+      supported, and it is preserved on both cells whose interface list
+      aligns; on the other five it drifts only with the lost `mgmt` record
+      (see `interfaces[].name`).
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].enabled":
-    disposition: lossy
-    reason: >
-      Admin state is declared supported on both sides and survives on every
-      name-preserving record; lossy on this pair because the interface list
-      does not align (`interfaces[].name`).  The concrete hazard is the
-      duplicated SVI: on `aoscx_dcn_arch4_core1_1.cfg` the render emits
-      `interface vlan 101` WITH `shutdown` and `interface Vlan101` WITHOUT it,
-      for the same SVI.  An operator pasting that render configures the
-      interface twice with contradictory admin state.  Reconcile shut/no-shut
-      per SVI by hand after cutover.
+    disposition: good
+    note: >
+      Admin state is declared supported on both sides and preserved on both
+      cells whose interface list aligns; on the other five it drifts only
+      with the lost `mgmt` record (see `interfaces[].name`).  The render no
+      longer writes an SVI twice: it wrote `interface vlan 101` WITH
+      `shutdown` and a synthesized `interface Vlan101` WITHOUT it, for one
+      SVI, until `synthesize_svis_from_vlan_l3` knew the AOS-CX spelling for
+      a VLAN interface.
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].mtu":
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       `/interfaces/interface/config/mtu` is supported on both sides and the
-      jumbo values in the corpus (9198 on the uplink and ISL ports) survive on
-      every name-preserving record; lossy here for the same single structural
-      reason as the rest of the interface sub-fields.  Note the synthesized
-      SVI records carry no MTU at all, so re-check MTU on any SVI or uplink
-      after cutover — an unaligned record silently leaves the target at its
-      default.
+      jumbo values in the corpus (9198 on the uplink and ISL ports) are
+      preserved on both cells whose interface list aligns; on the other five
+      it drifts only with the lost `mgmt` record (see `interfaces[].name`).
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].ipv4_addresses":
     disposition: lossy
     reason: >
-      Two causes, one disposition.  Structural: routed-port addressing rides
-      the interface record, which does not align.  Independent and declared:
-      cisco_iosxe_cli lists
+      Measured on both cells whose interface list aligns: `ip` and
+      `prefix_length` survive on every SVI, and `virtual_gateway_address`
+      goes from an address to empty (`vlan 1` on
+      `canu_csm17_spine001_ipv6_vrf.cfg`: `192.168.1.2/16`, gateway
+      `192.168.1.1`).  cisco_iosxe_cli lists
       `/interfaces/interface/ipv4/address/virtual-gateway-address` as a
-      LossyPath — the synthesized SVI carries only ip + prefix_length — so an
-      AOS-CX active-gateway address on an SVI is dropped even when the record
-      DOES align.  Verified on `aoscx_dcn_arch4_core1_1.cfg`: with port-name
-      translation engaged and every other attribute matching, `Vlan101` still
-      arrives with `virtual_gateway_address` empty.  The render flags it in
-      band with a `! review:` comment naming the dropped address — grep the
-      output for `! review:` before cutover.
+      LossyPath, so an AOS-CX active-gateway address on an SVI is dropped
+      whatever its name.  Verified on `aoscx_dcn_arch4_core1_1.cfg` too: with
+      port-name translation engaged and every other attribute matching,
+      `Vlan101` still arrives with `virtual_gateway_address` empty.  The
+      render flags it in band with a `! review:` comment naming the dropped
+      address — grep the output for `! review:` before cutover.
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].ipv6_addresses":
-    disposition: lossy
-    reason: >
-      Same single structural cause as the rest of the interface sub-fields;
-      no independent IPv6 loss was observed.  Exactly one record in the corpus
-      carries IPv6 (`vlan 6` on `canu_csm17_spine001_ipv6_vrf.cfg`) and its
-      address round-trips intact — only the record's NAME mangles.  The
-      target declares `/interfaces/interface/subinterfaces/subinterface/ipv6`
-      unsupported ("Phase 0.5 scope — IPv4 only"), but no AOS-CX cell carries
-      a sub-interface, so that declaration is untested on this pair and is
+    disposition: good
+    note: >
+      Exactly one record in the corpus carries IPv6 (`vlan 6` on
+      `canu_csm17_spine001_ipv6_vrf.cfg`), a cell whose interface list
+      aligns, and its address is preserved — only the record's NAME changes
+      (`vlan6`).  The target declares
+      `/interfaces/interface/subinterfaces/subinterface/ipv6` unsupported
+      ("Phase 0.5 scope — IPv4 only"), but no AOS-CX cell carries a
+      sub-interface, so that declaration is untested on this pair and is
       stated rather than relied on.
     references: [aoscx-iosxecli-surface]
 
@@ -236,8 +231,9 @@ per_field_expectation:
       target's reason names the mechanism: the CLI parser infers type from the
       IOS-XE name prefix (`GigabitEthernet` -> ethernetCsmacd, `Loopback` ->
       softwareLoopback).  An AOS-CX name has no such prefix, so on the bare
-      path EVERY name-preserving physical port degrades
-      `ianaift:ethernetCsmacd` -> `ianaift:other` — measured on all 8 ports of
+      path EVERY physical port degrades `ianaift:ethernetCsmacd` ->
+      `ianaift:other` — measured on every `1/1/x` port of the two cells whose
+      interface list aligns, and on all 8 ports of
       `aoscx_dcn_arch4_core1_1.cfg`.  With port-name translation engaged the
       type round-trips, which confirms the cause is the name form.  Nothing
       forwards differently because of this; it matters for downstream tooling
@@ -247,14 +243,13 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: lossy
     reason: >
-      Lossy from the shared record-alignment cause, and this key carries no
-      independent signal — every `interfaces[].*` key drifts on this pair for
-      that one reason, so its drift is not proof of membership loss.  The
-      round-trip says the opposite: on `aoscx_dcn_arch4_core1_1.cfg` all eight
-      member ports keep their binding, renamed `lag 1` -> `Port-channel1` etc.,
-      and `channel-group N mode active` is emitted on each member.  Treat this
-      as a naming change to reconcile, not lost membership — and confirm
-      against the `lags` entry, which measures the LAG surface directly.
+      A naming change, not lost membership.  On both cells whose interface
+      list aligns, every member port keeps its binding under the IOS-XE name
+      for it (`lag 101` -> `Port-channel101`, from `channel-group 101 mode
+      active` on each member), and the comparison reads the different string
+      as drift; `aoscx_dcn_arch4_core1_1.cfg` shows the same.  Reconcile the
+      names, and confirm against the `lags` entry, which measures the LAG
+      surface directly.
     references: [aoscx-iosxecli-surface]
 
   "interfaces[].vrrp_groups":

@@ -26,7 +26,8 @@ distributed gateway), and VXLAN L2VNI bindings.
   addresses, VRF binding
 - L2 switchport — access / trunk mode, access-VLAN, trunk allowed-VLAN
   list, trunk native VLAN, `lag` membership
-- VLANs — ID, name, description, tagged/untagged port lists
+- VLANs — ID, name, description, tagged/untagged port lists, and an
+  address held on the VLAN record (see Common gotchas)
 - Static routes — default VRF (`ip route`)
 - VRFs — name (a bare `vrf <name>` stanza in v1)
 
@@ -252,6 +253,20 @@ translate it again from `show running-config` as the switch prints it.
   place it is named, and a route whose gateway holds either is left
   out whole; each with a `review:` line.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A VLAN's address with no interface of its own gets one.**  A
+  source can hold a VLAN's address on the VLAN itself: Junos folds
+  the address of an `irb` unit that a VLAN binds with `l3-interface`
+  onto the VLAN.  As a target, AOS-CX writes `interface vlan <N>`
+  for it, with the addresses after the first `secondary`; an
+  interface of the VLAN the source already has, in any spelling, is
+  the one written.  The address's anycast virtual gateway is not
+  written.  Release 0.7.7 and earlier wrote nothing for such an
+  address, and the job's validation report listed it as lossy.  As
+  a source, an AOS-CX `interface vlan 101` reaches EOS and IOS-XE as
+  `Vlan101` where port names are translated (the API, the demo); a
+  `render` of the parsed tree with no translation writes it as it
+  stands, and 0.7.7 and earlier wrote an `interface Vlan101` beside
+  it there.
 - **A trunk's allowed list means what it says, and AOS-CX cannot say
   "no VLAN".**  `vlan trunk allowed all` is read as EVERY VLAN, and so
   is `vlan trunk native <N>` with no allowed line: the switch adds

@@ -283,10 +283,13 @@ per_field_expectation:
       Drifts to `[]` on all 3 cells that populate it, which reads worse than
       it is.  The round-trip proves the address is NOT lost: the render emits
       `interface Vlan10 / ip address 192.168.10.1/24` and
-      `interfaces[].ipv4_addresses` is preserved on every cell.  aruba_aoscx
-      declares `/vlans/vlan/ipv4/address/ip` lossy for exactly this reason —
-      it renders VLAN L3 only from a sibling interface stanza, so an address
-      carried on the VLAN record stops being duplicated there.  This is a
+      `interfaces[].ipv4_addresses` is preserved on every cell.  The
+      VLAN-record copy empties because this path translates no name: the
+      AOS-CX render writes the address from the source's `interface Vlan10`
+      under that name (`synthesize_svis_from_vlan_l3` writes no second
+      interface), and the AOS-CX parser does not fold an interface called
+      `Vlan10` onto VLAN 10.  With port names translated it is `vlan 10` and
+      the address folds back.  This is a
       representation change, not a reachability loss; do NOT put "re-author
       SVI addressing" on the cutover checklist for this pair.
     references: [iosxecli-aoscx-surface]

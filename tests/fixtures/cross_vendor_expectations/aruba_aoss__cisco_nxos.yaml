@@ -16,11 +16,12 @@
 # per-field and per-sub-field counts are cached in
 # `docs/vendor-references/aruba_aoss_to_cisco_nxos/canonical_surface.md`.
 #
-# Where the matrices and the measurement disagree, the measurement wins.  The
-# clearest case is `vlans[].ipv4_addresses`: the NX-OS matrix declares
-# `/vlans/vlan/ipv4/address/ip` lossy, but the AOS-S SVI-absorption parser
-# always emits the sibling interface stanza the NX-OS renderer needs, so the
-# address is preserved on all 6 cells that carry one.  It is declared `good`.
+# Where the matrices and the measurement disagree, the measurement wins.
+# `vlans[].ipv4_addresses` was the clearest case until the NX-OS render
+# learned to write a VLAN interface for a VLAN record's address: the AOS-S
+# SVI-absorption parser emits the sibling interface stanza, the render writes
+# the address from it, and it is preserved on all 6 cells that carry one.
+# It is declared `good`.
 #
 # The mesh path is a bare parse -> render -> parse: no port-name translation
 # and no overrides.  It scores PRESERVATION of canonical content, not
@@ -324,12 +325,13 @@ per_field_expectation:
     disposition: good
     note: >
       The SVI address carried on the VLAN record survives on all 6 cells that
-      have one, and this is the case where the measurement overrides the
-      matrices: cisco_nxos declares `/vlans/vlan/ipv4/address/ip` lossy
-      because it renders SVI L3 only from a sibling `interface Vlan<N>`
-      stanza — but the AOS-S SVI-absorption parser always emits that sibling
-      interface alongside the VLAN record, so the stanza is there and the
-      address folds back onto the VLAN on re-parse.
+      have one.  The AOS-S SVI-absorption parser emits a `Vlan<N>` interface
+      alongside the VLAN record, the NX-OS render writes the address from
+      that stanza (`synthesize_svis_from_vlan_l3` writes no second one), and
+      the address folds back onto the VLAN on re-parse.  Until the render
+      wrote a VLAN interface for a VLAN record's address, cisco_nxos declared
+      `/vlans/vlan/ipv4/address/ip` lossy, and this was the case where the
+      measurement overrode it.
     references: [aoss-nxos-surface]
 
   static_routes:
