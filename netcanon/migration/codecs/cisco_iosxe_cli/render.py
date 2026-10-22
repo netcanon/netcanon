@@ -53,11 +53,12 @@ from ..._derived_values import (
 from ..._naming import sanitise_hostname
 from ..._one_value import left_out, splits
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    IOSXE_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import (
     classify_hash,
@@ -840,13 +841,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if radius_secret_is_migratable(
                 server.key, tree.source_vendor, "cisco_iosxe_cli",
             ):
-                out.append(f" key {unwrap_native_secret(server.key)}")
+                out.append(f" key {_radius_key_text(server.key)}")
             else:
                 out.append(
                     format_radius_review_comment(
                         server.host,
                         comment_syntax="exclamation",
                         target_label="Cisco IOS-XE",
+                        secret=server.key,
                     )
                 )
         out.append("!")
@@ -1081,6 +1083,21 @@ def _extract_lag_number(lag_name: str) -> int | None:
         return int(m.group(1))
     except ValueError:
         return None
+
+
+def _radius_key_text(key: str) -> str:
+    """What follows ``key`` for a secret the RADIUS policy let through.
+
+    A value behind ``IOSXE_ENVELOPE`` goes back as the device wrote it
+    (``7 <blob>``).  A secret as typed is written as it is, unless it
+    begins with digits and white space, which the device and the parser
+    read as a type: then ``0`` says that what follows is the secret.
+    """
+    if key.startswith(IOSXE_ENVELOPE):
+        return key[len(IOSXE_ENVELOPE):]
+    if re.match(r"^\d+\s", key):
+        return f"0 {key}"
+    return unwrap_native_secret(key)
 
 
 def _split_cisco_hash(hashed: str) -> tuple[str, str]:

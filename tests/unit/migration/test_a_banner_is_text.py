@@ -1030,7 +1030,8 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
     "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "c2f10d43a64e",
+    # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",

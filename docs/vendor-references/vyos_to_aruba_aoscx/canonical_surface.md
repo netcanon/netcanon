@@ -42,8 +42,8 @@ all, and the whole switchport-membership surface with it.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 | cells where a record vanishes | **0** |
 
@@ -129,10 +129,10 @@ by hand; nothing in the migration carries them.
 
 ### 2. `interface_type` is *fabricated*, not dropped — and the direction matters
 
-All **55 of 55** interface records drift, uniformly and in one shape:
+All **56 of 56** interface records drift, uniformly and in one shape:
 
 ```
-source '' -> target 'ianaift:other'   (55 records, 13 of 13 cells)
+source '' -> target 'ianaift:other'   (56 records, 13 of 13 cells)
 ```
 
 The VyOS parse leaves `interface_type` empty on every record. The AOS-CX
@@ -154,7 +154,7 @@ a value the source never asserted.
 Separately worth noting for whoever owns the vyos codec: the VyOS matrix's
 lossy reason *describes* a name-shape inference (`ethN` → ethernetCsmacd,
 `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag), but the measured
-parse output is the empty string on all 55 records. That is a codec-side
+parse output is the empty string on all 56 records. That is a codec-side
 observation, not a pair-specific fact, and belongs to a codec change rather
 than to this file.
 
@@ -367,10 +367,10 @@ own redaction.
 
 ## One drift-shape reading that is wrong
 
-A mechanical "does the target side differ?" pass over `interfaces[]` reports 55
-of 55 records drifting and invites the conclusion that the interface surface is
+A mechanical "does the target side differ?" pass over `interfaces[]` reports 56
+of 56 records drifting and invites the conclusion that the interface surface is
 broken. It is not. The inventory is whole, the names are whole, and every
-address, description, MTU and admin-state value survives. What drifts on all 55
+address, description, MTU and admin-state value survives. What drifts on all 56
 is a single attribute — `interface_type` — and it drifts because the target
 *added* a value the source never carried.
 

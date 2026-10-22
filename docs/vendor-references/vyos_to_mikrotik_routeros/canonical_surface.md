@@ -43,8 +43,8 @@ The two record lists that carry this pair are **fully preserved**:
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| interface records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| interface records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 | source local-user records, all 13 cells | **17** |
 | local-user records after the round-trip | **17** |
@@ -68,7 +68,7 @@ expects.
 | hostname | 13 | 0 | 0 |
 | domain | 0 | 1 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces[].name | 13 | 0 | 0 |
 | interfaces[].enabled | 12 | 1 | 0 |
 | interfaces[].description | 6 | 1 | 6 |
@@ -76,7 +76,7 @@ expects.
 | interfaces[].ipv6_addresses | 5 | 0 | 8 |
 | interfaces[].mtu | 1 | 0 | 12 |
 | interfaces[].lag_member_of | 1 | 0 | 12 |
-| interfaces[].interface_type | 0 | 6 | 7 |
+| interfaces[].interface_type | 0 | 7 | 6 |
 | static_routes | 4 | 0 | 9 |
 | snmp.community / location / contact / trap_hosts | 4 | 0 | 9 |
 | snmp.v3_users | 2 | 2 | 9 |
@@ -99,13 +99,13 @@ Fields trivially empty on all 13 cells: `timezone`, `syslog_servers`,
 
 ### Per-record detail behind the interface drift
 
-55 interface records across the 13 cells:
+56 interface records across the 13 cells:
 
 | sub-field | populated on source | drifting records | shape |
 |---|---|---|---|
-| `interface_type` | **0** | 7 | empty → a type the target *invents* |
+| `interface_type` | **0** | 8 | empty → a type the target *invents* |
 | `description` | 15 | 1 | value → empty |
-| `enabled` | 53 | 1 | `False` → `True` (fails **open**) |
+| `enabled` | 54 | 1 | `False` → `True` (fails **open**) |
 | `mtu` | 1 | 0 | — |
 | `ipv4_addresses` | 21 | 0 | — |
 | `ipv6_addresses` | 20 | 0 | — |
@@ -232,11 +232,11 @@ Verified on the two sub-interface records in the corpus:
 | `eth1.200` `enabled` | `False` | **`True`** |
 
 The name and the addressing survive (they ride the `/ip address` row, which is
-why `interfaces[].name` is 55/55), but the `comment=` and the `disabled=yes`
+why `interfaces[].name` is 56/56), but the `comment=` and the `disabled=yes`
 are never emitted. The admin-state case is the dangerous direction: a port
 that was **administratively down on VyOS comes up enabled on RouterOS**.
 
-Exposure is narrow and easy to state: 2 of 55 interface records in this corpus
+Exposure is narrow and easy to state: 2 of 56 interface records in this corpus
 are dot-notation sub-interfaces, and both sit on one fixture. Both matrices
 declare `/interfaces/interface/config/description` and `/config/enabled`
 supported, so this is a real per-attribute loss and not a declared gap.
@@ -253,14 +253,14 @@ is gone in full.
 
 ### 3. `interface_type` drift is a target-side *gain*, not a source-side loss
 
-`interfaces[].interface_type` drifts on 6 of 13 cells and 7 of 55 records —
+`interfaces[].interface_type` drifts on 7 of 13 cells and 8 of 56 records —
 and the direction is the opposite of a loss. **vyos populates
-`interface_type` on zero of its 55 records**, so there is nothing to lose. The
-RouterOS re-parse *attaches* a type to seven of them:
+`interface_type` on zero of its 56 records**, so there is nothing to lose. The
+RouterOS re-parse *attaches* a type to eight of them:
 
 | records | interface | type after round-trip | why |
 |---|---|---|---|
-| 6 | `lo` | `ianaift:bridge` | RouterOS has no loopback primitive; the renderer emits the documented empty-bridge idiom (`/interface bridge add name=lo`), and the re-parse types a bridge as a bridge |
+| 7 | `lo` | `ianaift:bridge` | RouterOS has no loopback primitive; the renderer emits the documented empty-bridge idiom (`/interface bridge add name=lo`), and the re-parse types a bridge as a bridge |
 | 1 | `bond0` | `ianaift:ieee8023adLag` | rendered under `/interface bonding`, re-parsed as a LAG |
 
 The `bond0` case is simply correct. The `lo` case is a **mislabel with a good
@@ -270,33 +270,36 @@ interface), but the canonical type that comes back describes the RouterOS
 construct rather than the VyOS one, so a migrated inventory shows the loopback
 classified as a bridge.
 
+One of the seven `lo` records is that of `houdev_vyos_dhcpv6_pd_client.conf`,
+an empty interface (the capture prints `loopback lo { }`, nothing set) that
+the VyOS parser has read as the node it is since 2026-10; before that it made
+no record of it. RouterOS keeps it as the same empty bridge
+(`/interface bridge` / `add name=lo`) and the re-parse invents the same
+`ianaift:bridge` for it, which is the eighth drifting record and the seventh
+cell.
+
 Both matrices already declare `/interfaces/interface/config/type` lossy —
 `mikrotik_routeros` states the mechanism outright ("RouterOS does not expose
 IANA ifType; the codec infers it from the interface-name prefix"). Recorded
 `lossy`: the interface record, its addressing and its admin state are
 untouched, so this is a wrong hint, not lost forwarding state.
 
-### 4. NTP loses two of three servers on one cell — from a source-parse residue
+### 4. `ntp_servers` crosses whole
 
-`ntp_servers` round-trips cleanly on 11 of the 12 cells that populate it,
-including a five-server cell. On `houdev_vyos_dhcpv6_pd_client.conf` it drops
-**3 → 1**, and the mechanism spans both codecs:
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
-- That fixture writes the empty block **inline**: `server  time1.vyos.net { }`
-  on one line, where every other fixture uses the multi-line
-  `server 0.pool.ntp.org {` / `}` form. The VyOS brace-stack parser handles
-  the multi-line form and leaves a literal ` { }` glued to the server name on
-  the inline form, so the canonical value is `time1.vyos.net { }`.
-- The RouterOS renderer writes that verbatim into a comma-joined
-  `servers=` value. An unquoted RouterOS value terminates at whitespace, so
-  the re-parse recovers only `time1.vyos.net` and the second and third servers
-  are gone.
+```
+server         time1.vyos.net { }
+```
 
-Both matrices declare `/system/ntp-server` supported, and the concept plainly
-crosses on 11 of 12 cells — so `ntp_servers` is recorded `lossy` (partial
-record loss inside a concept the target models), not `unsupported`. The
-residue is a source-side artifact; the record loss is measured on the target
-round-trip. Worth stating both halves rather than blaming one side.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the RouterOS render
+wrote it into its comma-joined `servers=` value, which the re-parse cut at the
+first space (three servers in, one out), and that cell drifted. The parser now
+reads such a line as the node it is, the reading the set form gives the same
+path (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and
+the YAML declares `ntp_servers` good.
 
 ## Credential material
 

@@ -380,6 +380,16 @@ have.
 
 ## Common gotchas
 
+- **A RADIUS `encrypted-key` is carried to AOS-S only.**  With
+  `encrypt-credentials` on, AOS-S prints a RADIUS key as
+  `encrypted-key "<blob>"`, on a host line or on the global
+  `radius-server` line (the global form is inferred from the host
+  form HPE documents).  It is written back as it was onto AOS-S; onto
+  any other target the server is written with no key, beside a review
+  line: re-enter the secret there.  `key "<secret>"` migrates
+  everywhere.  ⚠️ With 0.7.7 or earlier, the blob came out as the
+  secret itself on every target, AOS-S included (`key "<blob>"`).
+  Look for such a key in an old output.
 - **A credential that holds a `"` is left out as a target.**  AOS-S
   writes a password, the SNMP community, an SNMPv3 user and its keys
   and a VRRP password between double quotes, and HPE documents no
