@@ -366,13 +366,17 @@ per_field_expectation:
     references: [junos-vlans-statement, aruba-vlans]
 
   interfaces[].trunk_native_vlan:
-    disposition: lossy
-    reason: >
-      Junos's ``set interfaces <name> native-vlan-id N`` lands on
-      ``CanonicalInterface.trunk_native_vlan``; Aruba represents
-      native-VLAN as the ``untagged <port>`` membership on the
-      designated VLAN.  Round-trip preserves the integer; the
-      structural transformation is internal to each codec.
+    disposition: good
+    note: >
+      Junos's native VLAN -- ``set interfaces <name> native-vlan-id N``
+      (ELS), or ``native-vlan-id N`` under ``unit 0 family
+      ethernet-switching`` (the grammar before ELS) -- lands on
+      ``CanonicalInterface.trunk_native_vlan``, inside the trunk's
+      list; Aruba represents native-VLAN as the ``untagged <port>``
+      membership on the designated VLAN, which its parser reads back
+      as the trunk's native VLAN.  Observed preserved on the one cell
+      whose source states one: the synthetic kitchen sink's trunk,
+      VLAN 1 in the older grammar.
 
   interfaces[].voice_vlan:
     disposition: not_applicable
