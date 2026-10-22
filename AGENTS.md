@@ -1651,6 +1651,30 @@ tests use these exclusively — never CSS classes or element structure.  See
   (or a committed capture that prints such a line),
   counts the places a name goes before and after, and is handed each
   defect it is for.
+- **Never** fill a slot of the target's grammar with what the slot
+  does not take.  AOS-S takes an address, `vlan <id>`, `reject` or
+  `blackhole` as a static route's next hop (HPE's routing guide), and
+  its renderer wrote whatever the tree held there: a route out an
+  interface came out as `ip route <dest>` with nothing after it, a
+  route to `Null0` the same, a next hop `Trk1` as itself -- 33 such
+  lines over the committed captures, and a config whose one route
+  went to `Null0` made a job that said `completed` -- and a route in a
+  VRF went into the switch's one table.  A slot is filled from the
+  target's grammar, read from the vendor: each value the tree can hold
+  there is written in the form that means it, or left out under a
+  `review:` line in a job that is not `completed`.  And a parser reads
+  the forms its device takes, not the forms its renderer wrote: the
+  AOS-S parser read `ip route <dest> Trk1` back, so a round trip agreed
+  with itself over a line the switch refuses.  Still open, each a
+  change of its own: the tree's only spelling of a discard route is
+  `Null0` in its interface (a FortiOS `blackhole` route parses as a
+  route with no next hop), several renderers write `Null0` as it
+  stands where a next hop goes, not yet held to each vendor's grammar,
+  and the FortiOS, RouterOS and VyOS renderers write a route in a VRF
+  into the global table.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_route_the_switch_takes.py`,
+  which reads the output with a reader of HPE's grammar typed in the
+  test and works out each route's next hop from the source's tree.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

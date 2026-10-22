@@ -333,8 +333,9 @@ per_field_expectation:
       caveats that rest on declarations rather than observations, because no
       committed route exercises them: `/routing/static-route/description` is
       declared lossy on BOTH sides, and `/routing/static-route/vrf` is declared
-      unsupported on both — a per-VRF static route would lose its VRF binding on
-      top of the whole-VRF drop recorded under `routing_instances[].name`.
+      unsupported on both — a per-VRF static route would be left out under a
+      `; review:` line, beside the whole-VRF drop recorded under
+      `routing_instances[].name`.
     references: [aoscx-aoss-surface]
 
   "routing_instances[].name":
