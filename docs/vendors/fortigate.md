@@ -238,6 +238,14 @@ loses the layout too.
 
 ## Common gotchas
 
+- **A RADIUS secret typed without `ENC` migrates; an `ENC` secret goes
+  to FortiOS only.**  FortiOS prints a stored secret as `set secret
+  ENC <blob>`, encrypted under the FortiGate's own key: it is written
+  back onto FortiOS, and onto any other target the server is written
+  with no key, beside a review line.  A `set secret <secret>` written
+  without `ENC` -- a config typed by hand, or a template -- is the
+  secret itself, and migrates.  With 0.7.7 or earlier such a secret
+  was refused on every other target as if it were encrypted.
 - **Names no other vendor has** — a hardware switch (`internal`,
   `lan`) and the SSL-VPN pseudo-interface (`ssl.root`) have no form
   on another vendor and are dropped, with whatever address they

@@ -261,10 +261,12 @@ def test_radius_secret_envelope_registry_is_complete() -> None:
     for name in list_public_codecs():
         codec = get_codec(name)
         for fixture_text in _SECRET_BEARING_SNIPPETS.get(name, ()):
-            try:
-                intent = codec.parse(fixture_text)
-            except Exception:
-                continue
+            # A snippet its parser refuses, or reads no keyed server from,
+            # would discover nothing and pass: it is a failure here.
+            intent = codec.parse(fixture_text)
+            assert any(s.key for s in intent.radius_servers), (
+                name, fixture_text,
+            )
             for server in intent.radius_servers:
                 if ":" in server.key[:16]:
                     envelopes_seen.add(
@@ -292,5 +294,15 @@ _SECRET_BEARING_SNIPPETS: dict[str, tuple[str, ...]] = {
     ),
     "aruba_aoss": (
         'radius-server host 10.0.0.1 key "SomeSecret"\n',
+        'radius-server host 10.0.0.1 encrypted-key "U29tZUJsb2I="\n',
+        'radius-server host 10.0.0.1\nradius-server encrypted-key "U29tZUJsb2I="\n',
+    ),
+    "cisco_iosxe_cli": (
+        "radius server A\n address ipv4 10.0.0.1\n key 7 0822455D0A16\n!\n",
+        "radius server A\n address ipv4 10.0.0.1\n key 6 SomeAesBlob\n!\n",
+        "radius-server host 10.0.0.1 key 7 0822455D0A16\n",
+    ),
+    "arista_eos": (
+        "radius-server host 10.0.0.1 key 7 0822455D0A16\n",
     ),
 }

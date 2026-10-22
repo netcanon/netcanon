@@ -30,7 +30,7 @@ so the keyword-stable surface (`hostname`, `vlan N`, `snmp-server`,
 | `system_services.md` | Hostname (quoted -> bare) / DNS (priority-ordered -> flat) / SNTP -> NTP keyword change / minute-offset timezone -> zoneinfo timezone. |
 | `vrf_unsupported.md` | Aruba has no VRF concept; field always empty on this direction. |
 | `vxlan_unsupported.md` | Aruba has no VXLAN/EVPN concept; field always empty on this direction. |
-| `radius.md` | Both vendors share Cisco-derived `radius-server host` + global key form; round-trips cleanly. |
+| `radius.md` | Both vendors share Cisco-derived `radius-server host` + global key form; a key written as typed round-trips, an `encrypted-key` is refused. |
 
 Retrieved 2026-04-30 to 2026-05-01.
 

@@ -827,11 +827,16 @@ surface, sibling to `_user_secrets.py` (password hashes) and
 `_usm_keys.py` (SNMPv3 USM keys).  A render path consuming
 `CanonicalRADIUSServer.key` calls
 `radius_secret_is_migratable(value, source_vendor, target_vendor)`.
-Only a **plaintext** secret crosses a vendor boundary; FortiGate's
-`set secret ENC <blob>` (carried canonically behind the `fortios:`
-envelope) is encrypted under that device's own key and is refused,
-with a `format_review_comment(...)` line so the operator knows to
-re-enter it.  Same-vendor re-render always passes — that is the
+Only a **plaintext** secret crosses a vendor boundary.  A secret the
+source platform stored in a form of its own is carried behind the
+envelope its parser puts on it -- `fortios:` (FortiGate `set secret
+ENC <blob>`, encrypted under that device's own key), `iosxe:` (IOS-XE
+`key 6|7 <blob>`), `eos:` (EOS `key 7 <blob>`), `aoss:` (AOS-S
+`encrypted-key`) -- and is refused on every other platform, with a
+`format_review_comment(...)` line that names the form so the operator
+knows to re-enter it.  The envelope is the parser's to put on: what a
+value is is said by the grammar it was read from, and a stored form
+that reaches the tree bare is a "plaintext" secret to the gate.  Same-vendor re-render always passes — that is the
 reference path.  Unlike the SNMPv3 rule, a refusal does **not** drop
 the server record: a keyless `radius-server host <ip>` is a
 half-configured server the operator can see and finish, whereas a

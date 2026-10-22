@@ -441,15 +441,31 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # Juniper's page gives (``DEFAULT_VLAN``) is written as it is -- and no cell's
 # round trip shows it; the YAML's reason says so.
 #
-# And two more, when the RouterOS renderer began writing a value with white
-# space in it as one string: cisco_iosxe_cli__mikrotik_routeros from 1 to 2,
-# and vyos__mikrotik_routeros from 0 to 1.  On each pair the one cell that
-# showed the loss showed it because the value was written bare and ended at
-# its first white space: `secret=7 <blob>` read back as `7`, and
-# `servers=time1.vyos.net { },...` as one server.  Both values now come back
-# whole, and both are still wrong on the device -- an IOS-XE type-7 key
-# written as the literal secret, and a server name the VyOS parser glued
-# ` { }` to -- below what the round trip compares.  The YAMLs' reasons say so.
+# And one more, when the RouterOS renderer began writing a value with white
+# space in it as one string: vyos__mikrotik_routeros from 0 to 1.  The one
+# cell that showed the loss showed it because the value was written bare and
+# ended at its first white space: `servers=time1.vyos.net { },...` read back
+# as one server.  It now comes back whole, and is still wrong on the device
+# -- a server name the VyOS parser glued ` { }` to -- below what the round
+# trip compares.  The YAML's reason says so.  (cisco_iosxe_cli__mikrotik_routeros
+# rose from 1 to 2 with it, `secret=7 <blob>` having read back as `7`, and is
+# back at 1: a type-7 key is now refused on RouterOS, the server written with
+# no secret, and the round trip shows the key gone.)
+#
+# And four more, each by one, for ``radius_servers``: aruba_aoss__arista_eos
+# (2 to 3), aruba_aoss__cisco_iosxe_cli (3 to 4), aruba_aoss__fortigate_cli
+# (2 to 3) and aruba_aoss__opnsense (6 to 7).  An AOS-S ``encrypted-key
+# "<blob>"`` is a form only AOS-S reads, and since 2026-10 it is refused on
+# every other target (the server kept, with a review line): the field is
+# lossy on every pair from AOS-S.  The only committed AOS-S input with RADIUS
+# is the kitchen sink, whose keys are written as typed, so every cell
+# preserves the key.  Until then the parser had read the blob as the secret,
+# and the three pairs declared ``good``; on the fourth the key was lost on
+# the way back (the FortiGate parser put a typed secret behind
+# ``fortios:``), which no longer happens, and the loss that remains there
+# -- a non-default acct-port -- no capture shows either.  The loss is real
+# and pinned by ``tests/unit/migration/test_a_radius_key_says_its_form.py``;
+# the YAML reasons say so.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -460,13 +476,13 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__juniper_junos": 4,
     "arista_eos__mikrotik_routeros": 1,
     "arista_eos__opnsense": 6,
-    "aruba_aoss__arista_eos": 2,
+    "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
-    "aruba_aoss__cisco_iosxe_cli": 3,
-    "aruba_aoss__fortigate_cli": 2,
+    "aruba_aoss__cisco_iosxe_cli": 4,
+    "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
-    "aruba_aoss__opnsense": 6,
+    "aruba_aoss__opnsense": 7,
     "cisco_iosxe__aruba_aoss": 1,
     "cisco_iosxe__cisco_iosxe_cli": 2,
     "cisco_iosxe__fortigate_cli": 1,
@@ -477,7 +493,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__cisco_iosxe": 2,
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
-    "cisco_iosxe_cli__mikrotik_routeros": 2,
+    "cisco_iosxe_cli__mikrotik_routeros": 1,
     "cisco_iosxe_cli__opnsense": 4,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,

@@ -77,6 +77,25 @@ timestamp if your timezone matters for an audit.
   or earlier, read the old output for `$`, `;`, `[` and `(` outside a
   quoted string, and for `$` inside one, before it reaches a router.
 
+- **A RADIUS key that IOS-XE, EOS or AOS-S had stored in a form of its
+  own was written into the target's config as the secret itself, and
+  the server authenticated nobody.**  IOS-XE `key 7 <blob>` and `key 6
+  <blob>` came out on AOS-S, FortiOS, OPNsense and RouterOS as the
+  secret `7 <blob>` (and `key 0 <secret>` as the secret `0 <secret>`);
+  the one-line `radius-server host ... key 7 <blob>` came out on IOS-XE
+  itself as `key <blob>`, the blob as the secret; EOS `key 7 <blob>`,
+  the form EOS prints, came out as the secret `7` on every target, EOS
+  included (and `key 0 <secret>` as the secret `0`); and AOS-S
+  `encrypted-key "<blob>"` came out as the secret `<blob>` on every
+  target, AOS-S included.  Each such config commits, the server it
+  names rejects every request, and every job said `completed`.  Each
+  parser now holds a stored form behind its platform's envelope, which
+  only that platform's renderer writes back (Fixed, below).  If you
+  translated an IOS-XE, EOS or AOS-S config with a RADIUS key with
+  0.7.7 or earlier, look in the old output for a key written as `7
+  <blob>`, `0 <secret>`, `7` or `0` alone, or an AOS-S blob, and
+  re-enter the secret.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -629,6 +648,32 @@ timestamp if your timezone matters for an audit.
   which reads the output with a reader of its own, typed from
   MikroTik's "Scripting" page, for a tree with such text in every
   place the schema has, and for every committed input.
+
+- **A RADIUS key is read in the form its platform stored it**
+  (Security, above).  The IOS-XE CLI parser reads `key [0|6|7]
+  <secret>` in the `radius server` stanza and on the one-line
+  `radius-server host` form alike; the EOS parser reads `key [<type>]
+  <secret>`; the AOS-S parser reads `encrypted-key` on a host line and
+  on the global `radius-server` line, where its `key` pattern had
+  matched inside the word.  A key with no type, or type 0, is the
+  secret as typed, and migrates to every target.  Any other type, and
+  an AOS-S `encrypted-key`, is held behind `iosxe:`, `eos:` or `aoss:`
+  and written back as the device wrote it onto its own platform; onto
+  any other target the server is kept with no key, beside a review
+  line that names the form (`Cisco IOS-XE type 7`, `Arista EOS type
+  7`, `AOS-S encrypted-key`) and says to re-enter the secret.  A
+  plaintext secret that begins with a number and a space is written
+  `key 0 <secret>` on IOS-XE and EOS, so that its number is not read
+  as a type.  And the other way: the FortiGate parser put every `set
+  secret` behind `fortios:`, so a secret typed without `ENC` -- the
+  secret itself -- was refused on every other target as if it were
+  encrypted; only `ENC <blob>` is held behind the envelope now.  The
+  gate's own tests had built their trees with the envelope already on,
+  or parsed the FortiOS `ENC` form alone, and a parser test pinned the
+  IOS-XE value `7 <blob>` as the key.  Guarded by
+  `tests/unit/migration/test_a_radius_key_says_its_form.py`, which
+  sends each form through its parser onto all six targets that render
+  RADIUS, and reads the output as text and with the target's parser.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3207,6 +3252,20 @@ timestamp if your timezone matters for an audit.
   between them, in jobs that say `completed`.  Write the inner tags
   by hand.
 
+- **A RADIUS key stored in a platform's own form is not decoded, and
+  goes only to its own platform.**  Cisco type 7 is a reversible
+  cipher and could be decoded to the secret; Netcanon does not decode
+  it, so an IOS-XE `key 7` is refused on every other target, with the
+  server kept and a review line.  Whether EOS's type 7 is Cisco's is
+  not established, so an IOS-XE `key 7` is not written into EOS, nor
+  an EOS one into IOS-XE.  The global AOS-S `radius-server
+  encrypted-key` line is read on the strength of the host-line form
+  HPE documents; the global form itself is inferred.  A refused key is
+  said by the review line in the output alone, and the job still says
+  `completed`, as for a FortiOS `ENC` secret.  And a plaintext secret
+  that itself begins with one of the envelopes (`iosxe:`, `eos:`,
+  `aoss:`, `fortios:`) is read as that stored form: refused on every
+  other target, and on its own platform written in the stored form.
 - **A config pasted without its indentation is not translated by most
   block parsers: they refuse it in words.**  The IOS XR parser
   refuses it for the router's reason: IOS XR places a line by its

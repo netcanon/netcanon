@@ -30,7 +30,7 @@ HP's Cisco-CLI-compatible offering) means the keyword-stable surface
 | `system_services.md` | Hostname (quoted) / DNS (priority-ordered) / SNTP -> NTP / minute-offset timezone -> name+offset timezone. |
 | `vrf_unsupported.md` | Aruba has no VRF concept; field always empty on this direction. |
 | `routing_protocols_unsupported.md` | Aruba lacks BGP/IS-IS/EIGRP; OSPF / RIP parse-and-ignore on both codecs. |
-| `radius.md` | Flat `radius-server host` + global key form -> Cisco modern `radius server <name>` form. |
+| `radius.md` | Flat `radius-server host` + global key form -> Cisco modern `radius server <name>` form; an `encrypted-key` is refused. |
 | `dhcp_relay.md` | Aruba is relay-only (no DHCP server pools to migrate). |
 | `spanning_tree.md` | Aruba MSTP default vs Cisco rapid-pvst default; canonical not modelled, Tier 3. |
 

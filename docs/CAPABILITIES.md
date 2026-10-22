@@ -843,6 +843,21 @@ in rendered output find every such site.
   FortiGate re-render of its own config would refuse its own key — FortiOS
   values classify `encrypted`, which no target accepts from a foreign source.
 
+* **RADIUS shared-secret portability**
+  ([`_radius_secrets.py`](../netcanon/migration/_radius_secrets.py)).  A
+  shared secret written as typed (`key <secret>`, `key 0 <secret>`,
+  FortiOS `set secret <secret>`, OPNsense `<radius_secret>`, RouterOS
+  `secret=`) migrates to every target.  A secret the source stored in a
+  form of its own -- IOS-XE `key 7` / `key 6`, EOS `key 7`, AOS-S
+  `encrypted-key`, FortiOS `set secret ENC` -- is written back as it was
+  onto its own platform only.  Onto any other target the server is kept
+  with no key, beside a review line in the target's comment syntax:
+
+      ; radius-server host 192.0.2.10 -- review: the source device stored this shared secret in its own encoded form (Cisco IOS-XE type 7), which is not carried to Aruba AOS-S; re-enter the secret manually
+
+  The secret is not decoded (Cisco type 7 could be, and is not), and the
+  job still says `completed`: the review line is where it is said.
+
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a

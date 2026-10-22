@@ -186,6 +186,16 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
+- **A RADIUS `key 7` is carried to EOS only.**  EOS prints a RADIUS
+  key in its own form, `key 7 <blob>`.  It is written back as it was
+  onto EOS; onto any other target the server is written with no key,
+  beside a review line that names the form: re-enter the secret there.
+  `key <secret>` and `key 0 <secret>` migrate everywhere.  Whether
+  EOS's type 7 is Cisco's is not established, so it is not written
+  into an IOS-XE `key 7`.  ⚠️ With 0.7.7 or earlier, `key 7 <blob>`
+  came out as the secret `7` on every target, EOS included, and `key
+  0 <secret>` as the secret `0`.  Look for such a key in an old
+  output.
 - **Paste the config as the switch prints it, with its
   indentation.**  This parser tells which lines belong to a stanza by
   their indentation.  A text with no line indented but a comment, the
