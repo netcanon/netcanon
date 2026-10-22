@@ -56,7 +56,14 @@ firewall translation is your primary need, see
   not carried, and nothing reports it.  Where the output has no interface of that name, a
   parent is chosen and a `# review:` line in the VLAN's block names
   the one the source stated.  A VLAN that states no parent, or one
-  from another vendor, is on the parent the renderer chooses.
+  from another vendor, is on the parent the renderer chooses: a
+  port with a private address before a trunk, never a loopback or
+  a tunnel, and a management port only where the output has no
+  other; where it has none, the block says so in a `# review:`
+  line.  ⚠️ Up to 0.7.7 a loopback with a private address was
+  chosen before every trunk, and a switch's management port
+  before its trunks, so every VLAN of a fabric switch was written
+  `set interface "loopback0"` or `set interface "mgmt1"`.
 - **A sub-interface of another vendor is a VLAN interface on its
   port.**  IOS-XE `GigabitEthernet0/0/1.100` with `encapsulation
   dot1Q 200`, or a Junos `unit 100 vlan-id 200`, is `edit
