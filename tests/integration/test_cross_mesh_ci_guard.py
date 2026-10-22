@@ -537,7 +537,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__aruba_aoss": 1,
     "fortigate_cli__cisco_iosxe": 3,
     "fortigate_cli__cisco_iosxe_cli": 1,
-    "fortigate_cli__juniper_junos": 5,
+    "fortigate_cli__juniper_junos": 4,
     "fortigate_cli__mikrotik_routeros": 2,
     "fortigate_cli__opnsense": 4,
     "juniper_junos__arista_eos": 2,

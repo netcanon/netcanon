@@ -189,17 +189,18 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Cisco's ``vlan 100 / name DATA``
-      separate name does not survive on FortiGate (interface edit ID
-      doubles as VLAN name).  Per-VLAN description is FortiGate-
-      unsupported.  Most importantly, the VLAN-centric port list
-      (``tagged_ports`` / ``untagged_ports``) is a model-translation
-      gap: FortiGate expresses VLAN membership as child interfaces
-      hanging off a parent, not as a port list per VLAN.  Cross-
-      vendor migration on Cisco -> FortiGate requires synthesising
-      multiple VLAN-child interfaces (one per VLAN per parent) which
-      the v1 render does not do; the operator must manually
-      reconstruct multi-port VLAN membership.
+      VLAN id round-trips cleanly.  Cisco's `vlan 100 / name DATA` is not the
+      VLAN's name on FortiGate, whose VLAN is an interface named after itself:
+      the name is written as that interface's alias (25 characters) where the
+      SVI states no description of its own, and in a `# review:` line beside
+      it where it does; the FortiGate parser reads the alias back as the
+      VLAN's description.  Most importantly, the VLAN-centric port list
+      (`tagged_ports` / `untagged_ports`) is a model-translation gap:
+      FortiGate expresses VLAN membership as child interfaces hanging off a
+      parent, not as a port list per VLAN.  Cross-vendor migration on Cisco ->
+      FortiGate requires synthesising multiple VLAN-child interfaces (one per
+      VLAN per parent) which the v1 render does not do; the operator must
+      manually reconstruct multi-port VLAN membership.
     references: [vlans]
 
   static_routes:

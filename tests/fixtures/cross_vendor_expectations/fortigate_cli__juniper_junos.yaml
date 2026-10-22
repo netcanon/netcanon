@@ -451,26 +451,26 @@ per_field_expectation:
     references: [fortios-vlan-cookbook, junos-vlans-statement]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      FortiGate's interface edit ID doubles as the canonical VLAN
-      name (``VL_100`` if the operator named the child interface
-      that way; ``port4.300`` if they used the dotted form).  Junos
-      VLAN names allow letters, digits, hyphens, periods only (up
-      to 255 chars) — names containing dots or underscores from
-      FortiGate may not be Junos-legal and require sanitisation
-      (typically dot/underscore -> hyphen) on render.
+    disposition: good
+    note: >
+      The VLAN's label is its name on Junos.  FortiOS names a VLAN after its
+      interface (`VL_100`, `port4.300`) and labels it by the interface's
+      alias, which the FortiGate parser reads as the VLAN's description; Junos
+      writes one label for a VLAN, so the alias is moved into the name (`set
+      vlans TEST100`, `_vlan_labels`), and the reconciler reads that move as
+      preserved (`_vlan_label_moved`).  An alias equal to the interface's own
+      name is the VLAN's name already.
     references: [fortios-vlan-cookbook, junos-vlans-statement]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      FortiGate has no VLAN-level description distinct from the
-      child-interface alias; the canonical ``CanonicalVlan.description``
-      is empty after FortiGate parse.  Junos's ``set vlans <name>
-      description X`` is therefore not emitted on this direction.
-      Lossy rather than not_applicable because the canonical field
-      exists and the loss is the FortiGate parse side.
+      The FortiGate parser reads a VLAN interface's alias as the VLAN's
+      description, and Junos writes one label for a VLAN, its name: the alias
+      is moved into the name (`_vlan_labels`, see `vlans[].name`), so the VLAN
+      comes back with no description and the label is in the output.  An alias
+      equal to the interface's own name (`user-vlan`) is the VLAN's name
+      already, and its repeat as a description drops.
     references: [fortios-vlan-cookbook, junos-vlans-statement]
 
   vlans[].tagged_ports:

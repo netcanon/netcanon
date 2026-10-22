@@ -285,17 +285,15 @@ per_field_expectation:
   "vlans[].name":
     disposition: lossy
     reason: >
-      Drifts on 7 of 7 cells and on 30 of 30 VLAN records — every operator name
-      is replaced by a synthetic `vlan<id>` derived from the child-interface
-      identifier on re-parse.  Measured examples: `PROD-WEB` -> `vlan101`,
-      `NMN` -> `vlan2`, and an unnamed VLAN 1 arrives *named* `vlan1`.  Lossy
-      rather than unsupported because the VLAN record survives and forwards;
-      only the label is substituted.
-      Note for a codec follow-up rather than for this file: fortigate_cli
-      declares `/vlans/vlan/name` SUPPORTED, which the measurement contradicts
-      on every record.  That is a target matrix over-declaration, left for a
-      codec change.  Capture VLAN names before cutover — on a campus switch
-      they are usually the only record of what a VLAN is for.
+      Every operator name is replaced by a synthetic `vlan<id>` derived from
+      the child-interface identifier on re-parse: a FortiOS VLAN is an
+      interface, named after itself.  Measured examples: `PROD-WEB` ->
+      `vlan101`, `NMN` -> `vlan2`, and an unnamed VLAN 1 arrives *named*
+      `vlan1`.  The name is not lost from the output: it is written as the
+      alias of the VLAN's interface, which the FortiGate parser reads back as
+      the VLAN's description (see `vlans[].description`).  Lossy rather than
+      unsupported because the VLAN record survives and forwards; only the
+      label moves.  fortigate_cli declares `/vlans/vlan/name` lossy for it.
     references: [aoscx-fortigate-surface]
 
   "vlans[].ipv4_addresses":
@@ -354,15 +352,16 @@ per_field_expectation:
   "vlans[].description":
     disposition: lossy
     reason: >
-      Drifts on the 4 cells that populate it — 6 descriptions on the source, 0
-      on the target.  The vanish classifier reads that as a total drop, but the
-      VLAN record itself survives with its id, so nothing is blocked, and
-      fortigate_cli declares `/vlans/vlan/description` LOSSY in its own matrix
-      ("Render emits the VLAN name but not a separate description line").  The
-      two signals only appear to disagree: the classifier is record-blind.
-      Recorded `lossy`.  Nothing breaks, but on a campus switch the VLAN
-      description is routinely how a VLAN is tied to a department or a site —
-      capture it before migrating.
+      An AOS-CX VLAN has a name and a description of its own, and FortiOS one
+      label for a VLAN, the alias of its interface, which the FortiGate parser
+      reads back as the VLAN's description.  The render writes there the
+      VLAN's name, the label `vlan_labels` picks where a VLAN has both, so a
+      VLAN comes back described by its name: `VLAN 11` / `Server VLAN` comes
+      back described `VLAN 11`, and `PROD-WEB` with no description comes back
+      described `PROD-WEB`.  The description beside a name is lost, as
+      fortigate_cli declares (`/vlans/vlan/description` lossy).  Nothing
+      breaks, but on a campus switch the VLAN description is routinely how a
+      VLAN is tied to a department or a site -- capture it before migrating.
     references: [aoscx-fortigate-surface]
 
   # -- Routing --------------------------------------------------------------

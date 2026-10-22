@@ -191,20 +191,22 @@ per_field_expectation:
     references: [interface_naming, ip_addressing, switchport, lags]
 
   vlans:
-    disposition: good
-    note: >
-      The CanonicalVlan list itself round-trips cleanly at the
-      list / id level: FortiGate ``set type vlan / set vlanid <N>``
-      child interfaces project to canonical entries; Cisco renders
-      ``vlan <N>`` declarations that re-parse with matching ids.
-      Per-VLAN sub-field caveats: name (mechanical FortiGate edit-
-      ID -> Cisco name; not operator-readable but lossless), per-
-      VLAN description / tagged_ports / untagged_ports empty after
-      FortiGate parse — child-interface model encodes membership
-      via the parent's identity, not as a port list per VLAN, so
-      operator must manually configure ``switchport access vlan
-      X`` on the Cisco target.  vlans[].ipv4_addresses (SVI)
-      round-trips via the FortiGate VL-iface ``set ip``.
+    disposition: lossy
+    reason: >
+      VLAN ids round-trip.  A FortiOS VLAN is named after its interface
+      (`VL_100`, `agg1.100`) and labelled by that interface's alias, which the
+      FortiGate parser reads as the VLAN's description.  IOS-XE writes one
+      label for a VLAN, its name, so the alias is MOVED into the name (`vlan
+      100 / name TEST100`, `_vlan_labels`) and the VLAN comes back with no
+      description: the label is in the output, and `vlans[].name` reads the
+      move as preserved.  An alias equal to the interface's own name
+      (`user-vlan`) is the VLAN's name already, and its repeat as a
+      description drops.  The VLAN-centric port lists (`tagged_ports` /
+      `untagged_ports`) are empty after FortiGate parse -- the child-interface
+      model encodes membership via the parent's identity -- so the operator
+      must configure `switchport access vlan X` on the Cisco target.
+      vlans[].ipv4_addresses (SVI) round-trips via the FortiGate VL-iface `set
+      ip`.
     references: [vlans]
 
   static_routes:

@@ -142,12 +142,16 @@ XML element mapping:
   and the renderer writes another vendor's VLAN name as the `<descr>`
   where the VLAN has no description, and drops it where it has one
   (`/vlans/vlan/name` is lossy; `/vlans/vlan/description` is
-  supported).  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos, which
-  write one label for a VLAN, the `<descr>` is written as the VLAN's
-  name (`name USER VLAN`; `USER_VLAN` on EOS, quoted on Junos); onto
-  AOS-CX it is the VLAN's `description` beside the device's name;
-  onto FortiOS, RouterOS and OS10 it is not written, and the job
-  lists `/vlans/vlan/description` as a loss.
+  supported).  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10,
+  which write one label for a VLAN, the `<descr>` is written as the
+  VLAN's name (`name USER VLAN`; `USER_VLAN` on EOS, quoted on
+  Junos, the SVI's `description` on OS10); onto AOS-CX it is the
+  VLAN's `description` beside the device's name.  Onto FortiOS and
+  RouterOS it is the alias or `comment=` of the VLAN's interface,
+  unless the device is assigned to a zone whose `<descr>` the
+  interface takes: then the VLAN's `<descr>` is in a `# review:`
+  line beside it, and the job lists `/vlans/vlan/description` as a
+  loss.
 - **Static routes are source-side only.**  The parser harvests
   `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
   #350), so OPNsense-*as-source* routes translate outward — but the

@@ -486,21 +486,22 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Junos VLAN names allow letters, digits, hyphens, periods only
-      (up to 255 chars); FortiGate VLAN-child interface names
-      become the canonical name verbatim — Junos names containing
-      hyphens / dots are FortiGate-legal but the FortiGate edit-ID
-      conventions favour underscores.  Round-trip preserves the
-      string but operators may rename for FortiGate readability.
+      A FortiOS VLAN is an interface, named after itself: a Junos VLAN comes
+      back named after the interface the render writes for it, and its Junos
+      name is that interface's alias (25 characters), which the FortiGate
+      parser reads back as the VLAN's description -- `V2021` comes back named
+      `vlan2021` and described `V2021`.  fortigate_cli declares
+      `/vlans/vlan/name` lossy.
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Junos's ``set vlans <name> description X`` is parsed by the
-      Junos codec but FortiGate has no first-class VLAN description
-      (only the child-interface alias, which doubles as VLAN name).
-      Description drops with a banner on FortiGate render.
+      The Junos parser reads no `set vlans <name> description`, so the source
+      holds no VLAN description.  FortiOS has one label for a VLAN, the alias
+      of its interface, which the render writes from the VLAN's name and the
+      FortiGate parser reads back as the VLAN's description: each named VLAN
+      comes back described by its name (`V2021`).
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].tagged_ports:

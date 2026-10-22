@@ -290,11 +290,11 @@ per_field_expectation:
     references: [fgt-aoscx-surface]
 
   "vlans[].description":
-    disposition: not_applicable
+    disposition: good
     note: >
-      Not populated on any of the 4 cells, so there is no observation to base
-      a loss on.  fortigate_cli declares `/vlans/vlan/description` lossy, which
-      would matter only for a source that actually sets one.
+      Preserved on every cell that holds VLANs: the FortiGate parser reads a
+      VLAN interface's alias as the VLAN's description, and AOS-CX writes a
+      VLAN's `description` beside its name, which its parser reads back.
     references: [fgt-aoscx-surface]
 
   # -- Routing --------------------------------------------------------------

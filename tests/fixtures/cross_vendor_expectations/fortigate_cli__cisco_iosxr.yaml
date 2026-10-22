@@ -313,11 +313,10 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      fortigate_cli declares `/vlans/vlan/description` LOSSY, but no VLAN
-      record in this corpus populates it: FortiOS `set alias` lands on the
-      INTERFACE description, which survives intact (see
-      `interfaces[].description`).  No measured degradation, and the
-      record-level loss belongs to `vlans[].id`.
+      The FortiGate parser reads a VLAN interface's alias as the VLAN's
+      description and as the interface's; the interface's survives intact (see
+      `interfaces[].description`).  The VLAN records themselves drop on this
+      pair, a loss claimed once under `vlans[].id`.
     references: [fortigate-iosxr-surface]
 
   # -- Routing --------------------------------------------------------------

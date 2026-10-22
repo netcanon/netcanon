@@ -423,12 +423,12 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      Measured empty on both sides of every cell — vyos emits no VLAN record
+      Measured empty on both sides of every cell -- vyos emits no VLAN record
       and therefore no VLAN description.  Recorded separately because
-      fortigate_cli declares `/vlans/vlan/description` LOSSY on its own
-      merits ("Render emits the VLAN name but not a separate description
-      line"), which would matter for a source that actually produces one.
-      VyOS does not, so the declared loss is untriggered here.
+      fortigate_cli declares `/vlans/vlan/description` LOSSY on its own merits
+      (one label for a VLAN, the alias of its interface), which would matter
+      for a source that actually produces one.  VyOS does not, so the declared
+      loss is untriggered here.
     references: [vyos-fortigate-surface]
 
   # -- Routing --------------------------------------------------------------

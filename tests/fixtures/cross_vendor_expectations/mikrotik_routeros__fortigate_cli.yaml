@@ -207,22 +207,18 @@ per_field_expectation:
     references: [interfaces]
 
   vlans:
-    disposition: lossy
-    reason: >
-      VLAN id round-trips cleanly via Plane-1 ``/interface vlan`` ->
-      FortiOS child interface (``set type vlan / set vlanid <id> /
-      set interface "<parent>"``).  Name is lossy: RouterOS conflates
-      the VLAN's name with the L3 interface name (``vlan100``);
-      FortiOS render emits the synthesised child-interface name
-      (e.g. ``agg1.100``) which differs from the canonical name
-      (per the MikroTik codec's LossyPath on ``/vlans/vlan/name``).
-      Per-VLAN description has no first-class field on either side.
-      Tagged / untagged port lists from RouterOS Plane-2 (bridge
-      VLAN filtering, parsed partially in v1) are unsupported on
-      FortiGate target — FortiOS has no port-list-per-VLAN concept;
-      multi-port VLAN membership requires synthesising multiple
-      VLAN child interfaces (one per parent) which the v1 render
-      does not do.  SVI addressing round-trips good.
+    disposition: good
+    note: >
+      VLAN ids, names and labels round-trip.  A RouterOS VLAN is an
+      `/interface vlan` named after itself and labelled by its `comment=`,
+      which the parser reads as the VLAN's description; FortiOS writes it as a
+      VLAN interface of the same name (`set type vlan / set vlanid <id> / set
+      interface "<parent>"`) with the comment as its alias, which the
+      FortiGate parser reads back as the VLAN's description.  An alias holds
+      25 characters, so a longer comment would drift; none on these cells is
+      longer.  Each platform models membership as a VLAN interface on a
+      parent, and every VLAN record of these cells comes back whole.  SVI
+      addressing round-trips.
     references: [vlans]
 
   static_routes:

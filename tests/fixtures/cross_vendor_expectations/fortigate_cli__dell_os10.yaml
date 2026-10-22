@@ -377,11 +377,16 @@ per_field_expectation:
     references: [fortigate-os10-surface]
 
   vlans[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (4 of 4 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      A FortiOS VLAN's label is its interface's alias, which the FortiGate
+      parser reads as the VLAN's description.  OS10 has one label for a VLAN,
+      its SVI's `description`, which the render spends on the VLAN's name: the
+      alias is moved into the name (`_vlan_labels`), and the VLAN comes back
+      with no description.  The label is in the output.  An alias equal to the
+      interface's own name (`user-vlan`) is the VLAN's name already, and its
+      repeat as a description drops.  dell_os10 declares
+      `/vlans/vlan/description` lossy.
     references: [fortigate-os10-surface]
 
   vlans[].id:

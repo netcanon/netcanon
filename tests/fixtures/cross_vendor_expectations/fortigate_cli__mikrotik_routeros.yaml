@@ -210,22 +210,17 @@ per_field_expectation:
     references: [interfaces]
 
   vlans:
-    disposition: lossy
-    reason: >
-      FortiGate has no global ``vlan <N>`` object — VLAN membership
-      is expressed as child interfaces.  The FortiGate codec does
-      not populate ``CanonicalIntent.vlans`` from the VLAN child
-      interfaces it parses (those land on
-      ``CanonicalIntent.interfaces`` instead).  RouterOS render via
-      Plane-1 ``/interface vlan`` synthesises matching child
-      interfaces; the descriptive VLAN-id name is conflated with the
-      L3 interface name (per the MikroTik codec's LossyPath on
-      ``/vlans/vlan/name``).  Per-VLAN tagged/untagged port lists
-      are structurally empty on the FortiGate source side, so
-      RouterOS Plane-2 (bridge VLAN filtering) targets cannot be
-      reconstructed automatically.  SVI addressing (IP on a VLAN
-      child interface) round-trips good via ``set ip`` -> ``/ip
-      address``.
+    disposition: good
+    note: >
+      VLAN ids, names and labels round-trip.  A FortiOS VLAN is an interface
+      (`set type vlan`) named after itself (`VL_100`, `agg1.100`) and labelled
+      by its alias, which the FortiGate parser reads as the VLAN's
+      description; RouterOS writes it as an `/interface vlan` of the same name
+      with the alias as its `comment=`, which the RouterOS parser reads back
+      as the VLAN's description.  Each platform models membership as a VLAN
+      interface on a parent, so the per-VLAN port lists are empty on both
+      sides, and RouterOS Plane-2 bridge VLAN filtering is not built from
+      them.  SVI addressing round-trips via `set ip` -> `/ip address`.
     references: [vlans]
 
   static_routes:

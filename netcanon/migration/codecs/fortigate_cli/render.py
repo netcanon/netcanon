@@ -19,6 +19,14 @@ for **VRRP groups** on the interface) → ``system snmp`` →
 Multi-VIP cross-vendor sources and non-``vrrp`` modes (HSRP / CARP)
 surface as ``# review:`` comments inside the interface edit body.
 
+A VLAN is an interface (``set type vlan``), and its one label is the
+interface's ``set alias``: the interface's own description where it
+states one, and otherwise the VLAN's label
+(``_vlan_labels.vlan_labels``: an IOS-XE ``name``, an OPNsense
+``<descr>``), on an interface of the config and on one made for a
+VLAN that has none.  Where the interface has a description of its
+own, the VLAN's label is written in a ``# review:`` line beside it.
+
 Defaults that FortiOS omits on export (e.g. ``set radius-port 1812``,
 ``set mtu 1500``) are NOT emitted here so our renders round-trip
 against real exports — see comments inline for the specific
@@ -65,6 +73,7 @@ from ..._usm_keys import (
     user_usm_is_migratable,
     user_usm_kind,
 )
+from ..._vlan_labels import vlan_labels
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -96,6 +105,14 @@ _RFC1918_NETWORKS = (
     ipaddress.IPv4Network("10.0.0.0/8"),
     ipaddress.IPv4Network("172.16.0.0/12"),
     ipaddress.IPv4Network("192.168.0.0/16"),
+)
+
+#: Beside the alias of a VLAN interface whose own description holds the
+#: one label FortiOS has, the label the source gives the VLAN.
+_LABEL_NOT_WRITTEN_REVIEW = (
+    "        # review: VLAN {vid} is called {label} in the source; FortiOS "
+    "has one label for a VLAN interface, its alias, which holds the "
+    "description the source gives the interface -- choose which to keep"
 )
 
 
@@ -648,14 +665,27 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("config system interface")
         for c in collision_comments:
             out.append(f"    {c}")
+        labels = vlan_labels(tree)
         for iface in deduped_ifaces:
             out.append(f'    edit "{_esc(iface.name)}"')
-            if iface.description:
-                # FortiOS alias caps at 25 chars per spec.
-                alias = iface.description[:25]
-                out.append(f'        set alias "{_esc(alias)}"')
             # LAG aggregate marker takes precedence over VLAN.
             lag = lag_by_name.get(iface.name)
+            is_vlan = lag is None and (
+                iface.interface_type == "ianaift:l3ipvlan"
+                or _looks_like_vlan_iface(iface.name)
+            )
+            vid = _vlan_id_for(iface.name, tree.vlans) if is_vlan else None
+            # The interface's own description, and otherwise the
+            # VLAN's label: FortiOS has one for the two.
+            label = labels.get(vid, "") if vid is not None else ""
+            alias = iface.description or (
+                label if label != iface.name else ""
+            )
+            if alias:
+                # FortiOS alias caps at 25 chars per spec.
+                out.append(f'        set alias "{_esc(alias[:25])}"')
+            if iface.description and label and label != iface.description:
+                out.append(_LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label))
             if lag is not None:
                 out.append("        set type aggregate")
                 if lag.members:
@@ -667,16 +697,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"        set lacp-mode "
                     f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
                 )
-            elif (
-                iface.interface_type == "ianaift:l3ipvlan"
-                or _looks_like_vlan_iface(iface.name)
-            ):
+            elif is_vlan:
                 # VLAN identification can come from either signal —
                 # canonical interface_type OR FortiGate-native
                 # name convention.  Real configs name VLAN ifaces
                 # freely (VL_100, DATA, etc.) so name alone isn't
-                # sufficient.
-                vid = _vlan_id_for(iface.name, tree.vlans)
+                # sufficient.  ``vid`` was read above, for the alias.
                 # The parent the config states, where this output has
                 # it.  Otherwise one is chosen from the elided iface
                 # list (post-stub-removal) so the fallback prefers a
@@ -891,6 +917,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # VLAN child interface emit (Issue #6).
         for child in vlan_children:
             out.append(f'    edit "{_esc(child["name"])}"')
+            label = labels.get(child["vlanid"], "")
+            if label and label != child["name"]:
+                out.append(f'        set alias "{_esc(label[:25])}"')
             out.append("        set type vlan")
             out.append(f'        set vlanid {child["vlanid"]}')
             if child.get("parent"):

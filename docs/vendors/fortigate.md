@@ -56,7 +56,18 @@ firewall translation is your primary need, see
   not carried, and nothing reports it.  Where the output has no interface of that name, a
   parent is chosen and a `# review:` line in the VLAN's block names
   the one the source stated.  A VLAN that states no parent, or one
-  from another vendor, is on the parent the renderer chooses
+  from another vendor, is on the parent the renderer chooses.
+- **A VLAN's alias is its label.**  FortiOS names a VLAN after its
+  interface (`VL_10`), and the parser reads the interface's `set
+  alias` as the description of the VLAN and of the interface.  Onto
+  IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10, which write one
+  label for a VLAN, the alias is written as the VLAN's name (`name
+  Users`).  Onto FortiOS another platform's VLAN label (an IOS-XE
+  `name`, an OPNsense `<descr>`) is the alias of the VLAN's
+  interface where that interface states no description of its own,
+  cut to the 25 characters an alias holds; where it states one, the
+  alias is the interface's description and the label is in a `#
+  review:` line beside it.
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
   member lists; a member with no `edit` of its own, as in a pasted

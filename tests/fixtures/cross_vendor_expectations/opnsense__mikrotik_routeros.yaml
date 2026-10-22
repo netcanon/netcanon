@@ -380,22 +380,24 @@ per_field_expectation:
     disposition: good
     note: >
       Preserved on both cells that hold VLANs: the canonical name is the
-      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      OPNsense device name (`vlan0.10` -- an OPNsense `<vlan>` has no name of
       its own), which RouterOS writes as the VLAN interface's `name=` and
-      reads back. The operator's label (`USER VLAN`) is the VLAN's
-      description, and is lost: see `vlans[].description`.
+      reads back.  The operator's label (`USER VLAN`) is the VLAN's
+      description: see `vlans[].description`.
     references: [opnsense-vlans, mikrotik_vlan]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
-      (`USER VLAN`) is the canonical description, and RouterOS has one
-      `comment=` for a VLAN interface, which the render gives the interface's
-      own description (the zone's: `USERVLAN`, `Voice VLAN gateway`), so the
-      VLAN's label does not reach the output. The job says so: RouterOS
-      declares `/vlans/vlan/description` lossy, which the validation report
-      lists for each VLAN.
+      An OPNsense `<vlan>`'s `<descr>` (`USER VLAN`) is the canonical
+      description, and RouterOS has one `comment=` for a VLAN interface, which
+      the render gives the interface's own description -- the `<descr>` of the
+      zone the VLAN's device is assigned to (`USERVLAN`, `Voice VLAN gateway`)
+      -- with the VLAN's `<descr>` in a `# review:` line above it; where the
+      zone states none, the VLAN's `<descr>` is the comment.  So a VLAN whose
+      zone has a `<descr>` comes back described by the zone.  The job says so:
+      RouterOS declares `/vlans/vlan/description` lossy, which the validation
+      report lists for each VLAN.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

@@ -949,7 +949,16 @@ lists no description loss for a label that is in the output.
 FortiOS and RouterOS are not among them -- a VLAN is an interface
 whose name other lines refer to -- and
 `tests/unit/migration/test_a_vlan_label_is_its_name.py` names
-every public codec that is not, with its reason.
+every public codec that is not, with its reason.  Their one
+label for a VLAN is its interface's (`set alias`, `comment=`),
+and their renderers ask `vlan_labels` what the config calls each
+VLAN: written there where the interface states no description of
+its own, and in a review line beside it where it does.  They ask
+after the port translator, which renames the interface and not
+the VLAN, so whether a VLAN's name is only an interface's is read
+from the platform the tree was parsed from
+(`NAMES_A_VLAN_AFTER_ITS_INTERFACE`: OPNsense, RouterOS, FortiOS),
+not from the tree.
 
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The
@@ -2109,8 +2118,9 @@ normally.  Added in commit `faf925f` (Wave 9β); the variance-class
 set was 7 at that time — TRIVIAL_EMPTY landed later in Wave 10α
 (commit `35c7bf0`).  The LAG equivalence callable just shifts where
 individual cells land between ALIGNED and CODEC_BUG; it doesn't add
-or remove a class.  Two equivalences read a record's whole diffs
-rather than one value (`_RECORD_EQUIVALENCES`).  `interfaces[].mtu`
+or remove a class.  Three equivalences read a record's whole diffs
+rather than one value, and one of them the cell's other records
+(`_RECORD_EQUIVALENCES`).  `interfaces[].mtu`
 is preserved where the record's only MTU drift is one number moving
 between `mtu` and `ip_mtu` with nothing in the other field (an IP
 MTU that a platform with one MTU writes as its `mtu`, or an IPv4
@@ -2125,6 +2135,14 @@ back (`_vlan_label_moved`; the move is `_vlan_labels`, above).  The
 label is in the output either way; any other pair of values is
 drift -- a label a target writes as one word (`one_value_tree`)
 included.
+And `interfaces[].description` is preserved where an interface that
+had none comes back with its VLAN's name, on a target whose VLAN
+is that interface (`_vlan_label_on_its_interface`): the cell's
+VLAN renamed after the interface must have come back with the
+same text as its description, and had it as its name -- or the
+start of it, an alias holding fewer characters.  Read per record,
+not declared per pair, so a description lost on any other
+interface of the cell still surfaces.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell

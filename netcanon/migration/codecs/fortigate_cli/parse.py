@@ -626,8 +626,12 @@ def _apply_system_interface(  # noqa: C901
                 # Use the iface name as the canonical VLAN name so the
                 # render path can map the iface back to its VLAN id
                 # via `_vlan_id_for`.  The alias (set via `set alias`)
-                # is preserved on the interface's description field.
-                intent.vlans.append(CanonicalVlan(id=vid, name=name))
+                # is the one label FortiOS has for the VLAN and for its
+                # interface: the description of both, as RouterOS's
+                # `comment=` is.
+                intent.vlans.append(CanonicalVlan(
+                    id=vid, name=name, description=iface.description,
+                ))
             except ValueError:
                 pass
         elif type_value == "aggregate":
