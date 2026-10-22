@@ -68,17 +68,19 @@ on cross-vendor render.
   canonically.  RouterOS render emits its default fallback
   behaviour (RADIUS first, local fallback always allowed unless
   `/user aaa set accept-aaa-from-radius-only=yes`).
-- **Shared secret encoding** — Both codecs pass through verbatim.
-  Aruba accepts the secret in quoted-string form; RouterOS accepts
-  bare or quoted.  Cross-vendor render preserves the byte content
-  so receiving-side RADIUS daemons accept the secret unchanged.
+- **Shared secret encoding** — a key written as typed passes
+  through verbatim.  Aruba accepts the secret in quoted-string form;
+  RouterOS accepts bare or quoted.  An AOS-S `encrypted-key
+  "<blob>"` (`encrypt-credentials` on) is a form only AOS-S reads:
+  it is held behind `aoss:`, not decoded, and the server is written
+  with no key, beside a review comment.
 
 ### Disposition
 
 | Field | Disposition |
 |---|---|
 | `radius_servers[].host` | good |
-| `radius_servers[].key` | good (verbatim pass-through) |
+| `radius_servers[].key` | lossy (a key written as typed passes through; an `encrypted-key` is refused) |
 | `radius_servers[].auth_port` | good |
 | `radius_servers[].acct_port` | good |
 | Service binding | lossy (RouterOS-rich; Aruba defaults to login) |

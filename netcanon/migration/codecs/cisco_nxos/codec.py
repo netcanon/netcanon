@@ -124,6 +124,7 @@ class CiscoNXOSCodec(CodecBase):
         version_range="9.x+",
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             # System
             "/system/hostname",
             # Management plane — domain / DNS / NTP / syslog (promotion #4):
@@ -156,6 +157,9 @@ class CiscoNXOSCodec(CodecBase):
             "/vlans/vlan/name",
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
+            # A VLAN record's address: written as ``interface Vlan<N>``
+            # (synthesize_svis_from_vlan_l3) where the tree has none.
+            "/vlans/vlan/ipv4/address/ip",
             # LAGs (Phase 2a)
             "/lags/lag/name",
             "/lags/lag/members",
@@ -195,6 +199,19 @@ class CiscoNXOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "NX-OS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/vxlan-vnis/udp-port",
                 reason=(
@@ -256,46 +273,37 @@ class CiscoNXOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/vlans/vlan/ipv4/address/ip",
-                reason=(
-                    "Renders VLAN SVI / management L3 only from a sibling "
-                    "interface stanza; an L3 address carried on the VLAN record "
-                    "itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto "
-                    "CanonicalVlan.ipv4_addresses) is dropped on render because "
-                    "this codec does not synthesize an SVI from the VLAN record. "
-                    "Declared lossy so validate_against surfaces the loss instead "
-                    "of reporting severity:ok (blind-audit 3ec11f3 T0-2)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): this codec renders no SVI "
-                    "from the VLAN record, so a secondary IP carried there is "
-                    "dropped with it. Declared lossy so validate_against "
-                    "surfaces the loss (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount: this codec renders a VLAN record's L3 by "
+                    "synthesizing a VLAN interface "
+                    "(synthesize_svis_from_vlan_l3), which writes an address "
+                    "after the first `secondary` by its position; the "
+                    "record's own is_secondary flag is not read, and the parse "
+                    "folds only ip+prefix_length back onto the VLAN. Declared "
+                    "lossy (blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
             LossyPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-address",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
-                    "IP carried on the VLAN record drops with the unrendered "
-                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount render gap: the synthesized VLAN interface "
+                    "(synthesize_svis_from_vlan_l3) carries only "
+                    "ip+prefix_length, so an anycast virtual-gateway IP on a "
+                    "VLAN-record address is not written. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
             LossyPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
-                    "MAC carried on the VLAN record drops with the unrendered "
-                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount render gap: the synthesized VLAN interface "
+                    "(synthesize_svis_from_vlan_l3) carries only "
+                    "ip+prefix_length, so an anycast virtual-gateway MAC on a "
+                    "VLAN-record address is not written. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
@@ -515,6 +523,17 @@ class CiscoNXOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "IOS-XE `encapsulation dot1Q N second-dot1q M`, Junos "
+                    "`vlan-tags outer N inner M`): the NX-OS sub-interface "
+                    "statement this codec reads and writes, `encapsulation "
+                    "dot1q <id>`, is one tag, so a source's inner tag is "
+                    "reported as a drop."
+                ),
+            ),
             UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(

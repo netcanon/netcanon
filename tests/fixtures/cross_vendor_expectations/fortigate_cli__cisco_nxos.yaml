@@ -379,9 +379,9 @@ per_field_expectation:
       addressing on the child INTERFACE record (measured -- the `cluster-vlan`
       interface carries the address, and it preserves; see
       `interfaces[].ipv4_addresses`), never on the VLAN record.  The
-      SVI-on-VLAN shape is therefore never populated on this direction, so the
-      NX-OS-side loss declared at `/vlans/vlan/ipv4/address/ip` is never
-      reached.
+      SVI-on-VLAN shape is therefore never populated on this direction, and
+      what NX-OS does with it (it writes `interface Vlan<N>`,
+      `synthesize_svis_from_vlan_l3`) is not exercised.
     references: [fg-nxos-surface]
 
   # -- Static routes.  Top-level key omitted: the record survives on every

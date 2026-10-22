@@ -11,6 +11,13 @@ the ratchet agree by construction. Every claim below that names a count was
 re-derived by parsing the fixture with `cisco_iosxr` and rendering it with
 `opnsense` directly, not read off the drift matrix.
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description is no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` predate that change; the
+> paired expectation YAML has the current measure.
+
 - Fixture cells: **12** (11 real IOS-XR captures + the synthetic kitchen sink)
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-08-25
@@ -216,6 +223,9 @@ declares nothing at that path at all — neither supported, lossy nor
 unsupported. The nearest target declaration is silence, not a block.
 
 ## Credential material
+
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **0 of 14** local accounts arrive across the 9 cells that populate users; 14 are refused for a secret OPNsense cannot consume (6 MD5 crypt (Cisco type 5), 5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__opnsense.yaml`.
 
 `local_users` records themselves are never lost — 14 source user records, 14
 survivors across the 9 cells that populate the field. Both matrices declare

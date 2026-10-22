@@ -335,36 +335,42 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Aruba's two-role model (manager/operator) maps to FortiGate's
-      named accprofile strings (``super_admin`` / ``prof_admin`` /
-      custom): manager -> super_admin, operator -> prof_admin.
-      Hash formats are NOT cross-compatible: Aruba SHA-1
-      (``<hex>``), bcrypt (``$2y$...``), and plaintext are all
-      Aruba-only; FortiOS uses its proprietary ``ENC <base64>`` form
-      with an internal-key encryption.  Cross-vendor migration of
-      admin accounts requires re-setting passwords on the target.
-      Both codecs preserve hashes verbatim with vendor tags so the
-      loss surfaces in the validation report.  Trusthost / IP-based
-      access controls (FortiOS ``set trusthost1``) are FortiGate-
-      specific and not in canonical.
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. FortiOS can consume its own `ENC` ciphertext or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 1 carrying 1 plaintext password.
+      Recorded `lossy` rather than `unsupported`: which account survives is
+      decided by its secret form, and accounts with a consumable secret do
+      arrive. Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target with
+      a fresh password.
     references: [local_users]
 
   radius_servers:
     disposition: lossy
     reason: >
-      Host / auth_port preserve cleanly.  Aruba's flat
-      ``radius-server host <ip> key "<secret>"`` populates the
+      Host, auth port and a key written as typed round-trip.  Aruba's
+      flat ``radius-server host <ip> key "<secret>"`` populates the
       canonical ``host / key / auth_port / acct_port`` tuple; the
-      FortiGate render emits ``config user radius / edit "<name>" /
-      set server <ip> / set secret ENC <encrypted> / set radius-port
-      1812``.  Shared-secret format is incompatible: Aruba carries
-      plaintext / shadowed strings; FortiOS uses ``ENC <opaque-
-      base64>``.  Cross-vendor migration requires re-keying.
-      FortiOS has no separate acct-port field (derived as
-      auth-port + 1 per RFC default), so non-default Aruba acct-port
-      values drop.  Aruba never carries a server-name (uses host
-      address as identity) so FortiOS render synthesises a name
-      from the host address.
+      FortiGate render emits ``config user radius / edit
+      "radius-<n>" / set server <ip> / set secret <secret>``, the
+      secret as typed, and ``set radius-port <n>`` for a port other
+      than 1812.  An AOS-S ``encrypted-key "<blob>"`` is a form only
+      AOS-S reads: it is held behind ``aoss:``, and the server is
+      written with no secret, beside a review line.  FortiOS has no
+      separate acct-port field (the FortiGate parser reads 1813), so
+      a non-default Aruba acct-port is lost; no committed capture
+      shows it, their acct ports being the default.  Aruba never
+      carries a server-name (the host is the identity), so the
+      FortiGate render synthesises one.  Until 2026-10 the key was
+      lost on the way back -- the FortiGate parser put every ``set
+      secret`` behind ``fortios:``, a typed one included -- and this
+      entry said the render writes ``set secret ENC``, which it has
+      not done since the RADIUS gate.
     references: [radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

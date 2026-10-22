@@ -125,12 +125,21 @@ per_field_expectation:
   # is dropped or invented.  Everything below is attribute-level. --
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Names are carried verbatim by design -- the cross-mesh audit scores name
-      STABILITY; native translation (`xe-0/0/0` -> `Ethernet1/1`) belongs to
-      the orchestrator's port-rename layer, which this path does not engage.
-      Preserved on 11 of 11 cells, including `irb.<vid>` units and `fxp0`.
+    disposition: lossy
+    reason: >
+      No interface is lost.  Names are carried verbatim by design -- the
+      cross-mesh audit scores name STABILITY; native translation
+      (`xe-0/0/0` -> `Ethernet1/1`) belongs to the orchestrator's
+      port-rename layer, which this path does not engage.  Preserved on 10
+      of 11 cells, including `irb.<vid>` units and `fxp0`.  On
+      `saidvandeklundert_snmpv3_junos172` the list GAINS a record (49 -> 50):
+      the Junos parser folds the address of `irb.698` onto VLAN 698 and keeps
+      no interface for the unit, NX-OS states a VLAN's address on `interface
+      Vlan<N>` only, so the render writes `interface Vlan698` for it
+      (`synthesize_svis_from_vlan_l3`), and the NX-OS parser reads that back
+      as an interface as well as the VLAN's address.  Declared lossy because
+      the audit reads a change of the list's length as one; on that cell the
+      interfaces are therefore not compared record by record.
     references: [junos-nxos-surface]
 
   "interfaces[].interface_type":
@@ -418,22 +427,15 @@ per_field_expectation:
     references: [junos-nxos-surface]
 
   "vlans[].ipv4_addresses":
-    disposition: lossy
-    reason: >
-      Drops on the one cell that uses this mount:
+    disposition: good
+    note: >
+      Preserved on the one cell that uses this mount:
       `saidvandeklundert_snmpv3_junos172` carries `10.200.1.1/22` on the VLAN
-      698 record itself and the target returns an empty list.  The NX-OS
-      matrix declares `/vlans/vlan/ipv4/address/ip` lossy -- the render emits
-      SVI L3 only from a sibling `interface Vlan<N>` stanza and never
-      synthesises one from the VLAN record, so an address carried on the VLAN
-      (the Junos irb / SVI-on-VLAN shape) is dropped with the SVI that was
-      never rendered.  The VLAN itself survives with its id, name and port
-      membership, so the loss is easy to miss: that subnet has no gateway on
-      the target until you add `interface Vlan698` and re-declare the address.
-      (That capture is one of the two whose VLAN list gains a record on the
-      target -- `vlans[].id` -- so the audit now reads this cell as a change
-      of the list's length and no longer shows the address by itself.  The
-      drop is as described.)
+      698 record itself (the Junos irb / SVI-on-VLAN shape), and the NX-OS
+      render writes it as `interface Vlan698` / `ip address 10.200.1.1/22`
+      with `feature interface-vlan` (`synthesize_svis_from_vlan_l3`), which
+      the NX-OS parser folds back onto VLAN 698.  The interface it writes is
+      the record `interfaces[].name` counts as gained.
     references: [junos-nxos-surface]
 
   # -- Static routes.  Top-level key omitted: `static_routes[].destination` is

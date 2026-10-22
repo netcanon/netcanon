@@ -818,7 +818,8 @@ set interfaces interface-range range1 hold-time up 10
 set interfaces interface-range range1 ether-options flow-control
 set interfaces et-10/1/1 mtu 256
 """,
-    hostname="r20", mtus={"et-5/[0-5]/*": 256, "et-10/1/1": 256}, absent=["et-5/[0-5]"], rows=[],
+    # A name the classifier does not read keeps the number as it stands.
+    hostname="r20", mtus={"et-5/[0-5]/*": 256, "et-10/1/1": 242}, absent=["et-5/[0-5]"], rows=[],
 )
 
 _pair(
@@ -942,7 +943,7 @@ set interfaces ge-0/0/1 mtu 9000
 set interfaces ge-0/0/1 unit 0 family inet address 10.1.1.1/24
 """,
     hostname="r22", interfaces={"ge-0/0/1": ["10.1.1.1/24"]}, descriptions={"ge-0/0/1": "#1-uplink"},
-    mtus={"ge-0/0/1": 9000}, rows=[],
+    mtus={"ge-0/0/1": 8986}, rows=[],
 )
 
 _pair(
@@ -967,7 +968,7 @@ set system host-name r23
 set interfaces ge-0/0/1 mtu 9000
 set interfaces ge-0/0/1 unit 0 family inet address 10.1.1.1/24
 """,
-    hostname="r23", interfaces={"ge-0/0/1": ["10.1.1.1/24"]}, mtus={"ge-0/0/1": 9000}, rows=[],
+    hostname="r23", interfaces={"ge-0/0/1": ["10.1.1.1/24"]}, mtus={"ge-0/0/1": 8986}, rows=[],
 )
 
 _pair(
@@ -1276,7 +1277,7 @@ set interfaces ge-0/0/1 description "switched off"
 deactivate interfaces ge-0/0/1
 set interfaces ge-0/0/2 description on
 """,
-    hostname="r34", interfaces={"ge-0/0/2": ["10.50.0.1/24"]}, absent=["ge-0/0/1"], mtus={"ge-0/0/2": 9100},
+    hostname="r34", interfaces={"ge-0/0/2": ["10.50.0.1/24"]}, absent=["ge-0/0/1"], mtus={"ge-0/0/2": 9086},
     descriptions={"ge-0/0/2": "on"}, rows=["inactive: interfaces ge-0/0/1" + _INACTIVE],
 )
 
@@ -1645,7 +1646,7 @@ set interfaces xe-0/0/1 unit 0 family inet address 10.17.2.1/24
 set interfaces xe-0/0/2 mtu 9000
 """,
     hostname="r13", interfaces={"xe-0/0/0.1": ["10.17.1.1/24"], "xe-0/0/1": ["10.17.2.1/24"], "xe-0/0/2": []},
-    absent=["xe-0/0/3", "active:", "delete:", "unprotect:", "replace:"], mtus={"xe-0/0/2": 9000},
+    absent=["xe-0/0/3", "active:", "delete:", "unprotect:", "replace:"], mtus={"xe-0/0/2": 8986},
     only_printed_rows=[
         "delete: interfaces xe-0/0/0 unit 0" + _DELETED,
         "delete: interfaces xe-0/0/3" + _DELETED,
@@ -1729,6 +1730,8 @@ def test_the_tree_holds_what_the_text_says(name: str, form: str) -> None:
         elif key == "descriptions":
             assert {port: by_name[port].description for port in value} == value
         elif key == "mtus":
+            # The tree's MTU is the payload: a port's media MTU less its
+            # Ethernet header (``MTU_BEYOND_THE_PAYLOAD``).
             assert {port: by_name[port].mtu for port in value} == value
         elif key == "enabled":
             assert {port: by_name[port].enabled for port in value} == value

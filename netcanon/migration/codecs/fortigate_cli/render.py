@@ -53,6 +53,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
     radius_secret_is_migratable,
@@ -79,6 +80,7 @@ from ...canonical.intent import (
     CanonicalLAG,
 )
 from ...canonical.transforms import is_every_vlan
+from .._helpers import one_mtu_written
 from ..base import RenderError
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
@@ -492,7 +494,7 @@ def _iface_is_empty_stub(iface: CanonicalInterface) -> bool:
         iface.description
         or iface.ipv4_addresses
         or iface.ipv6_addresses
-        or iface.mtu is not None
+        or one_mtu_written(iface) is not None
         or iface.switchport_mode
         or iface.access_vlan is not None
         or iface.trunk_allowed_vlans
@@ -528,13 +530,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             yang_path="/",
         )
 
+    # An address is never altered: one that is not one word is left out
+    # and said (a static route whose gateway it is, whole).  Policy:
+    # :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "FortiOS", addresses=ADDRESSES,
+    )
+
     out: list[str] = []
     out.append("#config-version=netcanon-translator")
+    out += [f"# {said}" for said in one_value_said]
 
     # --- system global ---
     if tree.hostname:
         out.append("config system global")
-        out.append(f'    set hostname "{tree.hostname}"')
+        out.append(f'    set hostname "{_esc(tree.hostname)}"')
         out.append("end")
 
     # --- system dns ---
@@ -558,7 +568,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if len(tree.dns_servers) >= 2:
             out.append(f"    set secondary {tree.dns_servers[1]}")
         if tree.domain:
-            out.append(f'    set domain "{tree.domain}"')
+            out.append(f'    set domain "{_esc(tree.domain)}"')
         out.append("end")
 
     # --- system ntp (nested subtable) ---
@@ -568,7 +578,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("    config ntpserver")
         for idx, server in enumerate(tree.ntp_servers, start=1):
             out.append(f"        edit {idx}")
-            out.append(f'            set server "{server}"')
+            out.append(f'            set server "{_esc(server)}"')
             out.append("        next")
         out.append("    end")
         out.append("end")
@@ -657,7 +667,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"    {c}")
         labels = vlan_labels(tree)
         for iface in deduped_ifaces:
-            out.append(f'    edit "{iface.name}"')
+            out.append(f'    edit "{_esc(iface.name)}"')
             # LAG aggregate marker takes precedence over VLAN.
             lag = lag_by_name.get(iface.name)
             is_vlan = lag is None and (
@@ -679,7 +689,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if lag is not None:
                 out.append("        set type aggregate")
                 if lag.members:
-                    quoted = " ".join(f'"{m}"' for m in lag.members)
+                    quoted = " ".join(
+                        f'"{_esc(m)}"' for m in lag.members
+                    )
                     out.append(f"        set member {quoted}")
                 out.append(
                     f"        set lacp-mode "
@@ -711,15 +723,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(f"        set vlanid {vid}")
                     if stated and parent != stated:
                         out.append(
-                            f"        # review: rides on \"{stated}\" in "
+                            f"        # review: rides on \"{_esc(stated)}\" in "
                             f"the source, which is not in this output; "
                             f"the parent below was chosen"
                             if parent else
-                            f"        # review: rides on \"{stated}\" in "
+                            f"        # review: rides on \"{_esc(stated)}\" in "
                             f"the source, which is not in this output"
                         )
                     if parent:
-                        out.append(f'        set interface "{parent}"')
+                        out.append(
+                            f'        set interface "{_esc(parent)}"'
+                        )
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
             # virtual_gateway_address, and emitting ``set ip  <mask>`` is
@@ -791,12 +805,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"        ! review: dhcp_client_v6="
                     f"{iface.dhcp_client_v6} has no FortiOS equivalent"
                 )
-            if iface.mtu is not None:
+            # One MTU here: the IP MTU where the tree states no
+            # payload.
+            mtu = one_mtu_written(iface)
+            if mtu is not None:
                 # FortiOS requires mtu-override enable before
                 # set mtu has effect on physical ports.  Emit
                 # both so the config is deployable.
                 out.append("        set mtu-override enable")
-                out.append(f"        set mtu {iface.mtu}")
+                out.append(f"        set mtu {mtu}")
             if iface.enabled:
                 out.append("        set status up")
             else:
@@ -876,7 +893,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     if group.authentication.startswith("plain:"):
                         out.append(
                             f'                set authentication '
-                            f'"{group.authentication[6:]}"'
+                            f'"{_esc(group.authentication[6:])}"'
                         )
                     if group.track_interfaces:
                         # FortiOS ``set vrdst`` is single-valued; emit
@@ -899,14 +916,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
         # VLAN child interface emit (Issue #6).
         for child in vlan_children:
-            out.append(f'    edit "{child["name"]}"')
+            out.append(f'    edit "{_esc(child["name"])}"')
             label = labels.get(child["vlanid"], "")
             if label and label != child["name"]:
                 out.append(f'        set alias "{_esc(label[:25])}"')
             out.append("        set type vlan")
             out.append(f'        set vlanid {child["vlanid"]}')
             if child.get("parent"):
-                out.append(f'        set interface "{child["parent"]}"')
+                out.append(
+                    f'        set interface "{_esc(child["parent"])}"'
+                )
             if child.get("ip") and child.get("mask"):
                 out.append(f'        set ip {child["ip"]} {child["mask"]}')
                 out.append("        set mode static")
@@ -939,7 +958,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append("config system snmp community")
             out.append("    edit 1")
             community_name = tree.snmp.community or "public"
-            out.append(f'        set name "{community_name}"')
+            out.append(f'        set name "{_esc(community_name)}"')
             if tree.snmp.trap_hosts:
                 out.append("        config hosts")
                 for idx, host in enumerate(tree.snmp.trap_hosts, start=1):
@@ -989,7 +1008,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"target"
                     )
                     continue
-                out.append(f'    edit "{u.name}"')
+                out.append(f'    edit "{_esc(u.name)}"')
                 if u.auth_protocol and u.priv_protocol:
                     out.append("        set security-level auth-priv")
                 elif u.auth_protocol:
@@ -1010,9 +1029,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.auth_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set auth-pwd "{val}"')
+                            out.append(
+                                f'        set auth-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set auth-pwd "ENC {val}"')
+                            out.append(
+                                f'        set auth-pwd "ENC {_esc(val)}"'
+                            )
                 if u.priv_protocol:
                     fg_priv = _CAN_TO_FG_PRIV.get(u.priv_protocol, "aes")
                     out.append(f"        set priv-proto {fg_priv}")
@@ -1021,9 +1044,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.priv_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set priv-pwd "{val}"')
+                            out.append(
+                                f'        set priv-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set priv-pwd "ENC {val}"')
+                            out.append(
+                                f'        set priv-pwd "ENC {_esc(val)}"'
+                            )
                 out.append("    next")
             out.append("end")
 
@@ -1031,7 +1058,33 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         out.append("config system admin")
         for user in tree.local_users:
-            out.append(f'    edit "{user.name}"')
+            # A secret FortiOS cannot take drops the WHOLE account: an
+            # admin written without its password is an admin with none
+            # (the review line used to sit inside the ``edit``, with the
+            # access profile after it).
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "fortigate_cli",
+            ):
+                algorithm, _payload = classify_hash(user.hashed_password)
+                out.append("    " + format_review_comment(
+                    user.name, algorithm, comment_syntax="hash",
+                    target_label="FortiOS",
+                ))
+                continue
+            # This device's own blob is written bare, so one that holds
+            # white space is not one value; the account is left out whole
+            # rather than written with no password.
+            if user.hashed_password:
+                algorithm, payload = classify_hash(user.hashed_password)
+                if (
+                    algorithm == "fortios" and payload.startswith("ENC ")
+                    and splits(payload[4:])
+                ):
+                    out.append(
+                        "    # " + left_out(f"admin {user.name}", "FortiOS")
+                    )
+                    continue
+            out.append(f'    edit "{_esc(user.name)}"')
             # Hash-portability gate (Issue #1a from
             # tests/fixtures/real/user_smoke_findings.md).  Foreign
             # hashes (Cisco type-5/7/8/9, Arista sha512, OPNsense
@@ -1043,36 +1096,29 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # FortiOS would either reject at commit time or, worse,
             # parse as garbage.  Now we consult the shared
             # :mod:`netcanon.migration._user_secrets` policy and
-            # emit a comment-form ``review:`` line instead, naming
-            # the source algorithm so the operator knows exactly
-            # which user to reset.  Native fortigate hashes tagged
-            # ``fortios:<blob>`` still pass through unchanged.
+            # emit a comment-form ``review:`` line instead (above,
+            # in place of the account), naming the source algorithm so
+            # the operator knows exactly which user to reset.  Native
+            # fortigate hashes tagged ``fortios:<blob>`` still pass
+            # through unchanged.
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "fortigate_cli"):
-                    alg, _, raw = user.hashed_password.partition(":")
-                    if alg == "fortios":
-                        out.append(f"        set password {raw}")
-                    elif raw:
-                        out.append(f"        set password ENC {raw}")
-                    else:
-                        out.append(
-                            f"        set password ENC "
-                            f"{user.hashed_password}"
-                        )
+                # This FortiGate's own ``ENC <blob>`` goes back as the
+                # device printed it.  Anything else that passed the gate
+                # is a password as it was TYPED, and is written as one
+                # quoted value for FortiOS to encrypt on save: under
+                # ``ENC`` it would be read as a blob it is not (and a
+                # typed password with a space was two words).
+                algorithm, payload = classify_hash(user.hashed_password)
+                if algorithm == "fortios" and payload.startswith("ENC "):
+                    out.append(f"        set password {payload}")
                 else:
-                    algorithm, _payload = classify_hash(
-                        user.hashed_password,
-                    )
-                    review_comment = format_review_comment(
-                        user.name, algorithm, comment_syntax="hash", target_label="FortiOS"
-                    )
-                    out.append(f"        {review_comment}")
+                    out.append(f'        set password "{_esc(payload)}"')
             # Map canonical privilege back to accprofile.
             accprofile = (
                 "super_admin" if user.privilege_level == 15
                 else (user.role or "prof_admin")
             )
-            out.append(f'        set accprofile "{accprofile}"')
+            out.append(f'        set accprofile "{_esc(accprofile)}"')
             out.append("    next")
         out.append("end")
 
@@ -1081,7 +1127,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("config user radius")
         for idx, server in enumerate(tree.radius_servers, start=1):
             out.append(f'    edit "radius-{idx}"')
-            out.append(f'        set server "{server.host}"')
+            out.append(f'        set server "{_esc(server.host)}"')
             # (#482) The two fallback branches here used to stamp ``ENC``
             # onto whatever arrived — a bare plaintext secret from Aruba
             # or OPNsense became ``set secret ENC <plaintext>``, and any
@@ -1113,6 +1159,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             server.host,
                             comment_syntax="hash",
                             target_label="FortiGate",
+                            secret=server.key,
                         )
                     )
             if server.auth_port and server.auth_port != 1812:
@@ -1136,13 +1183,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 except (ValueError, ipaddress.AddressValueError):
                     pass
             if pool.interface:
-                out.append(f'        set interface "{pool.interface}"')
+                out.append(
+                    f'        set interface "{_esc(pool.interface)}"'
+                )
             for i, dns in enumerate(pool.dns_servers[:3], start=1):
                 out.append(f"        set dns-server{i} {dns}")
             if pool.dns_servers:
                 out.append("        set dns-service specify")
             if pool.domain_name:
-                out.append(f'        set domain "{pool.domain_name}"')
+                out.append(
+                    f'        set domain "{_esc(pool.domain_name)}"'
+                )
             if pool.start_ip or pool.end_ip:
                 out.append("        config ip-range")
                 out.append("            edit 1")
@@ -1173,7 +1224,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if route.gateway:
             out.append(f"        set gateway {route.gateway}")
         if route.interface:
-            out.append(f'        set device "{route.interface}"')
+            out.append(f'        set device "{_esc(route.interface)}"')
         if route.metric:
             # FortiOS admin distance (default 10); emit only when the
             # canonical metric is set so ordinary routes stay clean.

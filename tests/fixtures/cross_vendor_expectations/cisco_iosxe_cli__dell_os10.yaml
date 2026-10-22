@@ -197,6 +197,16 @@ per_field_expectation:
       this surface.
     references: [iosxe-os10-surface]
 
+  interfaces[].dot1q_inner_vlan:
+    disposition: unsupported
+    reason: >
+      The dell_os10 matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: OS10 routed sub-interfaces are not modelled, so the inner
+      tag has no form there either.  The carrier capture's six Q-in-Q units
+      lose their inner tags; the job is `partial`, the validation report
+      listing the path.
+    references: [iosxe-os10-surface]
+
   lags:
     disposition: lossy
     reason: >

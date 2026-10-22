@@ -43,6 +43,14 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
+#: ``mtu 9000`` on a Junos port is a media MTU; the tree's MTU is the
+#: payload, the media MTU less the Ethernet header
+#: (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
+_PAYLOAD_OF_9000 = 8986
+#: And the tree's 9000 is written as the media MTU that carries it.
+_MEDIA_FOR_9000 = 9014
+
+
 class TestInterfaceRangeParse:
     def test_mtu_shared_across_members(self):
         raw = (
@@ -55,7 +63,7 @@ class TestInterfaceRangeParse:
         names = {i.name for i in intent.interfaces}
         assert names == {"ge-0/0/0", "ge-0/0/1", "ge-0/0/2"}
         for iface in intent.interfaces:
-            assert iface.mtu == 9000
+            assert iface.mtu == _PAYLOAD_OF_9000
 
     def test_description_shared_across_members(self):
         raw = (
@@ -105,7 +113,7 @@ class TestInterfaceRangeParse:
         )
         intent = JunosCodec().parse(raw)
         for iface in intent.interfaces:
-            assert iface.mtu == 9000
+            assert iface.mtu == _PAYLOAD_OF_9000
 
 
 # ---------------------------------------------------------------------------
@@ -127,9 +135,9 @@ class TestInterfaceRangeRender:
         assert "set interfaces interface-range AUTO-RANGE-1 member ge-0/0/0" in out
         assert "set interfaces interface-range AUTO-RANGE-1 member ge-0/0/1" in out
         assert "set interfaces interface-range AUTO-RANGE-1 member ge-0/0/2" in out
-        assert "set interfaces interface-range AUTO-RANGE-1 mtu 9000" in out
+        assert f"set interfaces interface-range AUTO-RANGE-1 mtu {_MEDIA_FOR_9000}" in out
         # Per-interface MTU emission suppressed.
-        assert "set interfaces ge-0/0/0 mtu 9000" not in out
+        assert f"set interfaces ge-0/0/0 mtu {_MEDIA_FOR_9000}" not in out
 
     def test_two_interfaces_no_collapse(self):
         """Collapse threshold is ≥3 members; 2 members stays flat."""
@@ -141,8 +149,8 @@ class TestInterfaceRangeRender:
         )
         out = JunosCodec().render(intent)
         assert "interface-range" not in out
-        assert "set interfaces ge-0/0/0 mtu 9000" in out
-        assert "set interfaces ge-0/0/1 mtu 9000" in out
+        assert f"set interfaces ge-0/0/0 mtu {_MEDIA_FOR_9000}" in out
+        assert f"set interfaces ge-0/0/1 mtu {_MEDIA_FOR_9000}" in out
 
     def test_multiple_collapse_groups(self):
         """Different shared-attr tuples get separate AUTO-RANGE-N names."""
@@ -263,7 +271,7 @@ class TestInterfaceRangeRoundTrip:
         # Canonical trees match.
         assert len(second.interfaces) == 4
         for iface in second.interfaces:
-            assert iface.mtu == 9000
+            assert iface.mtu == _PAYLOAD_OF_9000
 
     def test_range_input_roundtrips_via_flat_or_range_rendering(self):
         """Input uses interface-range; render collapses if members
@@ -281,7 +289,7 @@ class TestInterfaceRangeRoundTrip:
         rendered = codec.render(first)
         second = codec.parse(rendered)
         for iface in second.interfaces:
-            assert iface.mtu == 9000
+            assert iface.mtu == _PAYLOAD_OF_9000
             assert iface.description == "uplink"
         assert len(second.interfaces) == 3
 
@@ -292,4 +300,4 @@ class TestInterfaceRangeRoundTrip:
         intent = JunosCodec().parse(raw)
         iface = intent.interfaces[0]
         assert iface.name == "ge-0/0/0"
-        assert iface.mtu == 9000
+        assert iface.mtu == _PAYLOAD_OF_9000

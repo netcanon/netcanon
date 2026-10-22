@@ -248,7 +248,9 @@ def _svi_stanzas(text: str) -> dict[int, list[list[str]]]:
 
 def _labels(text: str) -> dict[int, tuple[str | None, str | None]]:
     """``{VLAN id: (the description OS10 applies, the name a review line
-    says)}`` -- the last ``description`` of the SVI's stanzas."""
+    says)}`` -- the last ``description`` of the SVI's stanzas.  A
+    description that holds white space is between quotes, which OS10
+    does not keep (``description (Interface)``, Dell OS10 User Guide)."""
     out: dict[int, tuple[str | None, str | None]] = {}
     for vid, stanzas in _svi_stanzas(text).items():
         description = review = None
@@ -256,7 +258,9 @@ def _labels(text: str) -> dict[int, tuple[str | None, str | None]]:
             for line in body:
                 found = re.fullmatch(r" description (.*?)\s*", line)
                 if found:
-                    description = found.group(1)
+                    value = found.group(1)
+                    quoted = len(value) > 1 and value[0] == value[-1] == '"'
+                    description = value[1:-1] if quoted else value
                 said = _REVIEW.fullmatch(line)
                 if said:
                     assert int(said.group(1)) == vid, line

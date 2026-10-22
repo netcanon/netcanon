@@ -499,20 +499,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense's binary admin / non-admin model (group membership in
-      ``admins`` versus ``users``) collapses to RouterOS's named
-      groups: OPNsense ``<groupname>admins</groupname>`` -> RouterOS
-      ``group=full`` (privilege 15 equivalent); OPNsense
-      ``<groupname>users</groupname>`` -> RouterOS ``group=read``;
-      custom OPNsense groups collapse to ``group=read`` with banner.
-      OPNsense ``<priv>`` strings (e.g. ``page-all``) have no
-      canonical model and drop on render.  Password material is the
-      structural blocker: OPNsense bcrypt (``$2y$``) hashes arrive
-      in the canonical ``hashed_password`` field but RouterOS uses
-      a vendor-private password format that is NOT documented for
-      cross-vendor injection.  RouterOS render emits the user
-      account WITHOUT a password attribute; operator MUST set
-      passwords manually on the target post-migration.
+      4 of 14 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 7 of them. The 10 accounts that vanish carry 8 bcrypt
+      (`$2y$` / `$2b$`), 2 SHA-512 crypt (`$6$`). RouterOS can consume a genuine
+      plaintext password only (it hashes the password itself); anything else is
+      refused with a review comment naming the account, in place of the account.
+      Up to 0.7.7 such an account was written as `/user add` with no
+      `password=`, which RouterOS gives a blank password; a refused secret now
+      drops the whole account, as on every other target. The survivors are 4
+      with no stored secret. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, mikrotik_user]
 
   radius_servers:

@@ -242,18 +242,12 @@ NO_VLAN_FOR_A_NAME_IT_CANNOT_READ = frozenset({"aruba_aoscx"})
 WRITES_NO_LAG_MEMBERS = frozenset({"cisco_iosxe"})
 
 #: Parsers that read a LAG's members from a list and give a member no
-#: record when the config has no stanza for it.  The same shape as the
-#: defect this module is for, in two parsers it was not found in: a
-#: FortiOS config prints an ``edit`` stanza for every physical port, so
-#: a device's own config has the record; an OPNsense lagg's members
-#: are as a rule NICs assigned to nothing, and the committed captures
-#: assign theirs.  Such a member is in no line of a port-centric
-#: target's output.  Typed configs show it (:data:`_LAG_IN_A_LIST`);
-#: compared for equality, so the change that gives these members a
-#: record empties this -- and re-homes the tests that use an OPNsense
-#: lagg for "a port the config has no interface for"
-#: (``test_run_plan_with_models.py``).
-LAG_MEMBERS_WITH_NO_RECORD = frozenset({"fortigate_cli", "opnsense"})
+#: record when the config has no stanza for it.  Empty: the FortiOS
+#: and OPNsense parsers were in it until each gave such a member a
+#: record (a FortiOS fragment's, which prints no ``edit`` for it; an
+#: OPNsense lagg's, which OPNsense assigns to no zone).  Compared for
+#: equality with what typed configs show (:data:`_LAG_IN_A_LIST`).
+LAG_MEMBERS_WITH_NO_RECORD: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------------------

@@ -75,6 +75,18 @@ _LOGICAL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
 )
 
 
+def mtu_is_a_frame(name: str) -> bool:
+    """Whether the ``mtu`` of the OS10 interface *name* is a link MTU,
+    a frame size (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``):
+    an Ethernet port, a breakout lane, a management port, a
+    ``port-channel`` or a ``vlan`` interface.  Dell: ``mtu`` "Sets the
+    link maximum transmission unit (MTU) frame size for an Ethernet L2
+    or L3 interface".  A loopback, or a name the classifier does not
+    read, is copied as it stands.
+    """
+    return classify_port_name(name).kind in ("physical", "breakout", "mgmt", "lag", "svi")
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Dell OS10 port name into a :class:`PortIdentity`.
 

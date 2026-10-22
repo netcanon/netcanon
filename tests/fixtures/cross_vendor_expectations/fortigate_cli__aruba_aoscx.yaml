@@ -266,9 +266,9 @@ per_field_expectation:
       Not populated on any of the 4 cells.  FortiGate carries VLAN L3 on the
       child interface record, not on the VLAN record, so the SVI-on-VLAN mount
       is empty from this source — and the addressing itself does survive, via
-      `interfaces[].ipv4_addresses`.  aruba_aoscx declares
-      `/vlans/vlan/ipv4/address/ip` lossy, but nothing from this source
-      reaches that declaration.
+      `interfaces[].ipv4_addresses`.  What aruba_aoscx does with such an
+      address (it writes `interface vlan <N>`,
+      `synthesize_svis_from_vlan_l3`) is not exercised from this source.
     references: [fgt-aoscx-surface]
 
   "vlans[].untagged_ports":

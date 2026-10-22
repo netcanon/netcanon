@@ -144,6 +144,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from ..migration._one_line import one_line_each, said
 from ..migration._tier3_detection import is_left_out_row
 from ..migration._vlan_labels import vlan_labels_as_names
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
@@ -356,6 +357,11 @@ def run_plan(
         )
         for fn in transforms or []:
             tree = fn(tree)
+        # Every value on one line, said where: a renderer puts a value
+        # into its line as it stands, so the text after a line break
+        # is a command of its own.  After the transforms, which put an
+        # operator's values into the tree (`netcanon.migration._one_line`).
+        job.warnings.extend(said(where) for where in one_line_each(tree))
 
         # Stage 4 — validate
         job.status = MigrationJobStatus.validating
@@ -2153,7 +2159,9 @@ def _unbound_hardware(
     renderer's rules is re-derived here.
 
     A port is confirmed by ITS OWN line: an interface of the output
-    under the port's name that is looked up by the port's hardware.
+    under the port's name that is looked up by the port's hardware --
+    and by no list that names it cutting the name (below: a LAG
+    member with a line of its own is still named in ``slaves=``).
     That another interface is looked up by the same hardware says
     nothing for this port.  Two allowances, both for what a parser
     cannot give back: where several names ended on one name the
@@ -2169,17 +2177,21 @@ def _unbound_hardware(
     write.  Under the name of the target port it was paired with it
     needs none.  Under any other name it is looked up by nothing, and
     that matters where the output USES the name.  An allowance
-    applies there too: a list is written unquoted (``slaves=``,
-    ``gateway=``), so a name with white space, a comma, ``@`` or
-    ``%`` in it is not given back whole, and is judged by the part of
-    it before the first such character.  That is what a member list
-    reads where the character is white space or a comma, and a next
-    hop where it is any of the four; a name that begins with one of
-    them, holds ``@`` or ``%`` ahead of the white space or comma as a
-    LAG member, is wrapped in double quotes, or has a line break in
-    it is NOT caught (its entry is then listed off-target only).
-    Quoting the two lists in the renderer is what would retire the
-    whole case.
+    applies there too, and to a port with a line of its own: the
+    RouterOS parser cuts a member list (``slaves=``) at each comma,
+    and a next hop (``gateway=``) at a comma, an ``@`` (a routing
+    table) and a ``%`` (an interface after an address), so a name
+    holding one of them is not given back whole.  It is judged by
+    each piece that each list's cutting makes of it: where the
+    output names a piece, the name was written into a list that
+    cut it.  A name none of whose pieces the parser gives back as a
+    name (``@a`` as a next hop: the piece after the ``@`` is read
+    as a routing table), or that has a line break in it, is NOT
+    caught; the entry of a port with no line of its own is then
+    listed off-target only.  White space and a double quote are
+    no longer among them: the renderer writes each list as one
+    string where it holds any character outside a bare value, and
+    the parser reads the string back whole.
 
     Args:
         target: The target codec.
@@ -2220,10 +2232,14 @@ def _unbound_hardware(
         # A next hop can name an interface too, and is not in that
         # list.  (After an address -- ``10.0.5.2%WAN`` -- the parser
         # gives the name as the route's interface, which is.)
+        hops: set[str] = set()
         for route in getattr(read_back, "static_routes", None) or []:
-            used.update(
+            hops.update(
                 hop.partition("@")[0].strip() for hop in (route.gateway or "").split(",")
             )
+            if route.interface:
+                hops.add(route.interface)
+        used |= hops
     except LimitExceeded as exc:
         # The translation is done and stands; what was refused is
         # reading it back.  Say that, and why.
@@ -2256,20 +2272,33 @@ def _unbound_hardware(
             return True
         return any(not ends[shown] for shown in holders.get(where, ()))
 
-    def refers_to(name: str) -> bool:
-        if name in used:
-            return True
-        # A list is written unquoted (``slaves=``, ``gateway=``), so the
-        # parser gives a name back only up to its first white space or
-        # comma -- or, in a next hop, ``@`` or ``%``.  A name that holds
-        # one is judged by the part before the first of them (see the
-        # docstring for what that does not catch).
-        cut = next(
-            (at for at, ch in enumerate(name) if ch.isspace() or ch in ",@%"), len(name),
-        )
-        return 0 < cut < len(name) and name[:cut] in used
+    def cut_in_a_list(name: str) -> bool:
+        # The parser cuts every list at each comma, and a next hop at
+        # an ``@`` and a ``%`` as well: a name that holds one is given
+        # back in pieces.  Judged by every piece of each cutting, not
+        # the first alone -- ``a%b,c`` in ``slaves=`` is ``a%b`` and
+        # ``c``, and ``,a`` is ``a`` -- and a next hop's pieces are
+        # looked for among the next hops: ``x@y`` is whole in
+        # ``slaves=``, whatever ``x`` is (see the docstring for what
+        # this does not catch).
+        for cuts, read in ((",", used), (",@%", hops)):
+            pieces = [name]
+            for ch in cuts:
+                pieces = [piece for part in pieces for piece in part.split(ch)]
+            if len(pieces) > 1 and any(piece in read for piece in pieces if piece):
+                return True
+        return False
 
-    unbound = [name for name, where in hardware.items() if not bound(name, where)]
+    def refers_to(name: str) -> bool:
+        return name in used or cut_in_a_list(name)
+
+    # A port its own line finds is no less lost to a list that cuts its
+    # name: ``set [ find default-name=sfp-sfpplus1 ] name="my,port"``
+    # beside ``slaves="my,port,sfp-sfpplus2"``, a LAG of a member ``my``.
+    unbound = [
+        name for name, where in hardware.items()
+        if not bound(name, where) or cut_in_a_list(final(name))
+    ]
     unbound.extend(name for name in expected if refers_to(final(name)))
     return unbound, True
 

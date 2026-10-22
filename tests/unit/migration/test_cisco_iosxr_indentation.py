@@ -195,7 +195,7 @@ SUBMODE_THEN_BODY = (
 def _check_submode_then_body() -> None:
     one, two = _parse(SUBMODE_THEN_BODY).interfaces
     assert (one.name, one.description, one.mtu, one.enabled) == (
-        "GigabitEthernet0/0/0/1", "to-core", 9000, False,
+        "GigabitEthernet0/0/0/1", "to-core", 8986, False,  # ``mtu 9000`` less the Ethernet header
     )
     assert [(a.ip, a.prefix_length) for a in one.ipv4_addresses] == [("192.0.2.1", 30)]
     assert [(a.ip, a.prefix_length) for a in one.ipv6_addresses] == [("2001:db8::1", 64)]

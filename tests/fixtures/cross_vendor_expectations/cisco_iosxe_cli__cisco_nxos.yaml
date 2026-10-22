@@ -301,6 +301,16 @@ per_field_expectation:
       only the protocol swap is measured.
     references: [iosxecli-nxos-surface]
 
+  "interfaces[].dot1q_inner_vlan":
+    disposition: unsupported
+    reason: >
+      The cisco_nxos matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: the NX-OS sub-interface statement the codec reads and
+      writes, `encapsulation dot1q <id>`, is one tag.  The carrier capture's
+      six Q-in-Q units lose their inner tags; the job is `partial`, the
+      validation report listing the path.
+    references: [iosxecli-nxos-surface]
+
   # -- VLANs.  Whole-record disposition: nothing under `vlans` drifts. --
 
   vlans:

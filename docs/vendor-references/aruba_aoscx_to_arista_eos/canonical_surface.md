@@ -1,5 +1,7 @@
 # AOS-CX → Arista EOS: measured canonical surface
 
+> **Update 2026-10-20 — the EOS render no longer writes a second VLAN interface beside an AOS-CX `interface vlan <N>`, and on this path the VLAN's address is now lost.**  `synthesize_svis_from_vlan_l3` now recognises a VLAN interface however a codec spells it, so a VLAN whose address is already on `interface vlan 101` gets no `interface Vlan101` as well.  That duplicate was the only line that carried the address back on the mesh path, which translates no name: the EOS parser reads no `interface vlan 101`, the same loss as every spaced AOS-CX name (`lag 1`, `loopback 0`).  `vlans[].ipv4_addresses` is therefore recorded `unsupported` on all five cells, and each cell parses back fewer interface records than before.  With port names translated, as the API and the demo do, `vlan 101` arrives as `Vlan101` with its address; the active gateway is not kept on the VLAN.  Statements below that the address survives on this path describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
 
@@ -106,6 +108,9 @@ supposed to serve does not.
 
 <!-- snmpv3-key-gate-465 -->
 > **Update 2026-09-16 (#465) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user ... auth <proto> <value>` takes the operator's PASSPHRASE and EOS derives the localised key from it at commit, so a value that is ALREADY a key cannot be re-derived.  This source supplies an AOS-CX `auth-pass ciphertext` blob, encrypted under the source device's key.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto EOS as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
 
 `local_users[].hashed_password` drifts on all 6 populated cells. AOS-CX stores
 the user secret in its own encrypted form — an `AQB…`-prefixed ciphertext blob

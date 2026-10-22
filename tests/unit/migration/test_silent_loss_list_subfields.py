@@ -301,7 +301,7 @@ def _svi_ip_survived(reparsed: CanonicalIntent) -> bool:
     # VLAN record (SVI-model targets re-fold via project_svi_to_vlan) OR an
     # interface (FortiGate renders it on a routed VLAN sub-interface).  Either
     # means the L3 reached the target — no reachability loss.  A genuine
-    # dropper (nxos/iosxr/aoscx/opnsense/mikrotik) leaves it on neither.
+    # dropper (iosxr/opnsense/mikrotik) leaves it on neither.
     on_vlan = any(a.ip == "10.11.0.1" for v in reparsed.vlans for a in v.ipv4_addresses)
     on_iface = any(
         a.ip == "10.11.0.1" for i in reparsed.interfaces for a in i.ipv4_addresses
@@ -409,7 +409,8 @@ _CASES = [
     # -- VLAN SVI / management L3 (blind-audit 3ec11f3 T0-2): the VLAN-record
     # IP was unwalked, so a codec that drops it on render reported severity:ok.
     # Now walked (/vlans/vlan/ipv4/address/ip) + declared lossy on the droppers
-    # (nxos/iosxr/aoscx/opnsense/mikrotik); SVI-model targets preserve it. --
+    # (iosxr/opnsense/mikrotik); SVI-model targets preserve it, nxos and aoscx
+    # by writing a VLAN interface for it (synthesize_svis_from_vlan_l3). --
     _Case(
         case_id="vlan-svi-ipv4",
         leaf="/vlans/vlan/ipv4/address/ip",

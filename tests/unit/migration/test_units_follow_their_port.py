@@ -254,6 +254,44 @@ def _tag_of(source_name: str, unit: str) -> int:
     return 300 if unit == "54" and source_name != "vyos" else int(unit)
 
 
+#: Targets whose parser reads a sub-interface's tag otherwise than as
+#: ``dot1q_vlan``.  RouterOS writes a sub-interface as a VLAN interface
+#: on its port (``/interface vlan add interface=ether1 name=ether1.54
+#: vlan-id=300``) and a VLAN interface on a port and on a bridge alike,
+#: so its parser reads the line as a VLAN interface and a VLAN of the
+#: tag under the interface's name.  The tag is taken where the parser
+#: reads it so AND a line of the text states it.
+_TAG_AS_A_VLAN_OF_ITS_NAME = {"mikrotik_routeros"}
+
+
+def _routeros_line_says(text: str, name: str, tag: int) -> bool:
+    """An ``add`` line of ``/interface vlan`` names *name* and states
+    *tag*."""
+    names = {f"name={name}", f'name="{name}"'}
+    section = ""
+    for line in text.splitlines():
+        words = line.split()
+        if line.startswith("/"):
+            section = line.strip()
+        elif (
+            section == "/interface vlan" and words[:1] == ["add"]
+            and names & set(words) and f"vlan-id={tag}" in words
+        ):
+            return True
+    return False
+
+
+def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
+    """The tags the output carries on *iface*, read the target's way."""
+    tags = {iface.dot1q_vlan} - {None}
+    if target_name in _TAG_AS_A_VLAN_OF_ITS_NAME and iface.interface_type == "ianaift:l3ipvlan":
+        tags |= {
+            vlan.id for vlan in out.vlans
+            if vlan.name == iface.name and _routeros_line_says(rendered, iface.name, vlan.id)
+        }
+    return tags
+
+
 class TestASubInterfaceOnEveryPair:
     """Every pair that can be made of the source grammars above and
     the public targets -- not every pair of codecs: AOS-S, AOS-CX,
@@ -308,11 +346,41 @@ class TestASubInterfaceOnEveryPair:
         for unit, ip in _UNIT_ADDRESSES:
             tag = _tag_of(source_name, unit)
             holders = _holders(out, ip)
-            if len(holders) != 1 or holders[0].dot1q_vlan != tag:
+            if len(holders) != 1 or tag not in _tags(target_name, out, holders[0], job.rendered):
                 assert job.status != MigrationJobStatus.completed, (
                     f"{ip}: tag {tag} is not in the output "
                     f"({[(h.name, h.dot1q_vlan) for h in holders]}) and the job is completed"
                 )
+
+    @pytest.mark.parametrize("source_name", sorted(_UNITS))
+    def test_routeros_is_read_for_a_tag_it_wrote(
+        self, source_name: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Handed the RouterOS renderer that wrote no line for a
+        sub-interface -- the defect RouterOS's reading is for -- the
+        reading finds no tag, and the job says ``completed``: the check
+        above fails."""
+        import copy
+
+        from netcanon.migration.codecs.mikrotik_routeros import codec as ros_codec
+
+        real = ros_codec.render_intent
+
+        def render(tree):
+            tree = copy.deepcopy(tree)
+            for iface in tree.interfaces:
+                iface.dot1q_vlan = None
+            return real(tree)
+
+        monkeypatch.setattr(ros_codec, "render_intent", render)
+        target = get_codec("mikrotik_routeros")
+        _, text = _UNITS[source_name]
+        job = run_plan_with_overrides(get_codec(source_name), target, text, port_rename_map={})
+        out = target.parse(job.rendered)
+        unit, ip = _UNIT_ADDRESSES[0]
+        (holder,) = _holders(out, ip)
+        assert _tag_of(source_name, unit) not in _tags("mikrotik_routeros", out, holder, job.rendered)
+        assert job.status == MigrationJobStatus.completed
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),
@@ -649,15 +717,17 @@ class TestWhatIsAUnit:
 
     def test_a_loopback_unit_is_not_followed(self) -> None:
         """No other platform has a sub-interface of a loopback, so
-        ``Loopback0.2`` would be a name of nothing.  The Junos
-        classifier still puts it on the loopback itself; the job says
-        the two share a name."""
+        ``Loopback0.2`` would be a name of nothing.  A unit of lo0 is
+        a loopback of its own, with the unit's number (see
+        ``test_a_loopback_is_a_unit_of_lo0.py``), and not on the
+        loopback itself."""
         junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
         job = run_plan_with_overrides(junos, eos, _JUNOS_OTHER_UNITS, port_rename_map={})
-        assert job.port_renames["lo0.2"] == job.port_renames["lo0"] == "Loopback0"
-        assert [
+        assert job.port_renames["lo0"] == "Loopback0"
+        assert job.port_renames["lo0.2"] == "Loopback2"
+        assert not [
             w for w in job.warnings
-            if "multiple source ports map to 'Loopback0'" in w and "lo0.2" in w
+            if "multiple source ports map to 'Loopback" in w
         ]
 
     def test_a_unit_with_no_interface_record(self) -> None:

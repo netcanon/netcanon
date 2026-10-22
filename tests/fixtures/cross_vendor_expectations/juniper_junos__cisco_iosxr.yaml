@@ -168,7 +168,10 @@ per_field_expectation:
     note: >
       Preserved on all 5 cells that populate it, including the 9192 / 9100 /
       9000 jumbo values on the synthetic kitchen sink.  Both matrices declare
-      `/interfaces/interface/config/mtu` supported.
+      `/interfaces/interface/config/mtu` supported.  The vSRX capture's
+      `st0` units state `family inet mtu 1420`, which is an IP MTU
+      (`ip_mtu`), not the unit's MTU: it is written `ipv4 mtu 1420` and
+      read back, so that cell has no `mtu` on either side.
     references: [junos-iosxr-surface]
 
   "interfaces[].ipv6_addresses":
