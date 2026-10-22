@@ -277,6 +277,9 @@ and the caveat belongs to the target matrix, not to this pair.
 
 ## Credential material
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the RouterOS render wrote such an account as `/user add` with no `password=`, which RouterOS gives a blank password.  Measured after the change: **0 of 14** local accounts arrive across the 9 cells that populate users; 14 are refused for a secret RouterOS cannot consume (6 MD5 crypt (Cisco type 5), 5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__mikrotik_routeros.yaml`.
+
 `local_users[].hashed_password` is empty after the round-trip on every one of
 the 9 populated cells. The source hashes are IOS-XR type-tagged crypt strings;
 their values are deliberately **not** reproduced in this file or in the

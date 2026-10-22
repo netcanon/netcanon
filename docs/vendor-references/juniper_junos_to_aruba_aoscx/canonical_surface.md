@@ -1,5 +1,7 @@
 # Junos → AOS-CX: measured canonical surface
 
+> **Update 2026-10-20 — an address held on a VLAN record now reaches AOS-CX.**  The AOS-CX render writes `interface vlan <N>` for a VLAN that carries an address and has no interface of its own in any spelling (`synthesize_svis_from_vlan_l3`), and the matrix no longer declares `/vlans/vlan/ipv4/address/ip` lossy.  Measured after the change: on `saidvandeklundert_snmpv3_junos172` the address of `irb.698`, which the Junos parser folds onto VLAN 698, arrives as `interface vlan 698` / `ip address 10.200.1.1/22` and folds back onto the VLAN, so `vlans[].ipv4_addresses` is preserved (it was recorded `unsupported`).  The interface list of that cell gains that record (49 -> 50), so `interfaces[].name` is declared lossy and the cell's interfaces are not compared record by record.  The table row and any statement below that the address drops describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__aruba_aoscx.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/juniper_junos__aruba_aoscx.yaml`.
 

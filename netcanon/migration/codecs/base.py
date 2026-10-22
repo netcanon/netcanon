@@ -33,10 +33,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
+from .._one_line import first_line_break
 from ..limits import census, metered
 
 if TYPE_CHECKING:
-    from ..canonical.port_names import PortIdentity
+    from collections.abc import Sequence
+
+    from ..canonical.port_names import LoopbackToPlace, PortIdentity
 
 
 class CodecError(Exception):
@@ -305,6 +308,21 @@ class CodecBase(ABC):
     #: name, which is every other platform that ships.
     ports_keep_a_factory_name: ClassVar[bool] = False
 
+    #: This platform's VLAN has a name and no label apart from it, so
+    #: the renderer writes ``CanonicalVlan.name`` and nothing of
+    #: ``.description`` (IOS-XE, NX-OS, EOS and AOS-S ``name``, Junos
+    #: ``set vlans <name>``).  Where a VLAN's name is only the name of an
+    #: interface of the config, or empty, and it has a description, the
+    #: description is written as its name
+    #: (:mod:`netcanon.migration._vlan_labels`): applied by
+    #: ``run_plan`` before the port translator, and by the render
+    #: boundary below.  ``False`` where the VLAN has a label of its own
+    #: (OPNsense, AOS-CX), where its name is an interface name other
+    #: lines refer to (FortiOS, RouterOS), or where no VLAN name is
+    #: written; ``test_a_vlan_label_is_its_name.py`` names each codec
+    #: that leaves it ``False`` and why.
+    vlans_have_only_a_name: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Wrap each subclass's ``parse`` at the class boundary so a pydantic
         ``ValidationError`` raised while building a canonical model surfaces
@@ -322,7 +340,10 @@ class CodecBase(ABC):
         what it is about to make without being handed anything, the
         finished tree is counted whoever made it, and the length of
         every output is held to the limit.  A caller that opened no
-        scope is counted against the standard limits.
+        scope is counted against the standard limits.  And on a
+        target whose VLAN has only a name, the tree a ``render`` is
+        handed has its VLAN labels as names first
+        (``vlans_have_only_a_name``), whoever calls it.
 
         Applied only to a subclass that DEFINES ``parse`` (or ``render``)
         in its own body (inherited implementations are already wrapped on
@@ -366,6 +387,22 @@ class CodecBase(ABC):
         def _wrapped_render(self: CodecBase, tree: Any) -> str:
             codec_name = getattr(self, "name", None) or cls.__name__
             with metered("render", codec_name) as meter:
+                # No value is written on more than one line: a renderer
+                # puts a value into its line as it stands, and the text
+                # after a break is a command of its own (`_one_line`).
+                # The pipeline wrote every value on one line already;
+                # this is for a caller that did not.
+                where = first_line_break(tree)
+                if where is not None:
+                    raise RenderError(
+                        f"{codec_name}: a value of the tree ({where}) holds a "
+                        "line break, and no value is written on more than "
+                        "one line"
+                    )
+                if self.vlans_have_only_a_name:
+                    from .._vlan_labels import vlan_labels_as_names
+
+                    tree = vlan_labels_as_names(tree)
                 rendered = raw_render(self, tree)
                 if isinstance(rendered, str):
                     meter.settle("text", len(rendered))
@@ -415,7 +452,10 @@ class CodecBase(ABC):
                 omitted from the output and surfaced as a ``block`` in
                 the :class:`ValidationReport` (a ``partial`` job).
                 ``RenderError`` is reserved for a tree the adapter
-                genuinely cannot serialise.
+                genuinely cannot serialise.  Also raised, for every
+                codec and before its own code runs, when a value of
+                *tree* holds a line break: no value is written on more
+                than one line (:mod:`netcanon.migration._one_line`).
             LimitExceeded: When the output is longer than the limit in
                 force (:mod:`netcanon.migration.limits`).
         """
@@ -530,6 +570,39 @@ class CodecBase(ABC):
               last-resort fallback — the whole point of going through
               :class:`PortIdentity` is that we DON'T leak vendor-
               specific source names into the target render.
+        """
+        return None
+
+    def place_loopbacks(
+        self,
+        loopbacks: Sequence[LoopbackToPlace],
+        taken: frozenset[str],
+    ) -> tuple[dict[str, str], dict[str, str]] | None:
+        """Name a config's loopbacks as a set, or ``None``.
+
+        For a target whose name for a loopback depends on the config's
+        OTHER loopbacks, which :meth:`format_port_identity` -- given
+        one name at a time -- cannot know.  Junos has one loopback
+        interface, ``lo0``, whose unit 0 is the global table's
+        loopback and of which each routing instance takes one unit of
+        its own; formatted one at a time, ``Loopback1`` was ``lo1``.
+
+        Args:
+            loopbacks: Every loopback the translator is to name: an
+                interface record of the source config that the source
+                classifier reads as a loopback, that no entry of the
+                rename map decides, between configs of two codecs.
+            taken: The names the entries of the rename map give, which
+                a loopback placed here would share.
+
+        Returns:
+            ``(placed, refused)``: the name of each loopback placed,
+            and for each that has no place, the reason, which the job
+            reports after the loopback's name (the loopback is dropped
+            and listed as a name no entry decided).  A loopback in
+            neither is formatted by :meth:`format_port_identity`.
+            ``None`` (the default): every loopback is formatted one at
+            a time.
         """
         return None
 

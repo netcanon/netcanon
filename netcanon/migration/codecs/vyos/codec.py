@@ -372,6 +372,17 @@ class VyOSCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  VyOS QinQ "
+                    "(`vif-s <id> vif-c <id>`) is not this field: its service "
+                    "tag is 802.1ad, Ethertype 0x88a8 by default, and the "
+                    "parser leaves a `vif-s` block out with a row."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group",
                 reason=(
                     "VyOS VRRP / VRRPv3 is not modelled by the codec; the "
@@ -623,7 +634,12 @@ class VyOSCodec(CodecBase):
         # idempotent on curly-brace input.
         brace = _setform_to_brace(raw)
         intent = parse_intent(brace)
-        intent.dropped_tier3_sections = detect_tier3_sections_vyos(brace)
+        # After the Tier-3 rows, the rows the parser itself made: a
+        # ``vif-s`` service VLAN, which is not translated.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_vyos(brace),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

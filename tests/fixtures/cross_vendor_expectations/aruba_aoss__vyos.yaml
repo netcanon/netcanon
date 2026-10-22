@@ -451,34 +451,29 @@ per_field_expectation:
   "snmp.location":
     disposition: good
     note: >
-      Zero drift on every cell.  Only `kitchen_sink.cfg` actually populates a
-      location, and it survives verbatim through `service snmp location`;
-      the other five SNMP-carrying cells leave it empty on both sides.  Both
-      matrices declare `/snmp/location` supported.  Thin but clean — one
-      populated cell, stated as one.
+      Zero drift on every cell.  `kitchen_sink.cfg` and
+      `hpe_community_2920_wb1608_dhcp_snooping.cfg` populate a
+      location, and it survives verbatim through `service snmp
+      location`; the other SNMP-carrying cells leave it empty on
+      both sides.  The WB.16.08 capture prints it on one line with
+      the contact (`snmp-server contact "IT" location "1OG"`),
+      which the AOS-S parser reads as two values.  Both matrices
+      declare `/snmp/location` supported.
     references: [aoss-vyos-surface]
 
   "snmp.contact":
-    disposition: lossy
-    reason: >
-      Drifts on 1 of the 3 cells that populate a contact
-      (`hpe_community_2920_wb1608_dhcp_snooping.cfg`), and the loss is a
-      punctuation rewrite, not a content loss — say which one you mean.
-      The source is a combined AOS-S `snmp-server contact "..." location
-      "..."` line, so the parsed contact string carries two embedded
-      double-quote characters.  The VyOS render replaces both with
-      apostrophes and warns as it does so: VyOS rejects embedded quotes in
-      value strings even when escaped (vyos.dev/T1246).  Every other
-      character round-trips; only the two `"` become `'`.
-      The text survives; its punctuation does not.  Recorded as a loss rather
-      than waved through because the audit compares strings and because an
-      operator diffing the two configs deserves to know why the field moved —
-      but it is `lossy`, not `unsupported`, because nothing is dropped and
-      the contact remains usable.
-      The other two populated cells
-      (`hpe_community_2930f_wc1607_intervlan.cfg`, `kitchen_sink.cfg`)
-      contain no quote character and round-trip exactly.  Both matrices
-      declare `/snmp/contact` supported.
+    disposition: good
+    note: >
+      Zero drift on every cell that populates a contact.  It
+      drifted on `hpe_community_2920_wb1608_dhcp_snooping.cfg`
+      while the AOS-S parser read the combined `snmp-server
+      contact "IT" location "1OG"` line as one contact holding two
+      `"`, which the VyOS render wrote as `'`; the parser reads
+      the line as two values now, and the contact `IT` round-
+      trips.  A contact that does hold a `"` is written `'` on
+      VyOS, with a review line (VyOS rejects an embedded quote
+      even escaped, vyos.dev/T1246).  Both matrices declare
+      `/snmp/contact` supported.
     references: [aoss-vyos-surface]
 
   "snmp.trap_hosts":

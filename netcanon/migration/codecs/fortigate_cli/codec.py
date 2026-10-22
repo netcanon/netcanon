@@ -45,6 +45,7 @@ from .parse import (
     _parse_blocks,
     _prefix_to_mask,
     parse_intent,
+    without_quoted_values,
 )
 from .render import render_intent
 
@@ -359,6 +360,17 @@ class FortiGateCLICodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  A FortiOS "
+                    "VLAN interface whose own interface is a VLAN interface is "
+                    "read as a VLAN interface of one tag, which is not this "
+                    "field.  Declared so that it is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "FortiGate models tenancy as VDOMs, not VRFs, and renders no "
@@ -551,8 +563,12 @@ class FortiGateCLICodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 `config` blocks the parser drops (firewall
         # policies, VIPs, VPN, UTM profiles, router policy/route-maps).
-        # Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_fortios(raw)
+        # Notification-only.  Read from the text the parser read: a line
+        # of a quoted value (a replacement message, a certificate) is
+        # text, not a stanza.
+        intent.dropped_tier3_sections = detect_tier3_sections_fortios(
+            without_quoted_values(raw),
+        )
         return intent
 
     def render(self, tree: Any) -> str:

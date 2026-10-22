@@ -164,6 +164,7 @@ def _maximal_intent() -> CanonicalIntent:
         ip_mtu=1400,
         ipv4_addresses=[addr4, addr4_sec], ipv6_addresses=[addr6, addr6_sec],
         switchport_mode="trunk", access_vlan=10, dot1q_vlan=100,
+        dot1q_inner_vlan=200,
         trunk_allowed_vlans=[10, 20],
         trunk_native_vlan=99, voice_vlan=200, lag_member_of="Port-Channel1",
         dhcp_client=True, dhcp_client_v6="dhcp6", tunnel_type="gre",

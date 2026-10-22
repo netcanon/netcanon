@@ -119,6 +119,9 @@ class JunosCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="juniper_junos",
         vendor_id="juniper_junos",
@@ -155,6 +158,9 @@ class JunosCodec(CodecBase):
             # surface; other codecs declare it unsupported (ship-before-wire)
             # until their `encapsulation dot1Q`-equivalent is wired.
             "/interfaces/interface/dot1q-vlan",
+            # `unit N vlan-tags outer X inner Y`, under the parent's
+            # `stacked-vlan-tagging` / `flexible-vlan-tagging`.
+            "/interfaces/interface/dot1q-inner-vlan",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -210,9 +216,12 @@ class JunosCodec(CodecBase):
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "description line.  Where the VLAN's name is only the "
+                    "name of an interface of the config, or empty, its "
+                    "description is written as its name (_vlan_labels: an "
+                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "description drops on render (silent-loss guard, "
+                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),
@@ -307,9 +316,13 @@ class JunosCodec(CodecBase):
                     "CanonicalInterface entries named "
                     "``<parent>.<unit>``, and GAP 7 captures the "
                     "per-unit 802.1Q tag (``unit N vlan-id``) on "
-                    "``/interfaces/interface/dot1q-vlan`` (round-trips). "
-                    "Per-unit subinterface attributes beyond the address "
-                    "+ 802.1Q tag remain unmodelled."
+                    "``/interfaces/interface/dot1q-vlan`` (round-trips), "
+                    "and an inner one (``vlan-tags outer X inner Y``) on "
+                    "``/interfaces/interface/dot1q-inner-vlan``.  A unit "
+                    "whose tag statement matches more than one tag (a "
+                    "range, a list, a TPID other than 0x8100) is left "
+                    "out, with a row.  Per-unit subinterface attributes "
+                    "beyond the address + 802.1Q tags remain unmodelled."
                 ),
                 severity="warn",
             ),
@@ -466,6 +479,9 @@ class JunosCodec(CodecBase):
 
     def format_port_identity(self, identity) -> str | None:
         return _port_names.format_port_identity(identity)
+
+    def place_loopbacks(self, loopbacks, taken):
+        return _port_names.place_loopbacks(loopbacks, taken)
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)

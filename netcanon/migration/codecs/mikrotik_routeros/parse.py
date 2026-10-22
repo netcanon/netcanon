@@ -56,6 +56,7 @@ from ...limits import ticked
 from .._helpers import Uniques
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .port_names import is_factory_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # appeared in the source ``/interface vrrp`` section, keeping
     # render output deterministic.
     _materialise_vrrp_groups(vrrp_scratch, iface_by_name)
+    _name_the_hardware(iface_by_name.values())
 
     # Order interfaces deterministically: ethernet ports first
     # (by natural-sort name), then bridges, then VLANs, then rest.
@@ -252,69 +254,49 @@ def _join_continuations(raw: str) -> str:
     """Collapse RouterOS ``\\`` line continuations into single lines.
 
     A line that ends in a backslash (white space after it aside) goes
-    on in the next one: the backslash and the white space before it
-    are dropped, and the next line is joined on, stripped, after one
-    space.  A line that is not continued is kept as it is, trailing
-    white space included.
+    on in the next one.  The backslash, the line break and the
+    indentation of the next line are not part of the line, and nothing
+    is put in their place: an ``export`` breaks a long line at any
+    column -- between two words (``mtu=auto \\``), right after a key
+    (``name=\\``), inside a quoted value, inside a word (``2.5G-\\``
+    then ``baseT``) -- and indents the rest, and a device reads its own
+    export back as it was before the break.  So white space before the
+    backslash is kept (it is what parts two words), and the next line
+    is joined on from its first character that is not white space.
+    A line that is not continued is kept as it is, trailing white
+    space included.  Whether a line is continued is asked of that line
+    alone: a backslash the line before kept (``x="a\\\\"``, then a
+    break) continues nothing.
 
     The text is whatever was pasted, and every line of it may end in
     a backslash.  So the line being joined is never copied while it
-    grows: it is held as pieces, each with the offset it ends at, and
-    a continuation only moves an offset back or drops pieces.  Built
-    as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
+    grows: it is held as pieces, each with the offset it ends at.
+    Built as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
     -- each line cost the length of everything before it, and 3 MB of
     continued lines held a plan request for minutes.
     """
     out: list[str] = []
     pieces: list[str] = []
     ends: list[int] = []
-
-    def trim() -> None:
-        """Drop trailing white space from the line being joined."""
-        while pieces:
-            piece, stop = pieces[-1], ends[-1]
-            while stop and piece[stop - 1].isspace():
-                stop -= 1
-            if stop:
-                ends[-1] = stop
-                return
-            pieces.pop()
-            ends.pop()
-
-    def joined() -> str:
-        return "".join(piece[:stop] for piece, stop in zip(pieces, ends, strict=True))
-
     for line in ticked(raw.splitlines()):
-        if pieces:
-            more = line.strip()
-            pieces += (" ", more)
-            ends += (1, len(more))
-        else:
-            pieces, ends = [line], [len(line)]
-        # Where the line ends once trailing white space is looked
+        piece = line.lstrip() if pieces else line
+        # Where this line ends once trailing white space is looked
         # past -- found without changing it, because a line that is
         # NOT continued keeps its trailing white space.
-        at, stop = len(pieces) - 1, ends[-1]
-        while at >= 0:
-            piece = pieces[at]
-            while stop and piece[stop - 1].isspace():
-                stop -= 1
-            if stop:
-                break
-            at -= 1
-            stop = ends[at] if at >= 0 else 0
-        if at >= 0 and pieces[at][stop - 1] == "\\":
-            # Drop the backslash and the white space before it and
-            # keep joining.  If nothing is left, the next line starts
-            # afresh.
-            del pieces[at + 1:], ends[at + 1:]
-            ends[at] = stop - 1
-            trim()
+        stop = len(piece)
+        while stop and piece[stop - 1].isspace():
+            stop -= 1
+        pieces.append(piece)
+        if stop and piece[stop - 1] == "\\":
+            # Drop the backslash and what follows it, keep the rest,
+            # and keep joining.
+            ends.append(stop - 1)
             continue
-        out.append(joined())
+        ends.append(len(piece))
+        out.append("".join(p[:e] for p, e in zip(pieces, ends, strict=True)))
         pieces, ends = [], []
     if pieces:
-        out.append(joined())
+        out.append("".join(p[:e] for p, e in zip(pieces, ends, strict=True)))
     return "\n".join(out)
 
 
@@ -403,13 +385,23 @@ def _unescape(value: str) -> str:
     return "".join(out)
 
 
-_FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")
 # Cross-vendor render path emits ``[ find name=X ]`` against the
 # canonical name when no ``default_name`` was tracked; we need to
 # accept both forms on the parse side so round-trips don't drop the
-# row.  Quoted names (``[ find name="ge-0/0/1" ]``) need the value
-# extracted without the surrounding quotes.
-_FIND_NAME_RE = re.compile(r'\[\s*find\s+name=(?:"([^"]*)"|(\S+?))\s*\]')
+# row.  Either value may be quoted (``[ find name="ge-0/0/1 x" ]``):
+# group 1 is a string, read through :func:`_unescape`, group 2 a bare
+# value.
+_FIND_DEFAULT_NAME_RE = re.compile(
+    r'\[\s*find\s+default-name=(?:"((?:\\.|[^"\\])*)"|(\S+?))\s*\]'
+)
+_FIND_NAME_RE = re.compile(
+    r'\[\s*find\s+name=(?:"((?:\\.|[^"\\])*)"|(\S+?))\s*\]'
+)
+
+
+def _found(m: re.Match[str]) -> str:
+    """The value a ``[ find ... ]`` match names, unquoted."""
+    return _unescape(m.group(1)) if m.group(1) is not None else m.group(2)
 
 
 def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
@@ -540,12 +532,11 @@ def _parse_interface_ethernet(
         if fm is None and nm is None:
             continue
         if fm is not None:
-            default_name = fm.group(1)
+            default_name = _found(fm)
             canonical_default = default_name
         else:
             default_name = ""
-            # _FIND_NAME_RE: group(1) is the quoted form, group(2) the bare.
-            canonical_default = nm.group(1) if nm.group(1) is not None else nm.group(2)
+            canonical_default = _found(nm)
         kv = _parse_kv(line)
         canonical_name = kv.get("name", canonical_default)
         iface = iface_by_name.get(canonical_name)
@@ -610,6 +601,11 @@ def _parse_interface_vlan(
         )
         if "comment" in kv:
             iface.description = kv["comment"]
+        # The interface it rides on: a bridge, a port, a bond.  Kept as
+        # the config states it, so that it is written back on the same
+        # parent rather than on one the renderer would have to choose.
+        if kv.get("interface"):
+            iface.vlan_parent = kv["interface"]
         # Disabled flag (defaults to enabled if not present).
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
@@ -947,9 +943,6 @@ def _materialise_vrrp_groups(
             parent_iface = CanonicalInterface(
                 name=parent_name,
                 interface_type=_infer_iface_type_from_name(parent_name),
-                default_name=(
-                    parent_name if _is_ethernet_name(parent_name) else ""
-                ),
             )
             iface_by_name[parent_name] = parent_iface
         group = CanonicalVRRPGroup(
@@ -1028,12 +1021,6 @@ def _parse_ip_address(
             CanonicalInterface(
                 name=iface_name,
                 interface_type=_infer_iface_type_from_name(iface_name),
-                # If the name already matches a factory default pattern,
-                # use it as the default_name too.  Keeps round-trip
-                # consistent for ifaces that only appear in /ip address
-                # (no /interface ethernet set line carries the default-
-                # name lookup).
-                default_name=iface_name if _is_ethernet_name(iface_name) else "",
             ),
         )
         iface.ipv4_addresses.append(CanonicalIPv4Address(
@@ -1102,7 +1089,6 @@ def _parse_ipv6_address(
             CanonicalInterface(
                 name=iface_name,
                 interface_type=_infer_iface_type_from_name(iface_name),
-                default_name=iface_name if _is_ethernet_name(iface_name) else "",
             ),
         )
         iface.ipv6_addresses.append(CanonicalIPv6Address(
@@ -1417,8 +1403,48 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
 
 
 def _is_ethernet_name(name: str) -> bool:
-    """Does this name look like a MikroTik default ethernet port?"""
+    """Does this name look like a MikroTik ethernet port?
+
+    A guess at the KIND of interface, for its type and its place in
+    the output: ``ether1_ADMIN`` is most likely a port.  It is not a
+    factory name -- :func:`.port_names.is_factory_port_name` says
+    which names are.
+    """
     return bool(re.match(r"^ether\d", name, re.IGNORECASE))
+
+
+#: The types a record of a port has: an interface the config only
+#: refers to is typed by nothing.
+_PORT_TYPES = frozenset({"", "ianaift:ethernetCsmacd"})
+
+
+def _name_the_hardware(ifaces: Iterable[CanonicalInterface]) -> None:
+    """Give a port the config names by its factory name that name as
+    its ``default_name``.
+
+    A port no line renames keeps the name the device gave it, and an
+    export writes no ``/interface ethernet`` line for a port with
+    nothing set on it: an SFP port known only from ``/ip address`` or a
+    bonding's ``slaves=`` is still the hardware of that name.  Without
+    it an entry that gives the port a name of its own was written ``set
+    [ find name=<new> ]``, a lookup no device matches.
+
+    Only a factory name (:func:`.port_names.is_factory_port_name`), and
+    only on a record of a port, not a VLAN, bridge, bond or tunnel some
+    line named so.  A line that still uses a port's factory name after
+    ``set [ find default-name=ether5 ] name=lan5`` -- what a
+    hand-merged file has -- is given it too, as ``ether<N>`` always
+    was: two records then look one port up, and the mapping onto a
+    declared device refuses to pair them, since which of the two the
+    port is cannot be told.
+    """
+    for iface in ifaces:
+        if (
+            not iface.default_name
+            and iface.interface_type in _PORT_TYPES
+            and is_factory_port_name(iface.name)
+        ):
+            iface.default_name = iface.name
 
 
 def _is_vlan_name(name: str) -> bool:

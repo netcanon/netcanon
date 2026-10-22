@@ -275,14 +275,18 @@ per_field_expectation:
       The canonical VLAN-record mount empties on all 6 cells that populate it
       — but the ADDRESS IS NOT LOST, and that distinction is the whole point
       of this entry.  The total-drop heuristic flags the `vlans` parent as a
-      TOTAL vanish; the aruba_aoscx matrix declares
-      `/vlans/vlan/ipv4/address/ip` merely LOSSY.  The two signals disagree,
-      so it was settled by round-trip rather than by grammar: all 23
-      VLAN-record IPv4 addresses in the corpus appear verbatim in the AOS-CX
-      render text, and all 23 re-parse onto the sibling `interface Vlan<N>`
-      record.  AOS-S mounts an SVI address on BOTH the VLAN record and an
-      interface record; AOS-CX renders SVI L3 only from the interface stanza,
-      so the duplicate mount is what drops.  `lossy` (warn, stay compatible)
+      TOTAL vanish, so it was settled by round-trip rather than by grammar:
+      all 23 VLAN-record IPv4 addresses in the corpus appear verbatim in the
+      AOS-CX render text, and all 23 re-parse onto the sibling `interface
+      Vlan<N>` record.  AOS-S mounts an SVI address on BOTH the VLAN record
+      and an interface record; the AOS-CX render writes it from the
+      interface stanza under the AOS-S name `Vlan<N>`
+      (`synthesize_svis_from_vlan_l3` writes no second interface for a VLAN
+      that has one in any spelling), and the AOS-CX parser does not fold an
+      interface of that name onto the VLAN, so the VLAN-record copy is what
+      empties.  With port names translated it is the same: the translator
+      leaves the AOS-S `Vlan<N>` as it is, and the job is `partial` with each
+      such name listed as untranslated.  `lossy` (warn, stay compatible)
       is therefore correct and `unsupported` would be actively misleading —
       it would tell an operator the SVI address is gone when it is present in
       the output.  Verify against `interfaces[].ipv4_addresses` after

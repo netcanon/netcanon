@@ -214,6 +214,9 @@ redundancy on this pair is not migrated, it is redesigned.
 ## Credential material
 
 <!-- secret-gate-461 -->
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto IOS-XR as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxr.yaml`.
+
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 7** local accounts now arrive across the 6 cells that populate users. 6 are refused for a secret IOS-XR cannot consume (6 AOS-CX `AQB` device-keyed ciphertext): the render emits a `review:` comment naming the account and no user entry. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxr.yaml`.
 
 `local_users[].hashed_password` is **preserved byte-for-byte on all 7 user

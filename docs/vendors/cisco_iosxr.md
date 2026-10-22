@@ -39,7 +39,9 @@ translatable with caveats:
   route-distinguisher is harvested from / rendered to the `router bgp`
   block; see [lossy](#lossy-paths))
 - LAGs — Bundle-Ether (`bundle id <N> mode <m>` on member interfaces),
-  reconciled with cross-vendor names like `Port-channel<N>` / `ae<N>`
+  reconciled with cross-vendor names like `Port-channel<N>` / `ae<N>`;
+  `Bundle-Ether<N>.<M>` is a sub-interface of the bundle, read as an
+  interface and not as a LAG of its own
 - Local users — `username` block (group → role + secret hash),
   form-preserving
 
@@ -215,6 +217,13 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
 
 ## Common gotchas
 
+- **A tag statement is read whole.**  `encapsulation dot1q 20
+  second-dot1q 30` is a sub-interface of two 802.1Q tags, and reaches
+  IOS-XE, IOS XR, EOS and Junos with both.  An 802.1ad tag
+  (`encapsulation dot1ad 20 dot1q 30`), `second-dot1q any` and a range
+  of tags have no form in the tree: the sub-interface is left out,
+  with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).
 - **An interface's `mtu` counts the Ethernet header.**  Cisco: the
   L2 MTU "includes 14 bytes for an Ethernet interface", and 4 bytes
   more for each tag of a sub-interface.  The tree's MTU is the
@@ -222,8 +231,8 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   AOS-CX, and their `mtu 9000` is written `mtu 9014` here (`mtu 9018`
   on a sub-interface with a tag).  A port, a management port, a
   `Bundle-Ether` and their sub-interfaces are converted; a loopback,
-  a tunnel and a `BVI` are copied as they stand.  A second tag
-  (Q-in-Q) is not read, and its 4 bytes are counted in the payload.
+  a tunnel and a `BVI` are copied as they stand.  A Q-in-Q
+  sub-interface's `second-dot1q` is a tag like its `dot1q`.
   ⚠️ Up to 0.7.7 the number was copied as it stood: IOS XR `mtu
   1514`, its default, was an IP MTU 14 bytes too large on the
   target, and IOS-XE `mtu 9000` an IP MTU of 8986 here.  Check MTUs

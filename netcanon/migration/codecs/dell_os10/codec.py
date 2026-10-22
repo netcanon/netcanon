@@ -610,6 +610,13 @@ class DellOS10Codec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "OS10 routed sub-interfaces are not modelled, so the inner "
+                    "tag of a Q-in-Q sub-interface has no form here either."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason="This codec does not model OS10 per-port voice VLAN.",
             ),

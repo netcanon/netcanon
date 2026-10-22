@@ -717,15 +717,17 @@ class TestWhatIsAUnit:
 
     def test_a_loopback_unit_is_not_followed(self) -> None:
         """No other platform has a sub-interface of a loopback, so
-        ``Loopback0.2`` would be a name of nothing.  The Junos
-        classifier still puts it on the loopback itself; the job says
-        the two share a name."""
+        ``Loopback0.2`` would be a name of nothing.  A unit of lo0 is
+        a loopback of its own, with the unit's number (see
+        ``test_a_loopback_is_a_unit_of_lo0.py``), and not on the
+        loopback itself."""
         junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
         job = run_plan_with_overrides(junos, eos, _JUNOS_OTHER_UNITS, port_rename_map={})
-        assert job.port_renames["lo0.2"] == job.port_renames["lo0"] == "Loopback0"
-        assert [
+        assert job.port_renames["lo0"] == "Loopback0"
+        assert job.port_renames["lo0.2"] == "Loopback2"
+        assert not [
             w for w in job.warnings
-            if "multiple source ports map to 'Loopback0'" in w and "lo0.2" in w
+            if "multiple source ports map to 'Loopback" in w
         ]
 
     def test_a_unit_with_no_interface_record(self) -> None:

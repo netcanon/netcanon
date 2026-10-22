@@ -819,7 +819,9 @@ target's CLI accepts that hash form.  Cross-vendor mismatches (e.g.
 Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
 `format_review_comment(...)` line in the appropriate per-codec
 syntax instead of leaking the hash literal as plaintext.  Per-target
-accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
+accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`; a typed
+password (`plaintext`) is in a set only where the target has a line
+that takes one (not Junos, not OPNsense).
 
 **RADIUS shared-secret portability policy**
 (`netcanon/migration/_radius_secrets.py`).  The third credential
@@ -827,11 +829,16 @@ surface, sibling to `_user_secrets.py` (password hashes) and
 `_usm_keys.py` (SNMPv3 USM keys).  A render path consuming
 `CanonicalRADIUSServer.key` calls
 `radius_secret_is_migratable(value, source_vendor, target_vendor)`.
-Only a **plaintext** secret crosses a vendor boundary; FortiGate's
-`set secret ENC <blob>` (carried canonically behind the `fortios:`
-envelope) is encrypted under that device's own key and is refused,
-with a `format_review_comment(...)` line so the operator knows to
-re-enter it.  Same-vendor re-render always passes — that is the
+Only a **plaintext** secret crosses a vendor boundary.  A secret the
+source platform stored in a form of its own is carried behind the
+envelope its parser puts on it -- `fortios:` (FortiGate `set secret
+ENC <blob>`, encrypted under that device's own key), `iosxe:` (IOS-XE
+`key 6|7 <blob>`), `eos:` (EOS `key 7 <blob>`), `aoss:` (AOS-S
+`encrypted-key`) -- and is refused on every other platform, with a
+`format_review_comment(...)` line that names the form so the operator
+knows to re-enter it.  The envelope is the parser's to put on: what a
+value is is said by the grammar it was read from, and a stored form
+that reaches the tree bare is a "plaintext" secret to the gate.  Same-vendor re-render always passes — that is the
 reference path.  Unlike the SNMPv3 rule, a refusal does **not** drop
 the server record: a keyless `radius-server host <ip>` is a
 half-configured server the operator can see and finish, whereas a
@@ -845,12 +852,104 @@ envelope-shaped prefix from an *unvouched* source classifies as
 `unknown` and is refused.  Refusing every value containing a colon
 would be a false-positive blast rather than a fix.
 
+**One value where one value goes** (`netcanon/migration/_one_value.py`).
+A renderer puts a value into its line as it stands, and most CLIs read
+a line a word at a time: a credential that holds white space is two
+words there, and the second is read as whatever that place takes next
+(NX-OS `snmp-server community public rw` is a read-write community
+`public`).  No word-at-a-time CLI documents a quoted form for a
+credential, so a secret -- a local user's password, an SNMP community,
+an SNMPv3 passphrase, a VRRP/HSRP key -- or an account's name that does
+not stand as one word (`splits`) is not written, and is never altered to
+fit.  It is left out with the granularity the credential rules set (a
+local user whole; an SNMPv3 user whole; a community with every trap host
+that would carry it, never an invented `public`; an FHRP key alone, the
+group kept) and said in a `left_out(...)` review line that names the
+place and never the value.  Where the target quotes, the value is
+quoted with the target's own escape (FortiOS, Junos, VyOS leaves);
+where it quotes with no escape (AOS-S), a value holding a `"`
+(`breaks_its_quotes`) is left out the same way.  RADIUS keys are not yet
+under the rule.  Guarded by
+`tests/unit/migration/test_a_secret_is_one_value.py`, which reads the
+output as text.
+
+What is not a secret goes through `one_value_tree(tree, ...)`, which
+each line renderer runs before its first line and which returns the
+tree to write (a copy, when anything changes) and the review lines to
+put at the top of the output.  Each renderer names the fields it writes
+as one word, by kind: a NAME that labels (host name, VLAN name, VRF
+name, route name) is written as `one_word()` makes it -- `_` for each
+run of white space, `'` for a `"` -- on the tree, so that every place
+it goes agrees (a VRF with every interface, route and EVPN prefix in
+it, and a name that would then be another VRF's told apart); an
+ADDRESS (a server, a domain, a gateway, a DHCP pool's options) is
+never altered and is left out, a static route whose gateway it is
+whole; a TEXT in a place no vendor page says reads to the end of the
+line is written and said, and one between quotes with no escape
+(AOS-S, VyOS, OS10) has each `"` written `'`.  Guarded by
+`tests/unit/migration/test_a_name_is_one_word.py`.
+
+**A value stays in its comment** (`netcanon/migration/_comments.py`).
+A review comment names what was left out as the tree holds it, and a
+comment that ends at a terminator -- VyOS `/* */`, OPNsense
+`<!-- -->` -- is ended by a name that holds the terminator, with what
+follows it read as configuration (an OPNsense account the source
+never had).  `comment(text, syntax)` builds every such comment and
+breaks the terminator where it stands; a comment that ends with its
+line is left as it is.  Both `format_review_comment` helpers build
+their line through it.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
-Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
-in hostname / domain / VRF-name tokens; renderers call
-`sanitise_hostname()` so the wire form round-trips through the
-target's own parser.  Source state preserved on canonical, sanitised
-only at the wire boundary.
+Arista EOS and Cisco IOS-XE wrote the host name through
+`sanitise_hostname()` before `one_value_tree` did it for every line
+renderer, with a review line; the calls are kept and change nothing
+now.  Source state preserved on canonical, sanitised only at the wire
+boundary.
+
+**A value is written on one line** (`netcanon/migration/_one_line.py`).
+Every renderer puts a value into its line as it stands, so a value that
+held a line break was written as lines of its own, and the text after
+the break was a command: a description that held `username ...
+nopassword` after a break was that account on every line-based target.
+The XML parsers keep a break that an element's text holds, and FortiOS
+prints a value of several lines between its quotes, so the tree can
+hold one.  No target is given a value of more than one line, whatever
+the field: the pipeline (`run_plan`, and the sanitiser before it
+renders) writes each run of breaks -- any character `str.splitlines`
+ends a line at -- as one space, after the transforms, and says each
+place in the job's warnings; `CodecBase.render` refuses a tree that
+still holds one, so a caller that renders without the pipeline cannot
+write one either.  It is one rule for every target, not a list of
+which field of which target may hold a break, because a value in the
+wrong place on such a list is an account; what a target that could
+have held the break loses (an XML target, FortiOS between its quotes)
+is the layout of the text.  `raw_sections`, the one field built to
+carry lines, is filled by no parser: one that fills it has to settle
+what its lines become, since the IOS-XE CLI renderer writes each as a
+command.
+
+**A VLAN's label as its name** (`netcanon/migration/_vlan_labels.py`).
+OPNsense and RouterOS have no name for a VLAN of its own: the tree
+names it after its interface (`vlan0.10`, `vlan10`) and holds the
+label an operator typed (an OPNsense `<descr>`, a RouterOS
+`comment=`) as its description.  IOS-XE CLI, NX-OS, EOS, AOS-S and
+Junos write one label for a VLAN, its name, and say so
+(`CodecBase.vlans_have_only_a_name`).  Onto those,
+`vlan_labels_as_names` MOVES a VLAN's description into its name
+where the name is empty or only the name of an interface of the
+config; a name of the VLAN's own (an AOS-CX `name`) is kept, and its
+description stays the loss the matrix declares.  It is applied
+twice: in `run_plan` before the transforms, since the port
+translator renames the interface and leaves the VLAN's name, which
+then matches nothing; and at the render boundary
+(`CodecBase.render`), on a copy, for a tree that did not come
+through the pipeline.  Moved, not copied: the job's validation then
+lists no description loss for a label that is in the output.
+FortiOS, RouterOS and OS10 are not among them -- a VLAN is an
+interface whose name other lines refer to, or (OS10) the name is
+written only as the description of an SVI the renderer makes --
+and `tests/unit/migration/test_a_vlan_label_is_its_name.py` names
+every public codec that is not, with its reason.
 
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The
@@ -2010,8 +2109,8 @@ normally.  Added in commit `faf925f` (Wave 9β); the variance-class
 set was 7 at that time — TRIVIAL_EMPTY landed later in Wave 10α
 (commit `35c7bf0`).  The LAG equivalence callable just shifts where
 individual cells land between ALIGNED and CODEC_BUG; it doesn't add
-or remove a class.  One equivalence reads a record's whole diffs
-rather than one value (`_RECORD_EQUIVALENCES`): `interfaces[].mtu`
+or remove a class.  Two equivalences read a record's whole diffs
+rather than one value (`_RECORD_EQUIVALENCES`).  `interfaces[].mtu`
 is preserved where the record's only MTU drift is one number moving
 between `mtu` and `ip_mtu` with nothing in the other field (an IP
 MTU that a platform with one MTU writes as its `mtu`, or an IPv4
@@ -2019,7 +2118,13 @@ Junos unit's MTU, which is its `family inet mtu`).  The same IP
 packets are sent either way; any other pair of values is drift.
 `ip_mtu` itself has no key in the expectation YAMLs: its losses are
 declared in the capability matrices and read from each output's
-text by `tests/unit/migration/test_an_ip_mtu_of_its_own.py`.
+text by `tests/unit/migration/test_an_ip_mtu_of_its_own.py`.  And
+`vlans[].name` is preserved where the record's name drift is its
+non-blank description written as its name, with no description
+back (`_vlan_label_moved`; the move is `_vlan_labels`, above).  The
+label is in the output either way; any other pair of values is
+drift -- a label a target writes as one word (`one_value_tree`)
+included.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell

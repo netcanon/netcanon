@@ -107,6 +107,9 @@ class CiscoIOSXECLICodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe_cli",
         vendor_id="cisco_iosxe",
@@ -127,6 +130,7 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/dot1q-vlan",              # GAP 7: routed-subif `encapsulation dot1Q N`
+            "/interfaces/interface/dot1q-inner-vlan",        # `encapsulation dot1Q N second-dot1q M`
             # ``switchport voice vlan <N>`` — parsed (_SWITCHPORT_VOICE_RE)
             # and rendered, so it fully round-trips same-vendor (blind-audit
             # 65f9c01 #11; targets that can't carry it declare it unsupported).
@@ -239,9 +243,12 @@ class CiscoIOSXECLICodec(CodecBase):
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "description line.  Where the VLAN's name is only the "
+                    "name of an interface of the config, or empty, its "
+                    "description is written as its name (_vlan_labels: an "
+                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "description drops on render (silent-loss guard, "
+                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),

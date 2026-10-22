@@ -259,11 +259,14 @@ per_field_expectation:
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].interface_type:
-    disposition: lossy
-    reason: >
-      OPNsense doesn't surface a type field; Arista codec defaults
-      to a ``gig`` speed-hint for unknown speeds (capability
-      matrix lossy entry).  Cross-pair drops the type hint.
+    disposition: good
+    note: >
+      The OPNsense parser types its VLAN devices (`ianaift:l3ipvlan`) and
+      leaves every other interface untyped, and the Arista round trip gives
+      each the type it had (`vlan0.10` reads back as a VLAN interface).
+      Preserved on the cell compared record by record; on `kitchen_sink.xml`
+      the inventory changes size and the drift is attributed to
+      `interfaces[].name`.
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].mtu:
@@ -358,9 +361,8 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries
-      below.
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`).
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].id:
@@ -373,18 +375,23 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      OPNsense's ``<descr>`` is the only label field; canonical
-      ``name`` and ``description`` both populate from it on parse,
-      so both fields carry the same text.  Arista per-VLAN
-      ``name <x>`` lands cleanly with no Arista-side loss; the
-      loss is upstream (OPNsense never carried distinct fields).
+      Drifted on both cells that hold VLANs, by its white space. An OPNsense
+      `<vlan>` has no name of its own: the canonical name is its device's
+      (`vlan0.10`), and its `<descr>` (`USER VLAN`) the description. EOS has
+      one label for a VLAN, its `name`, and a VLAN whose name is only an
+      interface's is written with its description as its name
+      (`_vlan_labels`); the Arista render writes a name with no white
+      space, so `USER VLAN` comes back `USER_VLAN`.
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same rationale as ``vlans[].name`` — one OPNsense XML field
-      populating two canonical fields.
+      Comes back empty on every VLAN that carries one: the Arista render writes a VLAN's `name`
+      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      Arista declares `/vlans/vlan/description` lossy for it.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

@@ -25,8 +25,10 @@ Netcanon translates the shared-network-function subset.
 - Interfaces — `<interfaces>` block with per-zone `<descr>`
   (USERVLAN / MGMTVLAN / SERVERVLAN etc.); IPv4 (`<ipaddr>`),
   IPv6 (`<ipaddrv6>`); track-interface forms
-- VLANs — `<vlans><vlan>` block (tagged form with parent interface
-  binding)
+- VLANs — `<vlans><vlan>` block: each `<vlan>` is a VLAN device,
+  kept on the parent (`<if>`) and tag it states, under its own name
+  (`<vlanif>`), which the zone that assigns it names (see "VLAN
+  devices" below)
 - DHCP server pools — `<dhcpd>` with per-zone configuration; a
   pool is on the device its zone is assigned to
 
@@ -135,6 +137,17 @@ XML element mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec
   source.  Most fields parse + render cleanly within the
   documented surface.
+- **A VLAN's name is its device.**  An OPNsense `<vlan>` has no name
+  of its own: the parser names a VLAN after its device (`<vlanif>`),
+  and the renderer writes another vendor's VLAN name as the `<descr>`
+  where the VLAN has no description, and drops it where it has one
+  (`/vlans/vlan/name` is lossy; `/vlans/vlan/description` is
+  supported).  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos, which
+  write one label for a VLAN, the `<descr>` is written as the VLAN's
+  name (`name USER VLAN`; `USER_VLAN` on EOS, quoted on Junos); onto
+  AOS-CX it is the VLAN's `description` beside the device's name;
+  onto FortiOS, RouterOS and OS10 it is not written, and the job
+  lists `/vlans/vlan/description` as a loss.
 - **Static routes are source-side only.**  The parser harvests
   `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
   #350), so OPNsense-*as-source* routes translate outward — but the
@@ -201,6 +214,18 @@ Provenance in
 
 ## Common gotchas
 
+- **A review comment shows `--` in a name as `- -`.**  XML allows no
+  `--` inside `<!-- -->`, and `-->` ends it: a source account left out
+  for its password, named with either, made the output malformed or
+  wrote what followed as XML (an account the source never had).  The
+  name in the comment is the source's name with a space after each
+  hyphen that another follows.
+- **A user whose password cannot be carried is left out** as a target,
+  with an XML comment in its place.  Up to 0.7.7 the `<user>` element
+  stayed, with no `<password>`.  A password the source holds as typed
+  (IOS-XE `password 0`, AOS-CX `password plaintext`) is one of them:
+  `<password>` is the hash `password_verify()` checks a password
+  against, and up to 0.7.7 the typed string was written there.
 - **Driver names onto another vendor** — an OPNsense interface is
   named for its FreeBSD driver, and the port translator reads some
   drivers' names (`igb0`, `ix1`, `em0`) and not others (`igc0`).
@@ -242,13 +267,21 @@ Provenance in
   output bound its DHCP server to `interface lan`, FortiOS wrote
   `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
   beside an `<interfaces>` with no `<lan>` in it.
-- **A lagg's members onto a switch** — the members of a lagg are
-  as a rule NICs assigned to nothing, so the config has no interface
-  for them and Netcanon makes no port record for them.  A target
-  that writes a LAG on each member's own stanza (EOS, AOS-CX, IOS-XE,
-  IOS-XR, NX-OS, OS10, Junos) then writes the LAG with no member, in
-  a job that can be `completed`.  Add the members on the target by
-  hand.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+- **A lagg's members** — OPNsense adds only an unassigned interface
+  to a lagg ("Only unassigned interfaces can be added to LAGG",
+  docs.opnsense.org, Other Types), so a member is named in `<laggs>`
+  alone, and Netcanon gives it a port record of its own that names
+  its lagg.  Onto OPNsense, a member of a LAG is written in the
+  lagg's `<members>` and in no zone of `<interfaces>`; where the
+  source gave the member something a zone would carry (a
+  description, an MTU, an address, a disabled state), a comment in
+  the `<lagg>` names the member and the elements not written, never
+  their values.
+  ⚠️ Up to 0.7.7 the members had no record: a target that writes a
+  LAG on each member's own stanza (EOS, AOS-CX, IOS-XE, IOS-XR,
+  NX-OS, OS10, Junos) wrote the LAG with no member, or none at all,
+  in a job that could be `completed`; and an OPNsense output
+  assigned each member a zone of its own.
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
   API or in the Interface rename modal an override typed in another
@@ -272,6 +305,28 @@ Provenance in
   `CanonicalVlan` entries because there was no `<vlans>` render
   block; fix + regression test landed in the same commit
   (operator-contributed fixture surfaced this).
+- **VLAN devices** — a `<vlan>` is a device, named by its
+  `<vlanif>`: OPNsense names a new one `vlan01`, `vlan02` ... (older
+  configs `<parent>_vlan<tag>`), or takes a typed `vlan0` and digits
+  and dots, so the digits of the name are NOT the tag.  The parser
+  gives each device the record of the zone that assigns it (or a
+  record of its own, typed `ianaift:l3ipvlan`, where none does), with
+  its parent from `<if>`, and names the VLAN after the device; the
+  `<descr>` is the VLAN's description.  The renderer writes each VLAN
+  interface as the device of that name on its parent, and no zone for
+  a device that holds nothing a zone holds.  A name OPNsense's VLAN
+  form would refuse (`Vlan.php`: `vlan0` and digits and dots, `qinq0`
+  ... on a parent whose name holds `vlan`, or `<parent>_vlan<tag>`) is
+  written with a `<!-- review: -->` comment beside it; an SVI from
+  another vendor is named `vlan0.<id>`.  Not translated, and said in
+  a row: a device that is not one 802.1Q tag (`802.1ad`, or a blank
+  `<proto>` on a device another VLAN rides on, which OPNsense sends as
+  802.1ad; a tag outside 1-4094), with what rides on it, its zone and
+  a DHCP pool on it; and a `<pcp>` other than 0, whose VLAN is kept.
+  Known limitation: onto another vendor, a device `vlan0.<n>` is the
+  SVI of VLAN `n` whatever its tag (CHANGELOG, known limitations).
+  Guarded by
+  `tests/unit/migration/codecs/opnsense/test_a_vlan_device_is_defined.py`.
 - **Backup-side**: requires `paramiko_shell` collector strategy
   in the device-definition YAML (`opnsense_shell_menu: true`).
 

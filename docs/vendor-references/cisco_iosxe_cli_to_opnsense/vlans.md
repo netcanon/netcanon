@@ -85,11 +85,20 @@ ipv4_addresses: list[CanonicalIPv4Address],   # SVI L3 config
 The Cisco -> OPNsense direction maps:
 
 - ``CanonicalVlan.id``: **good** — Cisco ``vlan N`` ↔ OPNsense ``<tag>N</tag>``.
-- ``CanonicalVlan.name``: **lossy** — Cisco emits a ``<name>`` field;
-  OPNsense's nearest equivalent is ``<descr>`` (which is also where
-  ``CanonicalVlan.description`` round-trips).  Two canonical fields
-  collapsing to one OPNsense field means one drops on render.
-- ``CanonicalVlan.description``: same as above — **lossy**.
+- ``CanonicalVlan.name``: **lossy** — the name does not come back.
+  An OPNsense ``<vlan>`` has no name of its own: the render writes
+  each VLAN as a ``<vlan>`` device, under the name of the source's
+  VLAN interface where there is one (``Vlan111``), otherwise as
+  ``<parent>_vlan<id>`` on a port that carries the VLAN or a default
+  one (``Port-channel1_vlan10``), and writes the Cisco ``name`` as
+  the device's ``<descr>``.  The OPNsense parser names a VLAN after
+  its device (``<vlanif>``) and reads ``<descr>`` as its description,
+  so a VLAN comes back named after its device, with its IOS name as
+  its description.  A device name OPNsense's VLAN form would refuse
+  (``Vlan111``) gets a ``<!-- review: -->`` comment beside it.
+- ``CanonicalVlan.description``: **lossy** — IOS states no VLAN
+  description; the round trip gives each named VLAN one, its name
+  (see above).  Drift by gaining the name, never by losing a value.
 - ``CanonicalVlan.tagged_ports`` / ``untagged_ports``: **unsupported**
   — OPNsense has no VLAN-centric port-membership model.  A trunk
   port carries "every vlan whose ``<if>`` matches this NIC"; there is
@@ -100,16 +109,18 @@ The Cisco -> OPNsense direction maps:
   ``interface Vlan100 / ip address X Y`` is the L3 face of the VLAN.
   OPNsense doesn't have first-class SVIs; the equivalent is to assign
   the VLAN sub-interface (``em1_vlan100``) to an OPNsense zone
-  (``<opt2>``) and put the address on that zone.  The canonical model
-  carries the SVI address but the OPNsense render path doesn't
-  synthesise the corresponding zone — operator-curated.
+  (``<opt2>``) and put the address on that zone.  The render writes
+  the SVI as a zone whose ``<if>`` is the VLAN device written under
+  the SVI's name (``Vlan10``), with the address on the zone; read
+  back, the address is on that interface record, not on the VLAN.
 
 Disposition (see YAML for granular per-sub-field):
 
 - ``vlans[].id``: **good**.
-- ``vlans[].name`` / ``description``: **lossy** (one OPNsense field
-  for two canonical fields).
+- ``vlans[].name`` / ``description``: **lossy** (a VLAN comes back
+  named after its OPNsense device, its IOS name as its description).
 - ``vlans[].tagged_ports`` / ``untagged_ports``: **unsupported**
   (router/firewall has no VLAN-centric port lists).
-- ``vlans[].ipv4_addresses`` (SVI): **lossy** — render path doesn't
-  synthesise the zone-side L3 stanza.
+- ``vlans[].ipv4_addresses`` (SVI): **lossy** — the address is
+  written on the SVI's zone and comes back on that interface, not on
+  the VLAN.

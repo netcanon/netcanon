@@ -11,6 +11,13 @@ the ratchet agree by construction. Every claim below that names a count was
 re-derived by parsing the fixture with `cisco_iosxr` and rendering it with
 `opnsense` directly, not read off the drift matrix.
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description is no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` predate that change; the
+> paired expectation YAML has the current measure.
+
 - Fixture cells: **12** (11 real IOS-XR captures + the synthetic kitchen sink)
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-08-25
@@ -56,6 +63,16 @@ on all 12 cells:
 (`GigabitEthernet0/0/0/1.35`, `MgmtEth0/RP0/CPU0/0`) come back byte-identical,
 and so do description, admin state, MTU, IPv4 and IPv6 addressing and LAG
 membership — zero drift on every one of those, on every cell.
+
+> **Since the VLAN-device change** (the table above was measured before it):
+> no source record is lost, but the inventory now **grows** by one record on
+> each cell that holds a VLAN. The render links the VLAN that the IOS-XR parser
+> makes from a sub-interface's `encapsulation dot1q` tag to no interface, so it
+> writes it as a `<vlan>` device of its own, `<parent>_vlan<id>` on a port it
+> picks (`MgmtEth0/RP0/CPU0/0_vlan35` on `batfish_ebgp_border01`), which the
+> OPNsense parser reads back as an interface record (`ianaift:l3ipvlan`). The
+> pair's expectation YAML holds the current disposition (`interfaces[].name`
+> lossy, for the shape of the inventory, not its contents).
 
 So the losses on this pair are **real per-attribute and per-record losses**,
 each independently caused, not one structural signal reflected in a dozen
@@ -109,6 +126,10 @@ from the interface side, not an independent finding.
 | local_users[].role | 0 | 9 | 3 |
 | local_users[].hashed_password | 0 | 9 | 3 |
 
+The `interfaces[].name` row, and `vlans[].name` among the empty fields below,
+were measured before the VLAN-device change; the pair's expectation YAML holds
+the current disposition (both lossy — see the VLAN section).
+
 Fields trivially empty on all 12 cells: `dns_servers`, `timezone`,
 `syslog_servers`, `interfaces[].vrrp_groups`, every `vlans[]` sub-field except
 `id`, `dhcp_servers`, all five `snmp.*` keys, `radius_servers`, all three
@@ -158,11 +179,16 @@ round-trip.
 `name` is hard-coded empty and there is no port membership, no address and no
 description. IOS-XR has no `vlan N / name X` stanza to harvest them from.
 
-So `vlans[].name`, `vlans[].description`, `vlans[].ipv4_addresses`,
-`vlans[].tagged_ports` and `vlans[].untagged_ports` are **source-side gaps**,
-recorded `not_applicable`, even though `cisco_iosxr` declares
-`/vlans/vlan/name` supported. The declaration describes the codec's render
-side; the parse never produces one.
+So `vlans[].description`, `vlans[].ipv4_addresses`, `vlans[].tagged_ports`
+and `vlans[].untagged_ports` are **source-side gaps**, recorded
+`not_applicable`. `opnsense` declares `/vlans/vlan/description` supported (it
+is the `<vlan>`'s `<descr>`), so a source that supplied one would keep it.
+
+`vlans[].name` is the exception since the VLAN-device change, recorded `lossy`:
+the round trip gives each VLAN a name it did not have. An OPNsense `<vlan>` has
+no name of its own, so the OPNsense parser names a VLAN after the device the
+render wrote for it (`MgmtEth0/RP0/CPU0/0_vlan35`). It drifts by gaining a
+name, never by losing one.
 
 **Do not read `vlans[].id: good` as "the VLAN migrated."** On all 4 of those
 cells the sub-interface tag that *generated* the VLAN record —
@@ -197,6 +223,9 @@ declares nothing at that path at all — neither supported, lossy nor
 unsupported. The nearest target declaration is silence, not a block.
 
 ## Credential material
+
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **0 of 14** local accounts arrive across the 9 cells that populate users; 14 are refused for a secret OPNsense cannot consume (6 MD5 crypt (Cisco type 5), 5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__opnsense.yaml`.
 
 `local_users` records themselves are never lost — 14 source user records, 14
 survivors across the 9 cells that populate the field. Both matrices declare

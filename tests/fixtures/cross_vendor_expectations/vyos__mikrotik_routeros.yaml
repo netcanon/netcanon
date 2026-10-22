@@ -15,7 +15,7 @@
 # local accounts — and NOT the fabric surface neither device is doing.
 #
 # READ THIS BEFORE READING ANY DISPOSITION BELOW: the two record lists
-# that carry this pair are FULLY PRESERVED. 55 interface records in, 55
+# that carry this pair are FULLY PRESERVED. 56 interface records in, 56
 # out, identical name sets on all 13 cells; 17 local-user records in, 17
 # out, zero accounts vanish. Every interface and local-user loss below is
 # therefore a genuine per-attribute loss that stands on its own
@@ -107,27 +107,18 @@ per_field_expectation:
     references: [vyos-mikrotik-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Round-trips cleanly on 11 of the 12 cells that populate it,
-      including a five-server cell, and loses two of three servers on
-      one: `houdev_vyos_dhcpv6_pd_client.conf` goes 3 -> 1.  The
-      mechanism spans both codecs and is worth stating in both halves
-      rather than blaming one side.
-      That fixture writes the empty per-server block INLINE —
-      `server  time1.vyos.net { }` on a single line — where every other
-      fixture uses the multi-line `server <host> {` / `}` form.  The VyOS
-      brace-stack parser handles the multi-line form and leaves a literal
-      ` { }` glued to the server name on the inline form, so the
-      canonical value is `time1.vyos.net { }`.  The RouterOS renderer
-      writes that verbatim into a comma-joined `servers=` value, and an
-      unquoted RouterOS value terminates at whitespace, so the re-parse
-      recovers only the first server.
-      Recorded `lossy`, not `unsupported`: both matrices declare
-      `/system/ntp-server` supported and the concept plainly crosses on
-      11 of 12 cells, so this is a partial record loss inside a concept
-      the target models.  Diff the source server list against the render
-      before cutover.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the RouterOS render
+      wrote it into its comma-joined `servers=` value, which the re-parse cut
+      at the first space (three servers in, one out), and that cell drifted.
+      The parser now reads such a line as the node it is, the reading the set
+      form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-mikrotik-surface]
 
   timezone:
@@ -155,8 +146,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, one attribute affected ----------------
   #
-  # The measured record count is the headline: 55 interface records across
-  # the 13 cells, 55 after the round-trip, with identical name sets on
+  # The measured record count is the headline: 56 interface records across
+  # the 13 cells, 56 after the round-trip, with identical name sets on
   # every cell.  VyOS kernel-style names (`eth0`), dummy interfaces
   # (`dum0`), the loopback (`lo`), the LACP bundle (`bond0`) and even the
   # dot-notation sub-interfaces (`eth1.100`) all come back — the last of
@@ -168,7 +159,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, identical name sets.  The RouterOS
       render does not rename VyOS ports to the `etherN` factory shape, does
       not drop the loopback (it emits the documented empty-bridge idiom
@@ -180,7 +171,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on 55 of 55 records: every populated description
+      Preserved on 56 of 56 records: every populated description
       round-trips as RouterOS `comment="..."`, `eth1.100`'s `tenant vlan
       100` on `kitchen_sink.conf` included.  A dot-notation sub-interface
       is a VLAN interface on its port (`/interface vlan add interface=eth1
@@ -194,7 +185,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Preserved on 55 of 55 records, the shut ones included: `eth3`
+      Preserved on 56 of 56 records, the shut ones included: `eth3`
       renders `disabled=yes` and re-parses shut, and so does the shut
       dot-notation sub-interface `eth1.200` on `kitchen_sink.conf`, a
       VLAN interface on its port with `disabled=yes`.  Up to 0.7.7
@@ -207,7 +198,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  MTU is actually populated on only
+      Preserved on 56 of 56 records.  MTU is actually populated on only
       one of them (`eth0`, 1500) and it round-trips unchanged as
       RouterOS `mtu=1500`.  `vyos` declares
       `/interfaces/interface/config/mtu` supported; `mikrotik_routeros`
@@ -219,7 +210,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records; IPv6 is populated on 20 of them and
+      Preserved on 56 of 56 records; IPv6 is populated on 20 of them and
       every address + prefix-length survives via `/ipv6 address add`.
       Both matrices declare `/interfaces/interface/ipv6/address/ip` and
       `.../prefix-length` supported.  One asymmetry that costs nothing
@@ -231,7 +222,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records, the widest-populated interface
+      Preserved on 56 of 56 records, the widest-populated interface
       attribute on the pair (21 records).  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.  This is the field the migration most depends on and it
@@ -242,20 +233,25 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 6 of 13 cells and 9 of 55 records — and the direction is
+      Drifts on 7 of 13 cells and 10 of 56 records — and the direction is
       the OPPOSITE of a loss, which is the point worth recording.  `vyos`
-      populates `interface_type` on ZERO of its 55 records, so there is
+      populates `interface_type` on ZERO of its 56 records, so there is
       nothing for RouterOS to lose; the round-trip INVENTS a type on
-      nine of them.
-      Six are the loopback `lo`, which comes back `ianaift:bridge`.  That
+      ten of them.
+      Seven are the loopback `lo`, which comes back `ianaift:bridge`.  That
       is a mislabel with a good cause: RouterOS has no loopback primitive,
       so the renderer emits the documented empty-bridge idiom
       (`/interface bridge add name=lo`) — without it the loopback name
       drops and its IP binds to a phantom interface — and the re-parse
-      then honestly types a bridge as a bridge.  The seventh is `bond0`,
-      typed `ianaift:ieee8023adLag` off `/interface bonding`, which is
-      simply correct, and so are the last two, the dot-notation
-      sub-interfaces `eth1.100` and `eth1.200` on the same cell, typed
+      then honestly types a bridge as a bridge.  One of the seven is the
+      `lo` of `houdev_vyos_dhcpv6_pd_client.conf`, an empty interface
+      record (`loopback lo { }`, nothing set) that the VyOS parser has
+      read since 2026-10; RouterOS keeps it as the same empty bridge and
+      the re-parse invents the same type, which is what makes that cell
+      the seventh.  The eighth record is `bond0`, typed
+      `ianaift:ieee8023adLag` off `/interface bonding`, which is simply
+      correct, and so are the last two, the dot-notation sub-interfaces
+      `eth1.100` and `eth1.200` on the same cell, typed
       `ianaift:l3ipvlan` off the VLAN interface each is written as.
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY, and `mikrotik_routeros` states the mechanism: RouterOS does
@@ -270,7 +266,7 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  Two records carry a membership
+      Preserved on 56 of 56 records.  Two records carry a membership
       pointer (`eth4` and `eth5` -> `bond0`) and both survive: the render
       emits `/interface bonding add slaves=eth4,eth5 ... name=bond0` and
       the re-parse rebuilds the pointer on each member.  This is the
@@ -289,7 +285,7 @@ per_field_expectation:
       `/interfaces/interface/vrrp-groups/group/*` subtree unsupported —
       the group itself plus mode, priority, preempt,
       advertisement-interval, authentication, virtual-IPv6 and description
-      — so nothing reaches the target.  Measured: 0 of 55 records carry a
+      — so nothing reaches the target.  Measured: 0 of 56 records carry a
       group, on all 13 cells.
       `mikrotik_routeros` declares `/interfaces/interface/vrrp-groups/group`
       SUPPORTED (with only `mode` and `description` lossy), so re-authoring
@@ -518,81 +514,49 @@ per_field_expectation:
   # -- Identity -- the accounts arrive, the credentials do not ---------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives: 17 source user records across all 13 cells,
-      17 after parse -> render -> re-parse, zero vanish.  Each renders as
-      `/user add group=<group> name=<name>` and re-parses with its name
-      intact.
-      This one is worth reading carefully, because a mechanical
-      "is the target side empty?" pass over this pair reports `local_users`
-      as a TOTAL drop.  It is not — see `local_users[].hashed_password`
-      for the single field that actually empties.
-      `vyos` declares `/local-users/user/name` supported;
-      `mikrotik_routeros` declares no path under `/local-users/*` at all,
-      so this `good` rests on the measured round-trip rather than on a
-      target declaration.  That silence is a matrix under-declaration on a
-      codec that plainly does render and re-parse users, and is left for a
-      codec change rather than fixed here.
+    disposition: lossy
+    reason: >
+      1 of 17 accounts arrive across the 13 cells that populate local users; the
+      list shrinks on 12 of them. The 16 accounts that vanish carry 16 SHA-512
+      crypt (`$6$`). RouterOS can consume a genuine plaintext password only (it
+      hashes the password itself); anything else is refused with a review
+      comment naming the account, in place of the account. Up to 0.7.7 such an
+      account was written as `/user add` with no `password=`, which RouterOS
+      gives a blank password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 1 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [vyos-mikrotik-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every one of the 17 user records, on all 13
-      cells — zero role drift measured anywhere.  Every account in this
-      corpus is role `admin` with privilege level 15; the canonical
-      privilege maps onto a RouterOS built-in group (`group=full`) and
-      re-parses back to the same role.
-      `vyos` declares `/local-users/user/role` supported and
-      `/local-users/user/privilege-level` LOSSY — but the numeric level is
-      set on all 17 records here and round-trips unchanged, so the
-      declared sub-loss is NOT exercised by this corpus.  Recorded that
-      way rather than repeated as fact: that declaration is about the vyos
-      codec's own handling, and this pair does not reproduce it.  A corpus
-      with a non-15 privilege level could still land differently, since
-      RouterOS has only three built-in groups to map onto.
-      This key measures what happens to the VALUE when the record
-      survives, and the answer is: nothing.  It is deliberately NOT used
-      to re-record the credential loss, which is accounted for once under
-      `local_users[].hashed_password`.
+      On the 1 account that survives, the role is unchanged. Mechanism: RouterOS
+      carries a built-in group (`full` / `write` / `read`) chosen from the
+      privilege level, and the parser reads the group back. Recorded `good`
+      rather than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here. Accounts refused for their secret
+      vanish with their role and are counted once, under `local_users[].name`.
     references: [vyos-mikrotik-surface]
 
   "local_users[].hashed_password":
-    disposition: unsupported
-    reason: >
-      The credential does not arrive, on 16 of 17 user records across 12
-      of 13 cells: a VyOS account whose `encrypted-password` is a crypt
-      string returns with `hashed_password` empty.  The RouterOS parser is
-      explicit about why — `/export` omits password hashes — so no
-      round-trip can recover it.  The single non-drifting record is an
-      account that carries no password in the source at all.
-      Recorded `unsupported` rather than `lossy` deliberately.  The value
-      does not degrade into a weaker form the operator can still use; it
-      disappears, and RouterOS has no grammar a hashed password lands in —
-      the central policy `_TARGET_ACCEPTS["mikrotik_routeros"]` is
-      `frozenset({"plaintext"})` because RouterOS re-hashes whatever it is
-      given.  A vanished value is not lossy (#436), and `lossy` — which
-      warns but stays compatible — would badly understate migrating a
-      fleet of accounts with no credentials.
-      There is a second half, and it is the reason this entry is worded
-      strongly.  The RouterOS renderer HAS a guard against emitting
-      unmigratable hashes (skip the field, emit a
-      `# password manager ... -- review:` line so the operator knows a
-      hash existed).  On this pair the guard never fires: the shared
-      classifier recognises TAGGED hash forms (`arista:sha512:...`,
-      `cisco:type9:...`, the bare-digit Cisco form) and falls through to
-      "plaintext" for anything untagged, and vyos emits the BARE crypt
-      string.  So the source hash is classified as a plaintext password
-      and written into RouterOS's cleartext `password=` attribute.
-      Measured across all 13 renders: 16 `/user add` lines carry a
-      crypt-shaped `password=` value, 1 carries none, and ZERO review
-      comments are emitted anywhere.  This is a codec-level defect, not a
-      pair-specific fact, and is recorded rather than acted on.
-      Set every migrated account's password on the target before cutover,
-      and treat the rendered config as containing recoverable credential
-      text.  No hash body is quoted in this file or its reference doc —
-      only the crypt-scheme marker, the length and the record counts.
+    disposition: good
+    note: >
+      No secret is written in a form RouterOS cannot consume. 16 accounts are
+      refused for their secret (16 SHA-512 crypt (`$6$`)) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account with a
+      stored secret arrives, so there is no value to compare. Recorded `good`
+      rather than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was written
+      as `/user add` with no `password=`, which RouterOS gives a blank password;
+      a refused secret now drops the whole account, as on every other target. No
+      secret value is quoted here or in the reference doc; only shapes and
+      counts.
     references: [vyos-mikrotik-surface]
 
   radius_servers:

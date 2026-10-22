@@ -238,12 +238,12 @@ per_field_expectation:
     references: [opnsense-interfaces]
 
   "interfaces[].interface_type":
-    disposition: not_applicable
+    disposition: good
     note: >
-      OPNsense parser doesn't surface a type field — OPNsense
-      doesn't model IANA ifType.  intent.interfaces[].interface_type
-      is empty from this source.  cisco_iosxe target render leaves
-      `<config>/<type>` empty when the canonical hint is empty.
+      The OPNsense parser types its VLAN devices (`ianaift:l3ipvlan`) and
+      leaves every other interface untyped; IOS-XE writes the type into
+      `<config>/<type>` and reads it back, and an untyped interface stays
+      untyped. Preserved on both cells that hold a VLAN device.
     references: [oc-interfaces]
 
   "interfaces[].mtu":
@@ -343,12 +343,11 @@ per_field_expectation:
   vlans:
     disposition: unsupported
     reason: >
-      OPNsense source DOES populate intent.vlans (id + name from
-      `<vlans>/<vlan>/<tag>` and `<descr>`).  cisco_iosxe target
-      render does NOT emit any `<vlans>` element regardless of
-      what the canonical tree carries.  Render-side wire-up gap
-      for the entire vlan list.  Flips to good (id) / lossy
-      (name collapse) when render-side wire-up lands.
+      OPNsense source DOES populate intent.vlans (the id from `<tag>`, the
+      name from the device `<vlanif>`, the description from `<descr>`).
+      cisco_iosxe target render does NOT emit any `<vlans>` element regardless
+      of what the canonical tree carries. Render-side wire-up gap for the
+      entire vlan list.
     references: [oc-vlan, opnsense-vlans]
 
   "vlans[].id":
@@ -362,17 +361,16 @@ per_field_expectation:
   "vlans[].name":
     disposition: unsupported
     reason: >
-      Same render-side wire-up gap.  OPNsense `<descr>` lands in
-      canonical name (per OPNsense parse.py); cisco_iosxe render
-      drops on the cross-pair.
+      Same render-side wire-up gap. The OPNsense parser names a VLAN after its
+      device (`vlan0.10`); the cisco_iosxe render drops it with the list.
     references: [oc-vlan, opnsense-vlans]
 
   "vlans[].description":
-    disposition: not_applicable
-    note: >
-      OPNsense source doesn't populate description separately —
-      `<descr>` lands in canonical name instead.  cisco_iosxe
-      render also doesn't emit description regardless.
+    disposition: unsupported
+    reason: >
+      Same render-side wire-up gap. The OPNsense parser reads a VLAN's
+      `<descr>` (`USER VLAN`) as its description; the cisco_iosxe render drops
+      it with the list.
     references: [opnsense-vlans]
 
   "vlans[].tagged_ports":

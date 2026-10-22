@@ -41,7 +41,7 @@ and user identity. There is no campus L2 surface on the VyOS side to migrate:
 
 Anyone arriving here from `vyos_to_arista_eos/canonical_surface.md` should read
 this section before assuming the same shape. There the inventory **shrinks**,
-55 records in and 46 out on 6 of 13 cells, because the EOS render elides
+56 records in and 46 out on 7 of 13 cells, because the EOS render elides
 content-free VyOS stubs — so `interfaces[].name` carries a structural loss and
 every interface sub-field inherits that one signal.
 
@@ -49,8 +49,8 @@ every interface sub-field inherits that one signal.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 
 The NX-OS render emits `interface eth0`, `interface lo`, `interface dum0`,
@@ -74,7 +74,7 @@ synthesised, not lost" below.
 | hostname | 13 | 0 | 0 |
 | domain | 1 | 0 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces (whole field) | 0 | 13 | 0 |
 | vlans | 0 | 3 | 10 |
 | static_routes | 4 | 0 | 9 |
@@ -96,9 +96,9 @@ until the sub-field walk is read. Both are single-attribute effects:
 
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
-| `interface_type` | 55 | 55 | empty string → `ianaift:other` |
+| `interface_type` | 56 | 56 | empty string → `ianaift:other` |
 | `lag_member_of` | 2 | 2 populated | `bond0` → `port-channel0` |
-| `name` / `description` / `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 55 | — |
+| `name` / `description` / `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 56 | — |
 
 Populated counts for the clean sub-fields, so the `good` verdicts are not
 mistaken for untested ones: `description` on **15** records across 7 cells,
@@ -172,7 +172,7 @@ re-checking on any pair where VyOS is the target.
 
 ### 1. The interface type hint is invented on the target, not lost
 
-`interfaces[].interface_type` drifts on **55 of 55 records, on all 13 cells** —
+`interfaces[].interface_type` drifts on **56 of 56 records, on all 13 cells** —
 the single largest drift signal on the pair. The direction is the surprise:
 
 ```
@@ -371,7 +371,7 @@ redaction.
 ## Two drift-shape readings that are wrong
 
 **"`interfaces` drifts on 13 of 13 cells, so the interface surface is broken."**
-It is not. 55 records in, 55 out, identical names, and every attribute an
+It is not. 56 records in, 56 out, identical names, and every attribute an
 operator actually configured — description, addressing, MTU, admin state —
 survives on every record. The 13-cell drift is one uniform, harmless
 type-hint fabrication (finding 1) plus a two-record LAG rename on one cell.
@@ -394,13 +394,16 @@ diagnosis: `interfaces[].description` shows zero drift here across 15 populated
 records on 7 cells, and none of those 15 strings contains a quote or an
 apostrophe to begin with.
 
-The one source-side parser artefact that does surface is on NTP.
-`houdev_vyos_dhcpv6_pd_client.conf` writes its servers as one-line empty-body
-blocks (`server         time1.vyos.net { }`); the VyOS brace parser captures the
-whole token run, so the canonical value is `time1.vyos.net { }`. The NX-OS
-render emits that verbatim and the NX-OS parser reads only the first token after
-`ntp server`, returning the clean `time1.vyos.net`. All three hostnames are
-present on both sides, in order — the text survives, the stray brace pair does
-not, and the target value is the more correct of the two. It is still recorded
-as a loss, because the audit compares canonical strings and this one is not
-preserved.
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
+
+```
+server         time1.vyos.net { }
+```
+
+Until 2026-10 the VyOS parser kept ` { }` in the name, the NX-OS render wrote
+it out (`ntp server time1.vyos.net { }`), and that cell drifted. The parser now
+reads such a line as the node it is, the reading the set form gives the same
+path (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and
+the YAML declares `ntp_servers` good.

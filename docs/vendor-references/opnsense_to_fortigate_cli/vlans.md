@@ -34,9 +34,9 @@ Retrieved: 2026-05-01
 OPNsense notes:
 
 - Each `<vlan>` element binds a single tag to ONE parent NIC.
-- `<descr>` is the only label field — both canonical `name` and
-  `description` populate from it on parse, so they share the same
-  text.
+- A `<vlan>` has no name of its own.  The opnsense parser names the
+  canonical VLAN after its device (`<vlanif>`) and reads `<descr>`
+  (the operator's label) as its description.
 - `<vlanif>` is the synthesised BSD device name; this is what
   shows up on a zone interface to use the VLAN as a routed/firewalled
   interface.
@@ -60,13 +60,16 @@ shape.  Key points:
 
 - `vlans[].id`: **good** — OPNsense `<tag>10</tag>` ↔ FortiGate
   `set vlanid 10`.  Both vendors share the 1-4094 range.
-- `vlans[].name`: **lossy** — OPNsense's `<descr>` is the only label
-  field; canonical `name` and `description` both populate from it on
-  parse, so both fields carry the same text.  FortiGate `set alias`
-  is the closest analogue but caps at 25 characters; long OPNsense
-  descriptions truncate on FortiGate render.
-- `vlans[].description`: **lossy** — same rationale as `vlans[].name`
-  — one OPNsense XML field populating two canonical fields.
+- `vlans[].name`: **good** — the canonical name is the OPNsense
+  device name (`vlan0.10`), which FortiGate writes as the VLAN
+  interface's name (`edit "vlan0.10"`) and reads back.
+- `vlans[].description`: **lossy** — the OPNsense `<descr>` (the
+  operator's label, e.g. `USER VLAN`) is the canonical description,
+  and the FortiGate render writes a VLAN's name and no separate
+  description (`set alias` carries the interface's own description,
+  the zone's), so the label is lost.  FortiGate declares
+  `/vlans/vlan/description` lossy, which the validation report lists
+  for each VLAN.
 - `vlans[].tagged_ports` / `untagged_ports`: **not_applicable** —
   OPNsense never populates per-VLAN port-membership lists on parse
   (no per-VLAN port concept).  FortiGate target's child-interface

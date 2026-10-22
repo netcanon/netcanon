@@ -107,6 +107,9 @@ class ArubaAOSSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="aruba_aoss",
         vendor_id="aruba_aoss",
@@ -228,9 +231,12 @@ class ArubaAOSSCodec(CodecBase):
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "description line.  Where the VLAN's name is only the "
+                    "name of an interface of the config, or empty, its "
+                    "description is written as its name (_vlan_labels: an "
+                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "description drops on render (silent-loss guard, "
+                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),
@@ -303,6 +309,22 @@ class ArubaAOSSCodec(CodecBase):
                     "route name / description is dropped (run3)."
                 ),
                 severity="warn",
+            ),
+            LossyPath(
+                path="/routing/static-route/interface",
+                reason=(
+                    "AOS-S takes an address, a VLAN (``vlan <id>``) or the "
+                    "discard (``blackhole``, written for ``Null0``) as a "
+                    "next hop and nothing else.  A route out any other "
+                    "interface -- a routed port, a LAG, a tunnel -- is "
+                    "left out under a ``; review:`` line, and an interface "
+                    "named beside a gateway is not written.  Error-level: "
+                    "the job is partial for any route that names an "
+                    "interface, the ones written as ``vlan`` or "
+                    "``blackhole`` included, since the matrix cannot tell "
+                    "them apart."
+                ),
+                severity="error",
             ),
             LossyPath(
                 path="/interfaces/interface/config/type",
@@ -378,6 +400,16 @@ class ArubaAOSSCodec(CodecBase):
                     "(ship-before-wire, GAP 7) so a routed sub-interface "
                     "tag is flagged as a drop, not silently mis-rendered "
                     "as an L2 access-mode VLAN."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec, whose "
+                    "routed sub-interface tag is itself not wired: declared "
+                    "so that it is reported as a drop."
                 ),
             ),
             UnsupportedPath(
@@ -493,10 +525,11 @@ class ArubaAOSSCodec(CodecBase):
             UnsupportedPath(
                 path="/routing/static-route/vrf",
                 reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
+                    "AOS-S has no VRF (HPE's routing guide names none): "
+                    "a route in a VRF is left out under a ``; review:`` "
+                    "line.  It was written into the switch's one table, "
+                    "where it routed traffic the source routed in "
+                    "another."
                 ),
             ),
         ],

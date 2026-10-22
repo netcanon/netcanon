@@ -304,21 +304,28 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      OPNsense's `<descr>` lands as the canonical VLAN name and re-parses
-      from the NX-OS `vlan <id> / name <x>` stanza unchanged.
+    disposition: lossy
+    reason: >
+      An OPNsense `<vlan>` has no name of its own: the canonical name
+      is its device's (`vlan0.10`), and its `<descr>` (`USER VLAN`) the
+      description. NX-OS has one label for a VLAN, and a VLAN whose
+      name is only an interface's is written with its description as
+      its name (`_vlan_labels`), read back as the name -- a move the
+      reconciler reads as preserved (`_vlan_label_moved`). A label that
+      holds white space is then written with `_` for each run of it,
+      with a review line (`one_value_tree`, docs/CAPABILITIES.md
+      section C): `USER VLAN` is `vlan <id> / name USER_VLAN`, which is drift. The
+      device keeps its own name as the VLAN interface's.
     references: [opnsense-nxos-surface]
 
   "vlans[].description":
     disposition: lossy
     reason: >
-      Not exercised by the corpus — the OPNsense parser folds `<descr>` into
-      `name` and leaves `description` empty on every VLAN record — so this
-      rests on the target's declaration, stated plainly rather than implied.
-      The cisco_nxos matrix declares `/vlans/vlan/description` lossy: the
-      render emits the VLAN name but no separate description line, so a
-      canonical description distinct from the name would drop.
+      Comes back empty on every VLAN that carries one: NX-OS writes a VLAN's `name`
+      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      NX-OS declares `/vlans/vlan/description` lossy for it.
     references: [opnsense-nxos-surface]
 
   "vlans[].tagged_ports":
@@ -336,16 +343,14 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "vlans[].ipv4_addresses":
-    disposition: lossy
-    reason: >
+    disposition: not_applicable
+    note: >
       Not exercised by the corpus — no VLAN record in any cell carries L3
       addressing, since OPNsense hangs the address on the zone interface
-      instead — so this rests on the target's declaration.  The cisco_nxos
-      matrix declares `/vlans/vlan/ipv4/address/ip` (and its secondary /
-      virtual-gateway companions) lossy: the codec renders an SVI only from a
-      sibling interface stanza, so an address carried on the VLAN record
-      itself is dropped.  Re-declare such SVIs as `interface Vlan<N>` on the
-      target.
+      instead — so the field is empty on both sides of every cell.  For a
+      source that does carry one, cisco_nxos writes the address as
+      `interface Vlan<N>` (`synthesize_svis_from_vlan_l3`); its secondary and
+      virtual-gateway companions are declared lossy there.
     references: [opnsense-nxos-surface]
 
   # -- Static routes.  Top-level key omitted: the route record survives 1->1

@@ -19,12 +19,10 @@ Whether a line gives a port back is the parser's to say, and the
 renderer asks its reader, of the line as written.  A line counts for
 its ports only if every one of them comes back as itself: a ``trunk``
 line with a space in a member's name is no ``trunk`` line to the
-parser, a zero-padded number is written without its zeros, and a list
-under a stanza that a line of the top ended -- the rest of a VLAN's
-name, after a line break, can be one -- is read by nobody.  The port
-beside such a name keeps its stanza, or it would be in no record of
-the output read back.  (A line break alone ends no stanza: the rest of
-the name in column 0 is the stanza's, and the lists under it are read.)
+parser, and a zero-padded number is written without its zeros.  The
+port beside such a name keeps its stanza, or it would be in no record
+of the output read back.  (A VLAN's name with a line break in it is
+never handed to the renderer: ``netcanon.migration._one_line``.)
 """
 
 from __future__ import annotations
@@ -37,6 +35,7 @@ from pathlib import Path
 
 import pytest
 
+from netcanon.migration._one_line import one_line_each
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -48,6 +47,7 @@ from netcanon.migration.canonical.intent import (
 from netcanon.migration.codecs.aruba_aoss import parse as aoss_parse
 from netcanon.migration.codecs.aruba_aoss import render as aoss_render
 from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.base import RenderError
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
 
@@ -347,19 +347,14 @@ def test_a_line_counts_whole_or_not_at_all() -> None:
     assert {"5", "7"} <= records
 
 
-@pytest.mark.parametrize(
-    ("name", "kept"),
-    [("first\nsecond", set()), ("first\nhostname second", {"1", "2"})],
-    ids=["the rest is the stanza's", "the rest is a line of the top"],
-)
-def test_a_list_under_a_cut_name(name: str, kept: set[str]) -> None:
-    """A line break in a VLAN's name puts the rest of the name in
-    column 0.  That line is the stanza's -- it enters no context and
-    the top of the config does not read it -- so the lists under it are
-    read and their ports need no stanza.  Where the rest IS a line of
-    the top, the stanza ends there, and the lists under it are read by
-    nobody: their ports keep their stanzas.  The line alone would read
-    back either way, which is why the reader is asked of the stanza."""
+@pytest.mark.parametrize("name", ["first\nsecond", "first\nhostname second"])
+def test_a_name_with_a_line_break_is_never_written(name: str) -> None:
+    """A line break in a VLAN's name put the rest of the name in column
+    0, where it could end the stanza and leave the lists under it read
+    by nobody.  The renderer is never handed such a name: the pipeline
+    writes it on one line, and a tree that still holds it is refused.
+    On one line the name is the stanza's and its lists are read, so no
+    port needs a stanza of its own."""
     tree = CanonicalIntent(
         interfaces=[CanonicalInterface(name="1"), CanonicalInterface(name="2"), CanonicalInterface(name="3")],
         vlans=[
@@ -367,8 +362,11 @@ def test_a_list_under_a_cut_name(name: str, kept: set[str]) -> None:
             CanonicalVlan(id=20, name="whole", untagged_ports=["3"]),
         ],
     )
+    with pytest.raises(RenderError, match="holds a line break"):
+        ArubaAOSSCodec().render(tree)
+    assert one_line_each(tree) == ["vlans[10].name"]
     stanzas, records = _read_back(tree)
-    assert set(stanzas) == kept
+    assert stanzas == {}
     assert {"1", "2", "3"} <= records
     assert aoss_parse._lists_read_from("vlan 10\n   untagged 1\n   tagged 2") == (["1"], ["2"])
 
@@ -436,7 +434,7 @@ def _a_tree(rng: random.Random) -> CanonicalIntent:
     for vid in rng.sample(range(2, 60), rng.randint(0, 4)):
         untagged = rng.sample(names, rng.randint(0, min(5, len(names))))
         tagged = [name for name in rng.sample(names, rng.randint(0, min(5, len(names)))) if name not in untagged]
-        vlans.append(CanonicalVlan(id=vid, name=rng.choice(["V", "two words", "cut\nhere", "cut\nhostname here"]),
+        vlans.append(CanonicalVlan(id=vid, name=rng.choice(["V", "two words", "cut here", "cut hostname here"]),
                                    untagged_ports=untagged, tagged_ports=tagged))
     ports_only = [name for name in names if not name.startswith("trk")]
     lags = []
@@ -486,10 +484,10 @@ def test_a_stanza_left_out_takes_nothing(monkeypatch: pytest.MonkeyPatch) -> Non
         assert ours <= written, sorted(ours - written)
     left_out = sum(a != b for a, b in zip(as_it_is, every_stanza))
     assert left_out > 300, f"a stanza was left out of {left_out} outputs only: this compares little"
-    # ... and the trees hold what the parser cannot read, of both kinds.
+    # ... and the trees hold what the parser cannot read.  (A VLAN's name
+    # with a line break, which a line of the top could cut short, is
+    # never handed to the renderer: ``netcanon.migration._one_line``.)
     spaced = sum(bool(re.search(r"^trunk .*(my port|lag 1)", text, flags=re.M)) for text in as_it_is)
-    # A stanza a line of the top cuts short: the rest of a name.
-    cut_short = sum("\nhostname here" in text for text in as_it_is)
-    assert min(spaced, cut_short) > 40, f"{spaced} trunk lines with a space, {cut_short} stanzas cut short"
+    assert spaced > 40, f"{spaced} trunk lines with a space"
     differ = [n for n, (a, b) in enumerate(zip(as_it_is, every_stanza)) if _what_reads_back(a) != _what_reads_back(b)]
     assert differ == [], f"{len(differ)} of {len(trees)} read back differently; the first: {as_it_is[differ[0]]!r}"

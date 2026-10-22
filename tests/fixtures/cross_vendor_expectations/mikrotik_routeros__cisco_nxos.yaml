@@ -123,12 +123,21 @@ per_field_expectation:
   # sub-fields marked lossy below. --
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Names are carried verbatim by design — this audit scores name
-      STABILITY, and native translation (`ether2` -> `Ethernet1/2`) is the
-      orchestrator's port-rename layer, which this bare render path does not
-      engage.
+    disposition: lossy
+    reason: >
+      A RouterOS interface name is free text, and a port an operator has
+      named can hold a space (`Access Point`, `CLUSTER - PVE3` on the
+      CRS310 capture); an NX-OS interface name holds none.  This bare
+      round-trip does not run `translate_port_names`, so the name is
+      written as it stands -- `interface Access Point` -- and read back as
+      its first word: `Access`, and the three `CLUSTER - ...` ports as one
+      `CLUSTER`.  A name with no space round-trips verbatim by design --
+      this audit scores name STABILITY, and native translation (`ether2` ->
+      `Ethernet1/2`) is the orchestrator's port-rename layer, which this
+      bare render path does not engage.  Through
+      the pipeline the translator lists a name it cannot read -- every name
+      with a space among them -- as untranslated, and the job is `partial`
+      until a port-rename map entry decides it.
     references: [routeros-nxos-surface]
 
   "interfaces[].default_name":
@@ -311,24 +320,28 @@ per_field_expectation:
     references: [routeros-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on every cell.  The mikrotik_routeros matrix declares
-      `/vlans/vlan/name` lossy on its own side (RouterOS has no separate VLAN
-      name — the codec derives one from the `/interface vlan` object name),
-      but the derived name survives the render to NX-OS `vlan <id> / name
-      <name>` unchanged, so the cross-pair disposition is good.
+    disposition: lossy
+    reason: >
+      RouterOS names a VLAN after its `/interface vlan` (`vlan10`), and
+      its `comment=` is the VLAN's description. NX-OS has one label for
+      a VLAN: a VLAN whose name is only an interface's is written with
+      its description as its name (`_vlan_labels`), and one with none
+      with its interface's name. The reconciler reads the first as
+      preserved (`_vlan_label_moved`). A label that holds white space
+      is then written with `_` for each run of it, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): the kitchen
+      sink's `comment="Users VLAN"` is `vlan 100 / name Users_VLAN`,
+      which is drift.
     references: [routeros-nxos-surface]
 
   "vlans[].description":
     disposition: lossy
     reason: >
-      Drops on every VLAN that carries one (8 occurrences; `User` -> `""`).
-      The NX-OS render emits `name <name>` but has no second, longer
-      description line, and the cisco_nxos matrix declares
-      `/vlans/vlan/description` lossy for exactly this reason.  Operator-
-      authored VLAN documentation is lost; fold anything you need to keep
-      into the VLAN name (NX-OS caps it at 32 characters) before migrating.
+      Comes back empty on every VLAN that carries one: NX-OS writes a VLAN's `name`
+      and no description, and the `comment=` of a RouterOS `/interface vlan` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      the cisco_nxos matrix declares `/vlans/vlan/description` lossy for it.
     references: [routeros-nxos-surface]
 
   "vlans[].tagged_ports":

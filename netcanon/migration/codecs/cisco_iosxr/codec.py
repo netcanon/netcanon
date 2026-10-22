@@ -149,6 +149,8 @@ class CiscoIOSXRCodec(CodecBase):
             # (`encapsulation dot1q N`), distinct from the synthesised
             # VLAN id-list below.
             "/interfaces/interface/dot1q-vlan",
+            # `encapsulation dot1q N second-dot1q M`: both tags 802.1Q.
+            "/interfaces/interface/dot1q-inner-vlan",
             # Phase 2 — sub-interface `encapsulation dot1q` → synthesised
             # VLAN id-list (no port membership; name always empty)
             "/vlans/vlan/id",

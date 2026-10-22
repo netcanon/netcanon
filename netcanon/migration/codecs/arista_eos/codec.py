@@ -100,6 +100,9 @@ class AristaEOSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="arista_eos",
         vendor_id="arista_eos",
@@ -122,6 +125,7 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
             "/interfaces/interface/dot1q-vlan",   # GAP 7: routed-subif `encapsulation dot1q vlan N`
+            "/interfaces/interface/dot1q-inner-vlan",  # `encapsulation dot1q vlan N inner M`
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -185,12 +189,14 @@ class AristaEOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
-                    "VLAN-SVI mount render gap: this codec renders a VLAN's L3 "
-                    "by synthesizing an `interface Vlan<N>` "
-                    "(synthesize_svis_from_vlan_l3), which copies only "
-                    "ip+prefix_length, so the is_secondary flag on a VLAN-"
-                    "record address is dropped. The SVI L3 itself round-trips, "
-                    "so declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount: this codec renders a VLAN's L3 by "
+                    "synthesizing an `interface Vlan<N>` "
+                    "(synthesize_svis_from_vlan_l3), which writes an address "
+                    "after the first `secondary` by its position; the "
+                    "record's own is_secondary flag is not read, and the parse "
+                    "folds only ip+prefix_length back onto the VLAN. The SVI "
+                    "L3 itself round-trips, so declared lossy (blind-audit "
+                    "f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
@@ -220,9 +226,12 @@ class AristaEOSCodec(CodecBase):
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "description line.  Where the VLAN's name is only the "
+                    "name of an interface of the config, or empty, its "
+                    "description is written as its name (_vlan_labels: an "
+                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "description drops on render (silent-loss guard, "
+                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),
@@ -445,10 +454,13 @@ class AristaEOSCodec(CodecBase):
         # the parser deliberately drops — see
         # netcanon/migration/_tier3_detection.py.  Notification-only.
         # Read from the text the parser read: a banner's (or any other
-        # body's) lines up to its ``EOF`` are text, not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(
-            without_bodies(raw),
-        )
+        # body's) lines up to its ``EOF`` are text, not stanzas.  After
+        # them, the rows the parser itself made: a sub-interface whose
+        # tag statement it does not read whole.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_iosxe_cli(without_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

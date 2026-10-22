@@ -470,27 +470,27 @@ per_field_expectation:
     references: [mikrotik-vlan, junos-vlans-statement]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      RouterOS conflates the L3 interface name with the VLAN name
-      (per the MikroTik codec's ``LossyPath`` entry on
-      ``/vlans/vlan/name``); names typically follow the ``vlan<N>``
-      convention.  Junos VLAN names allow letters, digits, hyphens,
-      periods only (no underscores, no spaces).  Names containing
-      ``[A-Za-z0-9.-]`` round-trip losslessly; names with
-      underscores are sanitised on Junos render (typically
-      underscore -> hyphen).
+    disposition: good
+    note: >
+      Preserved on every cell that holds VLANs. RouterOS names a VLAN
+      after its `/interface vlan` (`vlan10`), and its `comment=` is the
+      VLAN's description. Junos has one label for a VLAN: a VLAN
+      whose name is only an interface's is written with its description
+      as its name (`_vlan_labels`; quoted where it holds a space, as the vendor
+      reference says Junos takes one), and one with none with its
+      interface's name. The reconciler reads the first as preserved
+      (`_vlan_label_moved`).
     references: [mikrotik-vlan, junos-vlans-statement]
 
   vlans[].description:
-    disposition: not_applicable
-    note: >
-      RouterOS has no VLAN-level description field.  Canonical
-      ``CanonicalVlan.description`` is always empty after RouterOS
-      parse, so Junos render emits no ``set vlans <name>
-      description`` line.  ``comment=`` on RouterOS's
-      `/interface vlan` record lifts to interface description (not
-      VLAN description), per codec policy.
+    disposition: lossy
+    reason: >
+      Comes back empty on every VLAN that carries one: the Junos render writes a VLAN's name
+      and no description, and the `comment=` of a RouterOS `/interface vlan` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      Junos declares `/vlans/vlan/description` lossy for it.
+    references: [mikrotik-vlan, junos-vlans-statement]
 
   vlans[].tagged_ports:
     disposition: lossy

@@ -364,10 +364,12 @@ class MikroTikRouterOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
-                    "RouterOS exposes a single per-VLAN ``comment`` field, "
-                    "which the parser maps to the VLAN name; a separate "
-                    "description collides with it on render and may be "
-                    "conflated with the name."
+                    "RouterOS has one label for a VLAN, the ``comment=`` "
+                    "of its /interface vlan.  The parser reads it as the "
+                    "description of the VLAN and of its interface; the "
+                    "render writes the interface's description there (for "
+                    "a VLAN with no interface, the VLAN's name), so a "
+                    "VLAN's own description is not written."
                 ),
                 severity="warn",
             ),
@@ -383,6 +385,17 @@ class MikroTikRouterOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  A RouterOS "
+                    "`/interface vlan` on another `/interface vlan` is read as "
+                    "a VLAN interface of one tag, which is not this field.  "
+                    "Declared so that it is reported as a drop."
+                ),
+            ),
             UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(

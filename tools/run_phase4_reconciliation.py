@@ -293,11 +293,46 @@ def _ip_mtu_moved(record_diffs: dict[str, Any]) -> bool:
     return False
 
 
+def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
+    """True iff a VLAN record's ``name`` drift is its label, written
+    as its name.
+
+    A target whose VLAN has only a name writes a VLAN's description
+    as its name where the name is only the name of an interface of
+    the config, or empty (``netcanon/migration/_vlan_labels.py``):
+    the source holds the interface's name (``vlan0.10``) and the
+    label (``USER VLAN``) as its description, the target reads back
+    that label as the name and no description.  The interface keeps
+    the name it had.  Any other pair of values (a name that is not
+    the label as it was stated, a description that came back as
+    well) is not equivalent and surfaces as drift.
+
+    Args:
+        record_diffs: One record's Phase 1 diffs, keyed by sub-field,
+            each ``{"source": ..., "target": ...}``.
+
+    Returns:
+        ``True`` when the record's name drift is that move.
+    """
+    name = record_diffs.get("name")
+    description = record_diffs.get("description")
+    if not isinstance(name, dict) or not isinstance(description, dict):
+        return False
+    label = description.get("source")
+    return (
+        isinstance(label, str)
+        and bool(label.strip())
+        and not description.get("target")
+        and name.get("target") == label
+    )
+
+
 #: YAML field-keys whose per-record drift is read with the WHOLE
-#: record's diffs, for a number one side holds in a sibling field.
-#: See :func:`_ip_mtu_moved`.
+#: record's diffs, for a value one side holds in a sibling field.
+#: See :func:`_ip_mtu_moved` and :func:`_vlan_label_moved`.
 _RECORD_EQUIVALENCES: dict[str, Callable[[dict[str, Any]], bool]] = {
     "interfaces[].mtu": _ip_mtu_moved,
+    "vlans[].name": _vlan_label_moved,
 }
 
 

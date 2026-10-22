@@ -287,8 +287,15 @@ per_field_expectation:
       free-form field) has no destination on OPNsense.  FortiGate
       codec capability matrix declares
       ``/interfaces/interface/config/description`` lossy with this
-      rationale.
-    references: [fgt-interfaces, opn-interfaces]
+      rationale.  And a member of an aggregate is written in its
+      lagg's ``<members>`` and in no zone of ``<interfaces>``:
+      OPNsense adds only an unassigned interface to a LAGG ("Only
+      unassigned interfaces can be added to LAGG", Other Types), so a
+      member's own ``set alias`` is not written, and a comment in the
+      ``<lagg>`` names the member and the elements left out, never
+      their values.  The synthetic kitchen sink's two members of
+      ``agg1`` lose theirs.
+    references: [fgt-interfaces, opn-interfaces, opn-laggs]
 
   interfaces[].enabled:
     disposition: good
@@ -300,11 +307,13 @@ per_field_expectation:
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      FortiGate ``set type`` enumerates physical / vlan / aggregate
-      / loopback / tunnel / hard-switch.  OPNsense doesn't surface
-      a type field; cross-pair drops the type hint.  FortiGate
-      codec capability matrix declares
-      ``/interfaces/interface/config/type`` lossy.
+      FortiGate ``set type`` enumerates physical / vlan / aggregate / loopback
+      / tunnel / hard-switch. OPNsense doesn't surface a type field;
+      cross-pair drops the type hint. FortiGate codec capability matrix
+      declares ``/interfaces/interface/config/type`` lossy. The OPNsense
+      parser types a `<vlan>` device `ianaift:l3ipvlan`, so a VLAN interface
+      the render writes as one comes back with that type; every other
+      interface comes back untyped.
     references: [fgt-interfaces, opn-interfaces]
 
   interfaces[].mtu:
@@ -416,7 +425,7 @@ per_field_expectation:
       vendors share the unusual idiom of modelling VLANs as 802.1Q
       child interfaces (NOT VLAN-centric port lists), which makes
       this pair relatively clean compared to switch-to-firewall
-      pairs.  Per-VLAN sub-field caveats (collapse or drop) are
+      pairs.  Per-VLAN sub-field caveats (lost or moved) are
       documented per ``vlans[].*`` entries below rather than
       bundled into a single ``lossy`` claim on the list itself.
     references: [fgt-vlans, opn-vlans]
@@ -432,21 +441,23 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      FortiGate's edit-name (``port2.10``) doubles as VLAN identity.
-      The canonical ``name`` populates from this on parse but loses
-      the ergonomic alias.  OPNsense renders a synthesised
-      ``<descr>`` instead — and OPNsense's ``<descr>`` is the only
-      label slot, so canonical ``name`` and ``description`` collapse
-      to one OPNsense XML field.
+      The value survives — a FortiGate VLAN is named after its interface
+      (`VL_100`, `port4.300`), and the OPNsense render writes that interface
+      as the VLAN's device under the same name, which the OPNsense parser
+      reads back as the VLAN's name — but not in a form OPNsense takes: its
+      VLAN form refuses a device name other than `vlan0` followed by digits
+      and dots, or `<parent>_vlan<id>`, when the VLAN is saved, and the render
+      says so in a `review:` comment beside each such device (every VLAN of
+      this corpus). Recorded `lossy` for that: the name is carried under a
+      review line, not into a config OPNsense keeps as it is.
     references: [fgt-vlans, opn-vlans]
 
   vlans[].description:
-    disposition: lossy
-    reason: >
-      FortiGate ``set alias`` (25-char cap) ↔ OPNsense ``<descr>``
-      (unbounded).  No truncation in this direction; marked lossy
-      because canonical ``name`` and ``description`` collapse to a
-      single OPNsense ``<descr>`` slot.
+    disposition: good
+    note: >
+      No FortiGate VLAN on this corpus carries a description, so nothing is
+      measured. OPNsense keeps a VLAN's description as its `<vlan>`'s
+      `<descr>`, with no length limit, so one would fit.
     references: [fgt-vlans, opn-vlans]
 
   vlans[].tagged_ports:
@@ -468,17 +479,13 @@ per_field_expectation:
     references: [fgt-vlans, opn-vlans]
 
   vlans[].ipv4_addresses:
-    disposition: lossy
-    reason: >
-      FortiGate places the L3 SVI address on the VLAN-child edit
-      (``set ip`` on ``port2.10``), which the parser absorbs into
-      ``CanonicalVlan.ipv4_addresses``.  OPNsense requires
-      synthesising a zone interface (``<opt2>``) referencing
-      ``<vlanif>em1_vlan10</vlanif>`` and putting the IP there.
-      The OPNsense codec does not currently auto-synthesise the
-      zone for an SVI-bearing canonical VLAN; cross-pair render
-      emits the VLAN declaration but loses the L3 address pending
-      wire-up.
+    disposition: not_applicable
+    note: >
+      Source-side absence: the FortiGate parser keeps a VLAN interface's `set
+      ip` on the interface record (`port2.10`), not on the canonical VLAN, so
+      no VLAN record holds an address on any cell. The interface's address is
+      written on its zone, whose `<if>` is the VLAN's `<vlan>` device, and
+      comes back on the interface (see `interfaces[].ipv4_addresses`).
     references: [fgt-vlans, opn-vlans]
 
   static_routes:
@@ -571,21 +578,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      FortiGate ``set password ENC <opaque-base64>`` is FortiOS-
-      internal-key-encrypted; OPNsense bcrypt is FreeBSD-
-      ``crypt(3)``-compatible (``$2a$`` / ``$2b$`` / ``$2y$``
-      prefixes).  Hash formats are NOT cross-compatible.  Both
-      codecs preserve hashes verbatim with vendor tags
-      (``fortios:`` on FortiGate, ``bcrypt:`` on OPNsense) so the
-      loss surfaces in the validation report.  Operators must reset
-      passwords on the OPNsense target.  Privilege number collapses
-      to OPNsense's binary admin / non-admin via group membership:
-      FortiGate ``super_admin`` (canonical privilege 15) ->
-      ``<groupname>admins</groupname>``, other profiles ->
-      ``<groupname>users</groupname>``.  Granular per-profile detail
-      is lost.  FortiGate ``set trusthost1...trusthost10`` IP-
-      restricted access controls are not modelled in canonical;
-      drop on parse.
+      2 of 8 accounts arrive across the 4 cells that populate local users; the
+      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
+      `ENC` ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
+      else is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as a `<user>` element
+      with no `<password>`; a refused secret now drops the whole account, as on
+      every other target. The survivors are 2 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [fgt-local-users, opn-users]
 
   radius_servers:
@@ -595,9 +600,10 @@ per_field_expectation:
       internal-key-encrypted; OPNsense expects cleartext in
       ``<radius_secret>``.  Cross-vendor migration requires
       re-keying — operators must paste the cleartext shared secret
-      into OPNsense after migration.  The codec passes the FortiOS-
-      encoded form through verbatim with a vendor tag so the loss
-      surfaces in the validation report.  ``auth_port`` / ``host``
+      into OPNsense after migration.  The OPNsense render writes the
+      server with no secret, beside a review element.  A ``set secret
+      <secret>`` written without ``ENC`` is the secret as typed, and
+      lands in ``<radius_secret>``.  ``auth_port`` / ``host``
       / ``name`` preserve cleanly.  ``acct_port``: FortiGate has no
       separate field (canonical defaults to 1813, which is
       OPNsense's default too).  FortiOS ``set auth-type`` /

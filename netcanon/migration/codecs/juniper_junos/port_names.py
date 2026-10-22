@@ -16,7 +16,8 @@ Recognised port-name forms::
     fe-0/0/0                  — FE (legacy M-series)
     me0 / me0.0               — management (SRX/MX)
     fxp0                      — management (legacy)
-    lo0.0                     — loopback (unit form)
+    lo0 / lo0.<N>             — the loopback, and its unit N, which is
+                                the loopback of a routing instance
     ae0 / ae0.0               — aggregated Ethernet (LAG)
     irb.<N>                   — integrated routing and bridging (SVI-ish)
 
@@ -39,6 +40,22 @@ Strategy:
     (``lo0.0``, ``ge-0/0/1.0`` -- the interface itself on every other
     platform) and a unit of a loopback.
 
+    The loopback.  Juniper names one loopback interface: "Junos OS
+    follows the IP convention of using lo0 as the loopback interface's
+    identifier name", and "Only unit 0 is permitted as the master
+    loopback interface" (Junos 13.2, *Configuring the Loopback
+    Interface*); "You can configure more than just unit 0 for lo0, but
+    you must place each additional unit in a separate routing
+    instance" (*Loopback Interfaces*, Interfaces Fundamentals).  Where
+    another platform has ``Loopback7``, Junos has a unit of ``lo0``,
+    so ``lo0.<N>`` reads as loopback N (``lo0`` and ``lo0.0`` as 0):
+    read as ``lo0`` itself, every unit of a routing instance came out
+    as the one ``Loopback0`` on every other platform.  The other way,
+    no name formatted one at a time can place a loopback -- whether
+    ``Loopback1`` is ``lo0`` or ``lo0.1`` depends on the config's
+    other loopbacks and on its routing instance -- so the translator
+    gives this codec every loopback at once (:func:`place_loopbacks`).
+
     Cross-vendor mesh limitations: Junos's FPC/PIC/port isn't
     structurally equivalent to Cisco's stack/module/port or Arista's
     flat port.  The identity bridge stores all three indices
@@ -51,8 +68,9 @@ Strategy:
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
-from ...canonical.port_names import PortIdentity
+from ...canonical.port_names import LoopbackToPlace, PortIdentity
 
 # ---------------------------------------------------------------------------
 # Regex patterns.
@@ -78,6 +96,19 @@ _MGMT_RE = re.compile(
 _LOOPBACK_RE = re.compile(r"^lo(?P<n>\d+)(?:\.(?P<unit>\d+))?$", re.IGNORECASE)
 _LAG_RE = re.compile(r"^ae(?P<n>\d+)(?:\.(?P<unit>\d+))?$", re.IGNORECASE)
 _IRB_RE = re.compile(r"^irb\.(?P<n>\d+)$", re.IGNORECASE)
+
+#: A name an entry of the rename map gives a unit of the loopback:
+#: ``lo0`` or ``lo0.<N>``.  Five digits: Junos numbers a unit to 16385.
+_LO0_UNIT_RE = re.compile(r"^lo0(?:\.0*(?P<unit>\d{1,5}))?$", re.IGNORECASE)
+
+#: The unit of lo0 Junos makes for its internal routing instance: "The
+#: internal loopback interface is a particular instance of the loopback
+#: interface with the logical unit number 16384" (*Loopback
+#: Interfaces*).  No unit from it up is given a loopback here.
+_INTERNAL_LOOPBACK_UNIT = 16384
+
+#: The most digits a unit of lo0 is written with.
+_UNIT_DIGITS = 5
 _VLAN_LOGICAL_RE = re.compile(r"^vlan\.(?P<n>\d+)$", re.IGNORECASE)
 
 
@@ -124,6 +155,22 @@ def media_mtu_counts_a_tag(device: str) -> bool:
     return classify_port_name(device).kind in ("physical", "lag")
 
 
+#: How many 802.1Q tags a device's media MTU counts, by the tagging
+#: statement on the device: one under ``vlan-tagging``, two under
+#: ``stacked-vlan-tagging`` ("dual VLAN tags for all logical
+#: interfaces"), and two under ``flexible-vlan-tagging``, whose MTU
+#: Juniper says to "increase ... to 4 bytes more" than a VLAN-tagged
+#: interface's: "The additional 4 bytes accommodates the future
+#: addition of a stacked VLAN tag" (Enabling VLAN Tagging).  Four
+#: bytes a tag is read from the overhead table (802.1Q/Ethernet
+#: version 2, 18, against Ethernet version 2, 14).
+TAGGING_STATEMENT_TAGS: dict[str, int] = {
+    "vlan-tagging": 1,
+    "stacked-vlan-tagging": 2,
+    "flexible-vlan-tagging": 2,
+}
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Junos port name into a :class:`PortIdentity`."""
     # Standard <media>-<fpc>/<pic>/<port>[.unit]
@@ -155,12 +202,22 @@ def classify_port_name(name: str) -> PortIdentity:
             original=name,
         )
 
-    # Loopback
+    # Loopback.  A unit of lo0 is a loopback of its own (see the
+    # module docstring); ``lo0.0`` is the loopback ``lo0`` is.
     m = _LOOPBACK_RE.match(name)
     if m:
+        number = m.group("n")
+        if m.group("unit") is not None and not number.strip("0"):
+            number = m.group("unit")
+        number = number.lstrip("0") or "0"
+        if len(number) > _UNIT_DIGITS:
+            # No unit of lo0 (Junos numbers them to 16385), and read
+            # as text first: a pasted config can write more digits
+            # than ``int`` converts, and that failed the whole job.
+            return PortIdentity(kind="unknown", original=name)
         return PortIdentity(
             kind="loopback",
-            index=int(m.group("n")),
+            index=int(number),
             original=name,
         )
 
@@ -230,8 +287,17 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         n = identity.port if identity.port is not None else 0
         return f"em{n}"
     if kind == "loopback":
+        # Named one at a time -- a name the config refers to and has
+        # no interface for -- a loopback is unit N of the one
+        # loopback; the translator places the loopbacks a config HAS
+        # with :func:`place_loopbacks`, which knows their routing
+        # instances.
         n = identity.index if identity.index is not None else 0
-        return f"lo{n}"
+        if n == 0:
+            return "lo0"
+        if n < _INTERNAL_LOOPBACK_UNIT:
+            return f"lo0.{n}"
+        return None
     if kind == "lag":
         n = identity.index
         if n is None:
@@ -243,3 +309,120 @@ def format_port_identity(identity: PortIdentity) -> str | None:
             return None
         return f"irb.{n}"
     return None
+
+
+def place_loopbacks(
+    loopbacks: Sequence[LoopbackToPlace],
+    taken: frozenset[str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Give each loopback of a config its unit of ``lo0``, or a reason.
+
+    Junos has one loopback interface, and the units of it a config may
+    use are placed by routing instance (see the module docstring):
+
+    * the global table has one, unit 0 -- ``lo0``.  One loopback there
+      is ``lo0`` whatever its number; of several, the one numbered 0
+      is, and each of the others is refused.  Of several with none
+      numbered 0, every one is refused: which is ``lo0`` is not for a
+      translation to choose.
+    * a routing instance takes one unit of its own: its one loopback
+      numbered N is ``lo0.N``.  Refused: a routing instance's loopbacks
+      where it has several, a loopback with no number or numbered 0
+      (unit 0 is the global table's), a unit from 16384 up (16384 is
+      Junos's internal loopback), and a number two routing instances'
+      loopbacks share.
+
+    A name an entry of the rename map gives (*taken*) is not given
+    again: a loopback whose unit an entry took is refused.
+    """
+    taken_units: set[int] = set()
+    for target in taken:
+        m = _LO0_UNIT_RE.match(target)
+        if m:
+            taken_units.add(int(m.group("unit") or 0))
+    placed: dict[str, str] = {}
+    refused: dict[str, str] = {}
+    by_instance: dict[str, list[LoopbackToPlace]] = {}
+    for loopback in loopbacks:
+        by_instance.setdefault(loopback.instance, []).append(loopback)
+
+    in_the_table = by_instance.pop("", [])
+    numbered_0 = [lb for lb in in_the_table if lb.number == 0]
+    if not in_the_table:
+        pass
+    elif 0 in taken_units:
+        for lb in in_the_table:
+            refused[lb.name] = (
+                "is in the global routing table, whose one loopback on "
+                "Junos, unit 0 of lo0, is the name an entry of the rename "
+                "map gives; dropped"
+            )
+    elif len(in_the_table) == 1:
+        placed[in_the_table[0].name] = "lo0"
+    elif len(numbered_0) == 1:
+        lo0 = numbered_0[0]
+        placed[lo0.name] = "lo0"
+        for lb in in_the_table:
+            if lb is not lo0:
+                refused[lb.name] = (
+                    f"is a second loopback of the global routing table: "
+                    f"Junos has one there, unit 0 of lo0, and {lo0.name!r} "
+                    f"is it; dropped -- put its addresses on lo0 unit 0, or "
+                    f"its loopback in a routing instance, yourself"
+                )
+    else:
+        for lb in in_the_table:
+            refused[lb.name] = (
+                f"is one of {len(in_the_table)} loopbacks of the global "
+                f"routing table, and Junos has one there, unit 0 of lo0; "
+                f"which of them it is is not for the translation to "
+                f"choose: dropped -- map that one to lo0"
+            )
+
+    alone = [lbs[0] for lbs in by_instance.values() if len(lbs) == 1]
+    per_number: dict[int | None, int] = {}
+    for lb in alone:
+        per_number[lb.number] = per_number.get(lb.number, 0) + 1
+    for instance, lbs in by_instance.items():
+        if len(lbs) > 1:
+            for lb in lbs:
+                refused[lb.name] = (
+                    f"is one of {len(lbs)} loopbacks of routing instance "
+                    f"{instance!r}, and Junos places one unit of lo0 in "
+                    f"each routing instance; dropped"
+                )
+            continue
+        lb = lbs[0]
+        n = lb.number
+        where = f"is in routing instance {instance!r}"
+        if n is None:
+            refused[lb.name] = (
+                f"{where} and has no number to give its unit of lo0; "
+                f"dropped -- map it to lo0.<unit>"
+            )
+        elif n == 0:
+            refused[lb.name] = (
+                f"{where}, and unit 0 of lo0 is the global table's "
+                f"loopback; dropped -- map it to another unit of lo0"
+            )
+        elif n >= _INTERNAL_LOOPBACK_UNIT:
+            refused[lb.name] = (
+                f"{where}, and unit {n} of lo0 is not one this "
+                f"translation gives ({_INTERNAL_LOOPBACK_UNIT} is Junos's "
+                f"internal loopback); dropped -- map it to another unit "
+                f"of lo0"
+            )
+        elif per_number[n] > 1:
+            refused[lb.name] = (
+                f"{where}, and {per_number[n]} routing instances have a "
+                f"loopback numbered {n}, which is one unit of lo0; "
+                f"dropped -- map each to a unit of its own"
+            )
+        elif n in taken_units:
+            refused[lb.name] = (
+                f"{where}, and lo0.{n} is the name an entry of the "
+                f"rename map gives; dropped"
+            )
+        else:
+            placed[lb.name] = f"lo0.{n}"
+    return placed, refused
