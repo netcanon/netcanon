@@ -185,11 +185,13 @@ def test_junos_parse_projects_irb_ip_via_dotted_name_shorthand() -> None:
     assert all(i.name != "irb.10" for i in intent.interfaces)
 
 
-def test_junos_parse_projects_vlan_members_to_tagged_ports() -> None:
+def test_junos_parse_projects_vlan_members_to_untagged_ports() -> None:
     """``set interfaces <name> unit 0 family ethernet-switching
     vlan members <VNAME>`` without an explicit ``interface-mode``
-    declaration must default to trunk semantics — the membership
-    info would otherwise be silently dropped.  This complements
+    declaration is an access port, Junos's default -- and its
+    membership is not dropped.  It was read as a trunk, and this
+    test pinned that (``test_a_port_with_no_mode_is_access.py``
+    holds the default to Juniper's sentence).  This complements
     the existing test_parse_projects_trunk_allowed_to_vlan_tagged_ports
     case (which exercises the ``interface-mode trunk`` branch).
     """
@@ -200,7 +202,8 @@ def test_junos_parse_projects_vlan_members_to_tagged_ports() -> None:
     )
     intent = parse_intent(cfg)
     by_id = {v.id: v for v in intent.vlans}
-    assert "ge-0/0/0" in by_id[10].tagged_ports
+    assert "ge-0/0/0" in by_id[10].untagged_ports
+    assert "ge-0/0/0" not in by_id[10].tagged_ports
 
 
 def test_junos_round_trip_l3_interface_binding_preserved() -> None:

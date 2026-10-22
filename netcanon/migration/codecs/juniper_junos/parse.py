@@ -852,6 +852,8 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     #    consulting intent.vlans.  Names that don't resolve are
     #    silently dropped (parse tolerance).
     vid_by_vlan_name = {v.name: v.id for v in intent.vlans if v.name}
+    # Access ports whose ``vlan members`` name more than one VLAN.
+    in_several: list[str] = []
     for name, state in iface_state.items():
         names_list = state.get("l2_vlan_member_names")
         if not names_list:
@@ -869,29 +871,39 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         iface = iface_by_name.get(name)
         if iface is None:
             continue
-        # Defensive default: ``vlan members`` declared without an
-        # explicit ``interface-mode`` line is unusual but not
-        # syntactically illegal — Junos's commit-time validator
-        # treats ``vlan members`` as trunk semantics by default (the
-        # tagged form is the more general one; access is a strict
-        # subset that requires an explicit mode declaration).  Without
-        # this default the membership info is silently dropped from
-        # the canonical tree, breaking cross-vendor renders that read
-        # from VLAN-centric tagged_ports / untagged_ports.  Same-vendor
-        # round-trips with explicit modes are unaffected — those take
-        # the matching branch below before we reach this default.
+        # No ``interface-mode`` (ELS) or ``port-mode`` line: the port
+        # is in access mode, Juniper's stated default ("when you boot
+        # the switch and do not explicitly configure a port mode, all
+        # interfaces on the switch are in access mode", Configuring
+        # Gigabit Ethernet Interfaces (CLI Procedure), ELS; the
+        # ``port-mode`` statement's Default says the same).  It was
+        # read as a trunk, so an access port of VLAN 10 came out as a
+        # trunk on every target.
         if iface.switchport_mode is None:
-            iface.switchport_mode = "trunk"
+            iface.switchport_mode = "access"
         if iface.switchport_mode == "access":
             # Access mode: the first resolved member becomes the
-            # access_vlan (operators rarely declare more than one).
-            # (#8) Numeric ``members <vid>`` resolve directly, not just
-            # via the name→id map.
+            # access_vlan.  (#8) Numeric ``members <vid>`` resolve
+            # directly, not just via the name→id map.  A port that
+            # names another VLAN as well (or ``all``) is said in a row
+            # (``in_several``): an access port takes the untagged
+            # frames of one VLAN, and what the device does with such a
+            # list is not the parser's to guess.
+            several = False
             for vname in names_list:
+                if vname == "all":
+                    several = True
+                    continue
                 vids = _resolve_vlan_member_to_vids(vname, vid_by_vlan_name)
-                if vids:
+                if not vids:
+                    continue
+                if iface.access_vlan is None:
                     iface.access_vlan = vids[0]
-                    break
+                several = several or any(
+                    vid != iface.access_vlan for vid in vids
+                )
+            if several:
+                in_several.append(name)
         elif iface.switchport_mode == "trunk":
             # Junos `vlan members all` is the operator-form for "all
             # VLANs allowed on this trunk" — what Arista writes as
@@ -1203,6 +1215,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             for path in sorted(inactive_met, key=inactive_met.__getitem__)
         ),
         *unread_tags,
+        *_in_several_vlans_row(in_several),
     ]
     if not cut_lines:
         return intent, raw
@@ -2502,9 +2515,9 @@ def _apply_interfaces(  # noqa: C901
         # ELS (EX/QFX 15.1+ on most platforms) spells this ``interface-mode``;
         # pre-ELS Junos (and platforms like the EX4550 that stayed non-ELS at
         # 15.1) spell the identical construct ``port-mode``.  Accept both — a
-        # ``port-mode access`` port must record mode=access here, otherwise the
-        # ``vlan members``-without-explicit-mode default below silently
-        # promotes it to a trunk (an access port becoming a trunk on reparse).
+        # ``port-mode trunk`` port must record mode=trunk here, otherwise the
+        # ``vlan members``-without-explicit-mode default below (access, the
+        # switch's own) makes an access port of a trunk.
         if (
             unit_num == 0
             and len(tokens) >= 7
@@ -2803,6 +2816,38 @@ def _apply_vlans(
         # convention).  A future enrichment could stash pending
         # mappings.
         return
+
+
+#: How many port names the row for access ports in several VLANs
+#: shows; it counts the rest.
+IN_SEVERAL_SHOWN = 3
+
+
+def _in_several_vlans_row(names: list[str]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for every access port
+    whose ``vlan members`` name more than one VLAN, or none.
+
+    Such a port is written in its first VLAN.  The row names a few
+    of the ports and counts the rest, so a config of thousands of
+    them is one row.
+
+    Args:
+        names: The ports, in the order they were read.
+
+    Returns:
+        ``[]`` or the one row.
+    """
+    if not names:
+        return []
+    shown = ", ".join(names[:IN_SEVERAL_SHOWN])
+    rest = len(names) - IN_SEVERAL_SHOWN
+    if rest > 0:
+        shown += f" and {rest} more"
+    return [
+        f"interfaces {shown}: family ethernet-switching vlan members -- an "
+        f"access port (no interface-mode is access) that names more than "
+        f"one VLAN is written in its first VLAN only"
+    ]
 
 
 def _describe_vlans(intent: CanonicalIntent, descriptions: dict[str, str]) -> None:
