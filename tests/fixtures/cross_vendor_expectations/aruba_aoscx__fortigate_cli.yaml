@@ -289,10 +289,15 @@ per_field_expectation:
   "vlans[].id":
     disposition: lossy
     reason: >
-      Every VLAN record is dropped on all 7 cells (2, 2, 4, 4, 8, 9 and 13
-      records); on the arch4 cores each rides on `lag 1`.  FortiOS has no VLAN
+      Every VLAN record is dropped on 6 of the 7 cells (2, 2, 4, 4, 8 and 9
+      records), each written on a LAG (on the arch4 cores `lag 1`, and
+      `lag 101`, which carries VLAN 4000).  On the kitchen sink 1 of 13 is
+      dropped, the one on `lag 1`: the other twelve ride on `1/1/4`, a name
+      the bare pipeline translates no further and the FortiGate parser does
+      not read as a port, and come back with their ids.  FortiOS has no VLAN
       apart from a VLAN interface on a parent: the render writes each VLAN as
-      one on the port or aggregate it chooses for every VLAN interface, and
+      one on the aggregate or port that carries it in the source (one it
+      chooses where none does), and
       the FortiGate parser reads a VLAN interface on an aggregate, or on a
       port it knows by its name, back as a routed sub-interface of it, its tag
       the VLAN's id, with no VLAN record (fortigate_cli declares

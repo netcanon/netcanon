@@ -224,7 +224,15 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Arista's `vlan 100 / name USERS` is not
+      A VLAN that comes back keeps its id; one whose VLAN interface the
+      render writes on a port-channel (the LAG that carries it, or for a VLAN
+      nothing carries the port the render chooses) is read back by the
+      FortiGate parser as a routed sub-interface of it, the id its tag, with
+      no VLAN record: all 8 on `batfish_eos_evpn_vlan_based_leaf.txt` and all
+      17 on `batfish_labval_dc1_leaf2a_eos4230.txt` (on `Port-Channel3`), and
+      3 of 5 on the kitchen sink.  On a port the mesh
+      leaves the EOS name (`Ethernet3`), which the parser does not read as a
+      port, and the VLAN comes back.  Arista's `vlan 100 / name USERS` is not
       the VLAN's name on FortiGate, whose VLAN is an interface named after
       itself (`VL_100` or `<parent>.100`): the name is written as that
       interface's alias (25 characters) where the SVI states no description of

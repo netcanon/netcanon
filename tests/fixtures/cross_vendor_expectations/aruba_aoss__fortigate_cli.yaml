@@ -247,7 +247,15 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Aruba's `vlan 100 / name "USERS"` is not
+      A VLAN that comes back keeps its id; one whose VLAN interface the
+      render writes on a trunk (`trk1`) is read back by the FortiGate parser
+      as a routed sub-interface of it, the id its tag, with no VLAN record:
+      all 5 on the kitchen sink (four that `trk1` carries, and VLAN 1, which
+      nothing carries and the render puts there) and 1 of 3 on
+      `aruba_central_5memberstack_rendered.cfg` (VLAN 20, which `trk1`
+      carries).  On a port the mesh leaves
+      the AOS-S name (`1/26`), which the parser does not read as a port, and
+      the VLAN comes back.  Aruba's `vlan 100 / name "USERS"` is not
       the VLAN's name on FortiGate, whose VLAN is an interface named after
       itself (`VL_100`): the name is written as that interface's alias (25
       characters), which the FortiGate parser reads back as the VLAN's

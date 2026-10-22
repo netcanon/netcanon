@@ -189,7 +189,7 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Cisco's `vlan 100 / name DATA` is not the
+      A VLAN that comes back keeps its id.  Cisco's `vlan 100 / name DATA` is not the
       VLAN's name on FortiGate, whose VLAN is an interface named after itself:
       the name is written as that interface's alias (25 characters) where the
       SVI states no description of its own, and in a `# review:` line beside
@@ -203,13 +203,15 @@ per_field_expectation:
       manually reconstruct multi-port VLAN membership.  And the list
       changes size where a VLAN interface's parent is read back otherwise.
       Every VLAN interface the render writes, a VLAN's or a routed
-      sub-interface's, is FortiOS's VLAN interface on a parent, and the
-      FortiGate parser reads one on an aggregate or on a port it knows by
-      its name as a routed sub-interface of it, with no VLAN record, and
-      any other as a VLAN of its tag.  The mesh leaves IOS-XE names as
-      they are, so a VLAN on `Port-channel1` is dropped
-      (`user_contrib_cat9300_iosxe1712.txt` 6 -> 2,
-      `batfish_cisco_interface.txt` 9 -> 8), and a sub-interface on a
+      sub-interface's, is FortiOS's VLAN interface on a parent -- for a VLAN,
+      the port-channel or port that carries it (one the render chooses where
+      none does) -- and the FortiGate parser reads one on an aggregate or on
+      a port it knows by its name as a routed sub-interface of it, with no
+      VLAN record, and any other as a VLAN of its tag.  The mesh leaves
+      IOS-XE names as they are, so a VLAN on `Port-channel1` is dropped (all
+      6 on `user_contrib_cat9300_iosxe1712.txt`, all 9 on
+      `batfish_cisco_interface.txt` and all 4 on the kitchen sink, each
+      carried by it), and a sub-interface on a
       port FortiOS does not name grows the list:
       `ntc_carrier_interfaces.txt` goes from no VLAN record to six, each of
       2234 (the outer tag of six Q-in-Q units, which the IOS-XE parser
