@@ -12,7 +12,7 @@
 #   - hostname / domain / DNS / NTP / syslog / radius / time-zone
 #   - 8 interfaces (ge ethernet x2, lo0, ae0 LAG, irb SVI, em0/fxp0 mgmt)
 #     covering IPv4 + IPv6 + link-local, VLAN trunk + native, MTU
-#   - 4 named VLANs, 3 with VXLAN VNI mappings + switch-options globals
+#   - 5 named VLANs, 3 with VXLAN VNI mappings + switch-options globals
 #   - static routes (IPv4 default, IPv4 named, IPv6 default,
 #     per-VRF under TENANT_A routing-instance)
 #   - 3 routing-instances (vrf, mac-vrf, virtual-router) with RD,
@@ -70,10 +70,11 @@ set apply-groups GLOBAL-SETTINGS
 set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31
 set interfaces ge-0/0/0 unit 0 family inet6 address 2001:db8::1/64
 #
-# ge-0/0/1: VLAN trunk + native (Junos ethernet-switching surface;
-# the trunk/native sub-paths are Tier-3 parse-and-ignore in v1, but
-# we include them for realism and round-trip).  Per-unit vlan-id
-# below populates CanonicalInterface.access_vlan.
+# ge-0/0/1: VLAN trunk + native (Junos ethernet-switching surface).
+# The native VLAN is stated in the grammar before ELS, under the unit
+# and off the members: the trunk carries VLAN 1 (`default`, below)
+# untagged.  Per-unit vlan-id below populates
+# CanonicalInterface.dot1q_vlan.
 set interfaces ge-0/0/1 description "Trunk to access switch"
 set interfaces ge-0/0/1 mtu 9100
 set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode trunk
@@ -131,8 +132,9 @@ set interfaces fxp0 unit 0 family inet address 192.168.99.10/24
 set interfaces ge-0/0/9 description "Reserved -- administratively down"
 set interfaces ge-0/0/9 disable
 #
-# --- VLANs (4 named, 3 with VXLAN VNI mappings) ---
+# --- VLANs (5 named, 3 with VXLAN VNI mappings) ---
 #
+set vlans default vlan-id 1
 set vlans USERS vlan-id 10
 set vlans USERS vxlan vni 10010
 set vlans VOICE vlan-id 20

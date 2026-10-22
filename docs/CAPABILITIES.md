@@ -2732,8 +2732,12 @@ matter; the matrix is honest about both.
     (`port-mode trunk`) the native VLAN belongs off the members --
     Juniper's knowledge base has it sent tagged there when it is a
     member -- so the output is not for such a switch as it stands.
-    As a source, a trunk in the older grammar loses its native VLAN:
-    `native-vlan-id` under the unit is not read.
+    As a source, the older grammar's `native-vlan-id` under the unit
+    is read: off the members it is the trunk's native VLAN, carried
+    untagged, and written in the ELS grammar.  What the tree has no
+    form for is said in a row: a native VLAN that is a member as well (received untagged and sent tagged, which the tree has no form for), one on a port that is not a trunk, one beside a `native-vlan-id` on the interface itself, and one that is not a VLAN id.
+    ⚠️ Up to 0.7.7 the statement was not read at all, and the trunk's
+    untagged VLAN was lost with nothing said.
   * **`vlan dot1q tag native exclude control` comes back, where the
     line comes back at all, as the line without its last two
     words.**  It is read as the line for every trunk, which is

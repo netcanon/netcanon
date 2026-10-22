@@ -592,6 +592,34 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos trunk's native VLAN in the grammar before ELS is read.**
+  EX switches before ELS state a trunk's native VLAN under the unit,
+  `unit 0 family ethernet-switching native-vlan-id <id>` ("Configure
+  the VLAN identifier to associate with untagged packets received on
+  the interface"), beside its `vlan members`: not a member, the VLAN
+  is carried untagged both ways; a member as well, it is received
+  untagged and sent tagged (Juniper KB17419, for non-ELS EX
+  switches).  The parser read `port-mode trunk` and nothing of the
+  statement, so the trunk's untagged VLAN was lost onto every target,
+  Junos included, in jobs that said nothing.  A native VLAN off the
+  members is now the trunk's native VLAN, put into its list (the
+  list is what a trunk carries), and written in each target's form
+  -- onto Junos in the ELS grammar, as before.  What the tree has no
+  form for is said in a row of the Tier-3 banner, one row for each
+  reason, naming a few: a native VLAN that is a member as well (the
+  VLAN stays on the list, tagged), one on a port that is not a trunk,
+  one beside a `native-vlan-id` on the interface itself, and one
+  that is not a VLAN id.  No real capture has the statement (the one
+  in that grammar states no native VLAN); the synthetic Junos kitchen
+  sink's trunk has one, and now declares the VLAN it names
+  (`default`, VLAN 1), as a switch does.  Guarded by
+  shapes `p1` and `p2` of
+  `tests/unit/migration/test_the_list_holds_the_native_vlan.py`, whose
+  reader of Junos text now reads the statement beside the members,
+  onto every target both ways, and by
+  `tests/unit/migration/codecs/juniper_junos/test_the_older_grammar_native_vlan.py`
+  for the rows.
+
 - **A routed port's untagged frames go to the sub-interface that
   says so.**  Junos `native-vlan-id <tag>` on a device whose units
   carry tags names the unit of that `vlan-id` as the one that takes
@@ -4820,10 +4848,8 @@ timestamp if your timezone matters for an audit.
     switch that takes the older grammar (`port-mode trunk`,
     `native-vlan-id` under the unit) the native VLAN belongs OFF the
     members -- on them it is sent tagged, by Juniper's knowledge
-    base -- so an output is not for such a switch as it stands.  As
-    a source, a trunk in the older grammar is read as an ELS one and
-    its `native-vlan-id` under the unit is not read at all: its
-    untagged VLAN is lost, and the job does not say so.
+    base -- so an output is not for such a switch as it stands.  (As
+    a source, the older grammar's native VLAN is read: see Fixed.)
   - *A VLAN nothing carries has no line on OS10.*  OS10 has a VLAN
     through an SVI or a port's membership.  A VLAN that is in the
     tree only as a trunk's native VLAN outside its list, with no

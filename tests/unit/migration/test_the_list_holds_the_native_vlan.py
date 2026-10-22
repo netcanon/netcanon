@@ -243,7 +243,10 @@ LIST, BESIDE = "the list decides", "beside the list"
 #: holds the two to each other.  (Junos is its ELS grammar here --
 #: ``interface-mode trunk``, ``native-vlan-id`` on the physical
 #: interface -- which is what the codec writes.  The older grammar
-#: states the native VLAN beside its members and is not this row.)
+#: states the native VLAN beside its members, under the unit, and is
+#: not this row: this module's reader of Junos text reads that
+#: statement beside the members (KB17419), and its parser puts the
+#: VLAN into the list, shapes (p1) and (p2).)
 HOW_IT_IS_STATED = {
     "arista_eos": LIST,
     "aruba_aoscx": LIST,
@@ -687,6 +690,8 @@ def _read_junos(text: str) -> dict[str, Port]:
     mode: dict[str, str] = {}
     members: dict[str, list[str]] = collections.defaultdict(list)
     native: dict[str, int] = {}
+    # The older grammar's, under the unit and beside the members.
+    beside: dict[str, int] = {}
     switching = r"set interfaces (\S+) unit 0 family ethernet-switching "
     for line in text.splitlines():
         if m := re.fullmatch(r'set vlans ("[^"]*"|\S+) vlan-id (\d+)', line):
@@ -698,6 +703,8 @@ def _read_junos(text: str) -> dict[str, Port]:
             members[m.group(1)].extend(word.strip('"') for word in words)
         elif m := re.fullmatch(r"set interfaces (\S+) native-vlan-id (\d+)", line):
             native[m.group(1)] = int(m.group(2))
+        elif m := re.fullmatch(switching + r"native-vlan-id (\d+)", line):
+            beside[m.group(1)] = int(m.group(2))
     out: dict[str, Port] = {}
     for name in set(mode) | set(members):
         ids: set[int] = set()
@@ -709,7 +716,11 @@ def _read_junos(text: str) -> dict[str, Port]:
                 ids |= _ids(word)
             else:
                 ids.add(vlan_id.get(word, -1))    # -1: a name the output declares no VLAN for
-        if mode.get(name) == "trunk":
+        if mode.get(name) == "trunk" and name in beside and not (every or beside[name] in ids):
+            # Not a member: carried untagged both ways (KB17419).  A
+            # member as well is sent tagged, and is read so below.
+            port = _port(BESIDE, "trunk", None, beside[name], _listed(ids))
+        elif mode.get(name) == "trunk":
             port = _port(LIST, "trunk", None, native.get(name), ALL if every else _listed(ids))
         else:
             port = _port(LIST, "access", next(iter(ids), None), None, frozenset())
@@ -1663,6 +1674,12 @@ def _junos(*trunk: str) -> str:
     ])
 
 
+def _junos_older(*trunk: str) -> str:
+    """A trunk in the grammar of EX switches before ELS: ``port-mode``,
+    and its native VLAN under the unit, beside its members."""
+    return _junos(*trunk).replace("interface-mode", "port-mode")
+
+
 def _aoss(ten: tuple[str, ...], twenty: tuple[str, ...], thirty: tuple[str, ...]) -> str:
     return "\n".join([
         "; J9727A Configuration Editor; Created on release #WB.16.08.0001",
@@ -1735,6 +1752,12 @@ SHAPES: dict[tuple[str, str], str] = {
     ("juniper_junos", "b"): _junos("native-vlan-id 10", f"{_MEMBERS} twenty", f"{_MEMBERS} thirty"),
     ("juniper_junos", "c"): _junos(f"{_MEMBERS} twenty", f"{_MEMBERS} thirty"),
     ("juniper_junos", "d"): _junos("native-vlan-id 10"),
+    # The older grammar: the native VLAN under the unit, off the
+    # members (p1), and with no members (p2).
+    ("juniper_junos", "p1"): _junos_older(
+        "unit 0 family ethernet-switching native-vlan-id 10", f"{_MEMBERS} twenty", f"{_MEMBERS} thirty",
+    ),
+    ("juniper_junos", "p2"): _junos_older("unit 0 family ethernet-switching native-vlan-id 10"),
     # OS10 has no native line: the access VLAN of a trunk is its
     # untagged VLAN, and the allowed line names tagged VLANs.  (a) is
     # a text its parser reads; this module holds its renderer to never
@@ -1814,6 +1837,10 @@ CARRIES: dict[tuple[str, str], tuple[int | None, frozenset[int]]] = {
     ("juniper_junos", "b"): (None, frozenset({20, 30})),
     ("juniper_junos", "c"): (None, frozenset({20, 30})),
     ("juniper_junos", "d"): (None, frozenset()),
+    # Beside the members, a native VLAN that is not one is carried
+    # untagged (KB17419).
+    ("juniper_junos", "p1"): (10, _EVERY),
+    ("juniper_junos", "p2"): (10, frozenset({10})),
     ("dell_os10", "a"): (10, _EVERY),
     ("dell_os10", "b"): (10, _EVERY),
     ("dell_os10", "c"): (None, frozenset({20, 30})),
@@ -2245,6 +2272,10 @@ def test_the_same_text_comes_back(source: str, shape: str) -> None:
     want = lines(SHAPES[(source, shape)])
     if (source, shape) == ("dell_os10", "a"):
         want = lines(SHAPES[(source, "b")])
+    if (source, shape) == ("juniper_junos", "p1"):
+        want = lines(SHAPES[(source, "a")])       # the codec writes ELS: the native VLAN on the members
+    if (source, shape) == ("juniper_junos", "p2"):
+        want = lines(_junos("native-vlan-id 10", f"{_MEMBERS} ten"))
     if source == "aruba_aoscx" and shape == "d":
         want.append("vlan trunk allowed all")     # the switch adds it, and prints it
     if source == "aruba_aoscx" and shape in ("f", "g"):
