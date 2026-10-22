@@ -546,6 +546,18 @@ the policy locally:
   is preserved on the canonical model — sanitisation happens only at
   the wire boundary.
 
+* **`netcanon/migration/_one_line.py`** — a value is written on one
+  line.  Public API: `one_line_each(tree)` (the pipeline's, after the
+  transforms: each run of line breaks as one space, in place, and the
+  places it did so, for the job's warnings), `first_line_break(tree)`
+  (the check `CodecBase.render` makes: a tree that still holds a break
+  is a `RenderError`), `LINE_BREAKS`.  A renderer needs to do nothing:
+  it is never handed a value of more than one line, whatever the field,
+  so it may put any value into its line as it stands.  A parser that
+  reads a value of several lines (FortiOS between its quotes, the XML
+  parsers) keeps it as it is; the layout is lost on the way out, and
+  the job says where.
+
 * **`netcanon/migration/canonical/transforms.py::project_switchport_to_vlan`**
   — projects per-iface switchport state (`switchport_mode`,
   `access_vlan`, `trunk_allowed_vlans`) back into VLAN-centric
