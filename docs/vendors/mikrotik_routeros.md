@@ -174,6 +174,11 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   parser reads a string back whole; it reads `\` and the character
   after it as that character, so a hex escape (`\C3\A9`), `\n` or `\_`
   in an export reaches the target as the letters.
+- **A user whose password cannot be carried is left out** as a target,
+  with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7 the `/user
+  add group=... name=...` line stayed without its password, and
+  RouterOS gives such a user a blank one; read old outputs for an
+  `add` after a `review:` line.
 - **VLAN interfaces, bridges and names of your own, onto another
   vendor** — the port translator reads the names RouterOS gives a
   port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN

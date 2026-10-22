@@ -568,68 +568,49 @@ per_field_expectation:
   # -- Identity -- everyone arrives, renamed and re-encoded -------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      The account inventory is intact: 17 local-user records across all 13
-      cells, 17 after parse -> render -> re-parse, zero dropped, same names.
-      The render emits `config system admin / edit "<name>"` for every one.
-      Both matrices declare `/local-users/user/name` supported.
-      Worth stating because a raw drift-shape reading of this pair reports
-      `local_users` as drifting on all 13 cells and invites the wrong
-      conclusion: no account disappears here.  What changes is the role token
-      and the password encoding, and those are recorded once each below,
-      where they are measured.
+    disposition: lossy
+    reason: >
+      1 of 17 accounts arrive across the 13 cells that populate local users; the
+      list shrinks on 12 of them. The 16 accounts that vanish carry 16 SHA-512
+      crypt (`$6$`). FortiOS can consume its own `ENC` ciphertext or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 1 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [vyos-fortigate-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      The role vocabulary is rewritten on every record: 17 of 17 accounts
-      across all 13 cells go from `admin` to `super_admin`.  That is the
-      FortiOS accprofile namespace and `super_admin` is its full-privilege
-      profile, so this is a translation rather than a privilege escalation —
-      the canonical string no longer matches what the source said, which is
-      what this key measures.  Both matrices declare `/local-users/user/role`
-      supported, and neither declares the mapping.
-      The honest limit of the measurement, stated rather than glossed: EVERY
-      source record on this corpus carries role `admin`.  There is no
-      operator or read-only account in any committed VyOS fixture, so this
-      pair says nothing about whether a lower privilege level maps to a lower
-      accprofile or also flattens to `super_admin`.  Verify that case
-      directly before migrating a device with non-admin accounts — a
-      read-only account arriving as `super_admin` is a privilege escalation,
-      and this corpus cannot tell you whether that happens.
-      Recorded `lossy`, not `unsupported`: the field is populated on the
-      target, the account survives, and the value is transformed rather than
-      dropped.
+      On the 1 account that survives, the role changes: `admin` -> `super_admin`
+      on 1. Mechanism: FortiOS carries an access profile: privilege 15 renders
+      `super_admin`, anything else the canonical role (or `prof_admin`), and the
+      parser reads the profile back as the role. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [vyos-fortigate-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on 16 of 17 records across 12 cells — the 17th does not drift
-      only because its source hash is empty.  The transformation is a
-      constant re-encoding and it was verified record by record, not
-      sampled: the target value equals the literal string `fortios:ENC `
-      followed by the source value, byte for byte, on every drifting record.
-      Source values on this corpus are all in the `$6$` crypt scheme and run
-      10 to 106 characters; target values are exactly 12 characters longer.
-      THE CREDENTIAL IS CARRIED.  This is the benign half of the failure mode
-      that Cisco-sourced pairs hit — no hash body is truncated, replaced, or
-      degraded into a cleartext marker, and a FortiGate reading back its own
-      `set password ENC <hash>` line recovers the same digest.  What differs
-      is the canonical string, which is why the audit sees drift and why this
-      is recorded as a loss at all.
-      Still worth an operator check rather than a shrug: confirm one migrated
-      account can actually authenticate on the target before cutover, because
-      a preserved digest is only useful if the target's password subsystem
-      accepts that crypt scheme.
-      `privilege_level` was measured separately and drifts on no record, even
-      though vyos declares `/local-users/user/privilege-level` lossy on its
-      own side.
-      No hash body is quoted anywhere in this file or its reference doc —
-      only the crypt-scheme marker, the constant prefix and the string
-      lengths are described.
+    disposition: good
+    note: >
+      No secret is written in a form FortiOS cannot consume. 16 accounts are
+      refused for their secret (16 SHA-512 crypt (`$6$`)) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account with a
+      stored secret arrives, so there is no value to compare. Recorded `good`
+      rather than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was written
+      as an `edit` with its access profile and no `set password` -- an admin
+      with no password; a refused secret now drops the whole account, as on
+      every other target. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [vyos-fortigate-surface]
 
   radius_servers:

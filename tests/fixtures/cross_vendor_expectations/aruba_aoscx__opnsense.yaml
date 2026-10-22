@@ -531,48 +531,47 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users — the
-      account arrives as `<system><user><name>`.  The account exists on the
-      target; see `hashed_password` for why it cannot yet be logged into.
+    disposition: lossy
+    reason: >
+      1 of 7 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 5 of them. The 6 accounts that vanish carry 6 AOS-CX `AQB`
+      device-keyed ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or
+      SHA-512 crypt (`$6$`) in `<password>`, or a genuine plaintext password;
+      anything else is refused with a review comment naming the account, in
+      place of the account. Up to 0.7.7 such an account was written as a
+      `<user>` element with no `<password>`; a refused secret now drops the
+      whole account, as on every other target. The survivors are 1 carrying 1
+      plaintext password. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [aoscx-opnsense-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 populated cells, and the mechanism is a deliberate remap
-      rather than a loss: the AOS-CX `administrators` role renders to the
-      OPNsense `admins` group and re-parses as `admin`; `operators` maps to
-      `user`.  Measured on the kitchen sink, which carries both.  aruba_aoscx
-      also declares `/local-users/user/privilege-level` lossy in its own right.
-      The privilege intent is preserved and arguably correct, but two things
-      follow: any downstream tooling keyed on the literal role string stops
-      matching, and an OPNsense `admin` has unrestricted access to a box that
-      is now the security boundary.  Review the mapping before the account
-      becomes production.
+      On the 1 account that survives, the role changes: `administrators` ->
+      `admin` on 1. Mechanism: the OPNsense render places an admin-tier account
+      in the `admins` group and everything else in `users`, and the parser maps
+      those back to `admin` / `user`. Accounts refused for their secret vanish
+      with their role and are counted once, under `local_users[].name`; this key
+      is about the value on accounts that survive.
     references: [aoscx-opnsense-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users, and this one was
-      settled by inspecting the render.  AOS-CX stores the user secret in its
-      own encrypted form — an `AQB...`-prefixed ciphertext blob — and the
-      OPNsense renderer writes that blob verbatim into `<system><user>
-      <password>`.  Re-parsing labels it as a bcrypt hash: the canonical string
-      grows by exactly the 7 characters of a `bcrypt:` scheme prefix on every
-      user on every cell and is otherwise byte-identical.
-      So nothing is deleted, which is why this is `lossy` and not
-      `unsupported` — but the bytes surviving is not the credential surviving.
-      OPNsense authenticates `<password>` as a crypt-format hash (the `$2y$`
-      bcrypt shape); an ArubaOS-CX ciphertext blob sitting in that element,
-      labelled bcrypt, is not a password any OPNsense box can ever verify.
-      Every migrated account arrives without a working credential: set
-      passwords on the target before cutover, or you will be locked out of the
-      firewall you just migrated.
-      The ciphertext is deliberately NOT quoted here — it is operator-traceable
-      key material even though it is encrypted (AGENTS.md).
+      1 typed password is written into `<password>` as it stands and read back
+      tagged `bcrypt:`. OPNsense checks `<password>` as a hash
+      (`password_verify()`), so such an account is not known to log in with the
+      password it was given (an open item). 6 accounts are refused for their
+      secret (6 AOS-CX `AQB` device-keyed ciphertext) and vanish with it; that
+      loss is recorded once, under `local_users[].name`. Recorded `lossy`
+      because the value changes on surviving accounts. Up to 0.7.7 such an
+      account was written as a `<user>` element with no `<password>`; a refused
+      secret now drops the whole account, as on every other target. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [aoscx-opnsense-surface]
 
   # -- Fabric ---------------------------------------------------------------

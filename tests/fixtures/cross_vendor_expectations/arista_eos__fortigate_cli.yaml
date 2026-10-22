@@ -319,23 +319,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Arista's numeric privilege levels (1-15) plus role string
-      (``role network-admin``) flatten onto FortiGate's named
-      accprofile strings (``super_admin`` / ``prof_admin`` /
-      custom): privilege >= 15 -> ``super_admin``; lower ->
-      ``prof_admin``.  Granular Cisco-style privilege levels
-      (2-14) are flattened.  Hash formats are NOT cross-
-      compatible: Arista ``$1$`` (md5_crypt), ``$6$``
-      (sha512_crypt — modern EOS default), ``$8$`` (PBKDF2),
-      ``$9$`` (scrypt) and ``secret 7`` (Cisco type-7 reversible)
-      are none of them accepted by FortiOS.  FortiOS uses its
-      proprietary ``ENC <opaque-base64>`` form keyed to the
-      device.  Cross-vendor migration of admin accounts requires
-      re-setting passwords on the target — and modern EOS uses
-      sha512_crypt by default, so this bites every migration.
-      Both codecs preserve hashes verbatim with vendor tags
-      (``arista_eos:`` / ``fortios:``) so the loss surfaces in
-      the validation report.
+      3 of 12 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 6 of them. The 9 accounts that vanish carry 7 SHA-512
+      crypt (`$6$`), 2 MD5 crypt (Cisco type 5). FortiOS can consume its own
+      `ENC` ciphertext or a genuine plaintext password; anything else is refused
+      with a review comment naming the account, in place of the account. Up to
+      0.7.7 such an account was written as an `edit` with its access profile and
+      no `set password` -- an admin with no password; a refused secret now drops
+      the whole account, as on every other target. The survivors are 3 with no
+      stored secret. Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [local_users]
 
   radius_servers:

@@ -236,6 +236,9 @@ instead of assuming it from this pair.
 
 ### Password → `fortios:ENC ` prefix, body intact
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the FortiOS render wrote such an account as an `edit` with its access profile and no `set password` -- an admin with no password.  Measured after the change: **1 of 17** local accounts arrive across the 13 cells that populate users; 16 are refused for a secret FortiOS cannot consume (16 SHA-512 crypt (`$6$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__fortigate_cli.yaml`.
+
 `hashed_password` drifts on **16 of 17** records across 12 cells. The 17th does
 not drift because its source hash is empty.
 

@@ -112,6 +112,25 @@ timestamp if your timezone matters for an audit.
   source whose credentials hold white space or a quote is worth reading
   for the lines it wrote.
 
+- **A local user whose password could not be carried was written onto
+  FortiOS and RouterOS with no password at all.**  When a target cannot
+  take a source's password hash, the account is to be left out with a
+  review line.  FortiOS, RouterOS and OPNsense wrote the review line
+  and then the account without its password: `edit "<name>"` with its
+  access profile (`super_admin` for a privilege-15 user), `/user add
+  group=full name=<name>`, a `<user>` element.  RouterOS documents that
+  a user added with no password has a blank one, and a FortiOS admin
+  with no `set password` is the same.  Over the committed captures, 93
+  accounts in 66 captures onto FortiOS, 99 in 70 onto RouterOS, and 60
+  in 43 onto OPNsense (where an account with no `<password>` element has no hash to check
+  a password against, so it is not known to log in), in
+  jobs that reported a review line and nothing else.  The account is
+  now left out whole, as on every other target, and the review line
+  stands in its place (Fixed, below).  If you translated a config with
+  local users onto FortiOS or RouterOS with 0.7.7 or earlier, look in
+  the old output for an account under a `review:` line before it
+  reaches a device.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -749,6 +768,18 @@ timestamp if your timezone matters for an audit.
   white space and one with a quote, onto every public line-grammar
   codec, and reads the output as text.  Not yet under the rule: RADIUS
   keys, and names that label (host name, VLAN, VRF) and addresses.
+
+- **A refused password takes its account with it on FortiOS, RouterOS
+  and OPNsense** (Security, above).  The review line is written in
+  place of the account (`edit`, `/user add`, `<user>`), never inside
+  it.  Guarded by `test_a_refused_secret_takes_its_account_with_it` in
+  `tests/unit/migration/test_secret_fail_open.py`, which reads every
+  user-rendering target's output for the account's name outside a
+  comment; it failed on exactly these three.  The expectations of the
+  pairs onto them are re-authored from a round trip of the corpus:
+  from IOS XR and NX-OS no account arrives on any of the three (every
+  stored secret is a form none of them takes), so `local_users[].name`
+  is `unsupported` there; from VyOS and AOS-CX it is `lossy`.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner

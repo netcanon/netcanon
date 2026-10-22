@@ -221,32 +221,62 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      4 of 6 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 1 of them. The 2 accounts that vanish carry 2 SHA-512
+      crypt (`$6$`). FortiOS can consume its own `ENC` ciphertext or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 4 carrying 4 plaintext password.
+      Recorded `lossy` rather than `unsupported`: which account survives is
+      decided by its secret form, and accounts with a consumable secret do
+      arrive. Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target with
+      a fresh password.
     references: [os10-fortigate-surface]
 
   local_users[].hashed_password:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      4 typed passwords are written `set password "<password>"`, for the
+      FortiGate to encrypt on save, and read back tagged `fortios:`: each
+      account holds the password it was given, and the tag is the whole of the
+      change. 2 accounts are refused for their secret (2 SHA-512 crypt (`$6$`))
+      and vanish with it; that loss is recorded once, under
+      `local_users[].name`. Recorded `lossy` because the value changes on
+      surviving accounts. Up to 0.7.7 such an account was written as an `edit`
+      with its access profile and no `set password` -- an admin with no
+      password; a refused secret now drops the whole account, as on every other
+      target. No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [os10-fortigate-surface]
 
   local_users[].name:
     disposition: good
     note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+      4 of 6 accounts arrive across the 3 cells that populate local users; names
+      are preserved on every cell where the list is stable. Accounts DO vanish
+      on 1 cells (2 SHA-512 crypt (`$6$`), refused because FortiOS cannot
+      consume the secret). On those cells the record-count drift is booked on
+      the sub-field that comes first in file order for this parent, so the audit
+      reclassifies this key STRUCTURAL_ONLY there. Recorded `good` for that
+      mechanical reason only; the account loss is real. Up to 0.7.7 such an
+      account was written as an `edit` with its access profile and no `set
+      password` -- an admin with no password; a refused secret now drops the
+      whole account, as on every other target.
     references: [os10-fortigate-surface]
 
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      On the 4 accounts that survive, the role changes: `sysadmin` ->
+      `super_admin` on 4. Mechanism: FortiOS carries an access profile:
+      privilege 15 renders `super_admin`, anything else the canonical role (or
+      `prof_admin`), and the parser reads the profile back as the role. Accounts
+      refused for their secret vanish with their role and are counted once,
+      under `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [os10-fortigate-surface]
 
   ntp_servers:

@@ -1011,12 +1011,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         out.append("config system admin")
         for user in tree.local_users:
+            # A secret FortiOS cannot take drops the WHOLE account: an
+            # admin written without its password is an admin with none
+            # (the review line used to sit inside the ``edit``, with the
+            # access profile after it).
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "fortigate_cli",
+            ):
+                algorithm, _payload = classify_hash(user.hashed_password)
+                out.append("    " + format_review_comment(
+                    user.name, algorithm, comment_syntax="hash",
+                    target_label="FortiOS",
+                ))
+                continue
             # This device's own blob is written bare, so one that holds
             # white space is not one value; the account is left out whole
             # rather than written with no password.
-            if user.hashed_password and is_migratable(
-                user.hashed_password, "fortigate_cli",
-            ):
+            if user.hashed_password:
                 algorithm, payload = classify_hash(user.hashed_password)
                 if (
                     algorithm == "fortios" and payload.startswith("ENC ")
@@ -1038,33 +1049,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # FortiOS would either reject at commit time or, worse,
             # parse as garbage.  Now we consult the shared
             # :mod:`netcanon.migration._user_secrets` policy and
-            # emit a comment-form ``review:`` line instead, naming
-            # the source algorithm so the operator knows exactly
-            # which user to reset.  Native fortigate hashes tagged
-            # ``fortios:<blob>`` still pass through unchanged.
+            # emit a comment-form ``review:`` line instead (above,
+            # in place of the account), naming the source algorithm so
+            # the operator knows exactly which user to reset.  Native
+            # fortigate hashes tagged ``fortios:<blob>`` still pass
+            # through unchanged.
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "fortigate_cli"):
-                    # This FortiGate's own ``ENC <blob>`` goes back as the
-                    # device printed it.  Anything else that passed the
-                    # gate is a password as it was TYPED, and is written
-                    # as one quoted value for FortiOS to encrypt on save:
-                    # under ``ENC`` it would be read as a blob it is not
-                    # (and a typed password with a space was two words).
-                    algorithm, payload = classify_hash(user.hashed_password)
-                    if algorithm == "fortios" and payload.startswith("ENC "):
-                        out.append(f"        set password {payload}")
-                    else:
-                        out.append(
-                            f'        set password "{_esc(payload)}"'
-                        )
+                # This FortiGate's own ``ENC <blob>`` goes back as the
+                # device printed it.  Anything else that passed the gate
+                # is a password as it was TYPED, and is written as one
+                # quoted value for FortiOS to encrypt on save: under
+                # ``ENC`` it would be read as a blob it is not (and a
+                # typed password with a space was two words).
+                algorithm, payload = classify_hash(user.hashed_password)
+                if algorithm == "fortios" and payload.startswith("ENC "):
+                    out.append(f"        set password {payload}")
                 else:
-                    algorithm, _payload = classify_hash(
-                        user.hashed_password,
-                    )
-                    review_comment = format_review_comment(
-                        user.name, algorithm, comment_syntax="hash", target_label="FortiOS"
-                    )
-                    out.append(f"        {review_comment}")
+                    out.append(f'        set password "{_esc(payload)}"')
             # Map canonical privilege back to accprofile.
             accprofile = (
                 "super_admin" if user.privilege_level == 15

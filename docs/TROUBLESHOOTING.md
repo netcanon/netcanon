@@ -526,9 +526,12 @@ form (e.g. Cisco type-7) doesn't have a target equivalent, the
 rendered output gets a `# REVIEW: <hash> from <source vendor>`
 comment instead of a plaintext password.
 
-**Action:** re-issue the hash on the target device using the
-target's native CLI (`enable secret`, `set system root-authentication
-plain-text-password`, etc.).
+The account itself is left out with it, on every target: an account
+written without the password it had would be an account with none.
+
+**Action:** re-create the user on the target device and set its
+password with the target's native CLI (`username ... secret`, `set
+system login user ... authentication plain-text-password`, etc.).
 
 ### "review: a value of it holds white space or a quote"
 

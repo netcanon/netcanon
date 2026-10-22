@@ -269,6 +269,11 @@ loses the layout too.
   again.  Names and secrets FortiOS takes in quotes (an admin's name
   and access profile, the SNMP community, an SNMPv3 user and its keys,
   a VRRP key) are written with FortiOS's escape for a `"` and a `\`.
+- **An admin whose password cannot be carried is left out** as a
+  target, with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7
+  the admin was written without its password (`edit`, `set accprofile
+  "super_admin"`) — an admin with no password; read old outputs for
+  an `edit` after a `review:` line.
 - **Declaring a FortiGate as the source device** — with both devices
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still

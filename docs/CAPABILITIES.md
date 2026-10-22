@@ -771,6 +771,10 @@ in rendered output find every such site.
      since #462 both defer to the crypt(3) id inside the payload (`$9$`
      excepted, being both Juniper-reversible and Cisco type-9).  OPNsense
      accepts bcrypt and SHA-512 crypt.
+  4. The account goes with its secret, on every target: the review line
+     stands in place of the account, never inside it.  FortiOS, RouterOS
+     and OPNsense used to write the account without its password, and a
+     RouterOS user added with no password has a blank one.
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth
