@@ -142,9 +142,10 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      Measured across all 7 cells: ZERO interface records are lost, and 30 are
-      added (9 -> 11, 18 -> 22, 42 -> 46, 22 -> 30, 44 -> 50, 13 -> 17 on the
-      real cells plus the synthetic kitchen sink).  Surviving names come back
+      Measured across all 7 cells (2026-10-21): ZERO interface records are
+      lost, and 42 are added (9 -> 11 twice, 18 -> 22, 42 -> 46, 22 -> 30,
+      44 -> 53 on the real cells, 13 -> 26 on the synthetic kitchen sink).
+      Surviving names come back
       verbatim; the additions are the FortiOS renderer synthesising an 802.1Q
       child `edit "vlan<id>" / set type vlan / set vlanid <id> / set interface
       "<parent>"` for every canonical VLAN, which the re-parse reads back as a
@@ -153,13 +154,20 @@ per_field_expectation:
       Recorded `lossy` rather than `unsupported` deliberately: nothing is
       dropped or blocked, so the migration stays compatible — but the inventory
       an operator reviews is not the inventory they wrote.  Two consequences to
-      act on before pushing the render.  First, on 3 of 7 cells
-      (`aoscx_dcn_arch4_core1_1`, `aoscx_dcn_arch4_core1_2`, `kitchen_sink`)
-      the same IPv4 address lands on BOTH the passthrough SVI record and the
-      synthesised child, which a real FortiGate rejects as a duplicate subnet —
-      delete one copy.  Second, every child is parented to the FIRST
-      CanonicalLAG on the tree regardless of the VLAN's real membership, so
-      re-parent them by hand.
+      act on before pushing a render made WITHOUT port-name translation (the
+      pipeline this audit runs).  First, on 5 of 7 cells
+      (`aoscx_dcn_arch4_core1_1`, `aoscx_dcn_arch4_core1_2`,
+      `canu_csm17_spine001_ipv6_vrf`, `netutils_aoscx_snmpv3_glcx1009`,
+      `kitchen_sink`) the same IPv4 address lands on BOTH the passthrough SVI
+      record and the synthesised child, which a real FortiGate rejects as a
+      duplicate subnet — delete one copy.  (It was 3 of 7 until the address
+      beside a virtual gateway was written; see `interfaces[].ipv4_addresses`.)
+      Second, on that path every child of a cell is parented to one LAG
+      regardless of the VLAN's real membership, so re-parent them by hand.
+      With port names translated, as every API endpoint and the demo do, the
+      SVI and its child are one interface: no address is on two (measured
+      2026-10-21, 7 of 7 cells), and each child is set on a port or LAG,
+      never on a loopback or the management port.
     references: [aoscx-fortigate-surface]
 
   "interfaces[].description":
@@ -183,7 +191,7 @@ per_field_expectation:
       lossy solely because the parent record list changes size — see
       `interfaces[].name`.  Stated plainly rather than implied, because a
       reader could otherwise take this as evidence that shutdown state is at
-      risk.  The one thing to check is the 30 synthesised `vlan<id>` children,
+      risk.  The one thing to check is the synthesised `vlan<id>` children,
       which are emitted enabled regardless of the SVI they were derived from.
     references: [aoscx-fortigate-surface]
 
@@ -201,16 +209,20 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: lossy
     reason: >
-      Independent evidence, measured on records present on both sides: 15
-      records lose their address list, and in every case the round-trip shows
-      the same prefix reappearing on the synthesised `vlan<id>` child — the
-      address moves mounts, it is not deleted.  What IS deleted is the anycast
-      companion: 15 of 15 `virtual_gateway_address` values are gone, and
-      fortigate_cli declares
-      `/interfaces/interface/ipv4/address/virtual-gateway-address` unsupported
-      (parses-and-ignores in v1, wire-up scheduled for v0.2.0 Wave C).
-      So the subnet migrates and first-hop redundancy does not.  Re-author the
-      gateway addressing on the FortiGate explicitly, and reconcile the
+      15 records carry an anycast companion (`active-gateway`) beside their
+      own address.  Every address of the 7 cells is in the output, on the
+      audit's untranslated path and with port names translated (measured
+      2026-10-21).  Up to 0.7.7 the FortiOS render left out every address
+      row that had a gateway beside it: on the audit's path these 15 records
+      lost their address list and the prefix survived only on the
+      synthesised `vlan<id>` child, and with port names translated (one
+      interface for the SVI and its child) 15 of 15 such addresses were in
+      no line of the output.  What IS deleted is the anycast companion:
+      15 of 15 `virtual_gateway_address` values are gone, and fortigate_cli
+      declares `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported; the job is `partial` for it.  So the subnet migrates and
+      first-hop redundancy does not.  Re-author the gateway addressing on
+      the FortiGate explicitly, and on the untranslated path reconcile the
       duplicate-address hazard flagged under `interfaces[].name`.
     references: [aoscx-fortigate-surface]
 
@@ -314,7 +326,8 @@ per_field_expectation:
       primitive"), along with `.../virtual-gateway-mac` and `.../secondary-ip`.
       This is the field most likely to break first-hop reachability: the
       FortiGate arrives holding the SVI's own address but not the gateway
-      address hosts point at.
+      address hosts point at.  Up to 0.7.7, with port names translated as
+      the API does, it held neither where a gateway was beside the address.
     references: [aoscx-fortigate-surface]
 
   "vlans[].untagged_ports":

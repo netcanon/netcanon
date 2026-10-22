@@ -177,7 +177,11 @@ parse.
 - **No anycast-gateway grammar.**  FortiGate is a firewall / edge
   platform; the three anycast canonical paths
   (`virtual-gateway-address` v4/v6, `anycast-gateway-mac`) are
-  declared `unsupported` and parse-and-ignore.
+  declared `unsupported` and parse-and-ignore.  The interface's own
+  address beside a gateway (Junos `address X virtual-gateway-address
+  Y`, AOS-CX `active-gateway`) is written; only the gateway is
+  dropped, and the validation report lists it.  ⚠️ Up to 0.7.7 the
+  address was dropped with it, and the interface had none.
 
 ### Cross-references
 
