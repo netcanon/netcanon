@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The Docker image no longer carries pip.**  The base image's pip
+  (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
+  intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,
+  CRITICAL), and the gating image scan failed every pull request on
+  it.  netcanon never used that copy -- the server makes no outbound
+  HTTPS request through pip -- but it was in the image.  The runtime
+  stage now uninstalls pip once netcanon is installed, so no copy pip
+  vendors can ship.  If you install packages into the container
+  yourself, `python -m ensurepip` restores a pip, and with it the
+  copy it bundles; build an image of your own on top instead.
+
 - **A value of several lines was written as lines of the config, and
   the text after a line break was a command on the target.**  Every
   renderer puts a value into its line as it stands.  An interface

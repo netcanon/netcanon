@@ -203,7 +203,14 @@ UNENDED_VALUE_MESSAGE = (
 
 
 def _quotes(line: str) -> int:
-    """How many double quotes of *line* open or end a quoted value."""
+    """How many double quotes of *line* open or end a quoted value.
+
+    A line with no backslash holds no escape, and its quotes are
+    counted as they stand: the pattern is for the other lines, and
+    every line of a config is asked, twice.
+    """
+    if "\\" not in line:
+        return line.count('"')
     return sum(1 for m in _QUOTE_OR_ESCAPE.finditer(line) if m.group() == '"')
 
 
@@ -215,7 +222,7 @@ def _leaves_a_value_open(line: str) -> bool:
     between its quotes, a quote or a backslash in it escaped with a
     backslash.  A ``#`` line is a comment, whatever it holds.
     """
-    return not _COMMENT_RE.match(line) and _quotes(line) % 2 == 1
+    return _quotes(line) % 2 == 1 and not _COMMENT_RE.match(line)
 
 
 def _opens_a_quoted_value(text: str, number: int) -> Body | None:

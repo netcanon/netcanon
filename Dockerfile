@@ -75,10 +75,18 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 
 WORKDIR /app
 
-# Install netcanon + dependencies from the prebuilt wheels.
+# Install netcanon + dependencies from the prebuilt wheels, then remove
+# pip itself.  Nothing in the server uses it, and pip carries its own
+# copies of third-party libraries that are pinned by the base image's
+# pip release, not by requirements.lock: the certifi CA bundle that
+# pip 26.2.1 vendors is a CRITICAL advisory (GHSA-6q48-6c7w-9gw2), which
+# the gating Trivy scan in ci.yml found in an image whose own
+# dependencies were clean.  Kept out of the runtime image, pip's copies
+# cannot ship in it.  Guarded by tests/unit/test_dockerfile_runtime_pip.py.
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir --no-index --find-links=/wheels netcanon \
-    && rm -rf /wheels
+    && rm -rf /wheels \
+    && python -m pip uninstall --yes pip
 
 # Per-vendor backup-side device definitions are read by the app's lifespan
 # at startup.  They now ship *inside the wheel* as package data
