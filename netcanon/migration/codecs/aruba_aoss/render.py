@@ -57,16 +57,18 @@ renderer's port-range compression contract:
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Any
 
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    AOSS_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
@@ -790,10 +792,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if server.key and radius_secret_is_migratable(
             server.key, tree.source_vendor, "aruba_aoss",
         ):
-            lines.append(
-                f'radius-server host {server.host} '
-                f'key "{unwrap_native_secret(server.key)}"'
-            )
+            if server.key.startswith(AOSS_ENVELOPE):
+                # The switch's own ``encrypted-key``, going back to AOS-S.
+                lines.append(
+                    f'radius-server host {server.host} '
+                    f'encrypted-key "{server.key[len(AOSS_ENVELOPE):]}"'
+                )
+            else:
+                lines.append(
+                    f'radius-server host {server.host} '
+                    f'key "{unwrap_native_secret(server.key)}"'
+                )
         else:
             lines.append(f"radius-server host {server.host}")
             if server.key:
@@ -802,6 +811,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="semicolon",
                         target_label="Aruba AOS-S",
+                        secret=server.key,
                     )
                 )
         if server.auth_port != 1812 or server.acct_port != 1813:
@@ -1317,31 +1327,86 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     )
         lines.append("   exit")
 
-    # Static routes.  IPv4 default route (0.0.0.0/0) becomes
-    # ``ip default-gateway`` per AOS-S convention; IPv6 destinations use the
-    # ``ipv6 route`` keyword (AOS-S has no ``ipv6 default-gateway`` form, so
-    # a v6 default is just ``ipv6 route ::/0 <gw>``).  Emitting ``ip route``
-    # for a v6 destination is invalid CLI.
+    # Static routes: a line the device takes, or a review line that
+    # says why there is none (:func:`_route_line`).
     for route in tree.static_routes:
-        # Administrative distance → the ``distance N`` suffix (canonical
-        # ``metric``; 0 = unset, emit nothing so the device default applies).
-        dist = f" distance {route.metric}" if route.metric else ""
-        # A next hop that names a LAG is one more place the device
-        # writes ``Trk1``.
-        hop = _as_the_device_writes(route.gateway) if route.gateway else route.gateway
-        if ":" in (route.destination or ""):
-            lines.append(
-                f"ipv6 route {route.destination} {hop}{dist}"
-            )
-        elif route.destination in ("0.0.0.0/0", "default") and not route.metric:
-            # AOS-S convention for the default route.  ``ip default-gateway``
-            # has no admin-distance form, so a default route WITH a metric
-            # falls through to the explicit ``ip route 0.0.0.0/0 <gw>
-            # distance N`` form below instead.
-            lines.append(f"ip default-gateway {hop}")
-        else:
-            lines.append(
-                f"ip route {route.destination} {hop}{dist}"
-            )
+        lines.append(_route_line(route))
 
     return "\n".join(lines) + "\n"
+
+
+#: A next hop that discards the traffic, as the tree names it: IOS-XE,
+#: NX-OS, EOS and IOS XR route to the interface ``Null0``.
+_DISCARD_HOP_RE = re.compile(r"^null[ \t]*0$", re.IGNORECASE)
+
+
+def _is_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _route_line(route: Any) -> str:
+    """The line AOS-S takes for *route*, or a ``; review:`` line that
+    says why it takes none.
+
+    HPE: "The next-hop can be either a gateway IP address, a VLAN, or the
+    keyword "reject" or "blackhole"" (ArubaOS-Switch Multicast and Routing
+    Guide, YC.16.04, "Configuring a static route"), and the guide names
+    no VRF.  So a next hop is written as one of those or not at all:
+
+    * an address -- ``ip route <dest> <address>``, and a v4 default with
+      no distance as ``ip default-gateway <address>`` (which has no
+      distance form).  An interface the route also names is not written:
+      AOS-S takes the address alone.
+    * the discard (``Null0``) -- ``blackhole``, which discards with "no
+      ICMP error notification" to the sender.  Whether the source
+      answered such traffic with an ICMP unreachable is not in the tree.
+    * a VLAN interface -- ``vlan <id>``.
+    * anything else -- a routed port, a LAG, a tunnel, a VRF, or no next
+      hop at all -- has no form on AOS-S.  Written with the name where
+      the hop goes, it was a line the switch refuses (``ip route
+      10.2.0.0/16`` with nothing after it, ``ip route 10.0.0.0/8 Trk1``),
+      and a route in a VRF was written into the switch's one table,
+      where it routes traffic the source routed elsewhere.  It is left
+      out, and the review line names it; the capability matrix holds
+      the job (``/routing/static-route/interface`` and ``/vrf``).
+
+    The administrative distance (canonical ``metric``; 0 = unset) is the
+    ``distance N`` suffix.
+    """
+    dest = route.destination or ""
+    gateway = route.gateway or ""
+    hop = gateway if _is_address(gateway) else ""
+    # A parser that reads an interface as the next hop (RouterOS, VyOS)
+    # puts its name where the gateway goes.
+    via = route.interface or ("" if hop else gateway)
+    if route.vrf:
+        return _route_review(route, f"is in VRF {route.vrf}, and AOS-S has no VRF")
+    keyword = "ipv6" if ":" in dest else "ip"
+    dist = f" distance {route.metric}" if route.metric else ""
+    if hop:
+        if keyword == "ip" and dest in ("0.0.0.0/0", "default") and not route.metric:
+            return f"ip default-gateway {hop}"
+        if dest == "default":
+            dest = "0.0.0.0/0"
+        return f"{keyword} route {dest} {hop}{dist}"
+    if _DISCARD_HOP_RE.match(via):
+        return f"{keyword} route {dest} blackhole{dist}"
+    vlan_id = _vlan_iface_id(via)
+    if vlan_id is not None:
+        return f"{keyword} route {dest} vlan {vlan_id}{dist}"
+    if via:
+        why = (
+            f"goes out {_as_the_device_writes(via)}, and AOS-S names only an "
+            f"address, a VLAN or a null route as a next hop"
+        )
+    else:
+        why = "names no next hop"
+    return _route_review(route, why)
+
+
+def _route_review(route: Any, why: str) -> str:
+    return f"; review: static route {route.destination} {why}; not written"

@@ -60,7 +60,9 @@ different PIC granularity than QFX line cards.
   rename mesh handles the prefix swap.
 * **Loopback.** Cisco's `Loopback0` -> Junos's `lo0` plus Junos
   adds a unit suffix (`lo0.0`).  Same operational unit, different
-  shape.
+  shape.  Another unit of `lo0` is the loopback of a routing instance
+  (Juniper, *Loopback Interfaces*): `Loopback5` in a VRF is `lo0.5`,
+  and a second loopback of the global table has no Junos name.
 * **MTU on parent vs unit.** Cisco's `mtu` lives directly on the
   interface stanza; Junos's `mtu` lives at the parent-interface
   hierarchy (parent of unit-0).  Both codecs collapse to the

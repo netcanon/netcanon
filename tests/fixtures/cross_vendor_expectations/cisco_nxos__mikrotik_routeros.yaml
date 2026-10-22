@@ -439,46 +439,60 @@ per_field_expectation:
   # attributes drop. --
 
   "local_users[].name":
-    disposition: good
-    note: "Account names preserved on all 9 populated cells."
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). RouterOS can consume a genuine plaintext password only (it hashes
+      the password itself); anything else is refused with a review comment
+      naming the account, in place of the account. Up to 0.7.7 such an account
+      was written as `/user add` with no `password=`, which RouterOS gives a
+      blank password; a refused secret now drops the whole account, as on every
+      other target. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and a `lossy` warning would understate a
+      target with no local accounts. It is a property of the source's secret
+      form, not a gap in the RouterOS user model: an account whose secret
+      RouterOS can consume would still migrate. Create a console admin on the
+      target out of band before cutover, then re-create every account with a
+      native credential.
     references: [nxos-routeros-surface]
 
   "local_users[].privilege_level":
     disposition: good
     note: >
-      Preserved on all 9 populated cells: an NX-OS privilege 15 account maps
-      to RouterOS group `full` and re-parses back to 15.  The cisco_nxos
-      matrix declares `/local-users/user/privilege-level` lossy on its own
-      render, but that is a reverse-direction concern; on this pair the value
-      survives every time, so declaring it lossy would be an unevidenced
-      claim.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Recorded `good` rather than
+      `lossy`: the only drift on this key is the parent record-count collapse,
+      which the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with their
+      privilege level and are counted once, under `local_users[].name`.
     references: [nxos-routeros-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 10 populated records: the named NX-OS role collapses onto
-      RouterOS's built-in group vocabulary (`network-admin` -> group `full` ->
-      `admin`).  Privilege is equivalent, but a CUSTOM NX-OS role with
-      scoped rules flattens to a built-in group and loses its restrictions —
-      an account that could only run a narrow command set on the Nexus becomes
-      a full administrator on the RouterOS box.  Re-create custom roles as
-      RouterOS groups with explicit policies.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-routeros-surface]
 
   "local_users[].hashed_password":
-    disposition: unsupported
-    reason: >
-      The credential does not survive at all — 10 records go from an NX-OS
-      type-5 hash (shape `5 $5$<salt>$<digest>`) to `''`.  This is deliberate,
-      not a bug: RouterOS accepts plaintext only, so the renderer refuses to
-      emit a foreign hash as `password=` (doing so would set the password TO
-      the hash string, an auth bypass for anyone who can read the old config)
-      and instead writes a `# password manager ... -- review:` comment above a
-      password-less `/user add`.  RouterOS `/export` omits hashes, so the
-      re-parse confirms the empty field.  EVERY account arrives on the target
-      without a password: set each one by hand at cutover and do not put the
-      device on a reachable network before you do.
+    disposition: good
+    note: >
+      No secret is written in a form RouterOS cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account with a stored secret arrives, so there is no value to compare.
+      Recorded `good` rather than `lossy`: the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7
+      such an account was written as `/user add` with no `password=`, which
+      RouterOS gives a blank password; a refused secret now drops the whole
+      account, as on every other target. No secret value is quoted here or in
+      the reference doc; only shapes and counts.
     references: [nxos-routeros-surface]
 
   radius_servers:

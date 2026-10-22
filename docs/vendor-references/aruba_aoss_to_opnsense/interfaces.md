@@ -114,7 +114,12 @@ Aruba -> OPNsense:
 
 - `name`: **lossy** — Aruba `1` / `A1` / `Trk1` does not survive on
   OPNsense.  The port-rename mesh maps each source name to a zone
-  label.  Canonical preserves the source string verbatim.
+  label.  Canonical preserves the source string verbatim.  The
+  round trip can also add records: a VLAN the render links to no
+  VLAN interface of the source is written as a `<parent>_vlan<id>`
+  device (`1_vlan1`), which the OPNsense parser reads back as an
+  interface of its own (`ianaift:l3ipvlan`).  No source record is
+  lost.
 - `description`: **good** — Aruba `name "<x>"` ↔ OPNsense `<descr>`.
   Aruba truncates to 64 characters; OPNsense imposes no length
   limit.

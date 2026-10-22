@@ -335,9 +335,9 @@ class TestCanonicalCoverage:
         )
         assert primary.auth_port == 1812
         assert primary.acct_port == 1813
-        # Cisco's ``key 7 <hash>`` format preserves the type digit;
-        # parse stores it verbatim as ``"7 fakeRadiusSharedSecret01"``.
-        assert "fakeRadiusSharedSecret01" in primary.key
+        # Cisco's ``key 7 <hash>`` is a form only IOS-XE reads: parse
+        # holds it behind its envelope, with its type.
+        assert primary.key == "iosxe:7 fakeRadiusSharedSecret01"
 
     # --- local users (3 hash forms) -------------------------------------
 

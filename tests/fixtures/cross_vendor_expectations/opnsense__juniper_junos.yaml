@@ -45,8 +45,8 @@
 #     named class collapse
 #   * LAGs — `lagg<N>` ↔ `ae<N>` rename, LACP-mode synthesis
 #   * DHCP — Junos render path not yet wiring `/dhcp/pool`
-#   * vlans[].name / description — collapse to OPNsense's single
-#     `<descr>` slot, then re-expand on Junos render
+#   * vlans[].description — an OPNsense VLAN's `<descr>` (its label)
+#     has no line in the Junos render
 
 meta:
   source_vendor: opnsense
@@ -415,24 +415,24 @@ per_field_expectation:
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's free-form ``<descr>`` (no character-set
-      restrictions) maps to Junos VLAN name (letters / digits /
-      hyphens / periods only, up to 255 chars).  Codec sanitises
-      (underscore → hyphen, spaces stripped).  Two canonical fields
-      (``name`` and ``description``) share OPNsense's single
-      ``<descr>`` slot, so the source-side collapse predates the
-      cross-vendor render.
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which is a legal Junos VLAN name (letters, digits, hyphens,
+      periods), which Junos writes and reads back. The operator's label (`USER
+      VLAN`) is the VLAN's description, and is lost: see
+      `vlans[].description`.
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same source-side collapse as ``vlans[].name`` (both share
-      OPNsense's ``<descr>``).  Junos target supports
-      ``set vlans NAME description X`` but receives only one of
-      the two canonical fields.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and the Junos render writes
+      a VLAN's name and no `description`. The job says so: Junos declares
+      `/vlans/vlan/description` lossy, which the validation report lists for
+      each VLAN.
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].tagged_ports:

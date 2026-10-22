@@ -440,15 +440,23 @@ def translate_vlan_ids(  # noqa: C901
 
         # (#5) 802.1Q tag on a routed (L3) sub-interface.  A stale tag
         # renders ``encapsulation dot1Q <old>`` on the renumbered VLAN —
-        # L3 dead on deploy.  Rewrite like access_vlan.
+        # L3 dead on deploy.  Rewrite like access_vlan.  The inner tag
+        # of a Q-in-Q sub-interface is a customer's tag inside this
+        # VLAN, not a VLAN of the device: a map does not move it, and
+        # it goes with the outer tag it is inside of.
         if iface.dot1q_vlan is not None:
             if iface.dot1q_vlan in drops:
+                inner = (
+                    f" and its inner tag {iface.dot1q_inner_vlan}"
+                    if iface.dot1q_inner_vlan is not None else ""
+                )
                 result.warnings.append(
                     f"vlan_rename: interface {iface.name!r} had 802.1Q "
                     f"sub-interface VLAN {iface.dot1q_vlan} which was dropped "
-                    f"— tag cleared"
+                    f"— tag{inner} cleared"
                 )
                 iface.dot1q_vlan = None
+                iface.dot1q_inner_vlan = None
             elif iface.dot1q_vlan in renames:
                 iface.dot1q_vlan = renames[iface.dot1q_vlan]
 

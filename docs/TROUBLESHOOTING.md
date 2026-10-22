@@ -526,9 +526,12 @@ form (e.g. Cisco type-7) doesn't have a target equivalent, the
 rendered output gets a `# REVIEW: <hash> from <source vendor>`
 comment instead of a plaintext password.
 
-**Action:** re-issue the hash on the target device using the
-target's native CLI (`enable secret`, `set system root-authentication
-plain-text-password`, etc.).
+The account itself is left out with it, on every target: an account
+written without the password it had would be an account with none.
+
+**Action:** re-create the user on the target device and set its
+password with the target's native CLI (`username ... secret`, `set
+system login user ... authentication plain-text-password`, etc.).
 
 ### "review: a value of it holds white space or a quote"
 
@@ -591,6 +594,20 @@ that the device reads that place to the end of the line.
 (`show running-config | include <place>`); if it was cut at the first
 space, set it again there, in quotes or with the space taken out.
 
+### "A user with a typed password came out as a review comment on Junos or OPNsense"
+
+By design.  The source held the password as it was typed (IOS-XE
+`password 0`, AOS-CX `password plaintext`, and the like), and the
+config of Junos and OPNsense holds a password only as a hash:
+Junos's `encrypted-password` and OPNsense's `<password>`.  Written
+there, the typed string would be the hash itself, and no password
+would open the account.  The review line names the account and says
+why; it never quotes the password.
+
+**Action:** add the user on the device and set its password there
+(Junos `set system login user <name> authentication
+plain-text-password`, which asks for it; the OPNsense user manager).
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG
@@ -622,8 +639,8 @@ such name with the source names on it, for example
 happens where the target's names cannot tell the two apart: an
 AOS-S uplink-module port beside the access port of the same number,
 ports numbered from 0 onto a platform that numbers from 1, two
-aggregates numbered from 0, a Junos per-instance loopback (`lo0.2`)
-onto a platform with one `Loopback0`.
+aggregates numbered from 0, `Loopback0` and `Loopback1` onto AOS-S,
+which writes both `loopback1`.
 
 *To settle it:* give all but one of the names a target of its own,
 or drop it.  In the rename modal the rows carry the collision mark
@@ -638,8 +655,15 @@ with no form for one (NX-OS `mgmt0` onto IOS-XE), a breakout lane, a
 port whose name shape the target cannot take — and a logical name
 just the same: a loopback or a tunnel the target has no form for, a
 FortiGate hardware switch (`internal`) with the LAN address on it.
-What was configured on the name is not in the output.  A
-sub-interface that went with its port is listed with it.
+Onto Junos, a loopback that has no place: Junos has one loopback
+interface, `lo0`, whose unit 0 is the global table's loopback and of
+which each routing instance takes a unit of its own, so a second
+loopback of the global table, or one of two in a routing instance,
+is dropped, and its warning says which loopback took the place.
+What was configured on the name is not in the output — and neither
+is what referred to it: a route out of it, a DHCP pool on it, a
+VXLAN that used it as its source.  A sub-interface that went with
+its port is listed with it.
 
 *To settle it:* say what is to happen to the name.  In the rename
 modal the row is marked with a `?`: **keep verbatim** opens its
@@ -647,7 +671,11 @@ field for a target name, **drop** records that it is to go, and
 **Accept the drops** above the table records that for every such
 row at once.  Through the API: `{"mgmt0": "GigabitEthernet0/0"}`,
 or `{"mgmt0": null}`.  Dropping a port settles its sub-interfaces
-too.
+too.  For a loopback onto Junos, which loopback is to be `lo0`:
+`{"Loopback1": "lo0", "Loopback0": null}` keeps `Loopback1` as the
+global table's loopback.  A unit of `lo0` other than 0
+(`{"Loopback1": "lo0.1"}`) is a routing instance's: Junos takes it
+in no other place, so put the unit in a routing instance yourself.
 
 **3. A name was left as the source config has it.**
 `untranslated_ports` lists them, and each has a `could not classify
@@ -736,10 +764,9 @@ under that name, and a device reads one port.  The job is `partial`
 for it, and lists the names in `fused_ports` (with both devices
 declared, in `port_mapping_plan.fused`).  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
-one interface, and is not in `fused_ports`.  A unit other than 0 is
-not: `sources: lo0, lo0.2` says a Junos per-instance loopback was put
-on the target's one loopback — give it a loopback of its own in
-`port_rename_map`.)
+one interface, and is not in `fused_ports`.  Another unit of `lo0` is
+the loopback of a routing instance, and is a loopback of its own on
+the target: `lo0.2` is `Loopback2`.)
 Where the line reads `map to 'Trk1' (also written
 'trk1': one port on <platform>)`, the two were sent to names that
 differ only in letter case, which on that platform is one port.
@@ -1094,7 +1121,8 @@ The message can also say **"N port(s) are not looked up by their
 hardware in the output"** — on a RouterOS target only.
 `port_mapping_plan.unbound_ports` lists them, each with the factory
 name it should be looked up by.  RouterOS finds a port by its factory
-name, and there are three ways to end without a line that does:
+name, and there are four ways to end without a line that does, or
+with one that a list does not lead to:
 
 * The port's name reads as a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
@@ -1112,11 +1140,16 @@ name, and there are three ways to end without a line that does:
 * Two ports of another vendor were given one name.  The output finds
   the first by it, and the second is listed.  Give each a name of its
   own.
+* The port has a line of its own, and an entry gave it a name that a
+  list cuts: a LAG's members (`slaves=`) are cut at a comma, a route's
+  next hop (`gateway=`) at a comma, an `@` or a `%`.  The list then
+  names something nothing defines.  Give the port a name without
+  them.
 
 If the job also says **"the output could not be read back with the
 target codec"**, no port could be checked at all: every port that
 could have been checked is listed for that reason, whatever its name,
-and the three causes above do not apply.  That is a fault in netcanon
+and the four causes above do not apply.  That is a fault in netcanon
 — report it with the config.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
@@ -1391,8 +1424,8 @@ the text, nor the delimiter (which is yours).
   banner under the other.  Change the banner on the router so that its
   text holds no caret, or remove the banner's lines from the paste.
 - **`<codec>: line <n> is a line of a banner, or of another block of
-  text, and ends in a character ...`** (the six above, and
-  `arista_eos`) -- a line of the banner ends in a form feed, a
+  text, and ends in a character ...`** (the six above, `arista_eos`,
+  and `fortigate_cli` for a quoted value) -- a line of the banner ends in a form feed, a
   vertical tab, a carriage return on its own, or another character
   that ends a line for the parser and not for the device, which ends
   a line at a line feed: where the device ends the banner, and so
@@ -1412,6 +1445,39 @@ See the vendor pages, § "A banner is text":
 a banner the parser refuses is not read by `detect-deployment` either
 (see [Detection proposes a device, and says ports are
 missing](#detection-proposes-a-device-and-says-ports-are-missing)).
+
+### The job says `parse failed:` for a FortiGate config
+
+- **`fortigate_cli: line <n> opens a quoted value that no later line
+  ends ...`** -- FortiOS prints a value of several lines (a
+  certificate, a key, a replacement message's HTML) between its
+  quotes, and the parser reads it whole, up to the line whose quote no
+  backslash escapes.  The value that line opens has no such line after
+  it: the text was cut short, or a quote was lost or added on the way.
+  Read as it stands, the rest of the config would be the value's text.
+  Paste the configuration whole, as the FortiGate prints it (a backup
+  file, or the output of `show`).
+- **`fortigate_cli: line <n> is a line of a banner, or of another
+  block of text, and ends in a character ...`** -- a line of a quoted
+  value ends in a form feed, a vertical tab, a carriage return on its
+  own or the like, where the device ends a line at a line feed.  See
+  the last item of the section above.
+
+See [`vendors/fortigate.md`](vendors/fortigate.md#a-quoted-value-of-several-lines).
+
+### The job warns "... held a line break: it is written on one line"
+
+A value of the config -- an interface's description, a VLAN's name,
+any text -- held a line break, and was written on one line, each run
+of breaks as a space.  No target is given a value of more than one
+line: written as it stood, the text after the break was a line of its
+own in the output, and so a command on the target.  The OPNsense and
+IOS-XE NETCONF parsers keep a break that an element's text holds, and
+the FortiOS parser one in a value printed over several lines.  The
+warning names the place (`interfaces[em0].description`); the job's
+status is not changed by it.  If the layout mattered (a description
+meant to show on two lines), set it on the target by hand.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § C1.
 
 ### The job says `refused:` — "my config was refused"
 

@@ -249,6 +249,16 @@ per_field_expectation:
       missed.
     references: [iosxecli-aoscx-surface]
 
+  "interfaces[].dot1q_inner_vlan":
+    disposition: unsupported
+    reason: >
+      The aruba_aoscx matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: AOS-CX has no routed sub-interface construct, so the inner
+      tag of a Q-in-Q sub-interface has no form there either.  The carrier
+      capture's six Q-in-Q units lose their inner tags; the job is `partial`,
+      the validation report listing the path.
+    references: [iosxecli-aoscx-surface]
+
   # -- VLANs -- the database survives, the membership does not ---------------
 
   "vlans[].id":

@@ -230,25 +230,26 @@ per_field_expectation:
   interfaces[].description:
     disposition: lossy
     reason: >
-      OPNsense ``<descr>`` (no length limit) ↔ Aruba ``name "<x>"``
-      (64-character limit).  Text exceeding 64 characters truncates
-      on the Aruba render.  OPNsense codec capability matrix
-      already declares ``/interfaces/interface/config/description``
-      lossy with this rationale.
+      Two losses. A VLAN device's own description is lost: OPNsense writes it
+      on the zone (`Voice VLAN gateway` on `vlan0.20`), and AOS-S has one
+      label for a VLAN interface, the VLAN's `name`, which holds the VLAN's
+      name (`Vlan20` comes back described `vlan0.20`). And a port's
+      description longer than 64 characters truncates on the AOS-S `name`
+      line. Neither shows in the mesh: no description on this corpus is that
+      long, and the VLAN interface comes back under another name, on a cell
+      whose inventory changes size, where the reconciler compares the list as
+      a whole and attributes the drift to `interfaces[].name`.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].enabled:
-    disposition: lossy
-    reason: >
-      OPNsense zone-label rebinding causes positional comparator
-      drift; vendor-correct shape.  The per-record ``enabled`` flag
-      is preserved end-to-end on each interface, but because
-      ``interfaces[].name`` is ``lossy`` (OPNsense ``<wan>`` /
-      ``<lan>`` / ``<opt5>`` zone labels do not survive the rename
-      mesh onto Aruba's bare-numeric port identities), the
-      reordered list lines up records by positional index and the
-      comparator surfaces a per-cell diff.  Not a codec data loss;
-      a second-order consequence of the upstream lossy field.
+    disposition: good
+    note: >
+      Preserved: every port comes back with its admin state, checked by name
+      (`em4`, disabled, comes back disabled on `kitchen_sink.xml`). The loss
+      once recorded here was the comparator lining records up by position
+      after a rename; on the cells whose inventory changes size the reconciler
+      now compares the list as a whole and attributes the drift to
+      `interfaces[].name`.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].interface_type:
@@ -268,20 +269,15 @@ per_field_expectation:
     references: [opnsense-interfaces]
 
   interfaces[].ipv4_addresses:
-    disposition: lossy
-    reason: >
-      OPNsense zone-label rebinding causes positional comparator
-      drift; vendor-correct shape.  The IPv4 address values
-      themselves round-trip cleanly (``<ipaddr>`` + ``<subnet>``
-      ↔ Aruba CIDR ``10.0.0.2/30``), but because
-      ``interfaces[].name`` is ``lossy`` (OPNsense ``<wan>`` /
-      ``<lan>`` / ``<opt2>`` zone labels carry the IP and aruba
-      parse rebinds onto em-named ports in canonical order), the
-      reshuffled list aligns ``198.51.100.2/30`` against a
-      different em-port slot in the target.  Comparator misclas-
-      sifies as data drift; not a codec data loss.  OPNsense's
-      non-static keywords (``dhcp``, ``pppoe``) skip this branch
-      (see ``dhcp_client``).
+    disposition: good
+    note: >
+      Preserved: every address comes back, checked by name — a port's on its
+      port (`198.51.100.2/30` on `em0`), a VLAN device's on the AOS-S VLAN
+      interface it becomes (`192.168.20.1/24` of `vlan0.20` on `Vlan20`). The
+      loss once recorded here was the comparator lining records up by position
+      after a rename; on the cells whose inventory changes size the reconciler
+      now compares the list as a whole and attributes the drift to
+      `interfaces[].name`.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].ipv6_addresses:
@@ -362,9 +358,8 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries
-      below.
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`).
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].id:
@@ -377,20 +372,21 @@ per_field_expectation:
   vlans[].name:
     disposition: good
     note: >
-      OPNsense's ``<descr>`` is the only VLAN label field; canonical
-      ``name`` and ``description`` both populate from it on parse,
-      so both fields carry the same text.  Aruba per-VLAN
-      ``name "<x>"`` lands cleanly and the canonical string
-      round-trips across the pair — Wave 10β re-flip from lossy
-      to good (the upstream ``<descr>`` -> name+description fan-out
-      is captured by the ``vlans[].description`` entry below).
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which AOS-S writes as `name "vlan0.10"` and reads back. The
+      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
+      see `vlans[].description`.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same rationale as ``vlans[].name`` — one OPNsense XML field
-      populating two canonical fields.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and an AOS-S VLAN has one
+      label, its `name`, which holds the name. The job says so: AOS-S declares
+      `/vlans/vlan/description` lossy, which the validation report lists for
+      each VLAN.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:
@@ -414,10 +410,12 @@ per_field_expectation:
       OPNsense doesn't have a first-class SVI concept; the closest
       equivalent is a zone interface (``<opt2>``) referencing the
       VLAN's ``<vlanif>`` device name with the IP on the zone.
-      The opnsense codec does not currently project the zone-side
-      IP back onto a ``CanonicalVlan.ipv4_addresses`` record;
-      cross-pair render emits no SVI L3 line in the Aruba VLAN
-      stanza.
+      The opnsense codec does not project the zone-side IP onto a
+      ``CanonicalVlan.ipv4_addresses`` record: it puts it on the
+      zone's interface record, named after the device, which the
+      AOS-S render writes in the VLAN's stanza (``vlan 20`` /
+      ``ip address 192.168.20.1/24`` on the kitchen sink).  The
+      address reaches the output; the VLAN record holds none.
     references: [opnsense-vlans, aruba-vlans]
 
   static_routes:

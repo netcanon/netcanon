@@ -49,7 +49,7 @@ Schematically different, operationally identical.
 | `openconfig_yang_scope.md` | What the `cisco_iosxe` target render emits vs declares | render emits `<interfaces>` only; matrix entries for hostname/dns/snmp/vlan are aspirational |
 | `interface_fields.md` | OPNsense `<wan>`/`<lan>`/`<optN>` source through to OpenConfig YANG NETCONF | name / description / enabled / IPv4 round-trip |
 | `ipv6_addresses.md` | IPv6 address rendering on both sides | OPNsense `<ipaddrv6>`+`<subnetv6>` -> OpenConfig `openconfig-if-ip:ipv6` |
-| `vlan_render_gap.md` | VLAN handling on Cisco target | target render emits no `<vlans>` element; OPNsense source already lossy |
+| `vlan_render_gap.md` | VLAN handling on Cisco target | target render emits no `<vlans>` element; the OPNsense VLAN's name (its device) and `<descr>` label go with the table |
 | `snmp_render_gap.md` | SNMP on both sides | target render emits no `<snmp>` element; OPNsense source v3 lives in plugin's `snmpd.conf` |
 | `vxlan_evpn_gap.md` | VXLAN / EVPN | unsupported on target codec matrix AND on OPNsense source |
 | `firewall_unsupported.md` | OPNsense firewall / NAT / VPN | not in canonical scope; parse-and-ignored on OPNsense side |

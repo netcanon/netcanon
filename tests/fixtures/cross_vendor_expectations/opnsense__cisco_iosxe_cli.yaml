@@ -301,11 +301,8 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The VLAN list round-trips but for its names: a name that
-      holds white space is written as one word (see
-      `vlans[].name`), and the list is compared whole, so it
-      drifts wherever a name does.  Ids, port membership and
-      descriptions are as the `vlans[].*` entries below say.
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`).
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].id:
@@ -315,25 +312,25 @@ per_field_expectation:
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's ``<descr>`` lands in canonical ``name`` (per
-      ``parse.py``).  Cisco's distinct ``name`` and ``description``
-      fields are collapsed; the round-trip emits the OPNsense
-      description into the Cisco ``name`` line.  No data loss but
-      semantic conflation.
-      A name that holds white space is also written with `_` for
-      each run of it, with a review line (`one_value_tree`,
-      docs/CAPABILITIES.md section C).
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which IOS writes as `name vlan0.10` and reads back. The
+      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
+      see `vlans[].description`.  A device name holds no white
+      space, so the rule that writes `_` for it (`one_value_tree`,
+      docs/CAPABILITIES.md section C) does not touch it.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      OPNsense doesn't model a separate description field; the
-      ``<descr>`` lands in canonical ``name`` instead, leaving
-      ``description`` empty.  Cisco render emits no separate
-      description line.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and the IOS render writes a
+      VLAN's `name` line and no description. The job says so: IOS-XE CLI
+      declares `/vlans/vlan/description` lossy, which the validation report
+      lists for each VLAN.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

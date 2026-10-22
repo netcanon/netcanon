@@ -34,7 +34,7 @@ switch surface).  The two product roles diverge sharply:
 | [`static_routes.md`](static_routes.md) | Default-VRF static routes round-trip cleanly via CIDR <-> dotted-mask conversion.  Per-route metadata gaps (description / metric semantics). |
 | [`snmp.md`](snmp.md) | v1/v2c surface good (Operator/Manager collapses to single canonical scalar); v3 USM passphrases not cross-compatible (engineID-salted). |
 | [`local_users.md`](local_users.md) | Aruba two-role model (manager/operator) -> FortiGate accprofile strings (super_admin/prof_admin).  Hash formats incompatible. |
-| [`radius.md`](radius.md) | Aruba flat host-keyed form -> FortiGate edit-table.  Shared-secret format incompatible (FortiOS ENC encryption). |
+| [`radius.md`](radius.md) | Aruba flat host-keyed form -> FortiGate edit-table.  A key written as typed migrates; an `encrypted-key` is refused; a non-default acct-port is lost. |
 | [`dhcp.md`](dhcp.md) | Aruba is relay-only (codec doesn't parse pools); not_applicable on this direction.  helper-address relay intent unmodelled. |
 | [`lags.md`](lags.md) | Aruba `Trk<N>` -> FortiGate operator-named aggregates.  Members + LACP modes round-trip; HP-proprietary `dt-lacp` / `fec` lossy. |
 | [`vrf.md`](vrf.md) | Aruba has no VRF concept; FortiGate VDOMs / per-interface integer VRF unmodelled in canonical v1.  Not applicable. |

@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pytest
 
+from netcanon.migration.canonical.intent import CanonicalInterface
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 pytestmark = pytest.mark.unit
@@ -94,14 +95,20 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert intent.domain == "example.net"
 
     # ── Tier 1 — interfaces ──
-    # Seven zones (wan, lan, opt1..opt5) backed by the physical names
-    # in each zone's <if> child.  Canonical name = <if> text (per
-    # opnsense/parse.py::_parse_interface_zone_canonical) so cross-
-    # vendor round-trips preserve the original port-name identity
-    # through the lossy zone-tag sanitisation in render.
+    # Five zones (wan, lan, opt1, opt2, opt5) backed by the physical
+    # names in each zone's <if> child, then the VLAN devices no zone
+    # assigns, each a record of its own
+    # (opnsense/parse.py::_parse_vlan_devices), then the two LAG
+    # members, which no zone assigns either (OPNsense adds only an
+    # unassigned interface to a LAGG) and which the parser gives a
+    # record each.  Canonical name = <if> text (per
+    # opnsense/parse.py::_parse_interface_zone_canonical) so cross-vendor
+    # round-trips preserve the original port-name identity through the
+    # lossy zone-tag sanitisation in render.
     iface_names = [i.name for i in intent.interfaces]
     assert iface_names == [
-        "em0", "em1", "vlan0.20", "vlan0.30", "em2", "em3", "em4",
+        "em0", "em1", "vlan0.20", "vlan0.30", "em4",
+        "vlan0.10", "vlan0.100", "vlan0.200", "em2", "em3",
     ]
 
     by_name = {i.name: i for i in intent.interfaces}
@@ -140,13 +147,18 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # opt5 zone (<if>em4</if>) — disabled (no <enable/> element).
     assert by_name["em4"].enabled is False
 
-    # ── Tier 1 — VLANs (id + name) ──
+    # ── Tier 1 — VLANs (id, device, description) ──
     vlan_ids = sorted(v.id for v in intent.vlans)
     assert vlan_ids == [10, 20, 30, 100, 200]
     vlan_by_id = {v.id: v for v in intent.vlans}
-    assert vlan_by_id[10].name == "USER VLAN"
-    assert vlan_by_id[20].name == "VOICE VLAN"
-    assert vlan_by_id[200].name == "MGMT VLAN"
+    assert vlan_by_id[10].name == "vlan0.10"
+    assert vlan_by_id[10].description == "USER VLAN"
+    assert vlan_by_id[20].description == "VOICE VLAN"
+    assert vlan_by_id[200].description == "MGMT VLAN"
+    # Each device rides on the <if> its <vlan> states.
+    for device in ("vlan0.10", "vlan0.20", "vlan0.30", "vlan0.100", "vlan0.200"):
+        assert by_name[device].interface_type == "ianaift:l3ipvlan"
+        assert by_name[device].vlan_parent == "em1"
 
     # ── Tier 2 — local users (>= 3) ──
     user_names = [u.name for u in intent.local_users]
@@ -198,9 +210,10 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert lag.name == "lagg0"
     assert lag.members == ["em2", "em3"]
     assert lag.mode == "active"  # proto=lacp -> active
-    # Reverse-link from interface back to LAG (by canonical name = <if> text).
-    assert by_name["em2"].lag_member_of == "lagg0"
-    assert by_name["em3"].lag_member_of == "lagg0"
+    # Each member has a record of its own, back-linked to the LAG,
+    # and nothing else: no zone configures it.
+    assert by_name["em2"] == CanonicalInterface(name="em2", lag_member_of="lagg0")
+    assert by_name["em3"] == CanonicalInterface(name="em3", lag_member_of="lagg0")
     # Non-members must NOT be back-linked.
     assert by_name["em0"].lag_member_of is None  # wan zone
     assert by_name["vlan0.20"].lag_member_of is None  # opt1 zone

@@ -98,9 +98,13 @@ AAA method lists: also NO canonical model.  All `aaa authentication`
 / `aaa authorization` / `aaa accounting` lines parse-and-ignore on
 both codecs.
 
-Shared-secret encoding: Arista's `key 7 <blob>` carries a Type-7
-reversible obfuscation; Cisco accepts the same `7 <blob>` form.  Both
-codecs pass the opaque blob through verbatim.
+Shared-secret encoding: Arista prints a key as `key 7 <blob>`.
+Whether EOS's type 7 is Cisco's is not established, so it is held
+behind `eos:` and not written into an IOS-XE `key 7`: the server is
+written with no key, beside a review line that names the form.  A key
+written as typed (`key <secret>`, `key 0 <secret>`) migrates.  (Until
+2026-10 a `key 7` was read as the secret `7`.)
 
-Disposition: **good** for RADIUS host/key/ports surface; **lossy**
-for AAA method lists and TACACS+ (canonical model gap).
+Disposition: **lossy** for RADIUS (a `key 7` is refused; host, ports
+and a key written as typed round-trip); **lossy** for AAA method
+lists and TACACS+ (canonical model gap).

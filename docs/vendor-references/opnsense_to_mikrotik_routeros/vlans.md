@@ -30,8 +30,10 @@ parent NIC**:
 
 - ``<if>`` — parent BSD device.
 - ``<tag>`` — 802.1Q VLAN id.
-- ``<descr>`` — operator-friendly name (lands in canonical ``name``
-  per ``parse.py``).
+- ``<descr>`` — operator-friendly label (lands in canonical
+  ``description`` per ``parse.py``; a ``<vlan>`` has no name of its
+  own, so the parser names the canonical VLAN after its
+  ``<vlanif>``).
 - ``<vlanif>`` — auto-generated child device name (``vlan0.10``).
 
 OPNsense has **no VLAN-centric port-membership model** and **no
@@ -95,14 +97,17 @@ vendors share the 1-4094 range.  Round-trips cleanly.
 
 ### vlans[].name / vlans[].description
 
-OPNsense's ``<descr>`` lands in canonical ``name`` (per the OPNsense
-parse module).  RouterOS conflates the L3 interface name (``vlan10``)
-with the descriptive VLAN name on Plane 1 — the codec's
-``LossyPath`` on ``/vlans/vlan/name`` documents this.  Cross-pair
-render emits the OPNsense ``<descr>`` value into the RouterOS Plane 1
-``name=`` field.  ``description`` arrives empty from the OPNsense
-source (no separate description on OPNsense), so RouterOS render
-emits no description anyway.
+The OPNsense parser names the canonical VLAN after its device
+(``<vlanif>``, e.g. ``vlan0.10``) and reads ``<descr>``
+(``USER VLAN``) as its ``description``.  The name round-trips:
+RouterOS writes it as the Plane 1 VLAN interface's
+``name=vlan0.10`` and reads it back.  The description is lost:
+RouterOS has one ``comment=`` for a VLAN interface, which the render
+gives the interface's own description (the zone's, e.g.
+``comment="Voice VLAN gateway"``), so the VLAN's label does not
+reach the output.
+RouterOS declares ``/vlans/vlan/description`` lossy, which the
+validation report lists for each VLAN.
 
 ### vlans[].tagged_ports / vlans[].untagged_ports
 
@@ -115,11 +120,12 @@ reconstruct switching topology manually post-migration if needed.
 
 OPNsense's L3 face of a VLAN tag is the zone owning the ``<vlanif>``
 device, not a first-class SVI on the VLAN itself.  The OPNsense
-parser does not currently populate ``CanonicalVlan.ipv4_addresses``;
-the RouterOS target therefore emits no ``/ip address add
-interface=vlan<N>`` line on the cross-pair.  Lands when OPNsense
-parse wire-up surfaces zone-side L3 addresses into the canonical SVI
-list.
+parser does not populate ``CanonicalVlan.ipv4_addresses``: it puts
+the zone's address on the zone's interface record, named after the
+device, which the RouterOS target writes as an address of that
+interface (``add address=192.168.20.1/24 interface=vlan0.20`` on the
+kitchen sink).  The address reaches the output; the VLAN record holds
+none.
 
 ### interfaces[] switchport fields
 
@@ -133,8 +139,8 @@ bridge VLAN filtering config from this source.
 | Field | Disposition |
 |---|---|
 | `vlans[].id` | good |
-| `vlans[].name` | lossy (OPNsense `<descr>` → RouterOS Plane 1 `name=`; semantic conflation) |
-| `vlans[].description` | not_applicable (OPNsense source never populates separate description) |
+| `vlans[].name` | good (OPNsense device `vlan0.10` → RouterOS Plane 1 `name=`) |
+| `vlans[].description` | lossy (OPNsense `<descr>` has no line; the one `comment=` holds the interface's own description) |
 | `vlans[].tagged_ports` | not_applicable (OPNsense never populates) |
 | `vlans[].untagged_ports` | not_applicable (OPNsense never populates) |
 | `vlans[].ipv4_addresses` | lossy (OPNsense parse wire-up pending; SVI absorption not synthesised) |

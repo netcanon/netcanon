@@ -293,6 +293,16 @@ per_field_expectation:
       a migrated default gateway as unprotected until you have.
     references: [iosxecli-vyos-surface]
 
+  "interfaces[].dot1q_inner_vlan":
+    disposition: unsupported
+    reason: >
+      The vyos matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: the inner tag has no form in that codec (VyOS `vif-s` is an
+      802.1ad service tag, which is not this field).  The carrier capture's
+      six Q-in-Q units lose their inner tags; the job is `partial`, the
+      validation report listing the path.
+    references: [iosxecli-vyos-surface]
+
   # -- VLANs -- the campus L2 database, dropped whole ------------------------
   #
   # This block is the INVERSE of the interface block above: it is

@@ -67,6 +67,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._radius_secrets import AOSS_ENVELOPE
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -177,13 +178,49 @@ _IP_ROUTE_RE = re.compile(
 )
 _IPV6_ROUTE_RE = re.compile(
     # ``ipv6 route <prefix>/<len> <next-hop> [distance D]`` — the IPv6 form
-    # (does not overlap ``^ip route``; ``ipv6`` != ``ip``).  Group 3 is the
-    # optional administrative distance (canonical ``metric``).
-    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    # (does not overlap ``^ip route``; ``ipv6`` != ``ip``).  Group 2 is the
+    # next hop, an address: a word there (``vlan``, ``blackhole``) is
+    # read by :data:`_IPV6_ROUTE_NAMED_RE` or said, never taken for a
+    # gateway.  Group 3 is the optional administrative distance
+    # (canonical ``metric``).
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+([0-9A-Fa-f]*:[0-9A-Fa-f:.]*)"
     r"(?:\s+(?:distance\s+)?(\d+))?"
     r"\s*$",
     re.IGNORECASE,
 )
+#: A route whose next hop is a VLAN or the discard, ``ip route <dest>
+#: [<mask>] vlan <id> | blackhole [distance <d>]`` and its IPv6 form.
+#: HPE: "The next-hop can be either a gateway IP address, a VLAN, or
+#: the keyword "reject" or "blackhole"" (ArubaOS-Switch Multicast and
+#: Routing Guide, YC.16.04).  A VLAN is read as its interface,
+#: ``Vlan<id>``; ``blackhole`` as the tree's discard, :data:`DISCARD_HOP`.
+#: ``reject`` is not read: it discards with an ICMP error to the sender,
+#: which the tree's one discard does not say, and the line is said
+#: (:data:`_ANY_ROUTE_RE`).  An id or a distance of more digits than the
+#: device takes is not read either.
+_IP_ROUTE_NAMED_RE = re.compile(
+    r"^ip[ \t]+route[ \t]+(\S+)"
+    r"(?:[ \t]+(\d+\.\d+\.\d+\.\d+))?"
+    r"[ \t]+(?:vlan[ \t]+(\d{1,4})|(blackhole))"
+    r"(?:[ \t]+distance[ \t]+(\d{1,3}))?"
+    r"[ \t]*$",
+    re.IGNORECASE,
+)
+_IPV6_ROUTE_NAMED_RE = re.compile(
+    r"^ipv6[ \t]+route[ \t]+([0-9A-Fa-f:]+/\d+)"
+    r"[ \t]+(?:vlan[ \t]+(\d{1,4})|(blackhole))"
+    r"(?:[ \t]+distance[ \t]+(\d{1,3}))?"
+    r"[ \t]*$",
+    re.IGNORECASE,
+)
+#: Any other static route line -- ``reject``, a ``metric`` or
+#: ``tag-value`` option, a next hop of no form above -- is left out and
+#: said in a row, never passed in silence.
+_ANY_ROUTE_RE = re.compile(r"^ip(?:v6)?[ \t]+route\b", re.IGNORECASE)
+
+#: The name the tree gives a next hop that discards the traffic: the
+#: interface IOS-XE, NX-OS, EOS and IOS XR route to.
+DISCARD_HOP = "Null0"
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 # ``trunk <port-list> <name> <type>`` — AOS-S link-aggregation form.
 # Examples:
@@ -226,6 +263,7 @@ _PASSWORD_HASH_CONTINUATION_RE = re.compile(
 # AOS-S RADIUS forms (16.10 Access Security Guide):
 #   radius-server host <ip>
 #   radius-server host <ip> key "<secret>"
+#   radius-server host <ip> encrypted-key "<base64 AES-256 blob>"
 #   radius-server host <ip> auth-port <N> acct-port <N>
 #   radius-server host <ip> auth-port <N> acct-port <N> key "<secret>"
 # Each repeated ``radius-server host <ip>`` line refines the same
@@ -241,16 +279,36 @@ _RADIUS_HOST_RE = re.compile(
 )
 _RADIUS_AUTH_PORT_RE = re.compile(r'\bauth-port\s+(\d+)', re.IGNORECASE)
 _RADIUS_ACCT_PORT_RE = re.compile(r'\bacct-port\s+(\d+)', re.IGNORECASE)
+# ``key`` and ``encrypted-key`` are two words: a ``key`` that follows a
+# hyphen is the end of ``encrypted-key``, whose blob the pattern before
+# 2026-10 read as the literal secret.
 _RADIUS_INLINE_KEY_RE = re.compile(
-    r'\bkey\s+"?([^"]*)"?\s*$',
+    r'(?<![\w-])(key|encrypted-key)\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
 # Global shared-secret fallback (applies to hosts without inline key):
 #   radius-server key "<secret>"
+# and, read the same way as the host line's documented ``encrypted-key``
+# (the global form is inferred from it, not seen in a vendor document):
+#   radius-server encrypted-key "<blob>"
 _RADIUS_KEY_GLOBAL_RE = re.compile(
-    r'^radius-server\s+key\s+"?([^"]*)"?\s*$',
+    r'^radius-server\s+(key|encrypted-key)\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
+
+
+def _radius_key(word: str, value: str) -> str:
+    """The canonical value of ``key "<secret>"`` or ``encrypted-key "<blob>"``.
+
+    ``encrypted-key`` is AES-256 under the switch's ``encrypt-credentials``
+    key (16.10 Access Security Guide): a form only AOS-S reads, carried
+    behind :data:`AOSS_ENVELOPE` so that no other platform takes it for
+    the secret.
+    """
+    value = value.strip().strip('"')
+    if value and word.lower() == "encrypted-key":
+        return f"{AOSS_ENVELOPE}{value}"
+    return value
 _AOS_TRUNK_TYPE_TO_MODE = {
     "lacp": "active",
     "dt-lacp": "active",
@@ -472,7 +530,10 @@ _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _SNTP_SERVER_RE,
     _DEFAULT_GW_RE,
     _IPV6_ROUTE_RE,
+    _IPV6_ROUTE_NAMED_RE,
     _IP_ROUTE_RE,
+    _IP_ROUTE_NAMED_RE,
+    _ANY_ROUTE_RE,
     _RADIUS_HOST_RE,
     _RADIUS_KEY_GLOBAL_RE,
     _PASSWORD_LINE_RE,
@@ -1287,6 +1348,22 @@ _IDS_SHOWN = 8
 _LINE_SHOWN = 120
 
 
+def _route_destination(dest: str, mask: str | None) -> str:
+    """A route's destination as CIDR.  *mask* is the OPTIONAL
+    dotted-decimal mask (legacy Aruba form): when present it gives the
+    prefix length; when absent *dest* was already CIDR (or a bare IP,
+    defaulting to /32)."""
+    if mask is None:
+        return _dest_to_cidr(dest)
+    try:
+        prefix = _mask_to_prefix(mask, vendor="aruba_aoss")
+    except ParseError:
+        # Non-contiguous mask — unusual; fall back to /32 host-route
+        # semantic so render still produces something parseable.
+        prefix = 32
+    return f"{dest}/{prefix}"
+
+
 def _shown(line: str) -> str:
     """*line*, or its first :data:`_LINE_SHOWN` characters and a mark
     that it was cut."""
@@ -1876,42 +1953,48 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if rt6:
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=rt6.group(1),  # already <prefix>/<len>
-                # A next hop can name a LAG, and the renderer writes
-                # that ``Trk1``: read in the one spelling, like every
-                # other place a line names a port.  (The sweep after
-                # the loop cannot do it: it rewrites a next hop only
-                # where it IS an interface's name, and by then the
-                # interface is already ``trk1``.)
-                gateway=one_spelling(rt6.group(2)),
+                gateway=rt6.group(2),
                 metric=int(rt6.group(3)) if rt6.group(3) else 0,
+            ))
+            i += 1
+            continue
+
+        rt6n = _IPV6_ROUTE_NAMED_RE.match(stripped_line)
+        if rt6n:
+            intent.static_routes.append(CanonicalStaticRoute(
+                destination=rt6n.group(1),
+                interface=f"Vlan{int(rt6n.group(2))}" if rt6n.group(2) else DISCARD_HOP,
+                metric=int(rt6n.group(4)) if rt6n.group(4) else 0,
             ))
             i += 1
             continue
 
         rt = _IP_ROUTE_RE.match(stripped_line)
         if rt:
-            # Three-form parse: see _IP_ROUTE_RE above.  Group 2
-            # is the OPTIONAL dotted-decimal mask (legacy Aruba
-            # form).  When present we expand to CIDR via the
-            # mask's prefix length; when absent the destination
-            # was already CIDR (or a bare IP defaulting to /32).
-            dest, mask, gateway = rt.group(1), rt.group(2), rt.group(3)
-            if mask is not None:
-                try:
-                    prefix = _mask_to_prefix(mask, vendor="aruba_aoss")
-                except Exception:
-                    # Non-contiguous mask — unusual; fall back to
-                    # /32 host-route semantic so render still
-                    # produces something parseable.
-                    prefix = 32
-                canonical_dest = f"{dest}/{prefix}"
-            else:
-                canonical_dest = _dest_to_cidr(dest)
+            # Three-form parse: see _IP_ROUTE_RE above.
             intent.static_routes.append(CanonicalStaticRoute(
-                destination=canonical_dest,
-                gateway=gateway,
+                destination=_route_destination(rt.group(1), rt.group(2)),
+                gateway=rt.group(3),
                 metric=int(rt.group(4)) if rt.group(4) else 0,
             ))
+            i += 1
+            continue
+
+        rtn = _IP_ROUTE_NAMED_RE.match(stripped_line)
+        if rtn:
+            intent.static_routes.append(CanonicalStaticRoute(
+                destination=_route_destination(rtn.group(1), rtn.group(2)),
+                interface=f"Vlan{int(rtn.group(3))}" if rtn.group(3) else DISCARD_HOP,
+                metric=int(rtn.group(5)) if rtn.group(5) else 0,
+            ))
+            i += 1
+            continue
+
+        if _ANY_ROUTE_RE.match(stripped_line):
+            memberships.say(
+                f"{_shown(stripped_line)} (a static route in a form this parser "
+                f"does not read; not translated)"
+            )
             i += 1
             continue
 
@@ -1950,7 +2033,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     pass
             km = _RADIUS_INLINE_KEY_RE.search(rest)
             if km:
-                key = km.group(1).strip().strip('"')
+                key = _radius_key(km.group(1), km.group(2))
             existing = radius_by_host.get(host)
             if existing is None:
                 intent.radius_servers.append(CanonicalRADIUSServer(
@@ -1973,7 +2056,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if rk:
             # Global-scope key — apply to any RADIUS server that
             # didn't carry its own inline key.
-            global_key = rk.group(1).strip().strip('"')
+            global_key = _radius_key(rk.group(1), rk.group(2))
             # Only a server with no key can take it.  Those are kept
             # apart, and every server is looked at once to find them.
             # An empty key gives nothing to anyone: after it every

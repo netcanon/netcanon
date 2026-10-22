@@ -49,8 +49,10 @@ OPNsense VLAN notes:
   toggle.
 - The L3 SVI lives on the zone (`<opt2>`) that consumes the
   `vlan0.100` interface, not on the VLAN itself.
-- VLAN names are free-form text in `<descr>`; no character-set
-  restrictions.
+- A `<vlan>` has no name of its own.  `<descr>` is free-form text
+  (no character-set restrictions); the opnsense parser reads it as
+  the VLAN's description and names the VLAN after its device
+  (`<vlanif>`, here `vlan0.100`).
 
 ## Junos form
 
@@ -81,13 +83,15 @@ OPNsense -> Junos:
 
 * `vlans[].id`: **good** — OPNsense `<tag>` ↔ Junos `vlan-id`.  Both
   share the 1-4094 range.
-* `vlans[].name`: **lossy** — OPNsense `<descr>` (free-form) maps
-  to Junos `set vlans NAME` where NAME is restricted to letters,
-  digits, hyphens, periods.  Codec sanitises (`underscore` →
-  `hyphen`, spaces stripped).  Two canonical fields (`name` and
-  `description`) share OPNsense's single `<descr>` slot, so the
-  source-side collapse predates the cross-vendor render.
-* `vlans[].description`: **lossy** — same source-side collapse.
+* `vlans[].name`: **good** — the canonical name is the OPNsense
+  device name (`vlan0.10`), a legal Junos VLAN name (letters,
+  digits, hyphens, periods), which Junos writes as
+  `set vlans vlan0.10` and reads back.
+* `vlans[].description`: **lossy** — the OPNsense `<descr>` (the
+  operator's label, e.g. `USER VLAN`) is the canonical description,
+  and the Junos render writes a VLAN's name and no `description`, so
+  the label is lost.  Junos declares `/vlans/vlan/description`
+  lossy, which the validation report lists for each VLAN.
 * `vlans[].tagged_ports` / `untagged_ports`: **not_applicable** —
   OPNsense never populates these (no port-membership model on
   parse).  Junos target accepts per-interface `vlan members`
@@ -99,6 +103,6 @@ OPNsense -> Junos:
   synthesis from `CanonicalVlan.ipv4_addresses` therefore receives
   nothing — operators rebuild the SVI mapping manually.
 
-Disposition: tag round-trips cleanly; everything else degrades
-because OPNsense's parse path doesn't populate the VLAN-centric
-canonical fields.
+Disposition: tag and name round-trip cleanly; the description is
+lost on render; everything else degrades because OPNsense's parse
+path doesn't populate the VLAN-centric canonical fields.

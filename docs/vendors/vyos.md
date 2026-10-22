@@ -43,7 +43,11 @@ translatable with caveats:
 - Local users — `system login user` (name + role +
   `encrypted-password` hash)
 - LAGs — `interfaces bonding bondN` (members + `lag-member-of`
-  back-link)
+  back-link).  Members are read as VyOS prints them — one bare
+  `interface ethN` line each under `member`, or `member interface
+  'ethN'` in the set form — and written the first way; a `vif <vid>`
+  under a bond is a unit of the LAG, `bondN.<vid>`, as it is under an
+  ethernet port
 - SNMP — `service snmp` v1/v2c community + v3 USM (community,
   location, contact, v3 users)
 - VRFs — `vrf name <X>` instances + the per-interface binding
@@ -170,6 +174,24 @@ real set-form) capture are welcomed via
   location or contact is written `'` (VyOS refuses one even escaped).
   An NTP or DNS server, the domain or a route's gateway that holds
   either is left out and said, the route whole.
+- **A review comment shows `*/` in a name as `* /`.**  VyOS ends a
+  `/* */` comment at its first `*/`, so a name that held one (a source
+  account left out for its password) would have ended the comment, and
+  what followed was configuration.  The name in the comment is the
+  source's name with that one change.
+- **QinQ (`vif-s`) is not translated.**  A `vif-s <id>` block is a
+  service VLAN whose tag is 802.1ad, Ethertype 0x88a8 by default
+  (VyOS, "QinQ (802.1ad)"), and its `vif-c <id>` blocks the
+  sub-interfaces inside it; the tree has no form for an 802.1ad tag.
+  The block is left out, with a row of the Tier-3 banner (`interfaces
+  ethernet eth0 vif-s 1000: an 802.1ad service VLAN; it and its vif-c
+  sub-interfaces are not translated`).  ⚠️ Up to 0.7.7 it went with
+  nothing said.  A source's sub-interface of two 802.1Q tags (IOS-XE
+  `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has no form here
+  either: the job is `partial`.  A `vif 0` is read as a sub-interface
+  of tag 0, which no 802.1Q VLAN has; the IOS-XE, IOS XR and EOS
+  parsers leave such a stanza out of another vendor's output when it
+  is read back.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership
@@ -177,7 +199,9 @@ real set-form) capture are welcomed via
   where its port goes, with its number (`Ethernet1.54`).  ⚠️ Up to
   0.7.7 a `vif` was written onto its parent port — and a translation
   from VyOS to VyOS lost it with its addresses; translate such a
-  config again.
+  config again.  ⚠️ Up to 0.7.7 a `vif` under a **bond** was not
+  read at all, and a bond printed in the block form had no members:
+  translate a config with a bond again too.
 - **`protocols bgp` / `protocols ospf` are SHARED with Junos.**  Both
   VyOS and Junos use `set protocols …` — the probe disambiguates by
   config shape, not by that keyword alone.  Pick the right vendor in
@@ -186,6 +210,14 @@ real set-form) capture are welcomed via
   (curly-brace) is the native form; `show configuration commands`
   (set-form) is converted up front.  Distinct from the `juniper_junos`
   codec, which owns the Junos set-form.
+- **A node with nothing under it is printed on one line.**  VyOS
+  writes `server time1.vyos.net { }`, `loopback lo { }` or `disable
+  { }` for a node that holds nothing; such a line is read as a block
+  that opens and closes (`disable { }` as the leaf `disable`), the
+  reading the set form gives the same path.  ⚠️ Up to 0.7.7 it was
+  read as a word with ` { }` in it: an NTP server's name came out with
+  its braces, and an empty loopback, `vif` or `next-hop` was lost;
+  translate such a config again.
 - **A set line nested more than 64 levels deep is a parse failure.**
   A real path is a dozen words.  Set-form input is written out as
   nested blocks before it is read, each level indented once more, so

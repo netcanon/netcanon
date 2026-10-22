@@ -53,11 +53,12 @@ from ..._derived_values import (
 from ..._naming import sanitise_hostname
 from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    IOSXE_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import (
     classify_hash,
@@ -425,9 +426,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # ``secondary`` token before storing in the canonical list.
         # GAP 7: routed sub-interface 802.1Q tag.  Emitted before the IP
         # so the tag precedes the routed address (IOS-XE convention).
-        # Capital Q matches Cisco's canonical style.
+        # Capital Q matches Cisco's canonical style.  A Q-in-Q
+        # sub-interface's inner tag is ``second-dot1q`` on the same line
+        # (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag Termination").
         if iface.dot1q_vlan is not None:
-            body.append(f" encapsulation dot1Q {iface.dot1q_vlan}")
+            second = (
+                f" second-dot1q {iface.dot1q_inner_vlan}"
+                if iface.dot1q_inner_vlan is not None else ""
+            )
+            body.append(f" encapsulation dot1Q {iface.dot1q_vlan}{second}")
         for idx, addr in enumerate(iface.ipv4_addresses):
             mask = _prefix_to_mask(addr.prefix_length, vendor="cisco_iosxe_cli")
             suffix = " secondary" if idx > 0 else ""
@@ -851,13 +858,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if radius_secret_is_migratable(
                 server.key, tree.source_vendor, "cisco_iosxe_cli",
             ):
-                out.append(f" key {unwrap_native_secret(server.key)}")
+                out.append(f" key {_radius_key_text(server.key)}")
             else:
                 out.append(
                     format_radius_review_comment(
                         server.host,
                         comment_syntax="exclamation",
                         target_label="Cisco IOS-XE",
+                        secret=server.key,
                     )
                 )
         out.append("!")
@@ -1092,6 +1100,21 @@ def _extract_lag_number(lag_name: str) -> int | None:
         return int(m.group(1))
     except ValueError:
         return None
+
+
+def _radius_key_text(key: str) -> str:
+    """What follows ``key`` for a secret the RADIUS policy let through.
+
+    A value behind ``IOSXE_ENVELOPE`` goes back as the device wrote it
+    (``7 <blob>``).  A secret as typed is written as it is, unless it
+    begins with digits and white space, which the device and the parser
+    read as a type: then ``0`` says that what follows is the secret.
+    """
+    if key.startswith(IOSXE_ENVELOPE):
+        return key[len(IOSXE_ENVELOPE):]
+    if re.match(r"^\d+\s", key):
+        return f"0 {key}"
+    return unwrap_native_secret(key)
 
 
 def _split_cisco_hash(hashed: str) -> tuple[str, str]:

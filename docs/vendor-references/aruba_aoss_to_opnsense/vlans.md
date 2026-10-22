@@ -87,10 +87,20 @@ CanonicalVlan:
 Aruba -> OPNsense:
 
 - `vlans[].id`: **good** — both use 1-4094 range.
-- `vlans[].name`: **lossy** — Aruba's per-VLAN `name "<x>"` collapses
-  with `description` to OPNsense's single `<descr>` element.  One
-  canonical field drops on render.
-- `vlans[].description`: **lossy** — same rationale as `name`.
+- `vlans[].name`: **lossy** — the name does not come back.  An
+  OPNsense `<vlan>` has no name of its own: the render writes each
+  VLAN as a `<vlan>` device, under the name of the source's VLAN
+  interface where there is one (`Vlan2`), otherwise as
+  `<parent>_vlan<id>` on a port that carries the VLAN or a default
+  one (`1_vlan1`), and writes Aruba's `name "<x>"` as the device's
+  `<descr>`.  The OPNsense parser names a VLAN after its device
+  (`<vlanif>`) and reads `<descr>` as its description, so `servers`
+  comes back as the description of a VLAN named `Vlan2`.  A device
+  name OPNsense's VLAN form would refuse (`Vlan2`) gets a
+  `<!-- review: -->` comment beside it.
+- `vlans[].description`: **lossy** — AOS-S states no VLAN
+  description; the round trip gives each named VLAN one, its name
+  (see `name`).  Drift by gaining the name, never by losing a value.
 - `vlans[].tagged_ports` / `untagged_ports`: **unsupported** —
   OPNsense has no per-VLAN port-membership concept.  Cross-pair render
   emits no port-membership XML; the operator must manually assign
@@ -99,6 +109,7 @@ Aruba -> OPNsense:
   per-VLAN `ip address` (absorbed onto the canonical VLAN record by
   `_svi_absorption.py`) has no first-class OPNsense equivalent.  The
   OPNsense pattern is to assign the VLAN sub-interface to a zone and
-  put the address on the zone (`<opt2>`).  The canonical model
-  carries the SVI address but the OPNsense render path does not
-  synthesise the corresponding zone — operator-curated.
+  put the address on the zone (`<opt2>`).  The render writes the
+  SVI as a zone whose `<if>` is the VLAN device written under the
+  SVI's name (`Vlan2`), with the address on the zone; read back,
+  the address is on that interface record, not on the VLAN.

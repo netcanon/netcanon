@@ -13,8 +13,8 @@
 # Direction-specific framing.  Two stacked gaps dominate this pair:
 #
 #   1. The cisco_iosxe SOURCE codec's parse() walks `<interfaces>`
-#      only.  intent.hostname, intent.snmp, intent.vlans,
-#      intent.local_users, intent.radius_servers, intent.lags,
+#      only (and makes a VLAN of an SVI).  intent.hostname,
+#      intent.snmp, intent.local_users, intent.radius_servers, intent.lags,
 #      intent.routing_instances, intent.static_routes are all empty
 #      after parse, regardless of input content.  This is a parse-
 #      side wire-up gap (the matrix declares many of these as
@@ -204,13 +204,17 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      OpenConfig source emits `<name>GigabitEthernet0/0/0</name>`;
-      the parser stores verbatim on CanonicalInterface.name.
-      OPNsense target render emits via the port-rename mesh,
-      mapping Cisco shape to OPNsense zone label (`<wan>`/`<lan>`/
-      `<optN>`) plus BSD device name (`em0`/`igb0`/`ix0`).  Without
-      the rename mesh, literal Cisco names reach OPNsense XML and
-      the operator sees zone tags that don't match any FreeBSD NIC.
+      OpenConfig source emits `<name>GigabitEthernet0/0/0</name>`; the parser
+      stores verbatim on CanonicalInterface.name. OPNsense target render emits
+      via the port-rename mesh, mapping Cisco shape to OPNsense zone label
+      (`<wan>`/`<lan>`/ `<optN>`) plus BSD device name (`em0`/`igb0`/`ix0`).
+      Without the rename mesh, literal Cisco names reach OPNsense XML and the
+      operator sees zone tags that don't match any FreeBSD NIC. What the round
+      trip measures on this key is an addition, not a loss: VLAN 10, which the
+      render links to no interface, is written as a
+      `GigabitEthernet0/0/0_vlan10` device, which the OPNsense parser reads
+      back as an interface record of its own (`ianaift:l3ipvlan`). No source
+      record is lost.
     references: [oc-interfaces, opnsense-interfaces]
 
   "interfaces[].description":
@@ -233,9 +237,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       cisco_iosxe source emits IANA ifType ident
-      (`iana-if-type:ethernetCsmacd`, etc.).  OPNsense doesn't
-      surface a type field; the canonical type hint drops on
-      render.
+      (`iana-if-type:ethernetCsmacd`, etc.). OPNsense doesn't surface a type
+      field; the canonical type hint drops on render. The SVI, which the
+      IOS-XE NETCONF parser types `ianaift:l2vlan`, comes back untyped as
+      well: the render links only an `ianaift:l3ipvlan` interface to its VLAN,
+      so it is written as a zone on no `<vlan>` device.
     references: [oc-interfaces]
 
   "interfaces[].mtu":
@@ -337,16 +343,15 @@ per_field_expectation:
     references: [oc-network-instance]
 
   vlans:
-    disposition: not_applicable
-    note: >
-      cisco_iosxe parser doesn't walk `<vlans>` /
-      `<network-instances><vlans>`.  intent.vlans is empty after
-      parse.  OPNsense target accepts `/vlans/vlan/id` and
-      `/vlans/vlan/name` but the canonical input is empty.  Even
-      after parser wire-up, the OPNsense render-side has its own
-      modelling boundary on tagged_ports / untagged_ports / SVI
-      L3 (covered in cisco_iosxe_cli__opnsense.yaml's per-sub-field
-      breakdown).
+    disposition: lossy
+    reason: >
+      The IOS-XE NETCONF parser makes one VLAN record on this corpus: VLAN 10
+      of `kitchen_sink.xml`, from its SVI, named `User VLAN 10 SVI` and
+      holding the SVI's address. It comes back without the address — an
+      OPNsense `<vlan>` holds none; the address stays on the interface — and,
+      since an OPNsense `<vlan>` has no name of its own, named after the
+      device the render writes for it (`GigabitEthernet0/0/0_vlan10`), its
+      name moved to the description.
     references: [oc-vlan, opnsense-vlans]
 
   static_routes:

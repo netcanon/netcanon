@@ -407,11 +407,13 @@ per_field_expectation:
     references: [opnsense-os10-surface]
 
   vlans[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (8 of 8 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and OS10 has one label for a
+      VLAN, its SVI's description, which the OS10 render spends on the VLAN's
+      name. The job says so: OS10 declares `/vlans/vlan/description` lossy,
+      which the validation report lists for each VLAN.
     references: [opnsense-os10-surface]
 
   vlans[].id:
@@ -432,8 +434,11 @@ per_field_expectation:
   vlans[].name:
     disposition: good
     note: >
-      Preserved on 2 of 8 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which OS10 writes as its SVI's description and reads back. The
+      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
+      see `vlans[].description`.
     references: [opnsense-os10-surface]
 
   vlans[].tagged_ports:
