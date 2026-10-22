@@ -109,25 +109,27 @@ per_field_expectation:
   ntp_servers:
     disposition: lossy
     reason: >
-      Round-trips cleanly on 11 of the 12 cells that populate it,
-      including a five-server cell, and loses two of three servers on
-      one: `houdev_vyos_dhcpv6_pd_client.conf` goes 3 -> 1.  The
-      mechanism spans both codecs and is worth stating in both halves
-      rather than blaming one side.
+      Round-trips on all 12 cells that populate it, including a
+      five-server cell, and is wrong on one where no round trip can see
+      it: `houdev_vyos_dhcpv6_pd_client.conf`.
       That fixture writes the empty per-server block INLINE —
       `server  time1.vyos.net { }` on a single line — where every other
       fixture uses the multi-line `server <host> {` / `}` form.  The VyOS
       brace-stack parser handles the multi-line form and leaves a literal
       ` { }` glued to the server name on the inline form, so the
       canonical value is `time1.vyos.net { }`.  The RouterOS renderer
-      writes that verbatim into a comma-joined `servers=` value, and an
-      unquoted RouterOS value terminates at whitespace, so the re-parse
-      recovers only the first server.
-      Recorded `lossy`, not `unsupported`: both matrices declare
-      `/system/ntp-server` supported and the concept plainly crosses on
-      11 of 12 cells, so this is a partial record loss inside a concept
-      the target models.  Diff the source server list against the render
-      before cutover.
+      writes the comma-joined `servers=` value as one string, since it
+      holds white space, and the re-parse reads it back whole: both trees
+      hold the same three names, which resolve to nothing on the router.
+      (Written bare until 2026-10, the value ended at its first white
+      space and the re-parse recovered one server: the 3 -> 1 this field
+      was first measured lossy on.)
+      Recorded `lossy` still, not `unsupported` and not `good`: both
+      matrices declare `/system/ntp-server` supported and the concept
+      plainly crosses, so this is a partial record loss inside a concept
+      the target models; it is the source parser's, every target carries
+      it, and on this one it is below what the round trip compares.  Diff
+      the source server list against the render before cutover.
     references: [vyos-mikrotik-surface]
 
   timezone:

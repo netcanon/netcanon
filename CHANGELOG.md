@@ -57,6 +57,26 @@ timestamp if your timezone matters for an audit.
   earlier, look in the old output for lines the source config did not
   have before it reaches a device.
 
+- **A value of the config was written into a RouterOS output as
+  script, and a description could run a command on the router that
+  imported it.**  RouterOS reads an imported `.rsc` as a script:
+  outside a string white space parts two words, `;` ends the command,
+  and `$`, `[ ]` and `( )` substitute a variable or run a command or
+  an expression -- and inside a string `$[...]` and `$(...)` run as
+  well.  The RouterOS renderer escaped only `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source came out as that command on
+  the router that imported the output, in a job that said
+  `completed`, and a value with a `;` in it -- a RADIUS secret, an
+  SNMP community, a user's name, a DHCP domain -- ended its command
+  there, and what followed was read as the next one.  A value is now
+  written as it stands only when it is made of letters, digits and
+  `- . _ / : , %` (what an export leaves bare), and as a string
+  otherwise, with `\`, `"` and `$` escaped, as an export escapes `$`
+  (Fixed, below).  If you translated a config onto RouterOS with 0.7.7
+  or earlier, read the old output for `$`, `;`, `[` and `(` outside a
+  quoted string, and for `$` inside one, before it reaches a router.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -586,6 +606,29 @@ timestamp if your timezone matters for an audit.
   you translated a Junos config with units of `lo0`, `st0`, an
   aggregate or a management port, or a port-channel sub-interface,
   onto Junos with 0.7.7 or earlier, translate it again.
+
+- **A RouterOS value with white space or script in it was cut, or
+  read as more than a value** (Security, above).  A LAG's members, a
+  route's next hop, an SNMP community, a RADIUS secret, a list of NTP
+  or DNS servers or a user's name that held a space was written bare,
+  and the router -- and the parser -- read its first word:
+  `slaves=my port,sfp-sfpplus2` was a member `my` and a stray word,
+  `secret=7 <blob>` a secret `7`.  An SNMPv3 passphrase or a
+  description that held `$` was written into a string unescaped, and
+  the router substituted a variable for it.  Every value the renderer
+  takes from the tree is now written bare only when it is made of
+  letters, digits and `- . _ / : , %`, and as a string otherwise, with
+  `\`, `"` and `$` escaped; the parser reads a quoted `[ find
+  name="..." ]` and `[ find default-name="..." ]` back whole.  The
+  read-back that reports a placed port no line of the output finds
+  (`unbound_ports`) now allows only for what the parser still cuts a
+  list at -- a comma in `slaves=`, and a comma, `@` and `%` in
+  `gateway=` -- so a port given a name with white space is reported by
+  that name.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`,
+  which reads the output with a reader of its own, typed from
+  MikroTik's "Scripting" page, for a tree with such text in every
+  place the schema has, and for every committed input.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3804,6 +3847,17 @@ timestamp if your timezone matters for an audit.
   are sourced separately: the four Arista profiles' `lags.max` is not a
   vendor figure (Arista publishes ports per LAG, not a LAG count), and the
   QFX5120 figures were read from a reseller's copy of Juniper's datasheet.
+- **The RouterOS parser reads `\` and the character after it as that
+  character.**  An export writes a character outside ASCII as hex
+  escapes (`\C3\A9`), a line break as `\n` and a space as `\_`; the
+  parser reads them as the letters (`C3A9`, `n`, `_`), so such a
+  description or name reaches the target spelt so.
+- **The renderers whose lines a device reads a word at a time have not
+  been read for a value with white space in it written bare.**  The
+  RouterOS renderer writes such a value as one string (Security,
+  above); whether an IOS-XE, NX-OS, EOS, AOS-CX, AOS-S, OS10 or IOS XR
+  line can be given more words by a value from another vendor -- an
+  SNMP community, a RADIUS key -- is not established here.
 
 ## [0.7.7] - 2026-10-07
 

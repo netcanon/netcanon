@@ -105,7 +105,7 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | opnsense/opnsense_paramiko_shell_capture.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
 | opnsense/opnsense_service_test_config.xml | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 |
 | opnsense/user_contrib_supergate_opn25.xml | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | OK 21/21 | WARN 18/21 |
-| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
+| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
 | vyos/metasploit-vyos-config.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
 | vyos/pc5-round1-border.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
 | vyos/pc5-round1-core.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
@@ -128,7 +128,7 @@ One hand-authored fixture per codec exercising every field the codec's :class:`C
 | aruba_aoscx/kitchen_sink.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
 | aruba_aoss/kitchen_sink.cfg | WARN 18/21 | WARN 13/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 14/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 15/21 |
 | cisco_iosxe/kitchen_sink.xml | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 8/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 14/21 | WARN 16/21 | WARN 9/21 | WARN 13/21 | WARN 16/21 | WARN 11/21 | WARN 12/21 | WARN 11/21 |
+| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 8/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 14/21 | WARN 16/21 | WARN 9/21 | WARN 13/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 11/21 |
 | cisco_iosxr/kitchen_sink.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 18/21 | WARN 15/21 |
 | cisco_nxos/kitchen_sink.cfg | WARN 15/21 | WARN 13/21 | WARN 14/21 | WARN 19/21 | WARN 17/21 | WARN 14/21 | OK 21/21 | WARN 15/21 | WARN 15/21 | WARN 14/21 | WARN 15/21 | WARN 15/21 | WARN 12/21 |
 | dell_os10/kitchen_sink.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 |
@@ -169,8 +169,8 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 | 6 | arista_eos | aruba_aoscx | 11 |
 | 7 | juniper_junos | aruba_aoss | 11 |
 | 8 | arista_eos | dell_os10 | 10 |
-| 9 | cisco_iosxe_cli | mikrotik_routeros | 10 |
-| 10 | cisco_iosxe_cli | vyos | 10 |
+| 9 | cisco_iosxe_cli | vyos | 10 |
+| 10 | juniper_junos | mikrotik_routeros | 10 |
 
 ## Per-cell drill-downs — real captures
 
@@ -8965,11 +8965,10 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [{"name": "netadmin", "privilege_level": 1, "hashed_password": "", "role": "admin"}] | {"local_users[0] {'name': 'netadmin'}": {"privilege_level": {"source": 15, "target": 1}}} |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → mikrotik_routeros  (WARN 19/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → mikrotik_routeros  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net"] | count drift: 3 → 1 (ntp_servers) |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → opnsense  (WARN 19/21)
@@ -10515,7 +10514,7 @@ One section per non-OK synthetic cell (157 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin1", "privilege_level": 15, "hashed_password": "5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "role": "admin"}, {"name": "admin2", "privilege_level": 15, "hashed_password": "9 $9$fakeSCRYPT... | [{"name": "admin1", "privilege_level": 1, "hashed_password": "junos:$1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "role": "admin"}] | count drift: 3 → 1 (local_users) |
 | radius_servers | DRIFT | [{"host": "198.51.100.40", "key": "7 fakeRadiusSharedSecret01", "auth_port": 1812, "acct_port": 1813}, {"host": "198.51.100.41", "key": "7 fakeRadiusSharedSecret02", "auth_port": 1812, "acct_port":... | [] | all 2 radius_servers dropped |
 
-### cisco_iosxe_cli/kitchen_sink.txt → mikrotik_routeros  (WARN 11/21)
+### cisco_iosxe_cli/kitchen_sink.txt → mikrotik_routeros  (WARN 12/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -10528,7 +10527,6 @@ One section per non-OK synthetic cell (157 total).  Sections are ordered by sour
 | snmp | DRIFT | {"community": "publicRO", "location": "Lab-A Rack 12 Unit 4", "contact": "noc@kitchensink.example.com", "trap_hosts": ["198.51.100.250", "198.51.100.251"], "v3_users": [{"name": "monitor1", "group"... | {"community": "publicRO", "location": "Lab-A Rack 12 Unit 4", "contact": "noc@kitchensink.example.com", "trap_hosts": ["198.51.100.250", "198.51.100.251"], "v3_users": [{"name": "monitor1", "group"... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "Port-channel1", "members": ["TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "mode": "active"}, {"name": "Port-channel2", "members": ["TenGigabitEthernet1/0/3", "TenGigabitEthernet... | [{"name": "Port-channel1", "members": ["TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "mode": "active"}, {"name": "Port-channel2", "members": ["TenGigabitEthernet1/0/3", "TenGigabitEthernet... | {"lags[1] {'name': 'Port-channel2'}": {"mode": {"source": "passive", "target": "active"}}} |
 | local_users | DRIFT | [{"name": "admin1", "privilege_level": 15, "hashed_password": "5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "role": "admin"}, {"name": "admin2", "privilege_level": 15, "hashed_password": "9 $9$fakeSCRYPT... | [{"name": "admin1", "privilege_level": 15, "hashed_password": "", "role": "admin"}, {"name": "admin2", "privilege_level": 15, "hashed_password": "", "role": "admin"}, {"name": "operator1", "privile... | {"local_users[0] {'name': 'admin1'}": {"hashed_password": {"source": "5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "target": ""}}, "local_users[1] {'name': 'admin2'}": {"hashed_password": {"source": "9 $... |
-| radius_servers | DRIFT | [{"host": "198.51.100.40", "key": "7 fakeRadiusSharedSecret01", "auth_port": 1812, "acct_port": 1813}, {"host": "198.51.100.41", "key": "7 fakeRadiusSharedSecret02", "auth_port": 1812, "acct_port":... | [{"host": "198.51.100.40", "key": "7", "auth_port": 1812, "acct_port": 1813}, {"host": "198.51.100.41", "key": "7", "auth_port": 1812, "acct_port": 1813}] | {"radius_servers[0] {'host': '198.51.100.40'}": {"key": {"source": "7 fakeRadiusSharedSecret01", "target": "7"}}, "radius_servers[1] {'host': '198.51.100.41'}": {"key": {"source": "7 fakeRadiusShar... |
 | routing_instances | UNSUPPORTED (by design) | [{"name": "CUSTOMER-A", "instance_type": "vrf", "route_distinguisher": "65000:100", "rt_imports": ["65000:100", "65000:999"], "rt_exports": ["65000:100"], "description": "Tenant A \u2014 corp-overl... | [] | all 2 routing_instances dropped |
 
 ### cisco_iosxe_cli/kitchen_sink.txt → opnsense  (WARN 12/21)

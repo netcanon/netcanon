@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-22T00:58:29+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T005827Z.json",
-  "mesh_run_started_utc": "2026-10-22T00:58:06+00:00",
+  "started_utc": "2026-10-22T00:59:49+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T005947Z.json",
+  "mesh_run_started_utc": "2026-10-22T00:59:26+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -595,17 +595,17 @@
   "aggregate": {
     "ALIGNED": 9347,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4212,
+    "EXPECTED_LOSSY": 4210,
     "EXPECTED_UNSUPPORTED": 2693,
-    "METHODOLOGY_ISSUE_under": 1954,
+    "METHODOLOGY_ISSUE_under": 1956,
     "METHODOLOGY_ISSUE_over": 21,
     "STRUCTURAL_ONLY": 4536,
     "TRIVIAL_EMPTY": 34778,
     "fields_total": 57545,
     "severity_high": 4,
     "severity_medium": 287,
-    "severity_low": 6224,
-    "severity_ok": 51030
+    "severity_low": 6226,
+    "severity_ok": 51028
   },
   "severity_matrix": {
     "arista_eos": {

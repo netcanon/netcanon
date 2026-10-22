@@ -72,7 +72,10 @@ semantics are identical (1812 auth, 1813 acct).
   to break the obfuscation chain.  In practice, both codecs
   pass-through the opaque blob; the receiving vendor's RADIUS
   daemon will reject if it does not match the server's expectation,
-  and the operator re-enters the secret.
+  and the operator re-enters the secret.  The canonical value keeps the
+  IOS-XE type digit (`7 <blob>`), and the RouterOS renderer writes it
+  whole, as one string (`secret="7 <blob>"`): the round trip preserves
+  it, and the router's secret is the digit and the obfuscated text.
 - **Service-binding (RouterOS) vs server-group/method-list (Cisco)**:
   RouterOS's `service=login,ppp,wireless` and Cisco's `aaa group
   server / aaa authentication login default group ... local`

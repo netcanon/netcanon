@@ -1047,13 +1047,17 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
         assert plan["target_hardware"] == {"1": "sfp-sfpplus1", "3": "sfp-sfpplus3"}
 
-    @pytest.mark.parametrize("name", ["my port", "a,b"])
-    def test_and_so_is_one_under_a_name_that_cannot_be_read_back(
-        self, client: TestClient, name: str,
+    @pytest.mark.parametrize(("name", "written"), [
+        ("my port", 'slaves="my port,sfp-sfpplus2"'),
+        ("a,b", "slaves=a,b,sfp-sfpplus2"),
+    ])
+    def test_and_so_is_one_under_a_name_that_defines_nothing(
+        self, client: TestClient, name: str, written: str,
     ) -> None:
-        """The member list is written unquoted, so a name with white
-        space or a comma in it is not read back whole.  The port is
-        reported all the same; this used to be ``completed``."""
+        """A name with white space in it is written in a string and read
+        back whole, defining nothing; a comma parts two members, so a
+        name with one in it is not read back whole.  Either way the
+        port is reported; this used to be ``completed``."""
         resp = client.post("/api/v1/migration/plan", json={
             "source": "opnsense", "target": "mikrotik_routeros",
             "raw_text": _OPNSENSE_LAGG,
@@ -1063,7 +1067,7 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         })
         assert resp.headers["X-Netcanon-Job-Status"] == "partial"
         job = resp.json()
-        assert f"slaves={name},sfp-sfpplus2" in job["rendered"]
+        assert written in job["rendered"]
         assert job["port_mapping_plan"]["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
         assert job["port_mapping_plan"]["off_target"] == []
 

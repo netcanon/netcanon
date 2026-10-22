@@ -348,11 +348,14 @@ def _refers_to(rendered: str, used: set[str], name: str) -> bool:
     """Whether the output refers to *name* in a LAG's member list or
     as a next hop.
 
-    A parser does not give a name with white space, a comma, ``@`` or
-    ``%`` in it back whole out of a list that is written unquoted.
-    Such a name is looked for in the TEXT of the lines that hold a
-    list -- not by the engine's own rule for what a parser reads,
-    which a guard that shared it could not see past.
+    A parser does not give every name back whole out of a list: the
+    RouterOS one cuts a member list at a comma and a next hop at a
+    comma, ``@`` and ``%``.  A name of other than plain token
+    characters is looked for in the TEXT of the lines that hold a
+    list, as it stands and as a RouterOS string holds it (a backslash,
+    a quote and a ``$`` escaped) -- not by the engine's own rule for
+    what a parser reads, which a guard that shared it could not see
+    past.
     """
     if name in used:
         return True
@@ -360,8 +363,9 @@ def _refers_to(rendered: str, used: set[str], name: str) -> bool:
     # is looked for in the text -- whatever it is that is odd about it.
     if re.fullmatch(r"[\w./:+-]+", name):
         return False
+    in_a_string = name.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
     return any(
-        name in line for line in rendered.splitlines()
+        name in line or in_a_string in line for line in rendered.splitlines()
         if "slaves=" in line or "gateway=" in line
     )
 
@@ -4229,7 +4233,7 @@ class TestANextHopTheRewriteDoesNotReach:
         )
         plan = job.port_mapping_plan
         assert "gateway=ether1,ether2" in job.rendered
-        assert "gateway=ether3@main" in job.rendered
+        assert 'gateway="ether3@main"' in job.rendered
         # The plain one followed, and an address is never a port.
         assert "dst-address=10.24.0.0/16 gateway=sfp-sfpplus4" in job.rendered
         assert plan.stale_next_hops == ["0.0.0.0/0", "10.23.0.0/16"]
@@ -5388,10 +5392,11 @@ class TestAPortTheOutputDoesNotLookUp:
         ) == (["a", "b"], True)
 
     def test_a_name_the_parser_does_not_give_back_whole_is_still_a_use(self) -> None:
-        """A list is written unquoted, so a parser reads a member or a
-        next hop only up to its first white space or comma -- in a
-        next hop, ``@`` or ``%`` as well.  A port with no interface
-        under such a name is judged by the part that is read."""
+        """The parser cuts a member list at a comma, and a next hop
+        at ``@`` and ``%`` as well; a list is a string where a name in
+        it holds white space, and is read whole.  A port with no
+        interface under such a name is judged by the part that is
+        read."""
         job = SimpleNamespace(rendered=_OUTPUT_THAT_REFERS_TO_ODD_NAMES, port_drops=[], port_renames={
             "1": "my port", "3": "a,b", "5": "up@link", "7": "to core", "9": "a%b", "11": "not used",
             "13": ",x",
@@ -5595,11 +5600,11 @@ add address=10.0.0.1/24 interface=ether1.10
 """
 
 _OUTPUT_THAT_REFERS_TO_ODD_NAMES = """/interface bonding
-add slaves=my port,sfp-sfpplus2 mode=802.3ad name=bond1
+add slaves="my port,sfp-sfpplus2" mode=802.3ad name=bond1
 add slaves=a,b,sfp-sfpplus4 mode=802.3ad name=bond2
 /ip route
-add dst-address=10.9.0.0/16 gateway=up@link
-add dst-address=10.5.0.0/16 gateway=10.0.5.2%to core
+add dst-address=10.9.0.0/16 gateway="up@link"
+add dst-address=10.5.0.0/16 gateway="10.0.5.2%to core"
 add dst-address=10.6.0.0/16 gateway=a%b
 add dst-address=10.7.0.0/16 type=blackhole
 """
@@ -5777,22 +5782,37 @@ class TestAPortTheConfigHasNoInterfaceFor:
         assert "(igb0 on sfp-sfpplus1)" in line
         assert "or for a port the config has no interface for" in line
 
-    @pytest.mark.parametrize("name", ["my port", "a,b"])
-    def test_a_name_the_parser_does_not_give_back_whole_is_reported_too(
-        self, devices, name: str,
-    ) -> None:
-        """The member list is written unquoted, so the output cannot be
-        read back to this name.  The port is reported all the same,
-        and its name is not listed as an override target as well."""
+    def test_a_name_the_parser_does_not_give_back_whole_is_reported_too(self, devices) -> None:
+        """A comma parts two members, written bare or in a string, so
+        the output cannot be read back to this name.  The port is
+        reported all the same, and its name is not listed as an
+        override target as well."""
         # Not through the wrapper: such a name breaks the member list
-        # itself, and the wrapper rightly finds a port in it (``my``)
+        # itself, and the wrapper rightly finds a port in it (``a``)
         # that the job does not report.
         job = migration_pipeline.run_plan_with_models(
             get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
-            port_rename_map={"igb0": name},
+            port_rename_map={"igb0": "a,b"},
         )
         plan = job.port_mapping_plan
-        assert f"slaves={name},sfp-sfpplus2" in job.rendered
+        assert "slaves=a,b,sfp-sfpplus2" in job.rendered
+        assert plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
+        assert plan.off_target == [] and plan.target_hardware == {}
+        assert job.status == MigrationJobStatus.partial
+
+    def test_a_name_with_white_space_is_given_back_whole_and_reported(self, devices) -> None:
+        """The member list is one string where a member holds white
+        space, and is read back whole: the port is reported by its own
+        name.  (Written bare, ``my port`` was two words, and the
+        parser read a member ``my``.)"""
+        job = run_plan_with_models(
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": "my port"},
+        )
+        plan = job.port_mapping_plan
+        assert 'slaves="my port,sfp-sfpplus2"' in job.rendered
+        lags = get_codec("mikrotik_routeros").parse(job.rendered).lags
+        assert [lag.members for lag in lags] == [["my port", "sfp-sfpplus2"]]
         assert plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
         assert plan.off_target == [] and plan.target_hardware == {}
         assert job.status == MigrationJobStatus.partial
@@ -5811,10 +5831,10 @@ class TestAPortTheConfigHasNoInterfaceFor:
     @pytest.mark.parametrize(
         ("port", "name", "line"),
         [
-            ("GigabitEthernet1/0/3", "my port", "gateway=my port"),
-            ("GigabitEthernet1/0/3", "up@link", "gateway=up@link"),
+            ("GigabitEthernet1/0/3", "my port", 'gateway="my port"'),
+            ("GigabitEthernet1/0/3", "up@link", 'gateway="up@link"'),
             ("GigabitEthernet1/0/3", "a%b", "gateway=a%b"),
-            ("GigabitEthernet1/0/5", "to core", "gateway=10.0.5.2%to core"),
+            ("GigabitEthernet1/0/5", "to core", 'gateway="10.0.5.2%to core"'),
         ],
     )
     def test_a_route_by_such_a_name(self, port: str, name: str, line: str) -> None:
@@ -6347,20 +6367,34 @@ class TestTheWrapperAppliesEveryCheck:
             )
 
     def test_the_oracle_looks_past_the_engines_own_rule(self) -> None:
-        """A name in double quotes is read back without them.  The
-        engine judges a name by the part before its first white
-        space, comma, ``@`` or ``%``; this one has none, and is not
-        reported -- a limit the documents state.  The oracle looks in
-        the text, whatever is odd about a name, so it refuses the job
-        with nothing spoiled.  (When the renderer quotes its lists
-        this test has to change: the limit will be gone.)"""
+        """A next hop that begins with a comma is read back as two, the
+        first of them empty.  The engine judges a name by the part
+        before its first comma, ``@`` or ``%``; this one has nothing
+        before it, and is not reported -- a limit the documents state.
+        The oracle looks in the text, whatever is odd about a name, so
+        it refuses the job with nothing spoiled.  (A name in double
+        quotes was this test's name while the renderer wrote its lists
+        bare: it is a string now, read back whole, and reported.)"""
         with pytest.raises(AssertionError, match="uses a name for a paired port that nothing defines"):
             run_plan_with_models(
                 get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
                 _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
                 _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
-                port_rename_map={"GigabitEthernet1/0/3": '"q"'},
+                port_rename_map={"GigabitEthernet1/0/3": ",q"},
             )
+
+    def test_a_name_in_double_quotes_is_reported(self) -> None:
+        """What the test above once handed the oracle: written as a
+        string now, it is read back whole, and the engine reports it."""
+        job = run_plan_with_models(
+            get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
+            _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
+            _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
+            port_rename_map={"GigabitEthernet1/0/3": '"q"'},
+        )
+        assert 'gateway="\\"q\\""' in job.rendered
+        assert job.port_mapping_plan.unbound_ports == {"GigabitEthernet1/0/3": "sfp-sfpplus3"}
+        assert job.status == MigrationJobStatus.partial
 
     def test_one_stack_members_lists_under_the_others_names(self, monkeypatch) -> None:
         """Between two stacks the names of one member are names of the

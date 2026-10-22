@@ -383,13 +383,23 @@ def _unescape(value: str) -> str:
     return "".join(out)
 
 
-_FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")
 # Cross-vendor render path emits ``[ find name=X ]`` against the
 # canonical name when no ``default_name`` was tracked; we need to
 # accept both forms on the parse side so round-trips don't drop the
-# row.  Quoted names (``[ find name="ge-0/0/1" ]``) need the value
-# extracted without the surrounding quotes.
-_FIND_NAME_RE = re.compile(r'\[\s*find\s+name=(?:"([^"]*)"|(\S+?))\s*\]')
+# row.  Either value may be quoted (``[ find name="ge-0/0/1 x" ]``):
+# group 1 is a string, read through :func:`_unescape`, group 2 a bare
+# value.
+_FIND_DEFAULT_NAME_RE = re.compile(
+    r'\[\s*find\s+default-name=(?:"((?:\\.|[^"\\])*)"|(\S+?))\s*\]'
+)
+_FIND_NAME_RE = re.compile(
+    r'\[\s*find\s+name=(?:"((?:\\.|[^"\\])*)"|(\S+?))\s*\]'
+)
+
+
+def _found(m: re.Match[str]) -> str:
+    """The value a ``[ find ... ]`` match names, unquoted."""
+    return _unescape(m.group(1)) if m.group(1) is not None else m.group(2)
 
 
 def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
@@ -520,12 +530,11 @@ def _parse_interface_ethernet(
         if fm is None and nm is None:
             continue
         if fm is not None:
-            default_name = fm.group(1)
+            default_name = _found(fm)
             canonical_default = default_name
         else:
             default_name = ""
-            # _FIND_NAME_RE: group(1) is the quoted form, group(2) the bare.
-            canonical_default = nm.group(1) if nm.group(1) is not None else nm.group(2)
+            canonical_default = _found(nm)
         kv = _parse_kv(line)
         canonical_name = kv.get("name", canonical_default)
         iface = iface_by_name.get(canonical_name)

@@ -440,6 +440,16 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # VLAN ids are written ``VLAN-<id>``, and a name outside the characters
 # Juniper's page gives (``DEFAULT_VLAN``) is written as it is -- and no cell's
 # round trip shows it; the YAML's reason says so.
+#
+# And two more, when the RouterOS renderer began writing a value with white
+# space in it as one string: cisco_iosxe_cli__mikrotik_routeros from 1 to 2,
+# and vyos__mikrotik_routeros from 0 to 1.  On each pair the one cell that
+# showed the loss showed it because the value was written bare and ended at
+# its first white space: `secret=7 <blob>` read back as `7`, and
+# `servers=time1.vyos.net { },...` as one server.  Both values now come back
+# whole, and both are still wrong on the device -- an IOS-XE type-7 key
+# written as the literal secret, and a server name the VyOS parser glued
+# ` { }` to -- below what the round trip compares.  The YAMLs' reasons say so.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -467,7 +477,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__cisco_iosxe": 2,
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
-    "cisco_iosxe_cli__mikrotik_routeros": 1,
+    "cisco_iosxe_cli__mikrotik_routeros": 2,
     "cisco_iosxe_cli__opnsense": 4,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,
@@ -496,6 +506,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 5,
     "opnsense__mikrotik_routeros": 3,
+    "vyos__mikrotik_routeros": 1,
 }
 
 _EVIDENCED = {"EXPECTED_LOSSY", "EXPECTED_UNSUPPORTED"}
