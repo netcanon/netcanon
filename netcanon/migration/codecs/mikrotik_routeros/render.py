@@ -527,6 +527,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         'comment="review: tunnel endpoint placeholder -- set local-address/remote-address"'
                     )
                 parts.append(f"name={_quote_if_needed(iface.name)}")
+                # GRE, EoIP and IPIP each take ``mtu`` (default auto);
+                # the parser reads it back.
+                if iface.mtu is not None:
+                    parts.append(f"mtu={iface.mtu}")
                 # Placeholder endpoint -- canonical model in v1 carries
                 # no tunnel local/remote address pair.  Without
                 # ``remote-address`` RouterOS rejects the add line; we

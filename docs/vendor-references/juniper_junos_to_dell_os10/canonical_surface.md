@@ -7,7 +7,7 @@ Cached measurement backing
 
 - Fixture cells: **11**
 - Render errors: **0** · re-parse errors: **0**
-- Retrieved: 2026-09-21
+- Retrieved: 2026-09-21 (the `interfaces[].mtu` row re-measured 2026-10-20)
 
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
@@ -23,8 +23,8 @@ Across the 11 cells, 147 source interface records produce 273 re-parsed records 
 
 | Disposition | Fields |
 |---|---|
-| `good` | 20 |
-| `lossy` | 13 |
+| `good` | 21 |
+| `lossy` | 12 |
 | `unsupported` | 13 |
 | `not_applicable` | 0 |
 
@@ -48,7 +48,7 @@ Across the 11 cells, 147 source interface records produce 273 re-parsed records 
 | `interfaces[].ipv4_addresses` | good | 3 | 7 | 1 |
 | `interfaces[].ipv6_addresses` | good | 3 | 7 | 1 |
 | `interfaces[].lag_member_of` | lossy | 0 | 7 | 4 |
-| `interfaces[].mtu` | lossy | 0 | 7 | 4 |
+| `interfaces[].mtu` | good | 1 | 7 | 3 |
 | `interfaces[].name` | good | 4 | 7 | 0 |
 | `interfaces[].vrrp_groups` | lossy | 0 | 7 | 4 |
 | `lags` | lossy | 0 | 5 | 6 |
@@ -145,9 +145,14 @@ Drifted on 11 of 11 cells (preserved on 0, both sides empty on 0).
 
 Drifted on 7 of 11 cells (preserved on 0, both sides empty on 4).
 
-### `interfaces[].mtu` — lossy
+### `interfaces[].mtu` — good
 
-Drifted on 7 of 11 cells (preserved on 0, both sides empty on 4).
+Preserved on 1 of 11 cells; the 7 that drift are the structural
+drift of the whole `interfaces` list, attributed to one owner
+sub-field (both sides empty on 3).  Checked per interface over every
+Junos input, each MTU survives.  It was declared lossy from the
+structural drift alone, until the Junos parser read a unit's family
+MTU and a cell could preserve one.
 
 ### `interfaces[].vrrp_groups` — lossy
 

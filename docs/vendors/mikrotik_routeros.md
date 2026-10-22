@@ -20,6 +20,10 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
 - Interfaces — physical (`ether<N>`, `sfp-sfpplus<N>`), bridge
   (`/interface bridge`), VLAN (`/interface vlan` named e.g.
   `gn-mgmt`); IPv4 (`/ip address`), IPv6 (`/ipv6 address`)
+- Tunnels — `/interface gre`, `/interface eoip`, `/interface ipip`:
+  name, comment and `mtu`.  The endpoints are not translated: they
+  come out as `remote-address=0.0.0.0`, for you to fill in.
+  ⚠️ Up to 0.7.7 a tunnel's MTU was not written or read.
 - VLANs — `/interface bridge port` with vlan-id mappings + tagged
   / untagged port assignment
 - Static routes (`/ip route`)

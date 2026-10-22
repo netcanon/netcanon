@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-20T15:50:39+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261020T154951Z.json",
-  "mesh_run_started_utc": "2026-10-20T15:49:43+00:00",
+  "started_utc": "2026-10-22T00:58:29+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T005827Z.json",
+  "mesh_run_started_utc": "2026-10-22T00:58:06+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,14 +593,14 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9337,
+    "ALIGNED": 9347,
     "CODEC_BUG": 4,
     "EXPECTED_LOSSY": 4212,
-    "EXPECTED_UNSUPPORTED": 2692,
+    "EXPECTED_UNSUPPORTED": 2693,
     "METHODOLOGY_ISSUE_under": 1954,
     "METHODOLOGY_ISSUE_over": 21,
     "STRUCTURAL_ONLY": 4536,
-    "TRIVIAL_EMPTY": 34789,
+    "TRIVIAL_EMPTY": 34778,
     "fields_total": 57545,
     "severity_high": 4,
     "severity_medium": 287,
@@ -2557,9 +2557,9 @@
           }
         },
         "interfaces[].mtu": {
-          "actual": "trivially_preserved",
+          "actual": "preserved",
           "expected": "good",
-          "variance": "TRIVIAL_EMPTY",
+          "variance": "ALIGNED",
           "severity": "ok"
         },
         "interfaces[].ipv4_addresses": {
@@ -3189,14 +3189,14 @@
         }
       },
       "summary": {
-        "ALIGNED": 5,
+        "ALIGNED": 6,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 2,
         "METHODOLOGY_ISSUE_under": 5,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 39,
+        "TRIVIAL_EMPTY": 38,
         "fields_total": 55,
         "missing_in_phase1": 3,
         "severity_high": 1,

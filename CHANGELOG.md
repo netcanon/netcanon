@@ -548,6 +548,45 @@ timestamp if your timezone matters for an audit.
   the one the source stated.  Between FortiOS and RouterOS the parent
   now goes both ways.
 
+- **A unit of a Junos loopback, tunnel, aggregate or management port
+  was written under a name Junos refuses.**  The parser reads `set
+  interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the
+  renderer wrote such a name back as `set interfaces lo0 unit 10`
+  only where the device was shaped like a port (`ge-0/0/0`).  Every
+  other device was written `set interfaces lo0.10 unit 0 ...`, which
+  Junos refuses at commit -- no Junos interface has a dot in its
+  name.  So were the `lo0` units that the routing instances of both
+  committed Junos captures take, and the `st0` units of a VPN, so
+  that every routing instance and security zone named a unit no line
+  of the output defined; so was a unit of `ae`, `reth`, `me0`, `em0`,
+  `fxp0` or `vme`, and a unit of an aggregate lost its `vlan-id` as
+  well, from Junos and from an IOS-XE, EOS or NX-OS
+  `Port-channel1.10` alike.  All in jobs that said `completed`.  A
+  unit above 0 of any device is now written under it (`set
+  interfaces lo0 unit 10`, `set interfaces ae1 unit 10 vlan-id 10`),
+  and so is the unit of a management port that follows its port onto
+  a declared device (`em0 unit 5`; it was a known limitation).  A
+  unit 0 is split on a port shape only, as before: of another device
+  it would be that device's own unit 0 (`irb.0` is still the IRB's).
+  A unit's MTU, which the parser did not read and the renderer wrote
+  only under such a name, is written and read per family (`set
+  interfaces st0 unit 100 family inet mtu 1420`, on `family inet`
+  where the unit has no address), and where the device states no MTU
+  that holds it, a `# review:` line says so: Juniper requires the
+  device's media MTU to hold a family MTU and its encapsulation
+  overhead.  A Junos unit's MTU now reaches the other targets too,
+  and onto RouterOS a tunnel's `add` line, which carried no MTU from
+  any source, now writes it (`mtu=1420`) and the parser reads it
+  back.
+  On the bare pipeline (the demo's and
+  the cross-mesh audit's), where no port name is translated, a
+  sub-interface of another vendor is written as `set interfaces
+  GigabitEthernet0/0/0/1 unit 35 vlan-id 35`, the form the port
+  translator's path already gave it under the translated name.  If
+  you translated a Junos config with units of `lo0`, `st0`, an
+  aggregate or a management port, or a port-channel sub-interface,
+  onto Junos with 0.7.7 or earlier, translate it again.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
@@ -3117,6 +3156,14 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **An IOS-XE Q-in-Q sub-interface is read as its outer tag alone.**
+  `encapsulation dot1Q 2234 second-dot1q 15` is read as `dot1q 2234`,
+  and a target that writes a sub-interface's tag (EOS, NX-OS and
+  Junos among them) is written that one tag: the six units the
+  carrier capture has on `GigabitEthernet2/0/4` come out with one tag
+  between them, in jobs that say `completed`.  Write the inner tags
+  by hand.
+
 - **A config pasted without its indentation is not translated by most
   block parsers: they refuse it in words.**  The IOS XR parser
   refuses it for the router's reason: IOS XR places a line by its
@@ -3698,9 +3745,6 @@ timestamp if your timezone matters for an audit.
   10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
   `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
   RouterOS and VyOS).
-- **A non-zero unit of a Junos management port follows its port under
-  a name Junos does not accept.**  `me0 unit 5` comes out as
-  `set interfaces me0.5 unit 0 ...`.  Map it by hand.
 - **On RouterOS only a declared target device can move a port onto
   other hardware.**  Without one, an entry of `port_rename_map` names
   the port.  The output then finds it by the factory name it had
