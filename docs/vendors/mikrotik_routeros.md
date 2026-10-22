@@ -17,9 +17,32 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
 - `hostname` (`/system identity`)
-- Interfaces — physical (`ether<N>`, `sfp-sfpplus<N>`), bridge
+- Interfaces — physical (`ether<N>`, `sfp<N>`, `combo<N>`,
+  `sfp-sfpplus<N>`, `sfp28-<N>`, `qsfp28-<N>-<lane>`), bridge
   (`/interface bridge`), VLAN (`/interface vlan` named e.g.
-  `gn-mgmt`); IPv4 (`/ip address`), IPv6 (`/ipv6 address`)
+  `gn-mgmt`, with its `mtu`; ⚠️ not written or read up to 0.7.7);
+  IPv4 (`/ip address`), IPv6 (`/ipv6 address`).  RouterOS has one
+  MTU: another vendor's IP MTU of its own is written as `mtu` where
+  no other MTU is stated, and is lost where one is (the job's
+  report says so).  A sub-interface of another vendor (IOS-XE
+  `GigabitEthernet1/0/2.10` with `encapsulation dot1Q 10`, Junos
+  `unit 10 vlan-id 10`) is a VLAN interface on its port: `/interface
+  vlan add interface=ether2 name=ether2.10 vlan-id=10`.  Read back,
+  it is a VLAN interface and a VLAN of its tag, not a sub-interface
+  of the port; the job's report says so.  A sub-interface you name
+  with no port in it (`wan10`) rides on the parent chosen for every
+  VLAN, under a `# review:` line: move it to its port.  A
+  sub-interface of two tags (IOS-XE `second-dot1q`, EOS `inner`,
+  Junos `vlan-tags`) is written with its outer tag, and the job is
+  `partial`, the validation report listing the inner tag.  ⚠️ Up to
+  0.7.7 such a sub-interface got no line, and its address named an
+  interface the output did not define.  A VLAN interface on a port,
+  read FROM RouterOS, is not yet a sub-interface onto another
+  vendor (see the CHANGELOG's known limitations).
+- Tunnels — `/interface gre`, `/interface eoip`, `/interface ipip`:
+  name, comment and `mtu`.  The endpoints are not translated: they
+  come out as `remote-address=0.0.0.0`, for you to fill in.
+  ⚠️ Up to 0.7.7 a tunnel's MTU was not written or read.
 - VLANs — `/interface bridge port` with vlan-id mappings + tagged
   / untagged port assignment
 - Static routes (`/ip route`)
@@ -107,6 +130,14 @@ can appear BEFORE `/interface vrrp` in the source.
 
 ## Lossy paths
 
+- **Tunnels** — `/interface gre`, `/interface eoip`,
+  `/interface ipip`.  The canonical model holds no tunnel endpoints,
+  so a tunnel is written with a placeholder `remote-address=0.0.0.0`
+  (with a `review:` comment when it has no description of its own);
+  set `local-address` / `remote-address` before it carries anything.
+  A tunnel that is shut on the source is written `disabled=yes`
+  (MikroTik's GRE and EoIP pages list the property; for IPIP it is
+  inferred from the `X - disabled` flag that page prints).
 - **`/queue tree`** — QoS queue tree carry-through; cross-vendor QoS
   translation doesn't share semantics, so this drops on cross-
   vendor render (intra-MikroTik round-trip preserves it).
@@ -155,6 +186,33 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 
 ## Common gotchas
 
+- **A value is written as one string where it holds anything but
+  letters, digits and `- . _ / : , %`** — white space, `;`, `$`, a
+  bracket, a quote.  RouterOS reads an imported `.rsc` as a script:
+  outside a string white space parts two words, `;` ends the command
+  and `$` and the brackets substitute a variable or run a command, and
+  inside a string `$` still substitutes, so it is escaped there (`\$`),
+  as an export escapes it.  ⚠️ Up to 0.7.7 the renderer escaped only
+  `\` and `"` and wrote most values bare: a description
+  `$[/system reset-configuration]` from any source was that command on
+  the router that imported the output, and a value with a space or a
+  `;` in it was cut there or ran on as another command.  Read an older
+  output for `$`, `;`, `[` and `(` before it reaches a router.  The
+  parser reads a string back whole; it reads `\` and the character
+  after it as that character, so a hex escape (`\C3\A9`), `\n` or `\_`
+  in an export reaches the target as the letters.
+- **A user whose password cannot be carried is left out** as a target,
+  with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7 the `/user
+  add group=... name=...` line stayed without its password, and
+  RouterOS gives such a user a blank one; read old outputs for an
+  `add` after a `review:` line.
+- **A VLAN on a VLAN is one tag on a VLAN interface.**  An
+  `/interface vlan` whose `interface=` is another `/interface vlan`
+  (Q-in-Q on RouterOS) is read as a VLAN interface of one tag on that
+  VLAN interface, not as a sub-interface of two tags.  Onto a target
+  that writes tags the job is `partial`; a source's sub-interface of
+  two tags (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has
+  no form here, and is `partial` too.
 - **VLAN interfaces, bridges and names of your own, onto another
   vendor** — the port translator reads the names RouterOS gives a
   port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN
@@ -185,12 +243,20 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   device replacements.  An entry of `port_rename_map` gives a port a
   NAME: `{"ether1": "WAN"}` renders
   `set [ find default-name=ether1 ] name=WAN`, and the port is still
-  found by the factory name it had — where the config states one (a
-  `set [ find default-name= ]` line, or a name of the form `etherN`).
-  A port the export mentions only elsewhere, such as an SFP port with
-  nothing but an address, has no factory name recorded: naming it
-  renders `set [ find name=WAN ]`, a lookup by the new name that
-  matches no port, unless both device models are declared (below).
+  found by the factory name it had: a `set [ find default-name= ]`
+  line's, or the port's own name where that is one a MikroTik device
+  gives a port — `etherN`, `sfpN`, `comboN`, `sfp-sfpplusN`, `sfp28-N`, and the
+  QSFP lanes `qsfpplusN-L`, `qsfp28-N-L`, `qsfp56-N-L` and
+  `qsfp56-dd-N-L`, whole and in lower case, as MikroTik's
+  manual and exports show them.  So an SFP port the export mentions
+  only in `/ip address` is found too.  A name of yours
+  (`ether1_ADMIN`, `Ether1`) is not one, and a port known only by
+  such a name, with no `set [ find default-name= ]` line for it, has
+  none recorded: naming it renders `set [ find name=WAN ]`, a lookup
+  by the new name that matches no port, unless both device models
+  are declared (below).  RouterOS names are free text in their own
+  letter case, so `SFP-SFPPLUS1` is not read as a port: onto another
+  vendor the job lists it as a name the translator could not read.
   The key of an entry is the name the config uses for the port —
   yours, where you gave one; without devices declared an entry keyed
   by the factory name of a port you named matches nothing and is
@@ -222,7 +288,7 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   and the job is `partial`; without, nothing is reported.  Give the
   port another name.
 - **A port a config from another vendor names only as a LAG member
-  or in a route** (an AOS-S trunk member, an IOS route's interface)
+  or in a route** (an IOS route's interface that no stanza configures)
   has no interface of its own, and so no line of its own in the
   output.  The name the mapping gives it — the target port's — needs
   none.  A name YOU give it in `port_rename_map` is written into
@@ -231,8 +297,11 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   and the job is `partial`.  Give such a port a port of the target,
   not a name.  A port with no place that you keep under a name is
   written the same way, and is said in a line of the plan, not in
-  `unbound_ports`.  (Both lists are written unquoted: a name with
-  white space or a comma in it breaks the line.)
+  `unbound_ports`.  (A comma parts two names in either list, and an
+  `@` or a `%` a next hop, so a name that holds one is pieces there;
+  with both devices declared a placed port under such a name is
+  listed in `unbound_ports`, whether or not it has a line of its
+  own.)
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix

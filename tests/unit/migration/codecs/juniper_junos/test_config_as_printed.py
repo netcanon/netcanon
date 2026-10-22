@@ -244,7 +244,7 @@ def test_what_is_inactive_is_not_in_the_tree_and_is_named() -> None:
         if any(address.ip == "10.0.2.1" for address in iface.ipv4_addresses)
     ]
     fourth = next(iface for iface in tree.interfaces if iface.name == "ge-0/0/4")
-    assert fourth.description == "" and fourth.mtu == 9000
+    assert fourth.description == "" and fourth.mtu == 8986  # media MTU 9000, less its header
     # A leaf is named by its first word, as ``display set`` names
     # one: what follows is its value.
     assert tree.dropped_tier3_sections == [
@@ -294,7 +294,7 @@ def test_set_form_says_it_with_deactivate(deactivate: str, gone: set[str], kept:
 def test_a_deactivated_leaf_takes_only_itself() -> None:
     tree = parse_intent(_SET_FORM.replace("{deactivate}", "deactivate interfaces ge-0/0/3 description"))
     third = next(iface for iface in tree.interfaces if iface.name == "ge-0/0/3")
-    assert third.description == "" and third.mtu == 9000
+    assert third.description == "" and third.mtu == 8986  # media MTU 9000, less its header
 
 
 def test_the_two_forms_say_the_same() -> None:

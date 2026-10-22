@@ -31,9 +31,10 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
   (Phase 2; ``lacp mode active|passive`` → mode, absent → static) AND a
   :class:`CanonicalInterface` (kind ``lag``) carrying the LAG's switchport
   state.  The ``multi-chassis`` (VSX MLAG) modifier is dropped in v1.
-* ``user <name> group <group> password ciphertext <blob>`` (Phase 2) →
-  :class:`CanonicalLocalUser` (``group`` → role; administrators → priv
-  15, else 1).
+* ``user <name> group <group> password <ciphertext|plaintext> <value>``
+  (Phase 2) → :class:`CanonicalLocalUser` (``group`` → role;
+  administrators → priv 15, else 1; the keyword, not the value's shape,
+  says which kind of secret it is).
 * top-level ``ip route <dest>/<prefix> <gw> [<dist>]`` (default VRF only)
   → :class:`CanonicalStaticRoute`.
 
@@ -73,6 +74,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._user_secrets import classify_hash
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -95,6 +97,7 @@ from .._helpers import (
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
     address_key,
+    ip_mtu_read,
     vlan_id_run,
 )
 from .._input_shape import detect_input_shape
@@ -124,9 +127,13 @@ _IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\d+))?\b", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
-#: ``mtu 9198`` — the L2 frame MTU.  The separate ``ip mtu`` line (L3
-#: MTU) is parse-and-ignore in v1.
+#: ``mtu 9198`` — the largest Ethernet payload (HPE's VSG: "the same
+#: bytes as the Layer 3 MTU").
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``ip mtu 9198`` — the largest IP packet, a setting of its own whose
+#: default is 1500 whatever ``mtu`` says
+#: (``IP_MTU_THAT_IS_NOT_STATED`` in ``codecs/_helpers.py``).
+_IP_MTU_RE = re.compile(r"^\s+ip\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 #: ``ip address 10.0.0.1/24`` — CIDR form, never dotted mask.  The mgmt
 #: port's ``ip static`` / ``ip dhcp`` forms are deferred (not this regex).
 _IP_CIDR_RE = re.compile(
@@ -174,12 +181,12 @@ _LACP_MODE_RE = re.compile(
     r"^\s+lacp\s+mode\s+(active|passive)\s*$", re.IGNORECASE,
 )
 
-#: ``user <name> group <group> password ciphertext <blob>`` (Phase 2).
-#: The ciphertext blob is a single token (base64-ish, no spaces).  The
-#: ``plaintext`` form is not parsed (rare in a running-config; would drop
-#: the user).
+#: ``user <name> group <group> password <ciphertext|plaintext> <value>``
+#: (Phase 2).  The value is a single token (a ciphertext is base64-ish, no
+#: spaces).  The keyword is CAPTURED: it says what the value is
+#: (:func:`_stored_secret`).
 _USER_RE = re.compile(
-    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(?:ciphertext|plaintext)\s+(\S+)",
+    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(ciphertext|plaintext)\s+(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
 #: AOS-CX built-in group that maps to the cross-vendor admin privilege.
@@ -651,6 +658,7 @@ def _new_iface_scratch(name: str) -> dict:
         "enabled": _default_enabled(name),
         "type": _infer_type(name),
         "mtu": None,
+        "ip_mtu": None,
         "ipv4": [],
         "ipv6": [],
         "vrf": "",
@@ -723,6 +731,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if mm:
             try:
                 current["mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
+            return
+
+        mm = _IP_MTU_RE.match(line)
+        if mm:
+            try:
+                current["ip_mtu"] = int(mm.group(1))
             except ValueError:
                 pass
             return
@@ -828,7 +844,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["lag_member_of"] = f"lag {int(lm.group(1))}"
             return
 
-        # Any other indented line (lacp mode / spanning-tree / ip mtu /
+        # Any other indented line (lacp mode / spanning-tree /
         # active-gateway / ...) is deferred — parse-and-ignore.
 
     # Loop skeleton (open on `interface`, close on dedent, flush at EOF)
@@ -873,6 +889,12 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
         mtu=raw.get("mtu"),
+        # An interface that routes IPv4 with ``mtu`` raised and no
+        # ``ip mtu`` sends IP packets of 1500 bytes, not ``mtu``.
+        ip_mtu=ip_mtu_read(
+            "aruba_aoscx", raw.get("ip_mtu"), raw.get("mtu"),
+            ipv4=bool(raw.get("ipv4")),
+        ),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],
@@ -986,17 +1008,35 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     users: list[CanonicalLocalUser] = []
     seen: set[str] = set()
     for m in _USER_RE.finditer(raw):
-        name, group, blob = m.group(1), m.group(2), m.group(3)
+        name, group, kind, blob = m.group(1), m.group(2), m.group(3), m.group(4)
         if name in seen:
             continue
         seen.add(name)
         users.append(CanonicalLocalUser(
             name=name,
             privilege_level=15 if group.lower() in _AOSCX_ADMIN_GROUPS else 1,
-            hashed_password=blob,
+            hashed_password=_stored_secret(kind, blob),
             role=group,
         ))
     return users
+
+
+def _stored_secret(kind: str, value: str) -> str:
+    """The canonical form of ``password <kind> <value>``, by the keyword.
+
+    The shared policy reads a bare value by its SHAPE (``AQB`` is AOS-CX
+    ciphertext, a word is a password as typed), and the keyword says what
+    the value IS.  Where the two agree the value is kept bare, the form
+    every AOS-CX tree has held; where they do not, it is tagged
+    ``aoscx:<algorithm>:`` so that the keyword decides.  A committed
+    capture whose publisher put a word in place of each ciphertext was
+    read as a typed password, and written as one onto every other target
+    (``secret 0 <word>`` on IOS-XE): a ciphertext must never be.
+    """
+    algorithm = "plaintext" if kind.lower() == "plaintext" else "aoscx_encrypted"
+    if classify_hash(value)[0] == algorithm:
+        return value
+    return f"aoscx:{algorithm}:{value}"
 
 
 def _parse_snmp(raw: str) -> CanonicalSNMP | None:

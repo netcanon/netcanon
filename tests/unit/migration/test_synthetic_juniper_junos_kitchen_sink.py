@@ -197,9 +197,10 @@ def test_populates_every_expected_canonical_field():
     assert any(a.ip == "10.0.0.1" and a.prefix_length == 31 for a in g0.ipv4_addresses)
     assert any(a.ip == "2001:db8::1" and a.prefix_length == 64 for a in g0.ipv6_addresses)
 
-    # ge-0/0/1 — non-default MTU
+    # ge-0/0/1 — non-default MTU: media MTU 9100 less the header and the
+    # 802.1Q tag its unit carries (Juniper: "802.1Q/Ethernet version 2 | 18").
     g1 = iface_by_name["ge-0/0/1"]
-    assert g1.mtu == 9100
+    assert g1.mtu == 9082
 
     # ge-0/0/1.100 — routed sub-interface with per-unit 802.1Q tag
     # (dot1q_vlan, NOT the L2 access_vlan field — GAP 7)
@@ -218,7 +219,7 @@ def test_populates_every_expected_canonical_field():
 
     # ae0 — LAG aggregate with IP + MTU
     ae0 = iface_by_name["ae0"]
-    assert ae0.mtu == 9192
+    assert ae0.mtu == 9178  # the media MTU less its Ethernet header
     assert any(a.ip == "10.1.0.1" for a in ae0.ipv4_addresses)
 
     # irb.100 — SVI with IPv4 + IPv6
@@ -343,7 +344,7 @@ def test_apply_groups_inheritance():
     iface_by_name = {i.name: i for i in intent.interfaces}
     g0 = iface_by_name["ge-0/0/0"]
     assert g0.description == "Inherited from GLOBAL-SETTINGS apply-group"
-    assert g0.mtu == 9000
+    assert g0.mtu == 8986  # the media MTU less its Ethernet header
 
     # Syslog 10.0.0.252 came from the group (top-level only declared
     # 250 + 251).

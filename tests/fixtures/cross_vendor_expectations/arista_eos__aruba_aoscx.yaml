@@ -291,17 +291,18 @@ per_field_expectation:
     reason: >
       Drifts on all 3 cells that populate it (24 record-cells aggregate),
       with the round-tripped VLAN record returning an empty address list.
-      The address is NOT gone from the config: aruba_aoscx declares
-      `/vlans/vlan/ipv4/address/ip` lossy because it renders SVI L3 from a
-      sibling interface stanza rather than from the VLAN record, and the
-      round-trip confirms it exactly — the kitchen-sink's VLAN 100 address
-      10.100.0.1/24 leaves the VLAN record and arrives intact on the
-      round-tripped `Vlan100` INTERFACE record.  The canonical mount point
-      moves; reachability does not break.  This is the one key where the
-      coarse total-drop classifier and the target matrix disagreed, and the
-      round-trip settled it for `lossy`.  Where the source SVI carried only
-      a virtual address the loss IS real — that case is recorded under
-      `interfaces[].ipv4_addresses`.
+      The address is NOT gone from the config.  This path translates no name,
+      so the AOS-CX render writes it from the source's own `interface
+      Vlan100` stanza, under that name (`synthesize_svis_from_vlan_l3` writes
+      no second interface for a VLAN that has one in any spelling), and the
+      AOS-CX parser does not fold an interface called `Vlan100` onto VLAN
+      100: the kitchen-sink's 10.100.0.1/24 leaves the VLAN record and
+      arrives intact on the round-tripped `Vlan100` INTERFACE record.  With
+      port names translated, as the API and the demo do, the interface is
+      `vlan 100` and the address folds back onto the VLAN.  The canonical
+      mount point moves; reachability does not break.  Where the source SVI
+      carried only a virtual address the loss IS real — that case is
+      recorded under `interfaces[].ipv4_addresses`.
     references: [arista-aoscx-surface]
 
   "vlans[].untagged_ports":

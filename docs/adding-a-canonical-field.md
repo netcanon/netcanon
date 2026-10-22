@@ -57,7 +57,25 @@ class CanonicalInterface(BaseModel):
 
 `None` as the default is the convention — codecs distinguish "field
 absent in source config" from "field present with value N" and
-render accordingly.  For collection fields use `Field(default_factory=list)`.
+render accordingly.
+
+**Say what the value COUNTS, and ask it of every platform.**  This
+example once copied the number as it stood, and that was wrong for
+three platforms: a Junos media MTU and an IOS XR `mtu` count the
+Ethernet header, and an OS10 link MTU a whole frame, so a Junos `mtu
+1514` came out as an IOS-XE `mtu 1514`, a packet 14 bytes larger.
+The field's docstring now says it counts the payload, and the codecs
+whose number counts more convert at their edge, from one table
+(`MTU_BEYOND_THE_PAYLOAD` in `codecs/_helpers.py`).  A number that is
+the same word on every platform is not the same quantity: a timer, a
+cost or a size has a unit, and the parser's own reading back of its
+output cannot tell you it is the wrong one.  **And ask whether one
+field holds one fact.**  An IP MTU of its own (IOS-XE `ip mtu`, Junos
+`family inet mtu`) is not the interface MTU, and its default is not
+always the MTU's: on AOS-CX it stays 1500 under a raised `mtu`.  It
+is a field of its own (`ip_mtu`), `None` where it is the payload,
+and a platform with one MTU declares it lost where both are stated
+and differ.  For collection fields use `Field(default_factory=list)`.
 
 Top-level features (an entire new canonical object like `CanonicalDHCPPool`)
 get their own class in the same file plus a new field on `CanonicalIntent`:

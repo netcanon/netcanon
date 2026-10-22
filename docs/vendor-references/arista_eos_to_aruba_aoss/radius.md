@@ -40,11 +40,12 @@ auth_port, acct_port)`.
 Arista -> Aruba round-trip:
 
 * `host`: opaque IP / FQDN string round-trips cleanly.
-* `key`: opaque shared-secret string round-trips verbatim.
-  RADIUS shared secrets are NOT engineID-salted (unlike SNMPv3
-  USM passphrases), so cross-vendor migration of a RADIUS key
-  IS possible without re-keying — the key is just an opaque
-  symmetric string.
+* `key`: a key written as typed round-trips verbatim.  RADIUS
+  shared secrets are NOT engineID-salted (unlike SNMPv3 USM
+  passphrases), so cross-vendor migration of such a key IS
+  possible without re-keying.  EOS prints a key in its own form,
+  `key 7 <blob>`: that is held behind `eos:`, not decoded, and the
+  server is written with no key, beside a review line.
 * `auth_port` / `acct_port`: defaults to 1812 / 1813 on both
   vendors; per-host overrides round-trip as explicit keywords.
 
@@ -53,5 +54,5 @@ of this path lives in real-capture fixtures
 (`tests/fixtures/real/arista/...`) and the Aruba kitchen-sink's
 two `radius-server host ... key "..."` lines.
 
-Disposition: **good** (host / key / port tuple round-trips
-cleanly; both vendors share Cisco-derived grammar).
+Disposition: **lossy** (host / port tuple and a key written as
+typed round-trip; a `key 7` is refused).

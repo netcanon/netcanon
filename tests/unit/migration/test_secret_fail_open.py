@@ -195,10 +195,12 @@ def test_no_target_accept_set_contains_the_unknown_sentinel() -> None:
 def test_genuine_plaintext_is_still_migratable() -> None:
     """A password a human actually typed is still a password.
 
-    The corpus has one: a 5-character alphanumeric secret on an AOS-CX
-    ``admin`` account.  Refusing *everything* unrecognised would have caught it
-    too — which is why the rule keys on structured-secret shape (a ``$``-form
-    or a known vendor ciphertext prefix) rather than on "did I recognise it".
+    The corpus has some (IOS-XE ``password 0``).  Refusing *everything*
+    unrecognised would have caught them too — which is why the rule keys on
+    structured-secret shape (a ``$``-form or a known vendor ciphertext
+    prefix) rather than on "did I recognise it".  The 5-character word on an
+    AOS-CX ``admin`` account this once cited is a ``password ciphertext``
+    its publisher replaced, and the AOS-CX parser now reads it so.
     """
     for target in ("arista_eos", "aruba_aoss", "mikrotik_routeros"):
         assert is_migratable("h0rse", target)
@@ -350,6 +352,42 @@ def test_every_user_rendering_codec_refuses_an_unmodelled_secret(target) -> None
     assert "B" * 40 not in out, (
         f"{target} rendered an unmodelled secret it cannot consume — its user "
         f"render path does not call is_migratable()"
+    )
+
+
+#: The comment markers of every target's grammar, XML's included.
+_COMMENT_MARKERS = ("!", "#", ";", "/*", "//", "<!--")
+
+
+def _outside_comments(text: str) -> list[str]:
+    """The lines of *text* that are not a comment, read as text."""
+    return [
+        line for line in text.splitlines()
+        if not line.lstrip().startswith(_COMMENT_MARKERS)
+    ]
+
+
+@pytest.mark.parametrize("target", _USER_RENDERING_TARGETS)
+def test_a_refused_secret_takes_its_account_with_it(target) -> None:
+    """Refusing a secret drops the whole account, never the secret alone.
+
+    An account written without the password it had is an account with
+    NO password: RouterOS documents that a user added with none has a
+    blank one ("hit [Enter] when logging in"), and a FortiOS admin with
+    no ``set password`` is the same.  FortiOS (``edit`` and an access
+    profile), RouterOS (``add group=full``) and OPNsense (a ``<user>``
+    element) wrote the account and left out only the password.  The
+    review line stays; the account's name is in no line but a comment.
+    """
+    from netcanon.migration.codecs.registry import get_codec
+
+    intent = _intent_with_users(_UNKNOWN_CRYPT)
+    intent.local_users[0].name = "zqrefused"
+    out = get_codec(target).render(intent)
+    assert "review" in out
+    written = [line for line in _outside_comments(out) if "zqrefused" in line]
+    assert written == [], (
+        f"{target} wrote an account whose secret it refused: {written[:3]}"
     )
 
 

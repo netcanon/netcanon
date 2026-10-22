@@ -270,9 +270,10 @@ per_field_expectation:
       declared one.  RouterOS expresses VLAN L3 as an address on the `vlanN`
       interface, which lands on `interfaces[].ipv4_addresses` (preserved on
       all 5 cells), leaving the VLAN record's own address list unpopulated.
-      Both matrices declare `/vlans/vlan/ipv4/address/ip` lossy, so a source
-      that DID mount an address on the VLAN record would degrade — but no
-      committed cell does, so there is no observation to record.
+      mikrotik_routeros declares `/vlans/vlan/ipv4/address/ip` lossy, and
+      aruba_aoscx writes such an address as `interface vlan <N>`
+      (`synthesize_svis_from_vlan_l3`) — but no committed cell exercises
+      either, so there is no observation to record.
     references: [mikrotik-aoscx-surface]
 
   "vlans[].untagged_ports":

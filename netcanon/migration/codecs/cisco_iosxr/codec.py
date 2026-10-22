@@ -124,6 +124,8 @@ class CiscoIOSXRCodec(CodecBase):
         version_range="6.x / 7.x",
         device_classes=[DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `ipv4 mtu`
+            "/interfaces/interface/config/ip-mtu-beside-mtu",  # `ipv4 mtu` beside the interface MTU
             # System
             "/system/hostname",
             # Management plane — DNS / NTP / syslog (promotion #13): parse
@@ -147,6 +149,8 @@ class CiscoIOSXRCodec(CodecBase):
             # (`encapsulation dot1q N`), distinct from the synthesised
             # VLAN id-list below.
             "/interfaces/interface/dot1q-vlan",
+            # `encapsulation dot1q N second-dot1q M`: both tags 802.1Q.
+            "/interfaces/interface/dot1q-inner-vlan",
             # Phase 2 — sub-interface `encapsulation dot1q` → synthesised
             # VLAN id-list (no port membership; name always empty)
             "/vlans/vlan/id",

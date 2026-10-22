@@ -43,11 +43,11 @@ meta:
     Campus/aggregation-to-firewall-edge re-home: an ArubaOS-CX switch replaced
     by a FortiGate that takes over the routed L3 boundary.  Hostname, LACP
     aggregates and their member ports, VLAN IDs, static routes (including
-    metric), SNMP scalars and local usernames survive.  SVI subnets survive but
+    metric) and SNMP scalars survive.  SVI subnets survive but
     relocate onto synthesised `vlan<id>` child interfaces.  What does not
     survive: port-to-VLAN membership, VLAN names and descriptions, anycast /
     virtual-gateway addressing, VRFs, VXLAN, SNMPv3 users, syslog, and every
-    local password.
+    local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-fortigate-surface
@@ -509,47 +509,60 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users, rendering
-      as `config system admin / edit "<name>"`.  The account arrives; see
-      `local_users[].role` and `local_users[].hashed_password` for what it
-      arrives with.
+    disposition: lossy
+    reason: >
+      0 of 7 accounts arrive across the 6 cells that populate local
+      users; the list is emptied on each.  Each of the 7 holds an AOS-CX
+      ciphertext (`password ciphertext`), encrypted under the key of the
+      switch that made it: 6 `AQB` blobs, and the GL CX 10.09 capture's
+      `admin`, whose publisher put a placeholder word where its
+      ciphertext was.  Up to 0.7.7 the AOS-CX parser read that word by
+      its shape, as a password as typed, and it was written onto this
+      target as one; the parser now reads a value by its keyword, so it
+      is refused like the rest
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      FortiOS can consume its own `ENC` ciphertext, from a FortiGate, or
+      a password as typed; anything else is refused on purpose (#461)
+      with a review comment naming the account and no user entry.  Up to
+      0.7.7 an account whose secret was refused was written as an `edit`
+      with its access profile and no `set password` -- an admin with no
+      password; a refused secret now drops the whole account, as on
+      every other target.  Recorded `lossy` rather than `unsupported`:
+      an AOS-CX account configured `password plaintext` is read as typed
+      and arrives, as `set password "<password>"` for the FortiGate to
+      encrypt on save; no committed capture has one.  Before cutover, list
+      the source accounts, search the render for `review:` comments, and
+      re-create each refused account on the target with a fresh
+      password.
     references: [aoscx-fortigate-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 populated cells, and the mechanism is a deliberate
-      remap rather than a loss: the AOS-CX `administrators` role renders to the
-      FortiOS `super_admin` accessprofile.  It is scoped, not blanket —
-      `operators` passes through unchanged, measured on the kitchen sink, which
-      carries both roles.  aruba_aoscx also declares
-      `/local-users/user/privilege-level` lossy in its own right.
-      The privilege intent is preserved and arguably correct, but two things
-      follow: any downstream tooling keyed on the literal role string will stop
-      matching, and `super_admin` on a FortiGate is unrestricted access.
-      Review the mapping before the account becomes production.
+      No account arrives on the corpus (see `local_users[].name`), so
+      there is no role on the target to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  On an account that arrives, FortiOS carries
+      an access profile: privilege 15 renders `super_admin`, anything
+      else the canonical role (or `prof_admin`), and the parser reads
+      the profile back as the role, so `administrators` comes back
+      `super_admin`.  Recorded `lossy` for that.
     references: [aoscx-fortigate-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users.  AOS-CX stores the user
-      secret in its own encrypted form — an `AQB...`-prefixed ciphertext blob —
-      and the FortiOS render re-emits that same blob behind a `set password
-      ENC` marker; measured, the canonical string grows by exactly the 12
-      characters of the `fortios:ENC ` prefix on every cell and is otherwise
-      unchanged.
-      So nothing is deleted, which is why this is `lossy` and not
-      `unsupported` — but the bytes surviving is not the credential surviving.
-      A FortiGate decrypts `ENC` material with FortiOS-internal key material,
-      so an ArubaOS-CX ciphertext presented as a FortiOS `ENC` blob is not a
-      password any FortiGate can authenticate.  Every migrated account arrives
-      without a working credential: set passwords on the target before cutover,
-      or you will be locked out of the box you just migrated.
-      The ciphertext is deliberately NOT quoted here — it is operator-traceable
-      key material even though it is encrypted (AGENTS.md).
+      On the corpus no account arrives (see `local_users[].name`): the
+      only drift on this key is the parent record-count collapse, which
+      the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  Recorded `lossy` for an account that
+      arrives: an AOS-CX account configured `password plaintext` is
+      written as `set password "<password>"`, for the FortiGate to
+      encrypt on save, and read back tagged `fortios:` -- the account
+      holds the password it was given, and the tag is the whole of the
+      change.  No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [aoscx-fortigate-surface]
 
   # -- Fabric ---------------------------------------------------------------

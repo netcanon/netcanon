@@ -208,7 +208,7 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     assert by_name["1/1/4"].trunk_native_vlan == 1
     assert 1 not in by_name["1/1/4"].trunk_allowed_vlans
 
-    # /vlans/vlan/ipv4/address/ip (lossy) — SVI address projected onto
+    # /vlans/vlan/ipv4/address/ip (supported) — SVI address projected onto
     # the VLAN record, carrying the active-gateway with it.
     assert vlan_by_id[20].ipv4_addresses[0].ip == "10.20.20.1"
     assert vlan_by_id[20].ipv4_addresses[0].virtual_gateway_address == "10.20.20.254"

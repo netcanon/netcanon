@@ -43,8 +43,8 @@ The two record lists that carry this pair are **fully preserved**:
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
-| interface records after parse → render → re-parse | **55** |
+| source interface records, all 13 cells | **56** |
+| interface records after parse → render → re-parse | **56** |
 | cells where the interface name set differs | **0** |
 | source local-user records, all 13 cells | **17** |
 | local-user records after the round-trip | **17** |
@@ -68,15 +68,15 @@ expects.
 | hostname | 13 | 0 | 0 |
 | domain | 0 | 1 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces[].name | 13 | 0 | 0 |
-| interfaces[].enabled | 12 | 1 | 0 |
-| interfaces[].description | 6 | 1 | 6 |
+| interfaces[].enabled | 13 | 0 | 0 |
+| interfaces[].description | 7 | 0 | 6 |
 | interfaces[].ipv4_addresses | 9 | 0 | 4 |
 | interfaces[].ipv6_addresses | 5 | 0 | 8 |
 | interfaces[].mtu | 1 | 0 | 12 |
 | interfaces[].lag_member_of | 1 | 0 | 12 |
-| interfaces[].interface_type | 0 | 6 | 7 |
+| interfaces[].interface_type | 0 | 7 | 6 |
 | static_routes | 4 | 0 | 9 |
 | snmp.community / location / contact / trap_hosts | 4 | 0 | 9 |
 | snmp.v3_users | 2 | 2 | 9 |
@@ -85,6 +85,7 @@ expects.
 | local_users[].hashed_password | 0 | 12 | 1 |
 | vxlan_vnis | 0 | 3 | 10 |
 | routing_instances | 0 | 1 | 12 |
+| vlans[] (all six keys) | 0 | 1 | 12 |
 
 Two rows in that table are "preserved" only in the vacuous sense and are
 called out rather than left to imply coverage: `snmp.trap_hosts` is empty on
@@ -93,19 +94,19 @@ trap destination), and the single non-drifting `local_users[].hashed_password`
 cell is an account that carries no password in the source at all.
 
 Fields trivially empty on all 13 cells: `timezone`, `syslog_servers`,
-`interfaces[].vrrp_groups`, all six `vlans[].*` keys, `dhcp_servers`,
+`interfaces[].vrrp_groups`, `dhcp_servers`,
 `radius_servers`, `evpn_type5_routes`, `raw_sections`, `apply_groups`,
 `group_content`, `anycast_gateway_mac`.
 
 ### Per-record detail behind the interface drift
 
-55 interface records across the 13 cells:
+56 interface records across the 13 cells:
 
 | sub-field | populated on source | drifting records | shape |
 |---|---|---|---|
-| `interface_type` | **0** | 7 | empty → a type the target *invents* |
-| `description` | 15 | 1 | value → empty |
-| `enabled` | 53 | 1 | `False` → `True` (fails **open**) |
+| `interface_type` | **0** | 10 | empty → a type the target *invents* |
+| `description` | 15 | 0 | — |
+| `enabled` | 54 | 0 | — |
 | `mtu` | 1 | 0 | — |
 | `ipv4_addresses` | 21 | 0 | — |
 | `ipv6_addresses` | 20 | 0 | — |
@@ -123,8 +124,9 @@ never emits them and there is nothing for RouterOS to lose:
 `/radius-servers/server/key` ·
 `/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
 
-These are recorded `not_applicable`, not `unsupported`, and the distinction is
-operational: for several of them **mikrotik_routeros declares the field
+These are recorded `not_applicable`, not `unsupported` (except `vlans[].id`,
+recorded `lossy`: the target reads each dot-notation sub-interface back as a
+VLAN of its tag, finding 2), and the distinction is operational: for several of them **mikrotik_routeros declares the field
 supported or lossy** — `/vlans/vlan/id` supported, the whole
 `/interfaces/interface/vrrp-groups/group` subtree supported,
 `/dhcp-servers/pool/lease-time` lossy (i.e. RouterOS renders pools, losing only
@@ -143,6 +145,9 @@ they are recorded `not_applicable` on that measurement, not on a declaration.
 ## Four findings worth carrying forward
 
 ### 1. Credential material lands in RouterOS's *cleartext* password field
+
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the RouterOS render wrote such an account as `/user add` with no `password=`, which RouterOS gives a blank password.  Measured after the change: **1 of 17** local accounts arrive across the 13 cells that populate users; 16 are refused for a secret RouterOS cannot consume (16 SHA-512 crypt (`$6$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__mikrotik_routeros.yaml`.
 
 <!-- snmpv3-key-gate-468 -->
 > **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-password=` takes the operator's PASSPHRASE and RouterOS derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
@@ -207,7 +212,17 @@ which warns but stays compatible — would badly understate this.
 Set every migrated account's password on the target before cutover, and treat
 the rendered config as containing recoverable credential text.
 
-### 2. A dot-notation sub-interface falls between two render filters
+### 2. A dot-notation sub-interface fell between two render filters (mended)
+
+**Mended.** A dot-notation sub-interface is now a VLAN interface on its port
+(`/interface vlan add interface=eth1 name=eth1.100 vlan-id=100
+comment="tenant vlan 100"`, and `disabled=yes` on `eth1.200`), so both
+records below round-trip and `interfaces[].description` and
+`interfaces[].enabled` are `good`.  The re-parse reads each such line as a
+VLAN interface and a VLAN of its tag (the target declares
+`/interfaces/interface/dot1q-vlan` lossy for that), which is why
+`vlans[].id` drifts on this one cell (0 → 2) and is recorded `lossy`.  What
+follows is the record of how it was up to 0.7.7.
 
 **One mechanism, two keys.** `interfaces[].description` and
 `interfaces[].enabled` each drift on exactly one record, both on
@@ -232,11 +247,11 @@ Verified on the two sub-interface records in the corpus:
 | `eth1.200` `enabled` | `False` | **`True`** |
 
 The name and the addressing survive (they ride the `/ip address` row, which is
-why `interfaces[].name` is 55/55), but the `comment=` and the `disabled=yes`
+why `interfaces[].name` is 56/56), but the `comment=` and the `disabled=yes`
 are never emitted. The admin-state case is the dangerous direction: a port
 that was **administratively down on VyOS comes up enabled on RouterOS**.
 
-Exposure is narrow and easy to state: 2 of 55 interface records in this corpus
+Exposure is narrow and easy to state: 2 of 56 interface records in this corpus
 are dot-notation sub-interfaces, and both sit on one fixture. Both matrices
 declare `/interfaces/interface/config/description` and `/config/enabled`
 supported, so this is a real per-attribute loss and not a declared gap.
@@ -253,22 +268,31 @@ is gone in full.
 
 ### 3. `interface_type` drift is a target-side *gain*, not a source-side loss
 
-`interfaces[].interface_type` drifts on 6 of 13 cells and 7 of 55 records —
+`interfaces[].interface_type` drifts on 7 of 13 cells and 10 of 56 records —
 and the direction is the opposite of a loss. **vyos populates
-`interface_type` on zero of its 55 records**, so there is nothing to lose. The
-RouterOS re-parse *attaches* a type to seven of them:
+`interface_type` on zero of its 56 records**, so there is nothing to lose. The
+RouterOS re-parse *attaches* a type to ten of them:
 
 | records | interface | type after round-trip | why |
 |---|---|---|---|
-| 6 | `lo` | `ianaift:bridge` | RouterOS has no loopback primitive; the renderer emits the documented empty-bridge idiom (`/interface bridge add name=lo`), and the re-parse types a bridge as a bridge |
+| 7 | `lo` | `ianaift:bridge` | RouterOS has no loopback primitive; the renderer emits the documented empty-bridge idiom (`/interface bridge add name=lo`), and the re-parse types a bridge as a bridge |
 | 1 | `bond0` | `ianaift:ieee8023adLag` | rendered under `/interface bonding`, re-parsed as a LAG |
+| 2 | `eth1.100`, `eth1.200` | `ianaift:l3ipvlan` | written as a VLAN interface on its port, re-parsed as one |
 
-The `bond0` case is simply correct. The `lo` case is a **mislabel with a good
+The `bond0` and sub-interface cases are simply correct. The `lo` case is a **mislabel with a good
 cause**: the loopback-as-empty-bridge render is deliberate and documented in
 the codec (without it the loopback's name drops and its IP binds to a phantom
 interface), but the canonical type that comes back describes the RouterOS
 construct rather than the VyOS one, so a migrated inventory shows the loopback
 classified as a bridge.
+
+One of the seven `lo` records is that of `houdev_vyos_dhcpv6_pd_client.conf`,
+an empty interface (the capture prints `loopback lo { }`, nothing set) that
+the VyOS parser has read as the node it is since 2026-10; before that it made
+no record of it. RouterOS keeps it as the same empty bridge
+(`/interface bridge` / `add name=lo`) and the re-parse invents the same
+`ianaift:bridge` for it, which is one of the ten drifting records and makes
+the seventh cell.
 
 Both matrices already declare `/interfaces/interface/config/type` lossy —
 `mikrotik_routeros` states the mechanism outright ("RouterOS does not expose
@@ -276,27 +300,22 @@ IANA ifType; the codec infers it from the interface-name prefix"). Recorded
 `lossy`: the interface record, its addressing and its admin state are
 untouched, so this is a wrong hint, not lost forwarding state.
 
-### 4. NTP loses two of three servers on one cell — from a source-parse residue
+### 4. `ntp_servers` crosses whole
 
-`ntp_servers` round-trips cleanly on 11 of the 12 cells that populate it,
-including a five-server cell. On `houdev_vyos_dhcpv6_pd_client.conf` it drops
-**3 → 1**, and the mechanism spans both codecs:
+`ntp_servers` is preserved on all 12 cells that populate it.
+`houdev_vyos_dhcpv6_pd_client.conf` prints each NTP server as a node with
+nothing under it, on one line:
 
-- That fixture writes the empty block **inline**: `server  time1.vyos.net { }`
-  on one line, where every other fixture uses the multi-line
-  `server 0.pool.ntp.org {` / `}` form. The VyOS brace-stack parser handles
-  the multi-line form and leaves a literal ` { }` glued to the server name on
-  the inline form, so the canonical value is `time1.vyos.net { }`.
-- The RouterOS renderer writes that verbatim into a comma-joined
-  `servers=` value. An unquoted RouterOS value terminates at whitespace, so
-  the re-parse recovers only `time1.vyos.net` and the second and third servers
-  are gone.
+```
+server         time1.vyos.net { }
+```
 
-Both matrices declare `/system/ntp-server` supported, and the concept plainly
-crosses on 11 of 12 cells — so `ntp_servers` is recorded `lossy` (partial
-record loss inside a concept the target models), not `unsupported`. The
-residue is a source-side artifact; the record loss is measured on the target
-round-trip. Worth stating both halves rather than blaming one side.
+Until 2026-10 the VyOS parser kept ` { }` in the name, the RouterOS render
+wrote it into its comma-joined `servers=` value, which the re-parse cut at the
+first space (three servers in, one out), and that cell drifted. The parser now
+reads such a line as the node it is, the reading the set form gives the same
+path (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`), and
+the YAML declares `ntp_servers` good.
 
 ## Credential material
 
@@ -343,9 +362,10 @@ keys, recorded here so the next reader does not re-hunt them:
   This is the same mechanism as the `routing_instances` drop
   (`/routing-instances/instance` unsupported: "Render emits no
   VRF/routing-instance construct"), not an independent loss.
-- `interfaces[].dot1q_vlan` — `100` → null on the sub-interface records; the
-  target declares `/interfaces/interface/dot1q-vlan` unsupported
-  (ship-before-wire, GAP 7).
+- `interfaces[].dot1q_vlan` — `100` → null on the sub-interface records: the
+  tag is written (`vlan-id=100` on the VLAN interface on its port) and read
+  back as a VLAN interface and a VLAN of the tag, not as a sub-interface; the
+  target declares `/interfaces/interface/dot1q-vlan` lossy for that.
 - `interfaces[].dhcp_client` — **3 records** across 3 cells (`houdev` `eth0`,
   `scottlaird` `eth5`, `kitchen_sink` `eth2`) go `True` → `False`: a port that
   took its address by DHCP arrives with no client configured. `vyos` declares

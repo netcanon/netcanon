@@ -293,8 +293,8 @@ per_field_expectation:
     note: >
       Same reading as `vlans[].name`: the SVI address is never degraded
       in place, it disappears with its VLAN record, and that drop belongs to
-      `vlans[].id`.  Both matrices independently declare the
-      `/vlans/vlan/ipv4/address/*` children lossy — the XR reason is that it
+      `vlans[].id`.  cisco_iosxr declares the `/vlans/vlan/ipv4/address/*`
+      children lossy: it
       "renders VLAN SVI / management L3 only from a sibling interface stanza",
       so an L3 address carried on the VLAN record itself has nowhere to go.
       Operationally this is the same warning as `vlans[].id`: SVI gateways do

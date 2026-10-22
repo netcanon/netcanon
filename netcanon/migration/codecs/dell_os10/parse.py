@@ -126,11 +126,13 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     address_key,
+    mtu_read,
     trunk_list_read,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
 from ..base import ParseError
+from . import port_names as _port_names
 
 logger = logging.getLogger(__name__)
 
@@ -960,7 +962,15 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         description=raw.get("description", ""),
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
-        mtu=raw.get("mtu"),
+        # The link MTU is a frame size; the tree's MTU is the payload.
+        # Copied as it stood, ``mtu 1522`` -- Dell's link MTU for an IP
+        # MTU of 1500 on a tagged member -- was ``mtu 1522`` on IOS-XE,
+        # a payload 22 bytes larger.
+        mtu=(
+            mtu_read("dell_os10", raw["mtu"])
+            if raw.get("mtu") is not None and _port_names.mtu_is_a_frame(raw["name"])
+            else raw.get("mtu")
+        ),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],

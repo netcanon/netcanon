@@ -256,6 +256,43 @@ _LAG_NAME_FIELDS: frozenset[str] = frozenset({
 })
 
 
+def _ip_mtu_moved(record_diffs: dict[str, Any]) -> bool:
+    """True iff a record's ``mtu`` drift is its IP MTU, written in
+    the other field of the same record.
+
+    One side states an IP MTU of its own (``ip_mtu``) and no payload
+    (``mtu``); the other states that number as its payload and no IP
+    MTU of its own, which makes the IP MTU the payload.  Both send IP
+    packets of the same size.  A platform with one MTU writes an IP
+    MTU that has no payload beside it as that MTU
+    (``one_mtu_written``), and Junos states a unit's MTU only by
+    family, so an IPv4 unit's MTU reads back as ``family inet mtu``,
+    its IP MTU.  Any other pair of values (a payload that changed as
+    well, an IP MTU that is another number, an IP MTU beside a payload
+    that one side lost) is not equivalent and surfaces as drift.
+
+    Args:
+        record_diffs: One record's Phase 1 diffs, keyed by sub-field,
+            each ``{"source": ..., "target": ...}``.
+
+    Returns:
+        ``True`` when the only MTU drift of the record is that move.
+    """
+    mtu = record_diffs.get("mtu")
+    ip_mtu = record_diffs.get("ip_mtu")
+    if not isinstance(mtu, dict) or not isinstance(ip_mtu, dict):
+        return False
+    for here, there in (("source", "target"), ("target", "source")):
+        if (
+            mtu.get(here) is None
+            and ip_mtu.get(there) is None
+            and ip_mtu.get(here) is not None
+            and ip_mtu.get(here) == mtu.get(there)
+        ):
+            return True
+    return False
+
+
 def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
     """True iff a VLAN record's ``name`` drift is its label, written
     as its name.
@@ -292,8 +329,9 @@ def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
 
 #: YAML field-keys whose per-record drift is read with the WHOLE
 #: record's diffs, for a value one side holds in a sibling field.
-#: See :func:`_vlan_label_moved`.
+#: See :func:`_ip_mtu_moved` and :func:`_vlan_label_moved`.
 _RECORD_EQUIVALENCES: dict[str, Callable[[dict[str, Any]], bool]] = {
+    "interfaces[].mtu": _ip_mtu_moved,
     "vlans[].name": _vlan_label_moved,
 }
 

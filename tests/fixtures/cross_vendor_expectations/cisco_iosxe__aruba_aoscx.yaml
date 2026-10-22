@@ -321,25 +321,20 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on the one cell — source carries one address on the VLAN record,
-      target re-parses an empty list — and the two available signals disagreed
-      about what that means, so it was settled by round-trip rather than by
-      reasoning.  The total-drop heuristic classified it TOTAL (target side
-      empty) and would have made it `unsupported`; the aruba_aoscx matrix
-      declares `/vlans/vlan/ipv4/address/ip` LOSSY.  The matrix is right.
-      Proof: the rendered config contains
+      target re-parses an empty list.  The total-drop heuristic classified it
+      TOTAL (target side empty) and would have made it `unsupported`; it was
+      settled by round-trip.  Proof: the rendered config contains
       `interface Vlan10` carrying that exact address and prefix, and the
       re-parsed tree still holds it under `interfaces[].ipv4_addresses`.  What
       vanished is a DUPLICATE — the SVI synthesiser copies the interface's
-      IPv4 list onto the VLAN record, AOS-CX renders SVI L3 only from the
-      sibling interface stanza, and so the copy has no render site.  No
-      forwarding state is lost on this cell, which is exactly why `lossy`
+      IPv4 list onto the VLAN record; this path translates no name, so the
+      AOS-CX render writes the address from the `Vlan10` interface under that
+      name (`synthesize_svis_from_vlan_l3` writes no second one), and the
+      AOS-CX parser does not fold an interface called `Vlan10` onto VLAN 10.
+      No forwarding state is lost on this cell, which is exactly why `lossy`
       (warn, stays compatible) is the honest severity and `unsupported`
-      (block) would over-claim.  The caveat an operator needs: this holds
-      because the address exists at BOTH canonical mount points here.  A
-      source that populates the VLAN record WITHOUT a matching `Vlan<N>`
-      interface would lose the address outright — so after cutover, verify SVI
-      addressing against the original device rather than against the canonical
-      diff.
+      (block) would over-claim.  With port names translated the interface is
+      `vlan 10` and the address folds back onto the VLAN.
     references: [iosxe-aoscx-surface]
 
   "vlans[].untagged_ports":

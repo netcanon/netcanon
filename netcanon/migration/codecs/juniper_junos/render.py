@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..._derived_values import (
     is_derivation_keyword,
@@ -73,6 +73,7 @@ from ..._derived_values import (
 from ..._derived_values import (
     review_comment as derived_review_comment,
 )
+from ..._one_value import ADDRESSES, one_value_tree
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -84,13 +85,21 @@ from ..._usm_keys import (
     user_usm_is_migratable,
     user_usm_kind,
 )
-from ...canonical.intent import CanonicalIntent
+from ...canonical.intent import CanonicalIntent, CanonicalInterface
+from ...canonical.port_names import UNIT_MAX_DIGITS, split_unit
 from ...canonical.transforms import (
     TRUNK_ALLOWED_SPECIFICITY_BOUND,
     is_every_vlan,
 )
 from ...limits import charge
+from .._helpers import mtu_written
 from ..base import RenderError
+from .port_names import (
+    TAGGING_STATEMENT_TAGS,
+    classify_port_name,
+    media_mtu_counts_a_header,
+    media_mtu_counts_a_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +150,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     from ...canonical.transforms import project_vlan_to_switchport
     project_vlan_to_switchport(tree)
 
-    out: list[str] = []
+    # A name or a text is written between quotes where it needs them;
+    # an address is never altered, so one that is not one word is left
+    # out and said (a static route whose next hop it is, whole).
+    # Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "Junos", addresses=ADDRESSES,
+    )
+
+    out: list[str] = [f"# {said}" for said in one_value_said]
 
     # --- system ---
     if tree.hostname:
@@ -179,7 +196,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # canonical happens to use a tagged form rather than a bare
         # crypt string.  Empty ``hashed_password`` falls through to
         # the bare ``class`` line below — Junos accepts that form
-        # as a console-only / no-password account.
+        # as a console-only / no-password account.  A TYPED password
+        # is refused here too: Junos takes one only at the prompt of
+        # ``plain-text-password``, and ``encrypted-password "<typed>"``
+        # made the typed string the hash (``_TARGET_ACCEPTS`` notes).
         if (
             user.hashed_password
             and not user.hashed_password.startswith("junos:")
@@ -222,8 +242,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             else:
                 # Foreign-source hash whose algorithm Junos can
                 # consume natively (sha512 -> $6$ / md5crypt -> $1$
-                # via Junos's commit-time hasher; plaintext is
-                # always emit-safe).  Strip the canonical
+                # via Junos's commit-time hasher).  Strip the canonical
                 # ``vendor:alg:`` prefix and emit just the payload.
                 # Unmigratable hashes were already short-circuited
                 # via the ``continue`` above.
@@ -245,6 +264,19 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # <auto-name> member <iface>` + one line per shared attr.
     # Per-interface render SUPPRESSES the shared attrs when the
     # interface is a range member.
+    # What each Ethernet device whose units carry tags is told about
+    # them, written once, before the first of its units' tags.
+    tagging = _device_tags(tree.interfaces)
+    # A device's media MTU as written: the tree's MTU is the payload,
+    # and a Junos media MTU counts the Ethernet header in front of it,
+    # and the tags the tagging statement written on it names.
+    media_mtu = {
+        i.name: _media_mtu_written(
+            i.name, i.mtu, TAGGING_STATEMENT_TAGS.get(tagging.statements.get(i.name, ""), 0),
+        )
+        for i in tree.interfaces
+        if i.mtu is not None
+    }
     range_emit_by_name: dict[str, list[str]] = {}
     iface_range_membership: dict[str, str] = {}
     collapsed_iface_count = 0
@@ -269,7 +301,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             continue
         # Collapse key: (mtu, description, enabled).  We DON'T
         # include IP addresses — those are per-interface.
-        key = (iface.mtu, iface.description, iface.enabled)
+        key = (media_mtu.get(iface.name), iface.description, iface.enabled)
         # Skip all-default tuples — nothing worth collapsing.
         if key == (None, "", True):
             continue
@@ -376,6 +408,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # so a stable parse->render->parse cycle requires the parent
     # stub to be re-emitted.
     iface_has_subunits: set[str] = set()
+    # A device's own MTU, which a unit's family MTU has to fit in.
+    mtu_of: dict[str, int | None] = {i.name: i.mtu for i in tree.interfaces}
     for i in tree.interfaces:
         if "." in i.name:
             parent_name = i.name.rsplit(".", 1)[0]
@@ -407,25 +441,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # split the compound name back into parent + unit so the
         # emitted set-lines use Junos's native grammar.
         #
-        # Logical SVI names (``irb.<vid>`` / ``vlan.<vid>``) follow
-        # the same Junos shorthand — ``irb.10`` IS ``irb unit 10``
-        # in native Junos grammar — but ``_split_subiface_name``
-        # deliberately rejects them (its ``parent`` group requires
-        # a ``<media>-<fpc>/<pic>/<port>`` shape) so they used to
-        # fall through to the regular-interface branch below and
-        # render as ``set interfaces irb.10 unit 0 family inet
-        # address ...`` — which Junos's commit-time validator
-        # rejects because ``irb.10 unit 0`` expands to ``irb unit
-        # 10 unit 0``.  The cross-vendor render INTO Junos for
-        # any source codec that emits SVIs (OPNsense, Cisco IOS-XE
-        # ``Vlan10`` -> ``irb.10`` via the rename mesh) would
-        # silently produce a non-deployable config.  Issue #3 in
-        # ``user_smoke_findings.md``.
-        #
-        # Detect the irb.N / vlan.N shape and route through the
-        # sub-interface branch with parent="irb" (or "vlan") and
-        # unit_num=N so the same correct ``set interfaces irb
-        # unit 10 family inet address ...`` lines come out.
+        # Every ``<parent>.<N>`` is split the same way (``lo0.10``,
+        # ``st0.100``, ``ae1.10``, ``irb.10`` -- ``irb.10`` IS ``irb
+        # unit 10``): no Junos interface has a dot in its name, and
+        # ``set interfaces lo0.10 unit 0`` is refused at commit.  A
+        # unit 0 is split by ``_split_subiface_name`` only on a port
+        # shape; ``irb.0`` / ``vlan.0`` are taken here by
+        # ``_LOGICAL_SVI_NAME_RE`` (Issue #3 in
+        # ``user_smoke_findings.md``), and any other ``<name>.0`` is
+        # written as a name.
         parent, unit_num = _split_subiface_name(name)
         if parent is None or unit_num is None:
             m = _LOGICAL_SVI_NAME_RE.match(name)
@@ -453,10 +477,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
             # GAP 7: per-unit 802.1Q tag on the routed sub-interface.
             if iface.dot1q_vlan is not None:
-                out.append(
-                    f"set interfaces {parent} unit {unit_num} "
-                    f"vlan-id {iface.dot1q_vlan}"
-                )
+                _emit_unit_tags(out, parent, unit_num, iface, tagging)
+            # A unit has no ``mtu`` of its own in Junos: it is set per
+            # family (``family inet mtu``), and written for each family
+            # the unit has.
+            _emit_unit_mtu(
+                out, parent, unit_num, iface, mtu_of.get(parent),
+                media_mtu.get(parent),
+            )
             # Sub-finding 9b: DHCP client.  Junos models the DHCP
             # client as a property of ``family inet`` (replacing the
             # ``address`` clause).  Emit the family inet dhcp form
@@ -552,6 +580,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"has no Junos equivalent on {parent}.{unit_num}"
                 )
             if not sub_has_renderable:
+                if iface_is_vrf_bound.get(name, False):
+                    out.append(
+                        f"# set interfaces {parent} unit {unit_num} -- "
+                        f"bare stub kept; required by routing-instance "
+                        f"binding below"
+                    )
                 out.append(
                     f"set interfaces {parent} unit {unit_num}"
                 )
@@ -565,7 +599,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if emit_disable:
             out.append(f"set interfaces {name} disable")
         if emit_mtu:
-            out.append(f"set interfaces {name} mtu {iface.mtu}")
+            out.append(f"set interfaces {name} mtu {media_mtu[name]}")
+        # The tags of the device's unit 0 (``unit 0 vlan-id N``), which
+        # the tree keeps on the device's own record.
+        if iface.dot1q_vlan is not None:
+            _emit_unit_tags(out, name, 0, iface, tagging)
+        # The IP MTU, where it is not the payload: ``family inet mtu``
+        # on unit 0.
+        _emit_unit_mtu(out, name, 0, iface, iface.mtu, media_mtu.get(name))
         # Sub-finding 9b: DHCP client.  Junos models the DHCP client
         # as ``family inet dhcp`` on ``unit 0``, replacing the static
         # ``address`` clause.  Emit only when no static IPv4 address
@@ -1450,7 +1491,7 @@ def _emit_vrrp_groups_for_address(
             if value:
                 out.append(
                     f"{prefix} vrrp-group {group.group_id} "
-                    f"authentication-key {value}"
+                    f"authentication-key {_quote_if_needed(value)}"
                 )
         if group.description:
             out.append(
@@ -1535,9 +1576,9 @@ _IS_JUNOS_PHYSICAL_PORT_RE = re.compile(
     r")$"
 )
 
-# ``<parent>.<unit>`` — e.g. ``ge-0/0/0.100``.  ``parent`` must
-# contain a slash (``ge-0/0/0``) to distinguish from normal names
-# like ``irb.10`` where the dot is part of the base port name.
+# ``<port>.<unit>`` — e.g. ``ge-0/0/0.100``: the one parent shape
+# whose unit 0 is split as well (``_split_subiface_name`` splits a
+# unit above 0 of any parent).
 #
 # Optional ``:<channel>`` segment after the port index covers
 # channelized (break-out) ports — ``xe-0/0/6:2`` is channel 2 of
@@ -1612,21 +1653,302 @@ def _lag_name_to_ae(
     return (f"ae{ae_id}", ae_id)
 
 
-def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
-    """Return ``(parent, unit)`` if *name* looks like a Junos physical
-    sub-interface (``ge-0/0/0.100``), else ``(None, None)``.
+#: The protocol MTU of a Junos Ethernet device that states no ``mtu``
+#: (its media MTU, 1514, less the Ethernet header).
+_DEFAULT_PROTOCOL_MTU = 1500
 
-    ``irb.N`` / ``vlan.N`` are excluded by the parent-slash requirement
-    — those are SVI-like interfaces that keep the dot in their
-    canonical name (rendered as top-level entries, not sub-interfaces).
+
+def _media_mtu_written(device: str, payload: int, tags: int) -> int:
+    """The media ``mtu`` of *device* for the tree's MTU, the payload:
+    the Ethernet header added, and 4 bytes for each of the *tags* its
+    tagging statement names (``TAGGING_STATEMENT_TAGS``; an IRB unit is
+    no tag on ``irb``) -- ``MTU_BEYOND_THE_PAYLOAD`` in
+    ``codecs/_helpers.py``.  Copied as
+    it stood, IOS-XE ``mtu 9000`` was Junos ``mtu 9000``, an IP MTU of
+    8986.  A device whose media MTU counts no Ethernet header, or
+    whose name the classifier does not read, is written as it stands
+    (:func:`.port_names.media_mtu_counts_a_header`)."""
+    if not media_mtu_counts_a_header(device):
+        return payload
+    return mtu_written(
+        "juniper_junos", payload, tags=tags if media_mtu_counts_a_tag(device) else 0,
+    )
+
+
+def _emit_unit_mtu(
+    out: list[str],
+    parent: str,
+    unit_num: int,
+    iface: CanonicalInterface,
+    device_mtu: int | None,
+    device_media_mtu: int | None = None,
+) -> None:
+    """Write a unit's MTUs as ``family <f> mtu``, for each family it has.
+
+    Junos has no ``mtu`` on a unit: the protocol MTU is set per
+    family.  ``family inet`` takes the IP MTU (``ip_mtu``, else the
+    unit's ``mtu``) and ``family inet6`` the unit's ``mtu``, and the
+    parser reads them back so.  Unit 0 is the device's own record,
+    whose ``mtu`` is the device's media MTU: only an IP MTU is
+    written there.  A unit with no address takes it on ``family
+    inet``, the family an MTU stated without one is for (an
+    unnumbered ``st0`` unit's only family line is often its ``family
+    inet mtu``), and so does a unit with an IP MTU.  Juniper requires
+    the device's media MTU to hold a family MTU and its encapsulation
+    overhead, so where the device states no MTU (and the unit's is
+    above the default protocol MTU) or a smaller one, a review line
+    says so.  *device_mtu* is the tree's MTU of the device, the
+    payload, which already leaves the overhead out where the device
+    counts an Ethernet header; on any other device it is the number
+    as it stands, whose overhead is not computed here.
+    *device_media_mtu* is the device's ``mtu`` as it is written.
+    """
+    families = []
+    if iface.ipv4_addresses or iface.dhcp_client or iface.ip_mtu is not None:
+        families.append("inet")
+    if iface.ipv6_addresses or iface.dhcp_client_v6 == "dhcp6":
+        families.append("inet6")
+    if not families:
+        families.append("inet")
+    unit_mtu = None if unit_num == 0 else iface.mtu
+    of_family = {
+        "inet": unit_mtu if iface.ip_mtu is None else iface.ip_mtu,
+        "inet6": unit_mtu,
+    }
+    mtus = {f: of_family[f] for f in families if of_family[f] is not None}
+    if not mtus:
+        return
+    largest = max(mtus.values())
+    if device_mtu is None:
+        too_small = largest > _DEFAULT_PROTOCOL_MTU
+    elif media_mtu_counts_a_header(parent):
+        too_small = device_mtu < largest
+    else:
+        too_small = device_mtu <= largest
+    if too_small:
+        written = device_mtu if device_media_mtu is None else device_media_mtu
+        stated = "no mtu" if device_mtu is None else f"mtu {written}"
+        out.append(
+            f"# review: family mtu {largest} of {parent} unit "
+            f"{unit_num} needs a media MTU on {parent} of at least that "
+            f"plus the encapsulation overhead; {parent} states {stated}"
+        )
+    for family, value in mtus.items():
+        out.append(
+            f"set interfaces {parent} unit {unit_num} "
+            f"family {family} mtu {value}"
+        )
+
+
+#: The statement an Ethernet device is given for the tags of its units
+#: (Juniper, "Binding VLAN IDs to Logical Interfaces"): ``vlan-tagging``
+#: where each is a unit of one tag, ``stacked-vlan-tagging`` where each
+#: is a unit of two, and "to support mixed tagging, include the
+#: flexible-vlan-tagging statement instead".  Keyed by whether a unit
+#: has an inner tag.
+_TAGGING: dict[frozenset[bool], str] = {
+    frozenset({False}): "vlan-tagging",
+    frozenset({True}): "stacked-vlan-tagging",
+    frozenset({False, True}): "flexible-vlan-tagging",
+}
+
+
+def _takes_vlan_tagging(device: str) -> bool:
+    """Whether *device* is an Ethernet interface, where Juniper puts
+    the tagging statement (``[edit interfaces ethernet-interface-name]``):
+    a port or an ``ae`` bundle, a channel of a port (``xe-0/0/6:2``, a
+    committed capture writes ``vlan-tagging`` on one), or a chassis
+    cluster's ``reth`` (Juniper's chassis-cluster CoS example writes
+    ``set interfaces reth0 vlan-tagging``).  Not ``irb``, ``lo0`` or a
+    tunnel, whose units are not told apart by a tag on the wire."""
+    if classify_port_name(device).kind in ("physical", "lag"):
+        return True
+    port, colon, channel = device.rpartition(":")
+    if (
+        colon
+        and channel.isascii()
+        and channel.isdigit()
+        and classify_port_name(port).kind == "physical"
+    ):
+        return True
+    return re.fullmatch(r"reth\d{1,4}", device) is not None
+
+
+class _DeviceTags(NamedTuple):
+    """What each Ethernet device whose units carry tags is told about
+    them, written once, ahead of the first of its units' tags.
+
+    Attributes:
+        statements: The device's tagging statement (:data:`_TAGGING`).
+        native: The ``native-vlan-id`` of a routed device (Junos
+            ``set interfaces <device> native-vlan-id <id>``, which the
+            parser keeps in the device's ``trunk_native_vlan``): its
+            untagged frames go to the unit of that ``vlan-id``.
+        untagged: The units with an address and no tag
+            (:func:`_untagged_units`).
+        written: The devices already told.
+    """
+
+    statements: dict[str, str]
+    native: dict[str, int]
+    untagged: dict[str, list[int]]
+    written: set[str]
+
+
+def _device_tags(interfaces: list[CanonicalInterface]) -> _DeviceTags:
+    """What each Ethernet device whose units carry tags is told.
+
+    A unit's ``vlan-id`` is taken only on a device that says its
+    frames are tagged, and the statement is the device's, not the
+    unit's: the renderer wrote neither, so every tagged unit it
+    wrote was on a device that does not take one, Junos to Junos
+    included (two committed captures say ``vlan-tagging``).  A routed
+    device with a native VLAN is given ``flexible-vlan-tagging`` and
+    its ``native-vlan-id`` ("To accept untagged packets, include the
+    native-vlan-id statement and the flexible-vlan-tagging statement",
+    Juniper, "Configuring Tagged Interface with multiple tagged vlans
+    and native vlan"): written ``vlan-tagging`` alone, the unit of the
+    native VLAN no longer took the device's untagged frames, in an
+    output that commits.
+    """
+    kinds: dict[str, set[bool]] = {}
+    routed_native: dict[str, int] = {}
+    for iface in interfaces:
+        parent, _unit = _split_subiface_name(iface.name)
+        if (
+            parent is None
+            and iface.switchport_mode is None
+            and iface.trunk_native_vlan is not None
+        ):
+            routed_native[iface.name] = iface.trunk_native_vlan
+        if iface.dot1q_vlan is None:
+            continue
+        device = iface.name if parent is None else parent
+        if _takes_vlan_tagging(device):
+            kinds.setdefault(device, set()).add(
+                iface.dot1q_inner_vlan is not None,
+            )
+    native = {d: v for d, v in routed_native.items() if d in kinds}
+    statements = {
+        device: (
+            "flexible-vlan-tagging" if device in native
+            else _TAGGING[frozenset(two)]
+        )
+        for device, two in kinds.items()
+    }
+    return _DeviceTags(
+        statements, native, _untagged_units(interfaces, statements), set(),
+    )
+
+
+def _untagged_units(
+    interfaces: list[CanonicalInterface], statements: dict[str, str],
+) -> dict[str, list[int]]:
+    """The units with an address and no tag, of each device that has
+    tagged units.
+
+    A Cisco router-on-a-stick has one: an address on the port beside
+    its tagged sub-interfaces.  Juniper documents untagged frames on
+    a tagged device through ``native-vlan-id`` ("to accept untagged
+    packets", with ``flexible-vlan-tagging``) and a unit whose
+    ``vlan-id`` is that id; a unit with no ``vlan-id`` there is not
+    described, and a forum report has such a commit refused (an SRX).  The
+    output cannot choose the id without a guess, so the unit is
+    written as it stands and a review line says what is not
+    established.
+    """
+    found: dict[str, list[int]] = {}
+    for iface in interfaces:
+        if iface.dot1q_vlan is not None or not (
+            iface.ipv4_addresses or iface.ipv6_addresses
+            or iface.dhcp_client or iface.dhcp_client_v6
+        ):
+            continue
+        parent, unit = _split_subiface_name(iface.name)
+        device, unit = (iface.name, 0) if parent is None else (parent, unit or 0)
+        if device in statements:
+            found.setdefault(device, []).append(unit)
+    return found
+
+
+def _emit_unit_tags(
+    out: list[str],
+    device: str,
+    unit: int,
+    iface: CanonicalInterface,
+    tags: _DeviceTags,
+) -> None:
+    """The tags of unit *unit* of *device*: ``vlan-id <tag>``, or
+    ``vlan-tags outer <tag> inner <tag>`` for a unit of two (Juniper's
+    "vlan-tags outer tpid.<vlan-id> inner tpid.vlan-id;"; the TPID may
+    be left out).  Ahead of a device's first unit, what the device is
+    told (:class:`_DeviceTags`): its tagging statement, its native
+    VLAN, and a review line for each of its units that has no tag."""
+    statement = tags.statements.get(device)
+    if statement is not None and device not in tags.written:
+        tags.written.add(device)
+        out.append(f"set interfaces {device} {statement}")
+        if device in tags.native:
+            out.append(
+                f"set interfaces {device} native-vlan-id {tags.native[device]}"
+            )
+        for bare in tags.untagged.get(device, []):
+            out.append(
+                f"# review: {device} unit {bare} has no tag, beside units "
+                f"under {statement}: Juniper documents untagged frames on "
+                f"such a device only through native-vlan-id (with "
+                f"flexible-vlan-tagging) and a unit of that vlan-id -- not "
+                f"established that a unit with no tag commits there"
+            )
+    if iface.dot1q_inner_vlan is not None:
+        out.append(
+            f"set interfaces {device} unit {unit} vlan-tags outer "
+            f"{iface.dot1q_vlan} inner {iface.dot1q_inner_vlan}"
+        )
+    else:
+        out.append(
+            f"set interfaces {device} unit {unit} vlan-id {iface.dot1q_vlan}"
+        )
+
+
+def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
+    """Return ``(parent, unit)`` if *name* is a unit of an interface
+    (``ge-0/0/0.100``, ``lo0.10``, ``ae1.10``), else ``(None, None)``.
+
+    No Junos interface has a dot in its name: ``<parent>.<N>`` is how
+    the tree names unit *N* of *parent* (the parser makes such a
+    record of ``set interfaces <parent> unit N``), and the only form
+    Junos takes for it is ``set interfaces <parent> unit N``.  Only a
+    port shape (``ge-0/0/0``) was split once, and every other parent
+    -- the ``lo0`` units of routing instances, ``st0`` tunnels, an
+    ``ae`` or ``reth`` unit -- was written ``set interfaces lo0.10
+    unit 0``: a name Junos refuses, and for a LAG unit its
+    ``vlan-id`` gone, in jobs that said ``completed``.
+
+    A unit 0 is split only on a port shape (``ge-0/0/0.0``), as
+    before.  Of any other parent it would be written as that
+    interface's own unit 0, two interfaces in one.  ``irb.0`` and
+    ``vlan.0`` are the caller's.  A unit longer than
+    :data:`~netcanon.migration.canonical.port_names.UNIT_MAX_DIGITS`
+    is no unit of any platform, and is not made a number.
     """
     m = _SUBIFACE_RE.match(name)
-    if m is None:
+    if m is not None:
+        try:
+            return (m.group("parent"), int(m.group("unit")))
+        except ValueError:
+            return (None, None)
+    split = split_unit(name)
+    if split is None:
         return (None, None)
-    try:
-        return (m.group("parent"), int(m.group("unit")))
-    except ValueError:
+    parent, unit = split
+    if (
+        not unit.strip("0")
+        or len(unit) > UNIT_MAX_DIGITS
+        or any(char.isspace() for char in parent)
+    ):
         return (None, None)
+    return (parent, int(unit))
 
 
 def _is_md5crypt_tagged(hashed: str) -> bool:

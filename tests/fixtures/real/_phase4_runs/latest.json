@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-21T16:20:37+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261021T161730Z.json",
-  "mesh_run_started_utc": "2026-10-21T16:17:17+00:00",
+  "started_utc": "2026-10-22T03:27:35+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T032730Z.json",
+  "mesh_run_started_utc": "2026-10-22T03:26:59+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,19 +593,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9139,
+    "ALIGNED": 8953,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4295,
-    "EXPECTED_UNSUPPORTED": 2630,
-    "METHODOLOGY_ISSUE_under": 1884,
+    "EXPECTED_LOSSY": 4201,
+    "EXPECTED_UNSUPPORTED": 2669,
+    "METHODOLOGY_ISSUE_under": 1875,
     "METHODOLOGY_ISSUE_over": 16,
-    "STRUCTURAL_ONLY": 5050,
-    "TRIVIAL_EMPTY": 34527,
-    "fields_total": 57545,
+    "STRUCTURAL_ONLY": 5380,
+    "TRIVIAL_EMPTY": 34559,
+    "fields_total": 57657,
     "severity_high": 4,
-    "severity_medium": 287,
-    "severity_low": 6663,
-    "severity_ok": 50591
+    "severity_medium": 285,
+    "severity_low": 6986,
+    "severity_ok": 50382
   },
   "severity_matrix": {
     "arista_eos": {
@@ -762,6 +762,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -774,6 +775,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -793,11 +795,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -817,11 +821,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -844,6 +850,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -856,6 +863,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -875,11 +883,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -899,11 +909,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1353,7 +1365,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -1636,6 +1648,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -1648,6 +1661,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1667,11 +1681,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1691,11 +1707,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1718,6 +1736,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "172.31.255.5",
@@ -1730,6 +1749,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1749,11 +1769,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1773,11 +1795,13 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -2320,7 +2344,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -3264,6 +3288,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "198.51.100.1",
@@ -3284,6 +3309,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3303,6 +3329,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "10.0.10.1",
@@ -3327,6 +3354,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3346,11 +3374,13 @@
                 "enabled": false,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3373,6 +3403,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "198.51.100.1",
@@ -3393,6 +3424,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3412,6 +3444,7 @@
                 "enabled": true,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [
                   {
                     "ip": "10.0.10.1",
@@ -3436,6 +3469,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3455,11 +3489,13 @@
                 "enabled": false,
                 "interface_type": "ianaift:ethernetCsmacd",
                 "mtu": null,
+                "ip_mtu": null,
                 "ipv4_addresses": [],
                 "ipv6_addresses": [],
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3759,10 +3795,58 @@
           "severity": "ok"
         },
         "vlans": {
-          "actual": "preserved",
-          "expected": "not_applicable",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "id": 10,
+                "name": "User VLAN 10 SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "target": [
+              {
+                "id": 10,
+                "name": "User_VLAN_10_SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "drift": {
+              "vlans[0] {'id': 10, 'name': 'User VLAN 10 SVI'}": {
+                "name": {
+                  "source": "User VLAN 10 SVI",
+                  "target": "User_VLAN_10_SVI"
+                }
+              }
+            },
+            "source_count": 1,
+            "target_count": 1
+          }
         },
         "static_routes": {
           "actual": "trivially_preserved",
@@ -3901,9 +3985,9 @@
       "summary": {
         "ALIGNED": 4,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 2,
+        "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 1,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 30,
@@ -3911,8 +3995,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 3,
-        "severity_ok": 36
+        "severity_low": 2,
+        "severity_ok": 37
       }
     }
   ],

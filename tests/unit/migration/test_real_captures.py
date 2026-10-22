@@ -115,8 +115,13 @@ _KNOWN_UNSUPPORTED: dict[str, str] = {
 # a round-trip.  These are TODOs on the codec, not the harness — the
 # fixture stays in the corpus for parse-coverage validation.
 _KNOWN_ROUNDTRIP_GAPS: dict[str, str] = {
-    # Empty — previously-tracked gaps (bridge render, VLAN name
-    # preservation) were both fixed as Fidelity Polish items.
+    # The parser reads `server time1.vyos.net { }` as the NTP server
+    # "time1.vyos.net { }", an address with white space in it, which the
+    # render now leaves out and says.  #532 reads the empty node; whichever
+    # of #532 and this change merges second takes this entry out.
+    "vyos/houdev_vyos_dhcpv6_pd_client.conf": (
+        "an NTP server read with its empty `{ }` node (#532)"
+    ),
 }
 
 

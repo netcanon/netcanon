@@ -130,8 +130,9 @@ py <scratchpad>/yz_detail.py
 ```
 
 The source is a carrier box of dot1q sub-interfaces. The XR render writes
-`encapsulation dot1q 2234` under each sub-interface; re-parsing that line
-materialises a VLAN record that the source never had. It is a fabricated
+`encapsulation dot1q 2234` under each sub-interface (since the inner tag
+is read, `encapsulation dot1q 2234 second-dot1q <inner>`); re-parsing that
+line materialises a VLAN record of the outer tag that the source never had. It is a fabricated
 record, not a rescued one — which is why `vlans[].id` is `unsupported` (records
 vanish) rather than `lossy` (records degrade). Per netcanon #436, `lossy` warns
 and stays compatible; that would badly understate a switch losing its whole

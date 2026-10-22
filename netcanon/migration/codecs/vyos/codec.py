@@ -128,6 +128,7 @@ class VyOSCodec(CodecBase):
         version_range="1.3/1.4",
         device_classes=[DeviceClass.router, DeviceClass.firewall],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             # System
             "/system/hostname",
             # ── Promotion #12: system domain-name + name-server ──
@@ -177,6 +178,19 @@ class VyOSCodec(CodecBase):
             "/vxlan-vnis/udp-port",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "VyOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
@@ -355,6 +369,17 @@ class VyOSCodec(CodecBase):
                     "(ship-before-wire, GAP 7) so a routed sub-interface "
                     "tag is flagged as a drop, not silently mis-rendered "
                     "as an L2 access-mode VLAN."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  VyOS QinQ "
+                    "(`vif-s <id> vif-c <id>`) is not this field: its service "
+                    "tag is 802.1ad, Ethertype 0x88a8 by default, and the "
+                    "parser leaves a `vif-s` block out with a row."
                 ),
             ),
             UnsupportedPath(
@@ -609,7 +634,12 @@ class VyOSCodec(CodecBase):
         # idempotent on curly-brace input.
         brace = _setform_to_brace(raw)
         intent = parse_intent(brace)
-        intent.dropped_tier3_sections = detect_tier3_sections_vyos(brace)
+        # After the Tier-3 rows, the rows the parser itself made: a
+        # ``vif-s`` service VLAN, which is not translated.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_vyos(brace),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

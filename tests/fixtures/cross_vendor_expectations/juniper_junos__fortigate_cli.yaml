@@ -662,22 +662,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Junos's named ``class super-user / operator / read-only``
-      and FortiGate's named accprofile strings (``super_admin`` /
-      ``prof_admin`` / ``super_admin_readonly`` / custom) require
-      operator-curated mapping.  Junos codec preserves the
-      class string in canonical ``role``; FortiGate render maps
-      ``super-user`` -> ``super_admin``, others -> ``prof_admin``
-      (privilege 1) by default.  Hash formats are NOT cross-
-      compatible: Junos uses ``$1$`` (MD5) / ``$5$`` (SHA-256) /
-      ``$6$`` (SHA-512, default since 17.2) and ``ssh-rsa`` keys;
-      FortiOS uses its own proprietary ``ENC <base64>`` form.
-      Cross-vendor migration of admin accounts therefore requires
-      re-setting passwords on the target device.  ``ssh-rsa`` SSH
-      keys (Junos ``set system login user X authentication ssh-rsa
-      "..."``) are not canonically modelled and drop.  Both codecs
-      preserve hashes verbatim with vendor tags so the loss
-      surfaces in the validation report.
+      1 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 8 of them. The 12 accounts that vanish carry 4 SHA-512
+      crypt (`$6$`), 4 MD5 crypt (`$1$`), 4 `junos:`-tagged crypt string.
+      FortiOS can consume its own `ENC` ciphertext or a genuine plaintext
+      password; anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was written
+      as an `edit` with its access profile and no `set password` -- an admin
+      with no password; a refused secret now drops the whole account, as on
+      every other target. The survivors are 1 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [junos-password-cli, junos-kb-password-format, fortios-local-users]
 
   # ── Tier 2 — RADIUS ──

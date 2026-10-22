@@ -221,18 +221,20 @@ def _port(tree, name: str) -> tuple:
     )
 
 
-_ALL_OF_IT = ("from-the-range", 9100, False, ["10.50.0.1"], ["2001:db8::1"])
+# The range's ``mtu 9100`` is a media MTU; the tree's is the payload,
+# 14 bytes less (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
+_ALL_OF_IT = ("from-the-range", 9086, False, ["10.50.0.1"], ["2001:db8::1"])
 
 
 @pytest.mark.parametrize(
     ("deactivated", "first_port"),
     [
-        ("interfaces ge-0/0/1 description", ("", 9100, False, ["10.50.0.1"], ["2001:db8::1"])),
+        ("interfaces ge-0/0/1 description", ("", 9086, False, ["10.50.0.1"], ["2001:db8::1"])),
         ("interfaces ge-0/0/1 mtu", ("from-the-range", None, False, ["10.50.0.1"], ["2001:db8::1"])),
-        ("interfaces ge-0/0/1 disable", ("from-the-range", 9100, True, ["10.50.0.1"], ["2001:db8::1"])),
-        ("interfaces ge-0/0/1 unit 0", ("from-the-range", 9100, False, [], [])),
-        ("interfaces ge-0/0/1 unit 0 family inet", ("from-the-range", 9100, False, [], ["2001:db8::1"])),
-        ("interfaces ge-0/0/1 unit 0 family inet6", ("from-the-range", 9100, False, ["10.50.0.1"], [])),
+        ("interfaces ge-0/0/1 disable", ("from-the-range", 9086, True, ["10.50.0.1"], ["2001:db8::1"])),
+        ("interfaces ge-0/0/1 unit 0", ("from-the-range", 9086, False, [], [])),
+        ("interfaces ge-0/0/1 unit 0 family inet", ("from-the-range", 9086, False, [], ["2001:db8::1"])),
+        ("interfaces ge-0/0/1 unit 0 family inet6", ("from-the-range", 9086, False, ["10.50.0.1"], [])),
     ],
 )
 def test_a_range_fills_nothing_deactivated(deactivated: str, first_port: tuple) -> None:
@@ -273,7 +275,8 @@ def test_a_tag_naming_nothing_takes_nothing(stray: str) -> None:
     lines = _blockform_to_setform(_PORT % stray).splitlines()
     assert lines == ["set system host-name r1", "set interfaces ge-0/0/1 mtu 9000"]
     tree = _parse(_PORT % stray)
-    assert [(iface.name, iface.mtu) for iface in tree.interfaces] == [("ge-0/0/1", 9000)]
+    # The media MTU less the Ethernet header: the tree's MTU is the payload.
+    assert [(iface.name, iface.mtu) for iface in tree.interfaces] == [("ge-0/0/1", 8986)]
     assert tree.dropped_tier3_sections == []
 
 

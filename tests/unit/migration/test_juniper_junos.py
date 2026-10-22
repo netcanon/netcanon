@@ -1328,7 +1328,10 @@ class TestPerUnitVlanTagging:
         assert sub.dot1q_vlan == 100
 
     def test_parse_vlan_id_non_integer_rejected(self):
-        """Malformed ``vlan-id abc`` silently no-ops rather than crashing."""
+        """Malformed ``vlan-id abc`` does not crash, and is not read as
+        "no tag": the unit is left out, and a row says so.  Kept with
+        its addresses and no tag, it was another sub-interface on the
+        target -- the untagged traffic of its port."""
         raw = (
             "set interfaces ge-0/0/0 unit 100 vlan-id not-a-number\n"
             "set interfaces ge-0/0/0 unit 100 family inet "
@@ -1339,10 +1342,12 @@ class TestPerUnitVlanTagging:
             (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
             None,
         )
-        assert sub is not None
-        assert sub.dot1q_vlan is None  # bad token silently dropped
-        # Rest of the unit's config still parses.
-        assert len(sub.ipv4_addresses) == 1
+        assert sub is None
+        assert intent.dropped_tier3_sections == [
+            "interfaces ge-0/0/0 unit 100: vlan-id not-a-number -- not "
+            "one 802.1Q tag and at most one inner tag, so the "
+            "sub-interface is not translated"
+        ]
 
     def test_render_vlan_id_on_subiface(self):
         intent = CanonicalIntent(

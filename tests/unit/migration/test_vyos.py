@@ -537,7 +537,11 @@ def test_parse_ntp_servers(codec: VyOSCodec) -> None:
 
 
 def test_parse_bonding_member_interface_form(codec: VyOSCodec) -> None:
-    """1.4-style ``bonding bondN { member { interface ethN { } } }``."""
+    """``bonding bondN { member { interface ethN { } } }``: each member
+    a node, the form this codec wrote before it wrote VyOS's own (one
+    bare ``interface ethN`` line a member) -- read still, so that its
+    old outputs read back.  Every form VyOS prints is held to one tree
+    in ``codecs/vyos/test_a_bond_and_its_units.py``."""
     intent = codec.parse(_P2)
     bond0 = next(l for l in intent.lags if l.name == "bond0")
     assert sorted(bond0.members) == ["eth1", "eth2"]
@@ -560,7 +564,9 @@ def test_render_bonding_grammar(codec: VyOSCodec) -> None:
     assert "    bonding bond0 {" in out
     assert "        mode 802.3ad" in out
     assert "        member {" in out
-    assert "            interface eth1 {" in out
+    # ``member interface`` is a leaf of many values: one bare line each.
+    assert "            interface eth1\n" in out
+    assert "interface eth1 {" not in out
 
 
 def test_render_login_and_ntp(codec: VyOSCodec) -> None:
