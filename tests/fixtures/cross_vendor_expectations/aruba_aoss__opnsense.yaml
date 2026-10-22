@@ -531,16 +531,22 @@ per_field_expectation:
     references: [opnsense-users, aruba-users]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Aruba ``radius-server host <ip> key "<secret>"`` (with
       separate ``radius-server key`` for the global default) ↔
       OPNsense ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
-      ``<radius_acct_port>``.  Round-trips host / port pair
-      cleanly with default ports 1812 / 1813.  Aruba's optional
-      ``radius-server retransmit`` / ``timeout`` directives have
-      no canonical model and drop on render.
+      ``<radius_acct_port>``.  Round-trips host / port pair and a
+      key written as typed, with default ports 1812 / 1813.
+      Aruba's optional ``radius-server retransmit`` / ``timeout``
+      directives have no canonical model and drop on render.
+      An AOS-S ``encrypted-key "<blob>"`` (``encrypt-credentials``
+      on) is a form only AOS-S reads: it is held behind ``aoss:``,
+      not decoded, and the server is written with no key, beside a
+      review line.  No committed capture has one, so every cell
+      round-trips; until 2026-10 the blob was read as the secret
+      itself, and this entry called the field good.
     references: [opnsense-radius, aruba-radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

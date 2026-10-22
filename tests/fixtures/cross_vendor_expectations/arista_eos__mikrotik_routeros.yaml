@@ -391,11 +391,12 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Host / auth_port / acct_port round-trip cleanly.  Shared
-      secret encoding: Arista's ``radius-server host X key K`` form
-      (with optional ``key 7`` reversible obfuscation) -> RouterOS
-      ``/radius add address=X secret=K``.  Both codecs pass through
-      verbatim; the receiving RouterOS daemon will reject if it
-      does not match the server's expectation.  Service binding
+      secret: Arista's ``radius-server host X key K`` -> RouterOS
+      ``/radius add address=X secret=K`` for a key written as typed.
+      ``key 7 <blob>``, the form EOS prints, is held behind ``eos:``,
+      not decoded, and the RouterOS render writes the server with no
+      secret, beside a review comment that names the form.  Until
+      2026-10 it was written as the secret ``7``.  Service binding
       (RouterOS ``service=login,ppp,wireless,hotspot``) versus
       method-list / server-group (Arista ``aaa group server radius``
       + ``aaa authentication login default group ... local``) is

@@ -533,6 +533,20 @@ written without the password it had would be an account with none.
 password with the target's native CLI (`username ... secret`, `set
 system login user ... authentication plain-text-password`, etc.).
 
+### "review: a value of it holds white space or a quote"
+
+The source holds a credential -- a password, an SNMP community, an
+SNMPv3 user or key, a VRRP/HSRP key -- or an account name with a space
+in it (or a `"`), and the target reads that place one word at a time.
+Written as it stood, the second word would have been read as the next
+keyword (on NX-OS `snmp-server community public rw` is a read-write
+community), so the record is left out rather than altered: a secret
+with its space replaced is another secret.
+
+**Action:** create the account, community or key on the device under a
+value the target takes (no white space, no quote), and update whatever
+uses it.  The line names the record; the value is in the source config.
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG
@@ -1333,8 +1347,8 @@ the text, nor the delimiter (which is yours).
   banner under the other.  Change the banner on the router so that its
   text holds no caret, or remove the banner's lines from the paste.
 - **`<codec>: line <n> is a line of a banner, or of another block of
-  text, and ends in a character ...`** (the six above, and
-  `arista_eos`) -- a line of the banner ends in a form feed, a
+  text, and ends in a character ...`** (the six above, `arista_eos`,
+  and `fortigate_cli` for a quoted value) -- a line of the banner ends in a form feed, a
   vertical tab, a carriage return on its own, or another character
   that ends a line for the parser and not for the device, which ends
   a line at a line feed: where the device ends the banner, and so
@@ -1354,6 +1368,39 @@ See the vendor pages, § "A banner is text":
 a banner the parser refuses is not read by `detect-deployment` either
 (see [Detection proposes a device, and says ports are
 missing](#detection-proposes-a-device-and-says-ports-are-missing)).
+
+### The job says `parse failed:` for a FortiGate config
+
+- **`fortigate_cli: line <n> opens a quoted value that no later line
+  ends ...`** -- FortiOS prints a value of several lines (a
+  certificate, a key, a replacement message's HTML) between its
+  quotes, and the parser reads it whole, up to the line whose quote no
+  backslash escapes.  The value that line opens has no such line after
+  it: the text was cut short, or a quote was lost or added on the way.
+  Read as it stands, the rest of the config would be the value's text.
+  Paste the configuration whole, as the FortiGate prints it (a backup
+  file, or the output of `show`).
+- **`fortigate_cli: line <n> is a line of a banner, or of another
+  block of text, and ends in a character ...`** -- a line of a quoted
+  value ends in a form feed, a vertical tab, a carriage return on its
+  own or the like, where the device ends a line at a line feed.  See
+  the last item of the section above.
+
+See [`vendors/fortigate.md`](vendors/fortigate.md#a-quoted-value-of-several-lines).
+
+### The job warns "... held a line break: it is written on one line"
+
+A value of the config -- an interface's description, a VLAN's name,
+any text -- held a line break, and was written on one line, each run
+of breaks as a space.  No target is given a value of more than one
+line: written as it stood, the text after the break was a line of its
+own in the output, and so a command on the target.  The OPNsense and
+IOS-XE NETCONF parsers keep a break that an element's text holds, and
+the FortiOS parser one in a value printed over several lines.  The
+warning names the place (`interfaces[em0].description`); the job's
+status is not changed by it.  If the layout mattered (a description
+meant to show on two lines), set it on the target by hand.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § C1.
 
 ### The job says `refused:` — "my config was refused"
 

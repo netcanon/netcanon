@@ -77,19 +77,20 @@ class CanonicalRADIUSServer(BaseModel):
 ```
 
 - **host** — `good`.  Direct preservation.
-- **key** — `lossy`.  Aruba's plaintext / shadowed string lands in
-  canonical; FortiOS render emits `set secret ENC <encrypted>`
-  with the shared-secret material wrapped in the FortiGate
-  internal-key cipher.  The cipher is device-specific so Aruba-
-  source secrets will not authenticate after migration without
-  re-keying.
+- **key** — `good` for a key written as typed: the FortiOS render
+  emits `set secret <secret>`, the secret as typed.  An AOS-S
+  `encrypted-key "<blob>"` is a form only AOS-S reads; it is held
+  behind `aoss:`, and the server is written with no secret, beside a
+  review line.  (Until 2026-10 this page said the render writes
+  `set secret ENC`, which it has not done since the RADIUS gate, and
+  the FortiGate parser read a typed secret back behind `fortios:`.)
 - **auth_port** — `good`.  Default 1812 round-trips.
 - **acct_port** — `lossy`.  FortiOS has no separate field;
   non-default acct ports drop on render.
-- **server-name** (FortiOS-only) — synthesised from the host
-  address on render (e.g. `radius_10.0.20.10`).  Operators may
+- **server-name** (FortiOS-only) — synthesised on render
+  (`radius-<n>`).  Operators may
   want to override post-migration.
 
-Disposition: **lossy**.  Reason: shared-secret format
-incompatibility (re-keying required) and acct-port loss for
-non-default values.
+Disposition: **lossy**.  Reason: acct-port loss for non-default
+values (no committed capture shows one), and an AOS-S
+`encrypted-key` is refused.

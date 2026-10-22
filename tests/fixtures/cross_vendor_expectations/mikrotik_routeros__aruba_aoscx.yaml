@@ -133,15 +133,24 @@ per_field_expectation:
   # drop.  Exactly two keys drift, each with its own single cause.
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Preserved on all 5 cells; no interface record is dropped anywhere on
-      this pair (2->2, 7->7, 9->9, 12->12, 16->16).  Read this as "the
+    disposition: lossy
+    reason: >
+      A RouterOS interface name is free text, and a port an operator has
+      named can hold a space (`Access Point`, `CLUSTER - PVE3` on the
+      CRS310 capture); an AOS-CX interface name holds none.  This bare
+      round-trip does not run `translate_port_names`, so the name is
+      written as it stands -- `interface Access Point` -- and read back as
+      its first word: `Access`, and the three `CLUSTER - ...` ports as one
+      `CLUSTER`.  A name with no space round-trips verbatim, and no
+      interface record is dropped anywhere on this pair.  Read that as "the
       canonical string survived intact", NOT as target-syntax validity: the
-      round-trip does not run `translate_port_names`, and the rendered config
-      contains stanzas like `interface ether1` and `interface bond1`, which
-      are not configurable interface names on an AOS-CX switch.  A port-rename
-      map is a mandatory separate cutover step.
+      rendered config contains stanzas like `interface ether1` and
+      `interface bond1`, which are not configurable interface names on an
+      AOS-CX switch.  A port-rename map is a mandatory separate cutover
+      step.  Through
+      the pipeline the translator lists a name it cannot read -- every name
+      with a space among them -- as untranslated, and the job is `partial`
+      until a port-rename map entry decides it.
     references: [mikrotik-aoscx-surface]
 
   "interfaces[].description":

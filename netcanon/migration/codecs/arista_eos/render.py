@@ -33,12 +33,14 @@ import re
 from typing import Any
 
 from ..._naming import sanitise_hostname
+from ..._one_value import left_out, splits
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    EOS_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import (
     classify_hash,
@@ -129,6 +131,21 @@ def _cidr_to_dotted_mask(cidr: str) -> tuple[str, str]:
     except (ipaddress.AddressValueError, ValueError):
         return "", ""
     return str(net.network_address), str(net.netmask)
+
+
+def _radius_key_text(key: str) -> str:
+    """What follows ``key`` for a secret the RADIUS policy let through.
+
+    A value behind ``EOS_ENVELOPE`` goes back as the device wrote it
+    (``7 <blob>``).  A secret as typed is written as it is, unless it
+    begins with a type token and white space, which the parser reads as
+    a type: then ``0`` says that what follows is the secret.
+    """
+    if key.startswith(EOS_ENVELOPE):
+        return key[len(EOS_ENVELOPE):]
+    if re.match(r"^\d+[a-z]?\s", key):
+        return f"0 {key}"
+    return unwrap_native_secret(key)
 
 
 def _normalise_lag_name_to_arista(name: str) -> str | None:
@@ -244,7 +261,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("!")
 
     if tree.snmp is not None:
-        if tree.snmp.community:
+        # A community is one word: a second word would be read as the
+        # next argument (a view, or an ACL name), not refused.  One that
+        # holds white space is left out, with every trap host that would
+        # carry it.  Policy: :mod:`netcanon.migration._one_value`.
+        community_splits = splits(tree.snmp.community)
+        if community_splits:
+            out.append("! " + left_out("an SNMP community", "Arista EOS"))
+        elif tree.snmp.community:
             out.append(f"snmp-server community {tree.snmp.community} ro")
         if tree.snmp.location:
             out.append(f"snmp-server location {tree.snmp.location}")
@@ -257,6 +281,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # aruba_aoss and fortigate_cli already make -- but SAY SO, because
         # a synthesised community is config the operator never wrote.
         for host in tree.snmp.trap_hosts:
+            if community_splits:
+                out.append(
+                    "! " + left_out(f"snmp-server host {host}", "Arista EOS")
+                )
+                continue
             community = tree.snmp.community or "public"
             out.append(f"snmp-server host {host} version 2c {community}")
             if not tree.snmp.community:
@@ -290,6 +319,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"! snmpv3 user {u.name} -- review: a {kind} USM key "
                     f"belongs to the source agent, so EOS cannot re-derive "
                     f"it; re-create this user and re-key it on the target"
+                )
+                continue
+            # Name, group and both passphrases are one word each here.
+            if any(
+                splits(v) for v in (
+                    u.name, u.group, u.auth_passphrase, u.priv_passphrase,
+                )
+            ):
+                out.append(
+                    "! " + left_out(f"snmpv3 user {u.name}", "Arista EOS")
                 )
                 continue
             parts = [f"snmp-server user {u.name} {u.group or 'v3group'} v3"]
@@ -379,6 +418,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             else:
                 secret_tag = None
                 payload = ""
+            # Name, role and secret are one word each on this line (a
+            # user name and a password take no white space); the account
+            # is left out whole rather than altered.
+            if splits(user.name) or splits(user.role) or splits(payload):
+                out.append(
+                    "! " + left_out(f"username {user.name}", "Arista EOS")
+                )
+                continue
             parts = [f"username {user.name}"]
             if user.privilege_level and user.privilege_level != 1:
                 parts.append(f"privilege {user.privilege_level}")
@@ -418,9 +465,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 if radius_secret_is_migratable(
                     server.key, tree.source_vendor, "arista_eos",
                 ):
-                    parts.append(
-                        f'key {unwrap_native_secret(server.key)}'
-                    )
+                    parts.append(f"key {_radius_key_text(server.key)}")
                 else:
                     refused = True
             out.append(" ".join(parts))
@@ -430,6 +475,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="exclamation",
                         target_label="Arista EOS",
+                        secret=server.key,
                     )
                 )
         out.append("!")
@@ -834,7 +880,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"   vrrp {group.group_id} mac-address "
                     f"{group.virtual_mac}"
                 )
-            if group.authentication.startswith("md5:"):
+            if group.authentication.startswith(("md5:", "plain:")) and splits(
+                group.authentication.split(":", 1)[1]
+            ):
+                # The key is one word; the group is kept without it.
+                out.append(
+                    "   ! " + left_out(
+                        f"vrrp {group.group_id} authentication", "Arista EOS",
+                    )
+                )
+            elif group.authentication.startswith("md5:"):
                 out.append(
                     f"   vrrp {group.group_id} authentication md5 "
                     f"key-string {group.authentication[4:]}"
@@ -845,10 +900,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"{group.authentication[6:]}"
                 )
             elif group.authentication:
+                # The blob is a secret: the line says where, never what.
                 out.append(
-                    f"   ! review: vrrp authentication blob "
-                    f"{group.authentication!r} could not be cleanly "
-                    f"emitted"
+                    f"   ! vrrp {group.group_id} authentication -- review: "
+                    f"the source's authentication value names no scheme, "
+                    f"so it could not be cleanly emitted"
                 )
         # IPv6 dynamic-address mode.  Arista EOS mirrors IOS-XE:
         # ``ipv6 address dhcp`` (stateful client) and ``ipv6

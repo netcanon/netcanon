@@ -15,7 +15,7 @@
 #
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: on that pair
 # the interface inventory was FULLY preserved and every interface loss stood on
-# its own measurement. Here it is not: 55 interface records in, 45 out, on 5 of
+# its own measurement. Here it is not: 56 interface records in, 45 out, on 6 of
 # 13 cells. `interfaces[].name` carries that record-level loss for the whole
 # list; every other `interfaces[].*` key is judged on the 45 records that
 # SURVIVE, matched by name, and says so.
@@ -104,23 +104,17 @@ per_field_expectation:
     references: [vyos-aoss-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Drifts on 1 of the 12 cells that populate it
-      (`houdev_vyos_dhcpv6_pd_client.conf`), and the direction matters more
-      than the count: this is the TARGET cleaning up after the SOURCE.
-      That fixture's `config.boot` writes its servers as
-      `server time1.vyos.net { }` — a node with an empty inline brace block —
-      and the VyOS brace-stack parser captures the whole token run, so the
-      SOURCE-side canonical value is already `time1.vyos.net { }`.  The AOS-S
-      render emits that verbatim (`sntp server priority 1 time1.vyos.net { }`)
-      and the AOS-S parser, whose regex captures a single `(\S+)`, hands back
-      `time1.vyos.net`.  All three server hostnames survive; what is stripped
-      is a VyOS parse artifact.
-      Recorded `lossy` because the canonical value genuinely changes and the
-      audit compares values — but the defect is on the source side, and no
-      NTP server was lost.  The other 11 populated cells round-trip
-      byte-identical.  Both matrices declare `/system/ntp-server` supported.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the AOS-S render
+      wrote it out (`sntp server priority 1 time1.vyos.net { }`), and that
+      cell drifted.  The parser now reads such a line as the node it is, the
+      reading the set form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-aoss-surface]
 
   timezone:
@@ -146,9 +140,9 @@ per_field_expectation:
   # -- Interfaces -- inventory shrinks, surviving records are clean ----------
   #
   # The measured record count is the headline, and it is the OPPOSITE of the
-  # cisco_iosxr -> arista_eos pair: 55 source interface records across the 13
+  # cisco_iosxr -> arista_eos pair: 56 source interface records across the 13
   # cells, 45 after parse -> render -> re-parse, with the name set differing on
-  # 5 cells.  `interfaces[].name` below carries that structural loss for the
+  # 6 cells.  `interfaces[].name` below carries that structural loss for the
   # whole list.  Every other `interfaces[].*` key is measured on the 45 records
   # that SURVIVE, matched by name — so none of them is a knock-on effect of the
   # vanishing parent, and none is cited as evidence for another.
@@ -156,7 +150,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      10 of 55 interface records vanish, across 5 of 13 cells, and the rule
+      11 of 56 interface records vanish, across 6 of 13 cells, and the rule
       behind it is exact rather than incidental.  The AOS-S render applies a
       tiered-elision rule (`render.py::_has_body`, mirrored from the Junos
       renderer): a stanza is emitted only when the record carries a
@@ -166,9 +160,14 @@ per_field_expectation:
       content is its name renders nothing and the re-parse cannot see it.
       Every lost record fits: `metasploit-vyos-config.conf` loses `eth1` and
       `lo`; `scottlaird-vyos-parser.conf` loses `eth2`, `eth3`, `eth4`, `eth5`
-      and `lo`; `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
-      `wcni-kind-gw1.conf` each lose `lo`.  Nine of the ten carry name +
-      enabled and nothing else; the tenth (`scottlaird` `eth5`) additionally
+      and `lo`; `houdev_vyos_dhcpv6_pd_client.conf`,
+      `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
+      `wcni-kind-gw1.conf` each lose `lo`.  The houdev `lo` is printed as a
+      node with nothing under it (`loopback lo { }`) — an empty interface
+      record, nothing set — which the parser has read as a record since
+      2026-10; it is elided like the others, structural drift with no
+      attribute lost.  Ten of the eleven carry name + enabled and nothing
+      else; the eleventh (`scottlaird` `eth5`) additionally
       carries `dhcp_client=True`, which the elision rule also does not count
       as body — so a DHCP-client port with no static address disappears with
       the bare ones.
@@ -257,7 +256,7 @@ per_field_expectation:
       Drifts on all 13 cells and all 45 surviving records, and the direction
       is the finding: on this pair the IANA type hint is not LOST, it is
       INVENTED.  Measured on both sides — the vyos parser emits
-      `interface_type` as the empty string on ALL 55 source records; the
+      `interface_type` as the empty string on ALL 56 source records; the
       aruba_aoss re-parse returns `ianaift:ethernetCsmacd` on ALL 45 target
       records.
       aruba_aoss says why in its own matrix: it does not declare IANA ifType

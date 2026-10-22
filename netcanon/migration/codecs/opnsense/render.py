@@ -147,6 +147,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="plain",
                         target_label="OPNsense",
+                        secret=server.key,
                     )
             ET.SubElement(auth_el, "radius_auth_port").text = (
                 str(server.auth_port)

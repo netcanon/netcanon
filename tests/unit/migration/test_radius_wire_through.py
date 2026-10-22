@@ -42,7 +42,9 @@ radius server MyRadius
         assert s.host == "10.0.0.4"
         assert s.auth_port == 1812
         assert s.acct_port == 1813
-        assert s.key == "7 082E0F1F5F"
+        # Type 7 is a form only IOS-XE reads: held behind its envelope
+        # (test_a_radius_key_says_its_form.py).
+        assert s.key == "iosxe:7 082E0F1F5F"
 
     def test_legacy_host_one_liner(self):
         raw = "radius-server host 10.0.0.5 auth-port 1645 key fakekey123\n"

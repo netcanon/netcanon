@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 
+from ..._one_value import left_out, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _prefix_to_mask, same_vendor_version
@@ -164,6 +165,18 @@ def _render_local_user(user) -> list[str]:
     role = user.role or (
         "root-lr" if user.privilege_level >= 15 else "operator"
     )
+    # Name, group and secret are one word each; the block is left out
+    # whole rather than altered.  Policy: :mod:`netcanon.migration._one_value`.
+    payload = (
+        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
+    )
+    # A secret this target cannot take at all is the hash gate's to
+    # say (below); this asks only of one it would write.
+    if splits(user.name) or splits(role) or (
+        splits(payload)
+        and is_migratable(user.hashed_password, "cisco_iosxr")
+    ):
+        return ["! " + left_out(f"username {user.name}", "Cisco IOS-XR")]
     block = [f"username {user.name}", f" group {role}"]
     if user.hashed_password:
         algorithm, payload = classify_hash(user.hashed_password)

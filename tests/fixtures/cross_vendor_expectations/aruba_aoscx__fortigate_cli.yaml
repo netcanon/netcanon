@@ -541,10 +541,10 @@ per_field_expectation:
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      1 typed password is written `set password ENC <password>` and read back
-      tagged `fortios:ENC`: that claims FortiOS ciphertext the value is not, so
-      the account does not hold the password it was given (the defect #533
-      mends). 6 accounts are refused for their secret (6 AOS-CX `AQB`
+      1 typed password is written `set password "<password>"`, for the
+      FortiGate to encrypt on save, and read back tagged `fortios:`: the
+      account holds the password it was given, and the tag is the whole of the
+      change. 6 accounts are refused for their secret (6 AOS-CX `AQB`
       device-keyed ciphertext) and vanish with it; that loss is recorded once,
       under `local_users[].name`. Recorded `lossy` because the value changes on
       surviving accounts. Up to 0.7.7 such an account was written as an `edit`
