@@ -1459,7 +1459,11 @@ tests use these exclusively — never CSS classes or element structure.  See
   type's number, so a keyword is no type, and an address after a
   type word (`ip route ... Dialer 10.0.0.1`) is the route's gateway.
   Before making a record for the first word of a line, ask what the
-  config STATES under that name, not what the parser read of it.  A
+  config STATES under that name, not what the parser read of it --
+  and of what KIND: `interface Port-channel1.10` states a unit of a
+  LAG, and three parsers that took any header with the LAG's prefix
+  for a LAG made an empty LAG of it, which Junos wrote as `ae10` and
+  FortiOS as an aggregate holding the unit's address.  A
   Junos line under `unit N` configures `<name>.<N>` and states
   nothing on the device the unit hangs off; a line on the device or
   on its unit 0 makes the record whether or not any handler reads

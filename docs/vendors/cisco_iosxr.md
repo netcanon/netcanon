@@ -39,7 +39,9 @@ translatable with caveats:
   route-distinguisher is harvested from / rendered to the `router bgp`
   block; see [lossy](#lossy-paths))
 - LAGs — Bundle-Ether (`bundle id <N> mode <m>` on member interfaces),
-  reconciled with cross-vendor names like `Port-channel<N>` / `ae<N>`
+  reconciled with cross-vendor names like `Port-channel<N>` / `ae<N>`;
+  `Bundle-Ether<N>.<M>` is a sub-interface of the bundle, read as an
+  interface and not as a LAG of its own
 - Local users — `username` block (group → role + secret hash),
   form-preserving
 

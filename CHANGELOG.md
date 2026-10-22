@@ -980,6 +980,23 @@ timestamp if your timezone matters for an audit.
   `tests/unit/migration/codecs/mikrotik_routeros/test_a_factory_name_is_the_devices.py`,
   which reads the lookup lines of the output as text, and is handed
   the old parse and render.  The cross-mesh audit is unchanged.
+- **A sub-interface of a LAG was also read as a LAG of its own.**
+  The IOS-XE CLI, NX-OS and IOS XR parsers took every `interface`
+  header that began `Port-channel`, `port-channel` or `Bundle-Ether`
+  for a declaration of a LAG, so `interface Port-channel1.10` -- a
+  routed unit with a tag and an address -- was also an empty LAG
+  called `Port-channel1.10`, and each target that writes a LAG wrote
+  it: Junos an `ae10` with LACP (and a device count to match), RouterOS
+  a bonding `bond1.10`, OPNsense a `lagg`, AOS-S a line saying a LAG
+  had no members, and FortiOS the unit itself as an LACP aggregate
+  holding the unit's address, where a VLAN on its parent was meant.
+  No job's status moved for it.  Only `<prefix><N>` declares a LAG
+  now, and the unit is an interface, as it was beside.  Guarded by
+  `tests/unit/migration/test_a_unit_of_a_lag_is_no_lag.py`, which
+  reads the LAGs every target's output declares as text, by a reader
+  of its grammar, and with its parser, and is handed the old parse.
+  No committed capture has such a unit; the cross-mesh audit is
+  unchanged.
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
