@@ -327,9 +327,13 @@ per_field_expectation:
   radius_servers:
     disposition: lossy
     reason: >
-      Host / key / auth_port / acct_port round-trip cleanly.
-      Shared secret encoding pass-through verbatim (Aruba quoted-
-      string form vs RouterOS bare/quoted both lift cleanly).
+      Host / key / auth_port / acct_port round-trip cleanly for a
+      key written as typed (Aruba quoted-string form vs RouterOS
+      bare/quoted both lift cleanly).  An AOS-S ``encrypted-key
+      "<blob>"`` is a form only AOS-S reads: it is held behind
+      ``aoss:``, and the RouterOS render writes the server with no
+      secret, beside a review comment.  Until 2026-10 the blob was
+      written as the secret.
       Service binding (RouterOS ``service=login,ppp,wireless,
       hotspot,dhcp,ipsec``) is RouterOS-rich and not modelled
       canonically; cross-vendor render to RouterOS defaults to

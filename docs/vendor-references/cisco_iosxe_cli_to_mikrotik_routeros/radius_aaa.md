@@ -66,13 +66,13 @@ semantics are identical (1812 auth, 1813 acct).
 
 ### Lossy points
 
-- **Shared secret**: Cisco's type-7 obfuscation can be reversed to
-  plaintext; RouterOS's `secret=` is stored verbatim.  Cross-vendor
-  migration would require a re-keying step if the operator wants
-  to break the obfuscation chain.  In practice, both codecs
-  pass-through the opaque blob; the receiving vendor's RADIUS
-  daemon will reject if it does not match the server's expectation,
-  and the operator re-enters the secret.
+- **Shared secret**: a key written as typed (`key <secret>`,
+  `key 0 <secret>`) is written `secret=`.  Cisco's type-7
+  obfuscation can be reversed to plaintext, and is not: a `key 7` or
+  `key 6` is a form only IOS-XE reads, held behind `iosxe:`, and the
+  RouterOS render writes the server with no secret, beside a review
+  comment that names the form; the operator re-enters the secret.
+  (Until 2026-10 the type-7 text was written as the secret.)
 - **Service-binding (RouterOS) vs server-group/method-list (Cisco)**:
   RouterOS's `service=login,ppp,wireless` and Cisco's `aaa group
   server / aaa authentication login default group ... local`
@@ -86,7 +86,7 @@ semantics are identical (1812 auth, 1813 acct).
 | Field | Disposition |
 |---|---|
 | `radius_servers[].host` | good |
-| `radius_servers[].key` | lossy (vendor-specific encoding; effectively re-key on migration) |
+| `radius_servers[].key` | lossy (a `key 7` / `key 6` is refused; re-enter the secret) |
 | `radius_servers[].auth_port` | good |
 | `radius_servers[].acct_port` | good |
 | Server-group / method-list (Cisco) / service-binding (MikroTik) | unsupported (no canonical model) |

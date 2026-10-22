@@ -827,11 +827,16 @@ surface, sibling to `_user_secrets.py` (password hashes) and
 `_usm_keys.py` (SNMPv3 USM keys).  A render path consuming
 `CanonicalRADIUSServer.key` calls
 `radius_secret_is_migratable(value, source_vendor, target_vendor)`.
-Only a **plaintext** secret crosses a vendor boundary; FortiGate's
-`set secret ENC <blob>` (carried canonically behind the `fortios:`
-envelope) is encrypted under that device's own key and is refused,
-with a `format_review_comment(...)` line so the operator knows to
-re-enter it.  Same-vendor re-render always passes — that is the
+Only a **plaintext** secret crosses a vendor boundary.  A secret the
+source platform stored in a form of its own is carried behind the
+envelope its parser puts on it -- `fortios:` (FortiGate `set secret
+ENC <blob>`, encrypted under that device's own key), `iosxe:` (IOS-XE
+`key 6|7 <blob>`), `eos:` (EOS `key 7 <blob>`), `aoss:` (AOS-S
+`encrypted-key`) -- and is refused on every other platform, with a
+`format_review_comment(...)` line that names the form so the operator
+knows to re-enter it.  The envelope is the parser's to put on: what a
+value is is said by the grammar it was read from, and a stored form
+that reaches the tree bare is a "plaintext" secret to the gate.  Same-vendor re-render always passes — that is the
 reference path.  Unlike the SNMPv3 rule, a refusal does **not** drop
 the server record: a keyless `radius-server host <ip>` is a
 half-configured server the operator can see and finish, whereas a
@@ -851,6 +856,28 @@ in hostname / domain / VRF-name tokens; renderers call
 `sanitise_hostname()` so the wire form round-trips through the
 target's own parser.  Source state preserved on canonical, sanitised
 only at the wire boundary.
+
+**A value is written on one line** (`netcanon/migration/_one_line.py`).
+Every renderer puts a value into its line as it stands, so a value that
+held a line break was written as lines of its own, and the text after
+the break was a command: a description that held `username ...
+nopassword` after a break was that account on every line-based target.
+The XML parsers keep a break that an element's text holds, and FortiOS
+prints a value of several lines between its quotes, so the tree can
+hold one.  No target is given a value of more than one line, whatever
+the field: the pipeline (`run_plan`, and the sanitiser before it
+renders) writes each run of breaks -- any character `str.splitlines`
+ends a line at -- as one space, after the transforms, and says each
+place in the job's warnings; `CodecBase.render` refuses a tree that
+still holds one, so a caller that renders without the pipeline cannot
+write one either.  It is one rule for every target, not a list of
+which field of which target may hold a break, because a value in the
+wrong place on such a list is an account; what a target that could
+have held the break loses (an XML target, FortiOS between its quotes)
+is the layout of the text.  `raw_sections`, the one field built to
+carry lines, is filled by no parser: one that fills it has to settle
+what its lines become, since the IOS-XE CLI renderer writes each as a
+command.
 
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The

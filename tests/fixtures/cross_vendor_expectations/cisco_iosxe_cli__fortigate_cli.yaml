@@ -278,12 +278,15 @@ per_field_expectation:
   radius_servers:
     disposition: lossy
     reason: >
-      Host / auth_port preserve cleanly.  Shared-secret format
-      is incompatible: Cisco emits plaintext or type-7 reversible;
-      FortiOS uses ``ENC <opaque-base64>``.  Cross-vendor migration
-      requires re-keying.  FortiOS has no separate acct-port field
-      (derived as auth-port + 1 per RFC default), so non-default
-      Cisco acct-port values drop.
+      Host / auth_port preserve cleanly, and a key written as typed
+      (``key <secret>``, ``key 0 <secret>``) is written ``set secret
+      <secret>``.  A ``key 7`` or ``key 6`` is a form only IOS-XE
+      reads: it is held behind ``iosxe:``, not decoded, and the
+      FortiGate render writes the server with no secret, beside a
+      review line that names the form; the secret has to be
+      re-entered.  FortiOS has no separate acct-port field (the
+      FortiGate parser reads 1813), so non-default Cisco acct-port
+      values drop.
     references: [aaa]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

@@ -412,7 +412,28 @@ tests use these exclusively — never CSS classes or element structure.  See
   default must not become a false-positive blast: classify by envelope
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
-  unvouched source is refused.
+  unvouched source is refused.  (3) A gate reads what the parsers hand
+  it, and is no better than their reading.  The IOS-XE CLI parser kept
+  a `key 7` type IN the value (`7 <blob>`) and dropped it on the
+  one-line form, the EOS parser read `key 7 <blob>` as the secret `7`,
+  and the AOS-S parser read `encrypted-key "<blob>"` as the plaintext
+  `<blob>`: none carried an envelope, so the gate called each a typed
+  secret and every target wrote the stored form into its
+  literal-secret slot, in jobs that said `completed`.  And the
+  FortiGate parser put EVERY `set secret` behind `fortios:`, so a
+  secret typed without `ENC` was refused everywhere.  What a value is
+  is said by the grammar it was read from, which only its parser has:
+  each parser envelopes its platform's stored form (`iosxe:`, `eos:`,
+  `aoss:`, `fortios:`) and only that platform's renderer writes it
+  back.  **The blind spot:** the gate's tests built their trees with
+  the envelope already on, or parsed the FortiOS `ENC` form alone, so
+  every value they handed it was already right -- and a parser test
+  pinned the IOS-XE value `7 <blob>` as the key.  Guarded by
+  `tests/unit/migration/test_a_radius_key_says_its_form.py`, which
+  sends each stored form of each grammar through its parser onto
+  every target and reads the output as text and with the target's
+  parser; and the envelope-registry test now fails for a snippet its
+  parser reads no keyed server from.
 - **Never** hand text nobody vouches for to code whose cost you have not
   measured.  A config is whatever was pasted, a request carries megabytes
   of it, and a pattern at work does not let the server's other threads
@@ -1455,6 +1476,83 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** write a value of the tree on more than one line.  Every
+  renderer writes a config a line at a time and puts a value into its
+  line as it stands, so a value that held a line break was written as
+  lines of its own, and the text after the break was a command: an
+  interface description holding a break and then `username <name>
+  privilege 15 nopassword` came out with that line on its own onto 12
+  of the 13 public codecs.  The OPNsense and IOS-XE NETCONF parsers
+  keep such a value from an element's text, and the FortiOS parser
+  made one of the device's own printout as well -- FortiOS prints a
+  certificate, a key or a replacement message's HTML between its
+  quotes, over several lines, and the parser read each line of it as a
+  statement: a line `end` in the HTML closed the block it was in, and
+  a line `config system admin` after it was an account with no
+  password on IOS-XE and EOS, in jobs that said `completed`.  The rule
+  is ONE for every field of every target, never a list of the fields a
+  target may hold a break in, since a value in the wrong place on such
+  a list is an account: the pipeline (and the sanitiser, before it
+  renders) writes each run of breaks as a space after the transforms
+  -- an operator's map puts values into the tree too -- and says each
+  place in the job's warnings (`one_line_each`), and `CodecBase.render`
+  refuses a tree that still holds one, naming the field and nothing of
+  the value (`netcanon/migration/_one_line.py`).  A break is every
+  character `str.splitlines` ends a line at, not the line feed alone.
+  The walk reads every field a record HOLDS, not the fields the schema
+  declares, and a dict's keys with its values: a value in a place the
+  schema does not name is written all the same.  The parsers' half is
+  the rule on a body that runs to its own end, above: a FortiOS quoted
+  value is read whole, up to the line whose quote no backslash escapes,
+  and the Tier-3 rows and the release are read from the text with its
+  lines emptied (`without_quoted_values`).  **The blind spot that hid
+  it:** every check read a capture, no committed capture's tree holds a
+  value of several lines, and a codec's round trip to itself writes
+  the break and reads the same value back.  `raw_sections`, the one
+  field built for text of several lines, is under the rule too; no
+  parser fills it.  Guarded by
+  `tests/unit/migration/test_a_value_is_one_line.py`, which puts a
+  break into every place of a tree built from the schema and sends the
+  sources that keep one onto every public codec; with the mend taken
+  out the render refuses, and with both gates out the line comes back
+  on every codec it is pinned for; and by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_quoted_value_is_text.py`,
+  which holds where each quoted value of every committed input ends to
+  a reader of its own, a character at a time.
+- **Never** write a value of the tree where the target reads it as
+  more than a value.  RouterOS imports an `.rsc` as a script: outside
+  a string white space parts two words, `;` ends the command, and
+  `$`, `[ ]`, `( )` and `{ }` substitute a variable, run a command or
+  an expression, or open a scope -- and inside a string `$[...]` and
+  `$(...)` run as well.  The renderer escaped `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source vendor came out as that
+  command on the router that imported the output, a value holding `;`
+  ended its command there, and a RADIUS secret `7 <blob>` was a secret
+  `7` and a stray word -- in jobs that said `completed`.  A value is
+  written as it stands only when it is made of characters the
+  vendor's own printout leaves bare (letters, digits and
+  `- . _ / : , %` for RouterOS), and as a string otherwise, escaped
+  by the vendor's rules -- `$` included, as an export escapes it
+  (`_quote_if_needed` and `_escape` in the RouterOS renderer) -- and
+  the parser reads back every form the renderer writes (a quoted
+  `[ find name="..." ]`), in the same change.  An allow-list, never a
+  list of the characters known to be dangerous: what a grammar gives a
+  meaning to is the vendor's to say, and a value nobody vouches for
+  finds the one left off.  **The blind spot that hid it:** every check
+  read the output with the codec's own parser, which reads `$[...]`
+  inside a string as text and a bare value up to its first space as
+  the whole of it -- so a description that runs a command
+  round-tripped, and a secret cut to `7` was a loss the mesh had
+  measured and put down to the secret's encoding.  The guard reads the
+  output with a reader of its own, typed from MikroTik's "Scripting"
+  page, over a tree built from the schema with such text in every
+  place it has and over every committed input, and each of its checks
+  is handed the old rule and fails
+  (`tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`).
+  Still open: the renderers whose lines a device reads a word at a
+  time have not been read for a value with white space in it written
+  bare (SECURITY.md, "Known Limitations").
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

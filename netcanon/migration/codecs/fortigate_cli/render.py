@@ -665,18 +665,33 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # freely (VL_100, DATA, etc.) so name alone isn't
                 # sufficient.
                 vid = _vlan_id_for(iface.name, tree.vlans)
-                # Use the elided iface list (post-stub-removal) so
-                # the parent fallback prefers a real LAN port over a
-                # bare WAN stub like OPNsense's ``igc0`` (Finding 6
-                # in user_smoke_findings.md).  The pre-elision tree
-                # still has ``igc0`` as its first iface, which would
-                # incorrectly anchor every VLAN child to the WAN.
-                parent = _parent_for_vlan_iface(
-                    iface.name, deduped_ifaces, scored_parent,
-                )
+                # The parent the config states, where this output has
+                # it.  Otherwise one is chosen from the elided iface
+                # list (post-stub-removal) so the fallback prefers a
+                # real LAN port over a bare WAN stub like OPNsense's
+                # ``igc0`` (Finding 6 in user_smoke_findings.md).  The
+                # pre-elision tree still has ``igc0`` as its first
+                # iface, which would incorrectly anchor every VLAN
+                # child to the WAN.
+                stated = iface.vlan_parent
+                if stated and stated in seen_iface_names:
+                    parent = stated
+                else:
+                    parent = _parent_for_vlan_iface(
+                        iface.name, deduped_ifaces, scored_parent,
+                    )
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")
+                    if stated and parent != stated:
+                        out.append(
+                            f"        # review: rides on \"{stated}\" in "
+                            f"the source, which is not in this output; "
+                            f"the parent below was chosen"
+                            if parent else
+                            f"        # review: rides on \"{stated}\" in "
+                            f"the source, which is not in this output"
+                        )
                     if parent:
                         out.append(f'        set interface "{parent}"')
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
@@ -1069,6 +1084,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             server.host,
                             comment_syntax="hash",
                             target_label="FortiGate",
+                            secret=server.key,
                         )
                     )
             if server.auth_port and server.auth_port != 1812:
