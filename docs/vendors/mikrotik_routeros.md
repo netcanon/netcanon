@@ -198,7 +198,12 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   The key of an entry is the name the config uses for the port —
   yours, where you gave one; without devices declared an entry keyed
   by the factory name of a port you named matches nothing and is
-  ignored with a warning.
+  ignored with a warning.  Onto another vendor with no devices
+  declared, a port you named is translated only by an entry: the
+  translator reads a RouterOS port by the shape of its name, a name
+  of your own has none, and the port's factory name is not used to
+  place it.  The job lists such a port (`untranslated_ports`) and is
+  `partial` until an entry decides it.
 - **Moving a port onto other hardware needs both device models
   declared** (the *Source device* and *Target device* rows of the
   Interface rename modal; on the API, `source_profile` /
@@ -236,14 +241,19 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix
   (`ether3@main`) are left as written.
-- **A value wrapped onto the line after its key** (`name=\` and the
-  name on the next line, as a long `export` line can break) is not
-  read.  The port's own line is then known by its factory name, while
-  every other line of the config still uses your name — which comes
-  back as an interface nothing defines and, with devices declared, as
-  a name that is not a port of the declared source.  A verbose export
-  wraps this way for most ports; re-join such lines before
-  translating.
+- **A VLAN interface's parent** (`/interface vlan add
+  interface=bridge name=mgmtvlan11 vlan-id=11`) is kept, and onto
+  RouterOS the VLAN is written on it again.  An entry of
+  `port_rename_map` for the parent moves its VLANs with it; an entry
+  that drops it is said in the job's warnings, and the renderer then
+  chooses a parent for the VLAN as below.  Onto FortiOS the parent is
+  carried, and a FortiGate VLAN comes with its own.  Onto any other
+  vendor it is not — no other codec writes a VLAN interface on a
+  parent the config names — and nothing reports it.  From any other
+  vendor every VLAN interface of a RouterOS output is on ONE parent
+  the renderer chooses: the config's one port with an address or an
+  allowed list, or a `bridge1` it adds where there is not exactly
+  one.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.

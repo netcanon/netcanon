@@ -998,6 +998,39 @@ to the code's.
 
 ---
 
+## Input Validation — Config Text (what reaches the output)
+
+**Files:** `netcanon/migration/_one_line.py`,
+`netcanon/migration/codecs/base.py` (`render`),
+`netcanon/services/migration_pipeline.py` (`run_plan`),
+`netcanon/tools/sanitize.py`, `netcanon/migration/codecs/_scanner.py`,
+`netcanon/migration/codecs/fortigate_cli/parse.py`
+
+A translation writes the source config's text values -- descriptions,
+names, comments -- into the target's config, which an operator then
+loads onto a device.  Every renderer writes a config a line at a time
+and puts a value into its line as it stands, so a value that held a
+line break was written as lines of its own, and the text after the
+break was a command: a description that held `username <name>
+privilege 15 nopassword` after a break was that account on the target.
+No target is given a value of more than one line: the pipeline (and
+the sanitiser, before it renders) writes each run of line breaks --
+any character `str.splitlines` ends a line at -- as a space, after the
+transforms, and says where in the job's warnings; `CodecBase.render`
+refuses a tree that still holds one, with a sentence that names the
+field and nothing of the value.  The rule is the same for every field
+of every target, not a list of the fields a target may hold a break
+in.  Guarded by `tests/unit/migration/test_a_value_is_one_line.py`,
+which puts a break into every place of a tree built from the schema,
+and sends the sources that can hold one onto every public codec.
+
+The parsers' half: a body of text the device prints inside its config
+(a banner, a FortiOS quoted value of several lines -- a certificate, a
+replacement message) is read as text, ended where the vendor ends it,
+and never as lines of configuration; a body that does not end, or
+whose lines end where the device would not end them, is refused.  The
+vendor pages say where each platform ends one.
+
 ## Data Directory Isolation
 
 Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)
@@ -1142,7 +1175,14 @@ provenance can verify each:
   stage (compiles wheels with `build-essential`) from a `runtime`
   stage that installs prebuilt wheels with `pip install --no-index`.
   No compilers in the runtime layer; no network during the runtime
-  install.
+  install.  And no pip: the runtime stage uninstalls it once netcanon
+  is installed.  pip carries its own copies of third-party libraries,
+  pinned by the base image's pip release rather than by
+  `requirements.lock`, and the certifi CA bundle that pip 26.2.1
+  vendors is a CRITICAL advisory (GHSA-6q48-6c7w-9gw2) the gating scan
+  found in an image whose own dependencies were clean.  Nothing in
+  the server uses pip.  Guarded by
+  `tests/unit/test_dockerfile_runtime_pip.py`.
 - **No build cache on the release path.**  The tag-triggered publish
   builds clean from source with no `cache-from` / `cache-to`.  A
   writable shared cache (e.g. `type=gha`) could otherwise launder a
@@ -1370,6 +1410,7 @@ constrains the *application* (the container).
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
 | The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
+| A set-form Junos or VyOS text is read a line at a time | A line after a quote that no later quote on its line ends is read as a statement of its own, so a quoted value of several lines -- if either device prints one so, which is not established -- would be read as configuration of the source | Documented | No value of the tree is written on more than one line, so such a value cannot add a line to the output; what it can do is make the source's tree hold a statement the source does not.  FortiOS reads a quoted value of several lines whole.  See "Input Validation — Config Text (what reaches the output)" |
 
 ---
 

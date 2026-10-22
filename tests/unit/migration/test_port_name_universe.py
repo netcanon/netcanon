@@ -213,28 +213,41 @@ def _units(names: list[str]) -> set[str]:
     }
 
 
-def _ports_to_move(codec: Any, tree: CanonicalIntent) -> dict[str, str]:
+def _ports_to_move(
+    codec: Any, tree: CanonicalIntent, *, named: bool = True,
+) -> dict[str, str]:
     """Every physical port of each name shape, sent to the next port
     of its shape.
 
     A port that has sub-interfaces is moved like any other, and its
     units are given no entry of their own: each has to FOLLOW its
     port, and the comparison expects it where its port went.  A port
-    an operator named (RouterOS) is left out, which the config does
-    not call by its hardware name.
+    an operator named (RouterOS ``name="Access Point"``) is moved by
+    that name, which is the one the config calls it by, among the
+    ports of its FACTORY name's shape: what the name is does not say
+    what the port is.  With no devices declared an entry gives such a
+    port a name and leaves its hardware where it was, which is what
+    the comparison expects (the factory name stands still).
+
+    ``named=False`` leaves such ports out.  With devices declared an
+    entry whose value is a port of the target MOVES the port onto that
+    hardware, and the comparison there sends a name and a factory name
+    alike: it is made for ports whose two names are one.  A committed
+    capture's named ports onto a declared device are pinned in
+    ``test_run_plan_with_models.py`` (``TestAPortsFactoryName``).
     """
     hardware = collect_hardware_port_names(tree, classify=codec.classify_port_name)
     units = _units(hardware)
-    named = {
-        iface.name for iface in tree.interfaces
-        if iface.default_name and iface.default_name != iface.name
+    factory = {
+        iface.name: iface.default_name for iface in tree.interfaces if iface.default_name
     }
     groups: dict[str, list[str]] = defaultdict(list)
     for name in hardware:
-        if name in units or name in named:
+        if name in units or (not named and factory.get(name, name) != name):
             continue
-        if _kind(codec, name) in ("physical", "breakout"):
-            groups[re.sub(r"\d+", "#", name)].append(name)
+        shape = factory.get(name, name)
+        if _kind(codec, shape) in ("physical", "breakout"):
+            groups[re.sub(r"\d+", "#", shape)].append(name)
     return _rotation(groups)
 
 
@@ -449,9 +462,13 @@ class TestEveryCapture:
         if _capture_id(path) in _NOT_EXERCISED:
             pytest.skip(_NOT_EXERCISED[_capture_id(path)])
         codec, text, tree = _comparable(codec_name, path)
-        moves = _ports_to_move(codec, tree)
+        moves = _ports_to_move(codec, tree, named=False)
         if not moves:
-            pytest.skip("only LAG names to exchange, which are not ports of a device")
+            pytest.skip(
+                "no two ports of one shape that the config calls by their hardware "
+                "names: a LAG is no port of a device, and a port an operator named "
+                "is not moved onto one here"
+            )
         stayed = _what_did_not_follow_with_devices(codec, text, moves)
         # No capture is skipped here for want of a pairing.  If one
         # ever is, it is named in ``_NOT_EXERCISED`` with its reason,
@@ -472,9 +489,10 @@ class TestEveryCapture:
                 continue
             codec, text, tree = _comparable(codec_name, path)
             assert any(iface.default_name for iface in tree.interfaces)
-            assert _what_did_not_follow_with_devices(
-                codec, text, _ports_to_move(codec, tree),
-            ) == []
+            moves = _ports_to_move(codec, tree, named=False)
+            if not moves:
+                continue
+            assert _what_did_not_follow_with_devices(codec, text, moves) == []
             ran += 1
         assert ran
 
@@ -488,6 +506,7 @@ class TestEveryCapture:
 _PLACES: dict[str, Callable[[CanonicalIntent], list[tuple[Any, str]]]] = {
     "interfaces[].name": lambda t: [(i, "name") for i in t.interfaces],
     "interfaces[].lag_member_of": lambda t: [(i, "lag_member_of") for i in t.interfaces],
+    "interfaces[].vlan_parent": lambda t: [(i, "vlan_parent") for i in t.interfaces],
     "interfaces[].vrrp_groups[].track_interfaces": lambda t: [
         (g, "track_interfaces") for i in t.interfaces for g in i.vrrp_groups
     ],
@@ -506,6 +525,9 @@ _PLACES: dict[str, Callable[[CanonicalIntent], list[tuple[Any, str]]]] = {
 _CAUGHT_ON_A_CAPTURE: frozenset[str] = frozenset({
     "interfaces[].name",
     "interfaces[].lag_member_of",
+    # A RouterOS VLAN interface on a port (routeros-diff's `gn-mgmt`
+    # on `ether3`).
+    "interfaces[].vlan_parent",
     "vlans[].tagged_ports",
     "vlans[].untagged_ports",
     "lags[].name",
@@ -795,10 +817,13 @@ class TestAnEntryNamesAPort:
         assert job.port_renames == {"ether1": name}
 
     def test_on_a_committed_capture(self) -> None:
+        """The capture's ``ether1`` has a name of its own,
+        ``Desktop``, which every line of the config calls it by -- so
+        that is the entry's key."""
         mikrotik = get_codec("mikrotik_routeros")
         text = (REAL / "mikrotik" / "user_contrib_crs310_ros7.rsc").read_text(encoding="utf-8")
         job = run_plan_with_overrides(
-            mikrotik, mikrotik, text, port_rename_map={"ether1": "uplink-to-core"},
+            mikrotik, mikrotik, text, port_rename_map={"Desktop": "uplink-to-core"},
         )
         lines = [line for line in job.rendered.splitlines() if "uplink-to-core" in line]
         assert lines[0].startswith("set [ find default-name=ether1 ] name=uplink-to-core ")
