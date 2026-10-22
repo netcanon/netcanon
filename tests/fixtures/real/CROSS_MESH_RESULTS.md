@@ -2478,19 +2478,19 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | DRIFT |  | switch | hostname: '' → 'switch' |
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "int... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "iana... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → aruba_aoss  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "mtu": {"source": 1546, "target": null}, "vrf": {"source": "CLIENT_VOIP:1234", "target":... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "mtu": {"source": 1546, "target": ... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → cisco_iosxe  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "mtu": {"source": 1546, "target": null}, "vrf": {"source": "CLIENT_VOIP:1234", "target":... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "mtu": {"source": 1546, "target": ... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → cisco_iosxr  (WARN 19/21)
 
@@ -2504,19 +2504,19 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | DRIFT |  | switch | hostname: '' → 'switch' |
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet2/0/4.223415... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → dell_os10  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "int... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:other", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.19... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "iana... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → fortigate_cli  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "vrf": {"source": "CLIENT_VOIP:1234", "target": ""}}, "interfaces[1] {'name': 'GigabitEt... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "vrf": {"source": "CLIENT_VOIP:123... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → juniper_junos  (WARN 20/21)
 
@@ -2528,20 +2528,20 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_length": 30, ... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"description": {"source": "BLUE \| 800K", "target": ""}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "i... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_length": 30, ... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"description": {"source": "BLUE \| 800K", "target": ""}, "dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": ... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → opnsense  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_l... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "vrf": {"source": ... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_l... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "iana... |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → vyos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | DRIFT |  | vyos | hostname: '' → 'vyos' |
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_l... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "", "mtu": 1546, "ipv4_addresses": [{"ip": "10.30.33.197", "prefix_l... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "iana... |
 
 ### cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt → arista_eos  (WARN 19/21)
 

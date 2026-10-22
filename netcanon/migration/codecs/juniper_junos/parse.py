@@ -92,7 +92,15 @@ from ...canonical.intent import (
 )
 from ...canonical.port_names import HARDWARE_PORT_KINDS
 from ...limits import LimitExceeded, charge, tick, ticked
-from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
+from .._helpers import (
+    GrowingIndex,
+    Tags,
+    Uniques,
+    a_tag,
+    unread_tags_row,
+    unstated_trunk_list,
+    vlan_id_run,
+)
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .port_names import classify_port_name
@@ -596,6 +604,11 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # vendor cells like fortigate_cli -> juniper_junos.  When the
     # operator IS configuring per-iface attrs under ae<N>, the
     # iface_state entry is non-empty and we materialise normally.
+    # A unit whose tag statements are not read whole is left out, and
+    # said (:func:`_tags_of_unit`); a routing instance that names it
+    # makes no record of it either.
+    unread_tags: list[str] = []
+    left_out_units: set[str] = set()
     for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
         if name in lag_state and not state:
@@ -634,6 +647,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # ``xe-0/0/6:2``, ``so-0/0/0``, ``reth0`` -- is a name
             # like any other here.)
             continue
+        tags: Tags | None = None
+        if state.get("tag_statements"):
+            read = _tags_of_unit(state["tag_statements"])
+            if isinstance(read, str):
+                unread_tags.append(unread_tags_row(state["tags_of"], read))
+                left_out_units.add(name)
+                continue
+            tags = read
         iface = CanonicalInterface(
             name=name,
             enabled=state.get("enabled", True),
@@ -643,8 +664,11 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # GAP 7: the per-unit 802.1Q tag on a routed sub-interface
             # surfaces on the DEDICATED CanonicalInterface.dot1q_vlan
             # (not access_vlan).  None = untagged (the common case for
-            # unit 0) or not a tagged routed sub-interface.
-            dot1q_vlan=state.get("dot1q_vlan"),
+            # unit 0) or not a tagged routed sub-interface.  A unit of
+            # two tags (``vlan-tags outer X inner Y``) has the inner one
+            # on dot1q_inner_vlan.
+            dot1q_vlan=tags[0] if tags else None,
+            dot1q_inner_vlan=tags[1] if tags else None,
             # interface-range / structural collapse: mtu may
             # have been populated from a ``set interfaces
             # interface-range <r> mtu <N>`` line via the
@@ -742,6 +766,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if not pending:
             continue
         for iface_name in pending:
+            if iface_name in left_out_units:
+                # Left out for its tags, and said: a stub of it
+                # would be a unit with no tag in the instance.
+                continue
             iface = iface_by_name.get(iface_name)
             # Phase 4 rank-5: routing-instances reference UNITs
             # (``Loopback0.0``); canonical stores parent (``Loopback0``).
@@ -1144,10 +1172,13 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     for number, gname, path in ticked(met_in_groups):
         if gname in applied:
             inactive_met[path] = min(number, inactive_met.get(path, number))
-    intent.dropped_tier3_sections = left_out_rows(
-        left_out.get(path, ("inactive", path))
-        for path in sorted(inactive_met, key=inactive_met.__getitem__)
-    )
+    intent.dropped_tier3_sections = [
+        *left_out_rows(
+            left_out.get(path, ("inactive", path))
+            for path in sorted(inactive_met, key=inactive_met.__getitem__)
+        ),
+        *unread_tags,
+    ]
     if not cut_lines:
         return intent, raw
     return intent, "\n".join(
@@ -1946,6 +1977,74 @@ def _apply_system(
             existing.hashed_password = f"junos:{tokens[5]}"
 
 
+#: The statements of a unit that say which tags it matches (Juniper,
+#: "Binding VLAN IDs to Logical Interfaces": ``vlan-id``,
+#: ``vlan-tags``, ``vlan-id-range``, ``vlan-id-list``).
+_UNIT_TAG_STATEMENTS: frozenset[str] = frozenset({
+    "vlan-id", "vlan-tags", "vlan-id-range", "vlan-id-list",
+})
+
+
+def _a_vlan_tags_value(word: str) -> int | None:
+    """A ``vlan-tags`` value as an 802.1Q tag: ``<vlan-id>``, or
+    ``<tpid>.<vlan-id>`` with the 802.1Q TPID ``0x8100`` (the TPID
+    "set to a value of 0x8100 in order to identify the frame as an IEEE
+    802.1Q-tagged frame", Juniper's ``vlan-tags``).  Another TPID is
+    not an 802.1Q tag, and the tree has no form for it."""
+    tpid, dot, vid = word.rpartition(".")
+    if dot and tpid.lower() != "0x8100":
+        return None
+    return a_tag(vid)
+
+
+def _tags_of_unit(statements: list[list[str]]) -> Tags | str:
+    """The tags a unit's tag statements state, read whole; else the
+    statement that is not, for the unit's row.
+
+    ``vlan-id <tag>`` is a unit of one tag and ``vlan-tags outer <tag>
+    inner <tag>`` one of two (the TPID ``0x8100`` may be written
+    before a tag).  ``vlan-tags`` given an ``inner-range`` or an
+    ``inner-list``, or another TPID, and ``vlan-id-range`` /
+    ``vlan-id-list``, match more than the tree can say, and a unit
+    with both forms, or an inner tag and no outer one, is not one
+    unit Junos takes.  Each such unit is left out -- written with
+    fewer tags than it matches it is another unit -- and its row says
+    the statement.
+
+    Args:
+        statements: Each tag statement of the unit, as its words from
+            the statement's own keyword on, in the order met.
+    """
+    outer: int | None = None
+    inner: int | None = None
+    forms: set[str] = set()
+    for words in ticked(statements):
+        forms.add(words[0])
+        if words[0] == "vlan-id" and len(words) == 2:
+            vid = a_tag(words[1])
+            if vid is not None:
+                outer = vid
+                continue
+        elif words[0] == "vlan-tags" and len(words) in (3, 5):
+            keys, values = words[1::2], words[2::2]
+            read = [_a_vlan_tags_value(v) for v in values]
+            if (
+                len(set(keys)) == len(keys)
+                and set(keys) <= {"outer", "inner"}
+                and None not in read
+            ):
+                for key, vid in zip(keys, read, strict=True):
+                    if key == "outer":
+                        outer = vid
+                    else:
+                        inner = vid
+                continue
+        return " ".join(words)
+    if len(forms) > 1 or outer is None:
+        return "; ".join(" ".join(words) for words in statements[:2])
+    return (outer, inner)
+
+
 def _apply_interfaces(  # noqa: C901
     tokens: list[str],
     iface_state: dict[str, dict[str, Any]],
@@ -2303,12 +2402,13 @@ def _apply_interfaces(  # noqa: C901
         # ``switchport access vlan N`` on a switchport-centric target.  Does
         # NOT set switchport_mode (these are L3-on-a-tagged-VLAN, not L2
         # access ports).  access_vlan stays reserved for the genuine L2
-        # ``family ethernet-switching`` access case.
-        if len(tokens) >= 5 and tokens[3] == "vlan-id":
-            try:
-                target_state["dot1q_vlan"] = int(tokens[4])
-            except ValueError:
-                pass
+        # ``family ethernet-switching`` access case.  ``vlan-tags`` is a
+        # unit of two tags, ``vlan-id-range`` / ``vlan-id-list`` one of
+        # many: every statement is kept, and read whole when the unit is
+        # made (:func:`_tags_of_unit`).
+        if tokens[3] in _UNIT_TAG_STATEMENTS:
+            target_state.setdefault("tag_statements", []).append(tokens[3:])
+            target_state["tags_of"] = f"interfaces {name} unit {unit_num}"
 
         # --- Phase 4 rank-4: L2 family ethernet-switching ---
         # ``unit 0 family ethernet-switching interface-mode access|trunk``

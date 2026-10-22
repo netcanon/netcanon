@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..._derived_values import (
     is_derivation_keyword,
@@ -93,6 +93,7 @@ from ...canonical.transforms import (
 )
 from ...limits import charge
 from ..base import RenderError
+from .port_names import classify_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parent_name = i.name.rsplit(".", 1)[0]
             iface_has_subunits.add(parent_name)
 
+    # What each Ethernet device whose units carry tags is told about
+    # them, written once, before the first of its units' tags.
+    tagging = _device_tags(tree.interfaces)
+
     # --- interfaces ---
     for iface in tree.interfaces:
         name = iface.name
@@ -457,10 +462,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
             # GAP 7: per-unit 802.1Q tag on the routed sub-interface.
             if iface.dot1q_vlan is not None:
-                out.append(
-                    f"set interfaces {parent} unit {unit_num} "
-                    f"vlan-id {iface.dot1q_vlan}"
-                )
+                _emit_unit_tags(out, parent, unit_num, iface, tagging)
             # A unit has no ``mtu`` of its own in Junos: it is set per
             # family (``family inet mtu``), and written for each family
             # the unit has.  A unit with no family has nowhere to take
@@ -584,6 +586,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"set interfaces {name} disable")
         if emit_mtu:
             out.append(f"set interfaces {name} mtu {iface.mtu}")
+        # The tags of the device's unit 0 (``unit 0 vlan-id N``), which
+        # the tree keeps on the device's own record.
+        if iface.dot1q_vlan is not None:
+            _emit_unit_tags(out, name, 0, iface, tagging)
         # Sub-finding 9b: DHCP client.  Junos models the DHCP client
         # as ``family inet dhcp`` on ``unit 0``, replacing the static
         # ``address`` clause.  Emit only when no static IPv4 address
@@ -1676,6 +1682,177 @@ def _emit_unit_mtu(
         out.append(
             f"set interfaces {parent} unit {unit_num} "
             f"family {family} mtu {iface.mtu}"
+        )
+
+
+#: The statement an Ethernet device is given for the tags of its units
+#: (Juniper, "Binding VLAN IDs to Logical Interfaces"): ``vlan-tagging``
+#: where each is a unit of one tag, ``stacked-vlan-tagging`` where each
+#: is a unit of two, and "to support mixed tagging, include the
+#: flexible-vlan-tagging statement instead".  Keyed by whether a unit
+#: has an inner tag.
+_TAGGING: dict[frozenset[bool], str] = {
+    frozenset({False}): "vlan-tagging",
+    frozenset({True}): "stacked-vlan-tagging",
+    frozenset({False, True}): "flexible-vlan-tagging",
+}
+
+
+def _takes_vlan_tagging(device: str) -> bool:
+    """Whether *device* is an Ethernet interface, where Juniper puts
+    the tagging statement (``[edit interfaces ethernet-interface-name]``):
+    a port or an ``ae`` bundle, a channel of a port (``xe-0/0/6:2``, a
+    committed capture writes ``vlan-tagging`` on one), or a chassis
+    cluster's ``reth`` (Juniper's chassis-cluster CoS example writes
+    ``set interfaces reth0 vlan-tagging``).  Not ``irb``, ``lo0`` or a
+    tunnel, whose units are not told apart by a tag on the wire."""
+    if classify_port_name(device).kind in ("physical", "lag"):
+        return True
+    port, colon, channel = device.rpartition(":")
+    if (
+        colon
+        and channel.isascii()
+        and channel.isdigit()
+        and classify_port_name(port).kind == "physical"
+    ):
+        return True
+    return re.fullmatch(r"reth\d{1,4}", device) is not None
+
+
+class _DeviceTags(NamedTuple):
+    """What each Ethernet device whose units carry tags is told about
+    them, written once, ahead of the first of its units' tags.
+
+    Attributes:
+        statements: The device's tagging statement (:data:`_TAGGING`).
+        native: The ``native-vlan-id`` of a routed device (Junos
+            ``set interfaces <device> native-vlan-id <id>``, which the
+            parser keeps in the device's ``trunk_native_vlan``): its
+            untagged frames go to the unit of that ``vlan-id``.
+        untagged: The units with an address and no tag
+            (:func:`_untagged_units`).
+        written: The devices already told.
+    """
+
+    statements: dict[str, str]
+    native: dict[str, int]
+    untagged: dict[str, list[int]]
+    written: set[str]
+
+
+def _device_tags(interfaces: list[CanonicalInterface]) -> _DeviceTags:
+    """What each Ethernet device whose units carry tags is told.
+
+    A unit's ``vlan-id`` is taken only on a device that says its
+    frames are tagged, and the statement is the device's, not the
+    unit's: the renderer wrote neither, so every tagged unit it
+    wrote was on a device that does not take one, Junos to Junos
+    included (two committed captures say ``vlan-tagging``).  A routed
+    device with a native VLAN is given ``flexible-vlan-tagging`` and
+    its ``native-vlan-id`` ("To accept untagged packets, include the
+    native-vlan-id statement and the flexible-vlan-tagging statement",
+    Juniper, "Configuring Tagged Interface with multiple tagged vlans
+    and native vlan"): written ``vlan-tagging`` alone, the unit of the
+    native VLAN no longer took the device's untagged frames, in an
+    output that commits.
+    """
+    kinds: dict[str, set[bool]] = {}
+    routed_native: dict[str, int] = {}
+    for iface in interfaces:
+        parent, _unit = _split_subiface_name(iface.name)
+        if (
+            parent is None
+            and iface.switchport_mode is None
+            and iface.trunk_native_vlan is not None
+        ):
+            routed_native[iface.name] = iface.trunk_native_vlan
+        if iface.dot1q_vlan is None:
+            continue
+        device = iface.name if parent is None else parent
+        if _takes_vlan_tagging(device):
+            kinds.setdefault(device, set()).add(
+                iface.dot1q_inner_vlan is not None,
+            )
+    native = {d: v for d, v in routed_native.items() if d in kinds}
+    statements = {
+        device: (
+            "flexible-vlan-tagging" if device in native
+            else _TAGGING[frozenset(two)]
+        )
+        for device, two in kinds.items()
+    }
+    return _DeviceTags(
+        statements, native, _untagged_units(interfaces, statements), set(),
+    )
+
+
+def _untagged_units(
+    interfaces: list[CanonicalInterface], statements: dict[str, str],
+) -> dict[str, list[int]]:
+    """The units with an address and no tag, of each device that has
+    tagged units.
+
+    A Cisco router-on-a-stick has one: an address on the port beside
+    its tagged sub-interfaces.  Juniper documents untagged frames on
+    a tagged device through ``native-vlan-id`` ("to accept untagged
+    packets", with ``flexible-vlan-tagging``) and a unit whose
+    ``vlan-id`` is that id; a unit with no ``vlan-id`` there is not
+    described, and a forum report has such a commit refused (an SRX).  The
+    output cannot choose the id without a guess, so the unit is
+    written as it stands and a review line says what is not
+    established.
+    """
+    found: dict[str, list[int]] = {}
+    for iface in interfaces:
+        if iface.dot1q_vlan is not None or not (
+            iface.ipv4_addresses or iface.ipv6_addresses
+            or iface.dhcp_client or iface.dhcp_client_v6
+        ):
+            continue
+        parent, unit = _split_subiface_name(iface.name)
+        device, unit = (iface.name, 0) if parent is None else (parent, unit or 0)
+        if device in statements:
+            found.setdefault(device, []).append(unit)
+    return found
+
+
+def _emit_unit_tags(
+    out: list[str],
+    device: str,
+    unit: int,
+    iface: CanonicalInterface,
+    tags: _DeviceTags,
+) -> None:
+    """The tags of unit *unit* of *device*: ``vlan-id <tag>``, or
+    ``vlan-tags outer <tag> inner <tag>`` for a unit of two (Juniper's
+    "vlan-tags outer tpid.<vlan-id> inner tpid.vlan-id;"; the TPID may
+    be left out).  Ahead of a device's first unit, what the device is
+    told (:class:`_DeviceTags`): its tagging statement, its native
+    VLAN, and a review line for each of its units that has no tag."""
+    statement = tags.statements.get(device)
+    if statement is not None and device not in tags.written:
+        tags.written.add(device)
+        out.append(f"set interfaces {device} {statement}")
+        if device in tags.native:
+            out.append(
+                f"set interfaces {device} native-vlan-id {tags.native[device]}"
+            )
+        for bare in tags.untagged.get(device, []):
+            out.append(
+                f"# review: {device} unit {bare} has no tag, beside units "
+                f"under {statement}: Juniper documents untagged frames on "
+                f"such a device only through native-vlan-id (with "
+                f"flexible-vlan-tagging) and a unit of that vlan-id -- not "
+                f"established that a unit with no tag commits there"
+            )
+    if iface.dot1q_inner_vlan is not None:
+        out.append(
+            f"set interfaces {device} unit {unit} vlan-tags outer "
+            f"{iface.dot1q_vlan} inner {iface.dot1q_inner_vlan}"
+        )
+    else:
+        out.append(
+            f"set interfaces {device} unit {unit} vlan-id {iface.dot1q_vlan}"
         )
 
 

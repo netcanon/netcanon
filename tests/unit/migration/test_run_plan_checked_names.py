@@ -596,10 +596,16 @@ class TestWhatIsNotASecondInterface:
         job = _checked("vyos", "arista_eos", _VYOS_VIF_0)
         assert job.fused_ports == {"Ethernet1": ["eth1", "eth1.0"]}
         assert job.status == PARTIAL
-        # And the output shows it: one interface with both addresses.
-        assert read_back(
-            get_codec("vyos"), get_codec("arista_eos"), _VYOS_VIF_0, job, {},
-        ) == ["'Ethernet1' in the output carries the addresses of ['eth1', 'eth1.0']"]
+        # And the output shows it: two stanzas of the one name.  The
+        # EOS reader does not read the second back -- VLAN 0 is no
+        # 802.1Q VLAN id, so a stanza tagged 0 is left out, and says
+        # so -- so the text is read, not the parse.
+        assert job.rendered.count("\ninterface Ethernet1\n") == 2
+        assert get_codec("arista_eos").parse(job.rendered).dropped_tier3_sections == [
+            "interface Ethernet1: encapsulation dot1q vlan 0 -- not one "
+            "802.1Q tag and at most one inner tag, so the sub-interface "
+            "is not translated"
+        ]
 
     def test_unit_0_of_a_port_that_is_not_there(self) -> None:
         """Unit 0 is set aside beside ITS interface.  Here a line

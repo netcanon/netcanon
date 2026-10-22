@@ -201,6 +201,14 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   read as an algorithm `0` that no target takes, and the account was
   left out everywhere, EOS included.  A printed EOS config holds no
   `secret 0`: the switch hashes the password when it is entered.
+- **A tag statement is read whole.**  `encapsulation dot1q vlan 20
+  inner 30` is a sub-interface of two tags, and reaches IOS-XE, IOS XR,
+  EOS and Junos with both.  A range of inner tags and a FlexEncap
+  block (`encapsulation vlan`, with its `client` and `network` lines)
+  have no form in the tree: the sub-interface is left out, with a row
+  of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).  A tag of 0 is no 802.1Q VLAN id, and
+  a stanza tagged so is left out the same way.
 - **Paste the config as the switch prints it, with its
   indentation.**  This parser tells which lines belong to a stanza by
   their indentation.  A text with no line indented but a comment, the

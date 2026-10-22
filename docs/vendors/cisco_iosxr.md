@@ -217,6 +217,13 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
 
 ## Common gotchas
 
+- **A tag statement is read whole.**  `encapsulation dot1q 20
+  second-dot1q 30` is a sub-interface of two 802.1Q tags, and reaches
+  IOS-XE, IOS XR, EOS and Junos with both.  An 802.1ad tag
+  (`encapsulation dot1ad 20 dot1q 30`), `second-dot1q any` and a range
+  of tags have no form in the tree: the sub-interface is left out,
+  with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).
 - **Paste the config as the router prints it, with its
   indentation.**  IOS XR places each line of a configuration by its
   indentation when it loads a file: a line at the left margin is a

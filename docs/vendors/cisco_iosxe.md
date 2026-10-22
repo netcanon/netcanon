@@ -387,6 +387,20 @@ translate it again from `show running-config` as the device prints it.
   Up to 0.7.7 a route's name that held a space was dropped with
   nothing said.  An address that holds white space is left out and
   said.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A tag statement is read whole.**  `encapsulation dot1Q 2234
+  second-dot1q 15` is a sub-interface of two tags, and reaches IOS-XE,
+  IOS XR, EOS and Junos with both; onto another target the job is
+  `partial`.  ⚠️ Up to 0.7.7 it was read as `dot1Q 2234` alone -- the
+  six units of the carrier capture came out as six sub-interfaces of
+  one tag, IOS-XE to IOS-XE included; translate such a config again.
+  A statement that matches more than one inner tag (`second-dot1q
+  any`, a range, a list) and `encapsulation dot1Q N native` have no
+  form in the tree: the sub-interface is left out, with a row of the
+  Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).  The `encapsulation` of a `service instance`
+  is the instance's, not the port's.  A port's own address beside
+  tagged sub-interfaces (router-on-a-stick) reaches Junos with a
+  `# review:` line: see [`juniper_junos.md`](juniper_junos.md).
 - **Renaming or dropping `Vlan<N>` in the rename modal is not
   always shown by the output** (CLI codec).  A translation from
   IOS-XE to IOS-XE lists each VLAN interface under *Other names in

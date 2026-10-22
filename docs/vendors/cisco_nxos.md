@@ -263,6 +263,11 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **One tag per sub-interface.**  The sub-interface statement this
+  codec reads and writes is `encapsulation dot1q <id>`, one tag: a
+  source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS
+  `inner`, Junos `vlan-tags`) is written with its outer tag, and the
+  job is `partial`, the validation report listing the inner tag.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line — a vPC peer link, usually —
   is read as a trunk of EVERY VLAN, the NX-OS default, and reaches

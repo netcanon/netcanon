@@ -362,6 +362,16 @@ per_field_expectation:
       drops the field from both ends.
     references: [vrf-unsupported]
 
+  interfaces[].dot1q_inner_vlan:
+    disposition: unsupported
+    reason: >
+      The opnsense matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: the inner tag has no form in that codec, whose routed sub-
+      interface tag is itself not wired.  The carrier capture's six Q-in-Q
+      units lose their inner tags; the job is `partial`, the validation report
+      listing the path.
+    references: [opnsense-interfaces, cisco-iface-cmd-ref]
+
   vlans:
     disposition: lossy
     reason: >

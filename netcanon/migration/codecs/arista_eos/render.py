@@ -712,8 +712,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # the ``vlan`` keyword (``encapsulation dot1q vlan N``) — the bare
         # ``dot1q N`` form is rejected by EOS (verified vs an independent
         # Batfish parse).
+        # A sub-interface of two tags writes its inner one on the same
+        # line (FlexEncap TOI: ``encapsulation dot1q vlan 10 inner 20``).
         if iface.dot1q_vlan is not None:
-            out.append(f"   encapsulation dot1q vlan {iface.dot1q_vlan}")
+            inner = (
+                f" inner {iface.dot1q_inner_vlan}"
+                if iface.dot1q_inner_vlan is not None else ""
+            )
+            out.append(
+                f"   encapsulation dot1q vlan {iface.dot1q_vlan}{inner}"
+            )
         # GAP 6: per-interface VRF membership.  Must emit BEFORE
         # ``ip address`` so EOS correctly binds the IP into the
         # VRF's routing table.

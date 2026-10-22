@@ -179,6 +179,19 @@ real set-form) capture are welcomed via
   account left out for its password) would have ended the comment, and
   what followed was configuration.  The name in the comment is the
   source's name with that one change.
+- **QinQ (`vif-s`) is not translated.**  A `vif-s <id>` block is a
+  service VLAN whose tag is 802.1ad, Ethertype 0x88a8 by default
+  (VyOS, "QinQ (802.1ad)"), and its `vif-c <id>` blocks the
+  sub-interfaces inside it; the tree has no form for an 802.1ad tag.
+  The block is left out, with a row of the Tier-3 banner (`interfaces
+  ethernet eth0 vif-s 1000: an 802.1ad service VLAN; it and its vif-c
+  sub-interfaces are not translated`).  ⚠️ Up to 0.7.7 it went with
+  nothing said.  A source's sub-interface of two 802.1Q tags (IOS-XE
+  `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has no form here
+  either: the job is `partial`.  A `vif 0` is read as a sub-interface
+  of tag 0, which no 802.1Q VLAN has; the IOS-XE, IOS XR and EOS
+  parsers leave such a stanza out of another vendor's output when it
+  is read back.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership

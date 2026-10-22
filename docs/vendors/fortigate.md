@@ -247,6 +247,13 @@ loses the layout too.
   without `ENC` -- a config typed by hand, or a template -- is the
   secret itself, and migrates.  With 0.7.7 or earlier such a secret
   was refused on every other target as if it were encrypted.
+- **A VLAN on a VLAN is one tag on a VLAN interface.**  A VLAN
+  interface whose `set interface` is another VLAN interface (Q-in-Q
+  on FortiOS) is read as a VLAN interface of one tag on that VLAN
+  interface, not as a sub-interface of two tags.  Onto a target that
+  writes tags the job is `partial`; a source's sub-interface of two
+  tags (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has no
+  form here, and is `partial` too.
 - **Names no other vendor has** — a hardware switch (`internal`,
   `lan`) and the SSL-VPN pseudo-interface (`ssl.root`) have no form
   on another vendor and are dropped, with whatever address they
