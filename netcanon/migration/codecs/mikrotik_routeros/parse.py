@@ -252,69 +252,49 @@ def _join_continuations(raw: str) -> str:
     """Collapse RouterOS ``\\`` line continuations into single lines.
 
     A line that ends in a backslash (white space after it aside) goes
-    on in the next one: the backslash and the white space before it
-    are dropped, and the next line is joined on, stripped, after one
-    space.  A line that is not continued is kept as it is, trailing
-    white space included.
+    on in the next one.  The backslash, the line break and the
+    indentation of the next line are not part of the line, and nothing
+    is put in their place: an ``export`` breaks a long line at any
+    column -- between two words (``mtu=auto \\``), right after a key
+    (``name=\\``), inside a quoted value, inside a word (``2.5G-\\``
+    then ``baseT``) -- and indents the rest, and a device reads its own
+    export back as it was before the break.  So white space before the
+    backslash is kept (it is what parts two words), and the next line
+    is joined on from its first character that is not white space.
+    A line that is not continued is kept as it is, trailing white
+    space included.  Whether a line is continued is asked of that line
+    alone: a backslash the line before kept (``x="a\\\\"``, then a
+    break) continues nothing.
 
     The text is whatever was pasted, and every line of it may end in
     a backslash.  So the line being joined is never copied while it
-    grows: it is held as pieces, each with the offset it ends at, and
-    a continuation only moves an offset back or drops pieces.  Built
-    as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
+    grows: it is held as pieces, each with the offset it ends at.
+    Built as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
     -- each line cost the length of everything before it, and 3 MB of
     continued lines held a plan request for minutes.
     """
     out: list[str] = []
     pieces: list[str] = []
     ends: list[int] = []
-
-    def trim() -> None:
-        """Drop trailing white space from the line being joined."""
-        while pieces:
-            piece, stop = pieces[-1], ends[-1]
-            while stop and piece[stop - 1].isspace():
-                stop -= 1
-            if stop:
-                ends[-1] = stop
-                return
-            pieces.pop()
-            ends.pop()
-
-    def joined() -> str:
-        return "".join(piece[:stop] for piece, stop in zip(pieces, ends, strict=True))
-
     for line in ticked(raw.splitlines()):
-        if pieces:
-            more = line.strip()
-            pieces += (" ", more)
-            ends += (1, len(more))
-        else:
-            pieces, ends = [line], [len(line)]
-        # Where the line ends once trailing white space is looked
+        piece = line.lstrip() if pieces else line
+        # Where this line ends once trailing white space is looked
         # past -- found without changing it, because a line that is
         # NOT continued keeps its trailing white space.
-        at, stop = len(pieces) - 1, ends[-1]
-        while at >= 0:
-            piece = pieces[at]
-            while stop and piece[stop - 1].isspace():
-                stop -= 1
-            if stop:
-                break
-            at -= 1
-            stop = ends[at] if at >= 0 else 0
-        if at >= 0 and pieces[at][stop - 1] == "\\":
-            # Drop the backslash and the white space before it and
-            # keep joining.  If nothing is left, the next line starts
-            # afresh.
-            del pieces[at + 1:], ends[at + 1:]
-            ends[at] = stop - 1
-            trim()
+        stop = len(piece)
+        while stop and piece[stop - 1].isspace():
+            stop -= 1
+        pieces.append(piece)
+        if stop and piece[stop - 1] == "\\":
+            # Drop the backslash and what follows it, keep the rest,
+            # and keep joining.
+            ends.append(stop - 1)
             continue
-        out.append(joined())
+        ends.append(len(piece))
+        out.append("".join(p[:e] for p, e in zip(pieces, ends, strict=True)))
         pieces, ends = [], []
     if pieces:
-        out.append(joined())
+        out.append("".join(p[:e] for p, e in zip(pieces, ends, strict=True)))
     return "\n".join(out)
 
 
@@ -619,6 +599,11 @@ def _parse_interface_vlan(
         )
         if "comment" in kv:
             iface.description = kv["comment"]
+        # The interface it rides on: a bridge, a port, a bond.  Kept as
+        # the config states it, so that it is written back on the same
+        # parent rather than on one the renderer would have to choose.
+        if kv.get("interface"):
+            iface.vlan_parent = kv["interface"]
         # Disabled flag (defaults to enabled if not present).
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
@@ -775,6 +760,12 @@ def _parse_interface_tunnel(
             iface.description = kv["comment"]
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
+        if "mtu" in kv:
+            # ``mtu=auto`` (the default) states no number.
+            try:
+                iface.mtu = int(kv["mtu"])
+            except ValueError:
+                pass
 
 
 def _parse_interface_vrrp(

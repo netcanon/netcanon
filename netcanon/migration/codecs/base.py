@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
+from .._one_line import first_line_break
 from ..limits import census, metered
 
 if TYPE_CHECKING:
@@ -366,6 +367,18 @@ class CodecBase(ABC):
         def _wrapped_render(self: CodecBase, tree: Any) -> str:
             codec_name = getattr(self, "name", None) or cls.__name__
             with metered("render", codec_name) as meter:
+                # No value is written on more than one line: a renderer
+                # puts a value into its line as it stands, and the text
+                # after a break is a command of its own (`_one_line`).
+                # The pipeline wrote every value on one line already;
+                # this is for a caller that did not.
+                where = first_line_break(tree)
+                if where is not None:
+                    raise RenderError(
+                        f"{codec_name}: a value of the tree ({where}) holds a "
+                        "line break, and no value is written on more than "
+                        "one line"
+                    )
                 rendered = raw_render(self, tree)
                 if isinstance(rendered, str):
                     meter.settle("text", len(rendered))
@@ -415,7 +428,10 @@ class CodecBase(ABC):
                 omitted from the output and surfaced as a ``block`` in
                 the :class:`ValidationReport` (a ``partial`` job).
                 ``RenderError`` is reserved for a tree the adapter
-                genuinely cannot serialise.
+                genuinely cannot serialise.  Also raised, for every
+                codec and before its own code runs, when a value of
+                *tree* holds a line break: no value is written on more
+                than one line (:mod:`netcanon.migration._one_line`).
             LimitExceeded: When the output is longer than the limit in
                 force (:mod:`netcanon.migration.limits`).
         """

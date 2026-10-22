@@ -3212,25 +3212,43 @@ class TestAPortsFactoryName:
 
     def test_a_real_capture_between_the_two_shipped_models(self) -> None:
         """A committed CRS310 capture, declared as a CRS310, onto the
-        CCR2004.  Ten ports move; each line must look up the port the
-        pairing chose, and rename nothing.
+        CCR2004.  Ten ports move by position (``ether1``-``ether8``,
+        then the two SFP+ ports); each line must look up the port the
+        pairing chose and keep the name the operator gave the port.
 
-        The capture names nine of these ports.  It is a verbose
-        export that wraps each ``name=`` onto the next line, which
-        the parser does not read, so no name survives: a known limit
-        of the codec (see its vendor page), not the expectation of
-        this test, which is about the lookups."""
+        The capture is a verbose export, which breaks a long line
+        anywhere and goes on in the next -- nine of its ``name=``
+        values among them.  While the parser did not join such a line
+        no name survived, and this test pinned the lookups alone."""
         mikrotik = get_codec("mikrotik_routeros")
         job = run_plan_with_models(
             mikrotik, mikrotik, _CRS310_CAPTURE, _profile(_CRS310), _profile(_CCR2004),
         )
         assert job.status == MigrationJobStatus.completed
-        lines = _find_lines(job)
-        assert [line.split("default-name=")[1].split(" ")[0] for line in lines] == [
-            *(f"sfp-sfpplus{n}" for n in range(1, 9)), "sfp28-1", "sfp28-2",
-        ]
-        assert not [line for line in lines if " name=" in line]
-        assert job.port_mapping_plan.target_hardware == {}
+        found = {}
+        for line in _find_lines(job):
+            lookup = re.search(r'find default-name=(\S+) \](?: name=("[^"]*"|\S+))?', line)
+            assert lookup is not None, line
+            found[lookup.group(1)] = (lookup.group(2) or "").strip('"') or None
+        paired = {
+            "sfp-sfpplus1": "Desktop",  # ether1
+            "sfp-sfpplus2": "Access Point",  # ether2
+            "sfp-sfpplus3": "CLUSTER - PVENAS",  # ether3
+            "sfp-sfpplus4": "PROD - PVENAS",  # ether4
+            "sfp-sfpplus5": "CLUSTER - PVE5",  # ether5
+            "sfp-sfpplus6": "PROD - PVE5",  # ether6
+            "sfp-sfpplus7": "CLUSTER - PVE3",  # ether7
+            "sfp-sfpplus8": "PROD - PVE3",  # ether8
+            "sfp28-1": "UPLINKSFP",  # sfp-sfpplus1
+            "sfp28-2": None,  # sfp-sfpplus2, which has no name of its own
+        }
+        assert found == paired
+        assert job.port_mapping_plan.target_hardware == {
+            name: port for port, name in paired.items() if name is not None
+        }
+        assert job.port_renames == {"sfp-sfpplus2": "sfp28-2"}
+        # What the config puts on a named port stays on it.
+        assert 'add address=192.168.88.1/24 interface="Access Point"' in job.rendered
 
     def test_an_entry_that_is_not_a_port_names_the_port(self) -> None:
         """The operator gives a paired port a name.  ``LAN`` is not a

@@ -377,6 +377,15 @@ text").
 
 #### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
 
+A quoted value printed over several lines -- a certificate, a private
+key, a replacement message's HTML -- is read whole, up to
+the line whose quote no backslash escapes, and none of its lines is
+read as configuration: not by the parser, not by the Tier-3 detector,
+and not for the release.  One that no later line ends, or with a line
+that ends in a form feed or the like, is refused (see
+[`vendors/fortigate.md`](vendors/fortigate.md) § "A quoted value of
+several lines").  Such a value reaches every target on one line (§ C1).
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`. |
@@ -864,6 +873,27 @@ in rendered output find every such site.
   `classify_port_name` can't place it, the renderer emits
   `! interface <name> -- review: foreign port` rather than
   emitting an interface stanza for an unknown chassis position.
+
+### C1. A value of several lines (a job warning)
+
+No target is given a value of more than one line, whatever the field.
+A description, a name or any other text value that holds a line break
+-- which the OPNsense and IOS-XE NETCONF parsers keep from an
+element's text, and the FortiOS parser from a value printed between
+quotes over several lines -- is written on one line, each run of
+breaks (any character `str.splitlines` ends a line at) as one space,
+and the job says where, one warning a value:
+
+    interfaces[em0].description held a line break: it is written on
+    one line, each break as a space, because no target is given a
+    value of more than one line
+
+Written as it stood, the text after the break was a line of its own in
+the output, and so a command on the target.  The job's status is not
+changed: the value's words are all there.  What is lost is the layout,
+on the targets that could have held it too (an XML target, FortiOS
+between its quotes).  A caller that renders a tree without the
+pipeline is refused (`RenderError`), naming the field.
 
 ### D. Validation severity (`ok` / `warn` / `block`)
 
@@ -1907,9 +1937,6 @@ nothing, as before.
   gateways or a routing-table suffix, and — across vendors — a Junos
   unit next hop.  The plan lists the route (`stale_next_hops`) and the
   job is `partial`.
-* **A non-zero unit of a Junos management port** (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`).  Map it by hand.
 * A FortiGate VLAN interface the codec reads as a physical port
   (`DMZ` beside a port `dmz`) or as a management port (`MGMT`), and
   its stock `fortilink` aggregate,
@@ -2474,10 +2501,12 @@ matter; the matrix is honest about both.
     VLAN 1 device.
     Their matrices declare the native VLAN unsupported; nothing in
     the output marks which device was untagged at the source.  On
-    `mikrotik_routeros` every VLAN device of an output is on ONE
-    parent -- the config's one port with an address or an allowed
-    list, or `bridge1` where there is not exactly one -- whether or
-    not that port carries the VLAN.
+    `mikrotik_routeros` every VLAN device of an output from a vendor
+    other than RouterOS or FortiOS is on ONE parent -- the config's one port with an address
+    or an allowed list, or `bridge1` where there is not exactly one --
+    whether or not that port carries the VLAN.  (From RouterOS or
+    FortiOS, a VLAN device is written on the parent its config
+    states.)
   * **A Junos output is ELS grammar** (`interface-mode trunk`,
     `native-vlan-id` on the physical interface, the native VLAN among
     the `vlan members`).  On a switch that takes the older grammar

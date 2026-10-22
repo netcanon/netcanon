@@ -48,7 +48,13 @@ firewall translation is your primary need, see
   advisory fires.  The bare aggregate (`internal` / `lan` with no
   number) has no cross-vendor equivalent at all and warns separately.
 - VLANs — VLAN sub-interface form (`config system interface` →
-  `set type vlan` + `set vlanid <N>`)
+  `set type vlan` + `set vlanid <N>`), on the interface its
+  `set interface` names.  The parent is kept onto FortiOS and
+  RouterOS; onto any other vendor it is not carried, and nothing
+  reports it.  Where the output has no interface of that name, a
+  parent is chosen and a `# review:` line in the VLAN's block names
+  the one the source stated.  A VLAN that states no parent, or one
+  from another vendor, is on the parent the renderer chooses
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
   member lists)
@@ -194,6 +200,41 @@ Provenance in
 
 Spans FortiOS 7.2.x and 7.6.x; FortiGate VM, 70G branch hardware,
 and 100E physical hardware.
+
+## A quoted value of several lines
+
+FortiOS prints a value of several lines as it is, between its quotes,
+as the committed captures show for a certificate (`set certificate
+"-----BEGIN CERTIFICATE-----` ... `-----END CERTIFICATE-----"`), a
+private key and a replacement message's HTML (`set buffer "<!DOCTYPE
+html>` ... `"`).  A quote, an apostrophe or a backslash in a value is printed
+with a backslash in front of it (`\"`, `\'`, `\\`), as the committed
+captures show; the parser takes a backslash as escaping the character
+after it, whichever character that is.
+
+The parser reads such a statement whole, up to the line whose quote no
+backslash escapes, so none of its lines is a statement of its own: a
+line `end` in a value closes nothing, and a line of HTML that reads
+`config system admin` is no account.  The Tier-3 detection and the
+release (`#config-version`) are read from the text with the value's
+lines emptied, each line keeping its number.  A line that begins with
+`#` is a comment, whatever quotes it holds.
+
+Refused, in words that name the line and quote nothing of the text:
+
+- **a value that no later line ends** -- the rest of the config would
+  be its text.  Paste the configuration whole, as the FortiGate prints
+  it (a backup file, or the output of `show`);
+- **a line of a value that ends in another character than a line feed**
+  (a form feed, a vertical tab, a carriage return on its own; `\r\n`
+  is a line feed) -- the device does not end a line there, so where the
+  value ends is not where the lines say.
+
+A value of several lines that the tree keeps -- an interface's alias,
+a static route's comment -- reaches every target on one line, each
+break as a space, and the job says where
+([`../CAPABILITIES.md`](../CAPABILITIES.md) § C1).  A FortiGate target
+loses the layout too.
 
 ## Common gotchas
 
