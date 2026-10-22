@@ -12,8 +12,10 @@ the zone's ``<if>`` assigns.
 
 What each source holds is typed by hand.  The output is read two ways:
 as XML, by a reader typed here, and with the OPNsense parser, which reads
-such a device back as a VLAN device and a VLAN of its tag (the matrix
-says so).  Each check is handed the defect it is for.
+such a device back as a sub-interface of the port: typed as the port,
+with the tag its own, and no VLAN (one on a bridge is the VLAN device it
+reads as a VLAN interface and a VLAN of its tag).  Each check is handed
+the defect it is for.
 """
 
 from __future__ import annotations
@@ -240,8 +242,8 @@ def _text_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
 
 def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
     """What the OPNsense parser reads back: an interface ``<port>.<unit>``
-    with the address, a VLAN device on *port*, and a VLAN of the tag under
-    that name -- its reading of a ``<vlan>``."""
+    with the address, a sub-interface of *port* with the tag its own, and
+    no VLAN under that name -- its reading of a ``<vlan>`` on a port."""
     tree = get_codec(_OPN).parse(text)
     by_name = {i.name: i for i in tree.interfaces}
     problems: list[str] = []
@@ -253,14 +255,14 @@ def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
             continue
         if [a.ip for a in iface.ipv4_addresses] != [sub.address]:
             problems.append(f"{name} holds {[a.ip for a in iface.ipv4_addresses]}")
-        if iface.interface_type != "ianaift:l3ipvlan":
+        if iface.interface_type != "ianaift:ethernetCsmacd":
             problems.append(f"{name} is read as {iface.interface_type!r}")
-        if iface.vlan_parent != port:
-            problems.append(f"{name} is read on {iface.vlan_parent}")
+        if (iface.dot1q_vlan, iface.vlan_parent) != (sub.tag, port):
+            problems.append(f"{name} is read with tag {iface.dot1q_vlan} on {iface.vlan_parent}")
         if iface.enabled != sub.enabled:
             problems.append(f"{name} is read enabled={iface.enabled}")
-        if (sub.tag, name) not in {(v.id, v.name) for v in tree.vlans}:
-            problems.append(f"no VLAN {sub.tag} named {name}")
+        if name in {v.name for v in tree.vlans}:
+            problems.append(f"a VLAN is named {name}")
     return problems
 
 
@@ -304,12 +306,12 @@ def test_a_sub_interface_is_a_vlan_device_on_its_port(key: str, path: str) -> No
 
 
 @pytest.mark.parametrize("key", sorted(SOURCES))
-def test_the_job_says_how_it_is_read_back(key: str) -> None:
-    """The output is what the device runs as the sub-interface; the
-    report says it is read back otherwise, and nothing holds the job."""
+def test_the_job_says_it_is_supported(key: str) -> None:
+    """The output is what the device runs as the sub-interface, and is
+    read back as one: the report lists no loss of it."""
     job = _job(key, "plan")
     assert job.status.value == "completed", job.error
-    assert _DOT1Q in {p.path for p in job.validation.lossy_paths}
+    assert _DOT1Q not in {p.path for p in job.validation.lossy_paths}
     assert _DOT1Q not in {p.path for p in job.validation.unsupported_paths}
 
 
@@ -624,8 +626,18 @@ def test_the_reader_sees_each_defect(broken: str, said: str) -> None:
     assert any(said in p for p in found), found
 
 
-def test_the_parsed_reading_sees_a_device_on_another_parent() -> None:
+@pytest.mark.parametrize(("broken", "said"), [
+    (_GOOD.replace("      <if>igb2</if>\n      <tag>", "      <if>igb1</if>\n      <tag>"),
+     "is read with tag 200 on igb1"),
+    (_GOOD.replace("<tag>200</tag>", "<tag>100</tag>"), "is read with tag 100 on igb2"),
+    (_GOOD.replace("      <if>igb2</if>\n      <tag>", "      <if>bridge0</if>\n      <tag>")
+     .replace("  <vlans>", "  <bridges>\n    <bridged><bridgeif>bridge0</bridgeif></bridged>\n"
+              "  </bridges>\n  <vlans>"),
+     "is read as 'ianaift:l3ipvlan'"),
+    (_GOOD.replace("      <enable/>\n      <ipaddr>", "      <ipaddr>"), "is read enabled=False"),
+])
+def test_the_parsed_reading_sees_each_defect(broken: str, said: str) -> None:
     sub = (Sub("198.51.100.1", 24, "100", 200, "users"),)
     assert _parsed_problems(_GOOD, "igb2", sub) == []
-    broken = _GOOD.replace("      <if>igb2</if>\n      <tag>", "      <if>igb1</if>\n      <tag>")
-    assert any("is read on igb1" in p for p in _parsed_problems(broken, "igb2", sub))
+    problems = _parsed_problems(broken, "igb2", sub)
+    assert any(said in p for p in problems), problems

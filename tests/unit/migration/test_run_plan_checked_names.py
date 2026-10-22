@@ -165,14 +165,26 @@ _OPENS_A_VLAN_INTERFACE = {
 def _left_by_the_translator(tree, job: MigrationJob) -> list[str]:
     """The names *tree* configures something under that the
     translator's own warning says it could not classify and left as
-    they were, sorted."""
-    return [
-        name for name in sorted(_configured(tree))
-        if any(
+    they were, sorted -- and each sub-interface of such a name (a
+    tag and the port it rides on, typed as a port or a LAG is, not
+    as a VLAN interface): it goes where its port goes, which is
+    nowhere, and the warning names the port alone."""
+    def warned(name: str) -> bool:
+        return any(
             line.endswith(f"could not classify port name {name!r}; left verbatim")
             for line in job.warnings
         )
-    ]
+
+    left = {name for name in _configured(tree) if warned(name)}
+    for iface in tree.interfaces:
+        if (
+            iface.dot1q_vlan is not None and iface.vlan_parent
+            and iface.vlan_parent != iface.name
+            and iface.interface_type not in ("ianaift:l3ipvlan", "ianaift:l2vlan")
+            and warned(iface.vlan_parent)
+        ):
+            left.add(iface.name)
+    return sorted(left)
 
 
 def _right_as_it_stands(
@@ -1840,7 +1852,15 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # port, are not in the config to be put there.  Three jobs that
     # listed both now list the names alone.
     "mikrotik_routeros": (0, 0, 0, 0, 24, 4),
-    "opnsense": (4, 0, 0, 0, 23, 1),
+    # From (4, 0, 0, 0, 23, 1): a VLAN device on a port is a
+    # sub-interface of it, so the supergate capture's five devices on
+    # `ixl0` are `TenGigE0/0/0/0.10` and the like onto IOS-XR, and
+    # `vif 10` under `eth0` onto VyOS, where each was a name the
+    # target had none for.  Onto IOS-XR the job lists `igc0` alone
+    # (-1 several, +1 left); onto VyOS it had been `partial` for its
+    # VLANs, the validation report passes it now, and `igc0`, left as
+    # the source has it, holds it (+1 left).
+    "opnsense": (4, 0, 0, 0, 25, 0),
     "vyos": (17, 0, 0, 0, 0, 0),
 }
 
@@ -1908,8 +1928,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 62, 5, 68, 44]
-        assert sum(by_reason) == 219
+        assert by_reason == [40, 0, 62, 5, 70, 43]
+        assert sum(by_reason) == 220
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

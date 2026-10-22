@@ -215,12 +215,15 @@ per_field_expectation:
     references: [routeros-nxos-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: not_applicable
+    disposition: good
     note: >
-      Source-side structural absence — `/interfaces/interface/dot1q-vlan` is
-      declared unsupported by the mikrotik_routeros matrix; empty on every
-      cell.  RouterOS carries the tag on the `/interface vlan` object, which
-      lands under `vlans` instead.
+      Preserved on the one cell that holds one
+      (`routeros_diff_verbose_export.rsc`: `gn-mgmt`, VLAN 84 on `ether3`).  A
+      RouterOS VLAN interface on a port or a bond is a routed sub-interface of
+      it, its `vlan-id=` the tag; NX-OS writes it as a sub-interface with
+      `encapsulation dot1q <tag>`, and its parser reads the tag back.  Up to
+      0.7.7 the RouterOS parser read every VLAN interface as a VLAN and never
+      filled this field.
     references: [routeros-nxos-surface]
 
   "interfaces[].trunk_allowed_vlans":

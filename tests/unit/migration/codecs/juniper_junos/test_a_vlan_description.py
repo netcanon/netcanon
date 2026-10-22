@@ -126,6 +126,12 @@ WRITES_IT = {
     "cisco_nxos": False, "dell_os10": False,
 }
 
+#: Targets that write it and declare the path lossy all the same, for
+#: a VLAN other than this one: an OPNsense VLAN on a port is read back
+#: as a sub-interface of the port, the ``<descr>`` its description.
+#: This VLAN is on no port, and is read back with its description.
+LOSSY_FOR_A_VLAN_ON_A_PORT = {"opnsense"}
+
 
 @pytest.mark.parametrize("target", sorted(WRITES_IT))
 def test_a_junos_description_is_written_or_said_lost(target: str) -> None:
@@ -136,4 +142,10 @@ def test_a_junos_description_is_written_or_said_lost(target: str) -> None:
     assert job.rendered, (job.status, job.error)
     lossy = {issue.path for issue in job.validation.lossy_paths}
     assert ("Second-floor" in job.rendered) is WRITES_IT[target]
-    assert ("/vlans/vlan/description" in lossy) is not WRITES_IT[target]
+    said = "/vlans/vlan/description" in lossy
+    if target in LOSSY_FOR_A_VLAN_ON_A_PORT:
+        assert said
+        back = {vlan.id: vlan.description for vlan in get_codec(target).parse(job.rendered).vlans}
+        assert back.get(60) == "Second-floor"
+    else:
+        assert said is not WRITES_IT[target]

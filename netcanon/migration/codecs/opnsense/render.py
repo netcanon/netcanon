@@ -345,7 +345,12 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             proto_el = ET.SubElement(vlan_el, "proto")
             if record.name in parents:
                 proto_el.text = "802.1q"
-            descr = _vlan_descr(device.vlan, record.name)
+            # A sub-interface's own description is its device's: no
+            # zone is written for a description alone
+            # (_unassigned_vlan_devices).
+            descr = (
+                record.description if record.dot1q_vlan is not None else ""
+            ) or _vlan_descr(device.vlan, record.name)
             if descr:
                 ET.SubElement(vlan_el, "descr").text = descr
             ET.SubElement(vlan_el, "vlanif").text = record.name
@@ -865,11 +870,13 @@ def _device_parent(
     """The <if> *device* is written on, and a review line where the
     output does not know it.
 
-    A routed sub-interface rides on the port its name is a unit of,
-    whether or not the output has a zone for that port (a config
-    can state a port only by its units); then on the device its
-    config says it rides on.  One an entry named with no port in it
-    is put where a VLAN interface would be, and the line says so.
+    A routed sub-interface rides on the device its config says it
+    rides on, then on the port its name is a unit of, whether or not
+    the output has a zone for that port (a config can state a port
+    only by its units).  The stated parent comes first: this codec's
+    own device name ``vlan0.10`` is no unit of a port ``vlan0``.  One
+    an entry named with no port in it is put where a VLAN interface
+    would be, and the line says so.
     A VLAN interface rides on the device its config says, else on
     what carries its VLAN, else on the parent chosen for every VLAN.
 
@@ -879,7 +886,7 @@ def _device_parent(
     record = device.record
     assert device.tag is not None
     if record.dot1q_vlan is not None:
-        port = _port_of_unit(record.name) or record.vlan_parent
+        port = record.vlan_parent or _port_of_unit(record.name)
         if port:
             return port, ""
         parent = carriers.get(device.tag, parent_default)
@@ -902,7 +909,8 @@ def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
     device no zone assigns, and written as a zone it would be
     assigned, and enabled, on the target.  A zone that assigned it
     with nothing in it is not written either; nothing else in this
-    output names a zone by its tag.
+    output names a zone by its tag.  A routed sub-interface's
+    description is its device's ``<descr>``, and calls for no zone.
 
     Returns:
         The ``id()`` of each such record.
@@ -917,7 +925,8 @@ def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
         and iface.name not in pooled
         and iface.enabled
         and not (
-            iface.description or iface.kind or one_mtu_written(iface) is not None
+            (iface.description and iface.dot1q_vlan is None)
+            or iface.kind or one_mtu_written(iface) is not None
             or iface.ipv4_addresses or iface.ipv6_addresses
             or iface.dhcp_client or iface.dhcp_client_v6
             or iface.vrrp_groups

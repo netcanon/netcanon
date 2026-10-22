@@ -443,12 +443,13 @@ def test_an_aoscx_svi_is_the_device_of_its_vlan():
 def test_a_name_opnsense_refuses_is_said_and_the_xml_stays_well_formed():
     """A RouterOS VLAN interface's free name is kept, with a review
     comment -- whose text holds ``--`` as the name does, broken apart,
-    since XML refuses ``--`` in a comment."""
+    since XML refuses ``--`` in a comment.  On a bridge: one on a port
+    is a sub-interface of it, named by its port and its tag."""
     ros = """# by RouterOS 7.12
-/interface ethernet
-set [ find default-name=ether1 ] name=ether1
+/interface bridge
+add name=bridge1
 /interface vlan
-add interface=ether1 name=guest--net- vlan-id=20
+add interface=bridge1 name=guest--net- vlan-id=20
 /ip address
 add address=198.51.100.1/26 interface=guest--net-
 """
@@ -488,9 +489,14 @@ def test_the_routeros_check_fails_on_each_defect():
     assert "vlan-id=20" in good
     assert _check_routeros(good.replace("vlan-id=20", "vlan-id=1"))
     assert _check_routeros(good.replace("vlan-id=40", "vlan-id=4"))
-    _, vlans = _routeros_by_address(good)
-    parent = vlans["vlan01"][0]
-    assert _check_routeros(good.replace(f"interface={parent} name=vlan01", "interface=ether9 name=vlan01"))
+    # A device on a port is a sub-interface, named by its port and its
+    # tag across vendors: found by its address.
+    addresses, vlans = _routeros_by_address(good)
+    name = addresses["198.51.100.1"]
+    parent = vlans[name][0]
+    moved = good.replace(f"interface={parent} name={name}", f"interface=ether9 name={name}")
+    assert moved != good
+    assert _check_routeros(moved)
 
 
 def test_the_fortios_check_fails_on_each_defect():
@@ -500,5 +506,6 @@ def test_the_fortios_check_fails_on_each_defect():
     assert _check_fortios(good.replace("set vlanid 20", "set vlanid 1"))
     assert _check_fortios(good.replace("set vlanid 40", "set vlanid 4"))
     blocks = _fortios_blocks(good)
-    parent = blocks["vlan01"]["interface"]
+    name = next(n for n, b in blocks.items() if b.get("ip") == "198.51.100.1")
+    parent = blocks[name]["interface"]
     assert _check_fortios(good.replace(f'set interface "{parent}"', 'set interface "port9"', 1))

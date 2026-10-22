@@ -441,19 +441,25 @@ per_field_expectation:
     references: [vrf-unsupported]
 
   vlans:
-    disposition: good
-    note: >
-      The list round-trips whole on every cell that holds VLANs: each RouterOS
-      VLAN interface is written as the `<vlan>` device of the same name on the
-      parent the config states, and comes back with its id, name and
-      description.
+    disposition: lossy
+    reason: >
+      All 5 VLANs of `user_contrib_crs310_ros7.rsc` are dropped: they ride on
+      a bridge named `bridge`, which the render writes as each device's
+      `<if>bridge</if>` with no `<bridges>` entry, and the OPNsense parser
+      reads a parent that no `<bridges>` names, and that is not `bridge` and
+      digits, as a port, so each comes back as a routed sub-interface of it,
+      its tag the VLAN's id (opnsense declares `/vlans/vlan/id` lossy).  On
+      the other cell that holds VLANs each RouterOS VLAN interface is written
+      as the `<vlan>` device of the same name on the parent the config states,
+      and comes back with its id, name and description.
     references: [mikrotik_vlan, opnsense-vlans]
 
   vlans[].id:
-    disposition: good
-    note: >
-      RouterOS ``vlan-id=10`` ↔ OPNsense ``<vlan>/<tag>10</tag>``.
-      Both vendors share the 1-4094 range.
+    disposition: lossy
+    reason: >
+      Dropped with its record on `user_contrib_crs310_ros7.rsc` (all 5; see
+      `vlans`), and kept on the other cell that holds VLANs.  opnsense
+      declares `/vlans/vlan/id` lossy.
     references: [mikrotik_vlan, opnsense-vlans]
 
   vlans[].name:

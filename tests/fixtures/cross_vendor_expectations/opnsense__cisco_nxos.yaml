@@ -240,11 +240,14 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: not_applicable
+    disposition: good
     note: >
-      The opnsense codec declares `/interfaces/interface/dot1q-vlan`
-      unsupported — its VLAN interfaces surface as `vlans` records, not as a
-      per-interface tag — and no record populates it.
+      Preserved on the 2 cells that hold one
+      (`user_contrib_supergate_opn25.xml` and `kitchen_sink.xml`).  A VLAN
+      device on a port or a LAGG is a routed sub-interface of it, its `<tag>`
+      the tag; NX-OS writes it as a sub-interface with `encapsulation dot1q
+      <tag>`, and its parser reads the tag back.  Up to 0.7.7 the OPNsense
+      parser read every VLAN device as a VLAN and never filled this field.
     references: [opnsense-nxos-surface]
 
   "interfaces[].trunk_allowed_vlans":

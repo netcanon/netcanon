@@ -416,21 +416,27 @@ per_field_expectation:
     disposition: lossy
     reason: >
       OS10 has one label for a VLAN, its SVI's `description`, which the OS10
-      parser reads as the VLAN's name; it keeps no VLAN description.
-      FortiOS's one label for a VLAN is the alias of its interface, which the
-      render writes from the VLAN's name, cut to the 25 characters an alias
-      holds, and which the FortiGate parser reads back as the VLAN's
-      description.  So each named VLAN comes back with its name, or the start
-      of it, as a description the source did not have
-      (`Edge_Transport_Management_Network` -> `Edge_Transport_Management`).
-      fortigate_cli declares `/vlans/vlan/description` lossy.
+      parser reads as the VLAN's name; it keeps no VLAN description. FortiOS's
+      one label for a VLAN is the alias of its interface, which the render
+      writes from the VLAN's name, cut to the 25 characters an alias holds,
+      and which the FortiGate parser reads back as the VLAN's description.  So
+      each named VLAN comes back with its name, or the start of it, as a
+      description the source did not have (`Edge_Transport_Management_Network`
+      -> `Edge_Transport_Management`). fortigate_cli declares
+      `/vlans/vlan/description` lossy.  This field also owns the change of the
+      list's size: VLANs written on an aggregate are read back as routed
+      sub-interfaces of it, with no VLAN record (see `vlans[].id`).
     references: [os10-fortigate-surface]
 
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+      Every VLAN record that comes back keeps its id.  Records are dropped
+      where the render writes the VLAN interface on an aggregate, which the
+      FortiGate parser reads back as a routed sub-interface of it (13 -> 12 on
+      the two azsupport TORs, all 3 on `canu_sw-leaf-bmc-001.cfg`, 15 -> 5 and
+      19 -> 9 on the dellgeos TORs, 4 -> 3 on the kitchen sink); that change
+      of size is attributed to `vlans[].description`, which declares it.
     references: [os10-fortigate-surface]
 
   vlans[].ipv4_addresses:

@@ -1121,10 +1121,13 @@ class TestEveryPlacedPortIsFoundByItsHardware:
     def test_a_management_vlan_on_a_port_the_target_lacks_asks_for_a_decision(
         self, client: TestClient,
     ) -> None:
+        # On the hardware switch ``internal`` it is a VLAN interface,
+        # whose name the classifier reads as the management port (on
+        # ``port1`` it would be a unit of the port, and follow it).
         text = (
             'config system interface\n    edit "port1"\n        set ip 10.1.1.1 255.255.255.0\n'
             '        set type physical\n    next\n    edit "MGMT"\n'
-            '        set ip 10.90.0.1 255.255.255.0\n        set interface "port1"\n'
+            '        set ip 10.90.0.1 255.255.255.0\n        set interface "internal"\n'
             "        set vlanid 90\n    next\nend\n"
         )
         job = client.post("/api/v1/migration/plan", json={

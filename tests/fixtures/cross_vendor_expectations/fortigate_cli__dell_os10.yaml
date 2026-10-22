@@ -125,10 +125,10 @@ per_field_expectation:
   interfaces[].description:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. FortiOS limits alias to 25 characters; longer descriptions
-      from other vendors will be truncated. Measured over 4 cells:
-      drifted on 3, preserved on 1, both sides empty on 0.
+      FortiOS limits an alias to 25 characters, so a longer description from
+      another vendor is cut; this field also owns the inventory's change of
+      size on `user_contrib_fg100e_fos7213.conf` (34 -> 33 interfaces).
+      Measured over 4 cells: drifted on 1, preserved on 3.
     references: [fortigate-os10-surface]
 
   interfaces[].enabled:
@@ -170,11 +170,13 @@ per_field_expectation:
     references: [fortigate-os10-surface]
 
   interfaces[].ipv6_addresses:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 4 cells: drifted on 3, preserved on 0, both
-      sides empty on 1.
+    disposition: good
+    note: >
+      Preserved on the kitchen sink, the one cell compared record by record
+      that holds an address; on `user_contrib_fg100e_fos7213.conf` the
+      inventory changes size (34 -> 33) and the drift is attributed to
+      `interfaces[].description`.  Up to 0.7.7 a VLAN interface on a port was
+      a VLAN, written onto OS10 as an SVI, and its address drifted.
     references: [fortigate-os10-surface]
 
   interfaces[].lag_member_of:
@@ -186,11 +188,13 @@ per_field_expectation:
     references: [fortigate-os10-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 4 cells: drifted on 3, preserved on 0, both
-      sides empty on 1.
+    disposition: good
+    note: >
+      Preserved on the kitchen sink, the one cell compared record by record
+      that holds an MTU; on `user_contrib_fg100e_fos7213.conf` the inventory
+      changes size (34 -> 33) and the drift is attributed to
+      `interfaces[].description`.  Up to 0.7.7 a VLAN interface on a port was
+      a VLAN, written onto OS10 as an SVI, and its MTU drifted.
     references: [fortigate-os10-surface]
 
   interfaces[].name:

@@ -407,17 +407,17 @@ per_field_expectation:
   vlans[].id:
     disposition: lossy
     reason: >
-      Cisco ``vlan N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``; both vendors
-      share the 1-4094 range, and every VLAN of the source comes back.
-      The list grows: a routed sub-interface (``encapsulation dot1Q N``)
-      is written as a `<vlan>` device of its tag on its port, which the
-      OPNsense parser reads back as a VLAN of that tag too (opnsense
-      declares `/interfaces/interface/dot1q-vlan` lossy for that
-      reading).  On the carrier capture six VLAN records of 2234 appear,
-      one for each Q-in-Q unit of `GigabitEthernet2/0/4`, each written
-      with its outer tag (its inner tag has no form onto OPNsense and is
-      reported as a drop).  The cells with no sub-interface keep their
-      list, and stand under this disposition.
+      Every VLAN record is dropped on the 5 cells that hold one (9, 3, 1, 6
+      and 4 records).  OPNsense has no VLAN apart from a VLAN device on one
+      parent: the render writes each VLAN as a `<vlan>` device on a LAGG or a
+      port that carries it, else on the first LAGG or port, and the OPNsense
+      parser reads a device on a port or a LAGG back as a routed sub-interface
+      of it, its tag the VLAN's id, with no VLAN record (opnsense declares
+      `/vlans/vlan/id` lossy).  Up to 0.7.7 every device was read back as a
+      VLAN.  A routed sub-interface (`encapsulation dot1Q N`) is written as a
+      `<vlan>` device of its tag on its port and read back as the
+      sub-interface it is; a Q-in-Q unit is written with its outer tag, and
+      its inner tag has no form onto OPNsense (reported as a drop).
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].name:

@@ -402,19 +402,25 @@ per_field_expectation:
   vlans[].description:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. RouterOS exposes a single per-VLAN ``comment`` field,
-      which the parser maps to the VLAN name; a separate description
-      collides with it on render and may be conflated with the name.
-      Measured over 1 cell: drifted on 1, preserved on 0, both sides
-      empty on 0.
+      The anchor renders but the value does not survive the round trip.
+      RouterOS exposes a single per-VLAN ``comment`` field, which the parser
+      maps to the VLAN name; a separate description collides with it on render
+      and may be conflated with the name. Measured over 1 cell: drifted on 1,
+      preserved on 0, both sides empty on 0.  This field also owns the change
+      of the list's size: on the four dellgeos TORs every VLAN is written on
+      the management port and read back as a routed sub-interface of it, with
+      no VLAN record (see `vlans[].id`).
     references: [os10-routeros-surface]
 
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+      Every VLAN record that comes back keeps its id.  On the four dellgeos
+      TORs every record is dropped (15 or 19): the render writes the VLANs on
+      the one port with an address (the management port), and the RouterOS
+      parser reads a VLAN interface on a port back as a routed sub-interface
+      of it; that change of size is attributed to `vlans[].description`, which
+      declares it.
     references: [os10-routeros-surface]
 
   vlans[].ipv4_addresses:

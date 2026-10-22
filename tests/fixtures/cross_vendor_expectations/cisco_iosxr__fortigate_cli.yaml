@@ -20,7 +20,9 @@
 # byte-identical, and the interface list is kept whole — 155 records in, 155
 # out.  Each dot1q sub-interface is written as FortiOS's own VLAN interface on
 # its port, with its own tag, and the re-parse reads it back as a VLAN
-# interface (`ianaift:l3ipvlan`) and a VLAN of its tag named after it.  Up to
+# interface (`ianaift:l3ipvlan`) and a VLAN of its tag named after it: the
+# mesh leaves the port its IOS-XR name, which the FortiGate parser does not
+# read as a port.  Up to
 # 0.7.7 the renderer also wrote a `vlan<id>` child for the VLAN record IOS-XR
 # makes of each sub-interface's tag, on a parent it chose (a loopback on two
 # cells), and the list grew by 4; the child is the sub-interface now.
@@ -238,9 +240,10 @@ per_field_expectation:
       `ianaift:softwareLoopback` records.  The 4 dot1q sub-interfaces (one
       on each of the 4 cells that carry one) come back
       `ianaift:ethernetCsmacd` -> `ianaift:l3ipvlan`: each is written as
-      FortiOS's VLAN interface on its port, and read back as one
-      (fortigate_cli declares `/interfaces/interface/dot1q-vlan` lossy for
-      it).  The fifth is on `iosxr_design_cst_pa3_xr752.cfg` — `BVI500`,
+      FortiOS's VLAN interface on its port, and read back as one:
+      the mesh leaves the port its IOS-XR name, which the FortiGate parser
+      does not read as a port (on one it does read, a VLAN interface is a
+      sub-interface of it).  The fifth is on `iosxr_design_cst_pa3_xr752.cfg` — `BVI500`,
       `ianaift:other` -> `ianaift:ethernetCsmacd`.  Both matrices declare
       `/interfaces/interface/config/type` lossy in their own right, and
       fortigate_cli states the mechanism ("FortiOS has no IANA ifType; inferred

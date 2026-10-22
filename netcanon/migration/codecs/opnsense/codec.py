@@ -148,9 +148,13 @@ class OPNsenseCodec(CodecBase):
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             # OPNsense <ipaddrv6>{dhcp6|slaac|track6|6rd|6to4}</ipaddrv6>
             "/interfaces/interface/dhcp-client-v6",
-            "/vlans/vlan/id",
-            # A <vlan>'s <descr>; its name is its device (lossy below).
-            "/vlans/vlan/description",
+            # A routed sub-interface is a VLAN device on its port
+            # (`<vlan>` with `<if>igb1</if>`, `<tag>N</tag>` and
+            # `<vlanif>igb1.100</vlanif>`), which the parser reads back
+            # as a sub-interface of the port.  OPNsense's VLAN form
+            # refuses a device name with a dot in it when the VLAN is
+            # saved, and a review comment in the device says so.
+            "/interfaces/interface/dot1q-vlan",
             # Tier 2 — SNMP (OPNsense snmpd plugin)
             "/snmp/community",
             "/snmp/location",
@@ -272,6 +276,31 @@ class OPNsenseCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/vlans/vlan/id",
+                reason=(
+                    "OPNsense has no VLAN apart from a VLAN device on a "
+                    "parent (<vlan> with <if> and <tag>).  A VLAN on a "
+                    "bridge, or on a zone's key (<if>lan</if>, written "
+                    "where the config has no port), is read back as a "
+                    "VLAN; one another platform "
+                    "carries on a port or a LAG is written as a VLAN device "
+                    "on it, which the parser reads back as a routed "
+                    "sub-interface of the port (its tag the VLAN's id), "
+                    "with no VLAN record."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/description",
+                reason=(
+                    "A <vlan>'s <descr>.  It goes with the VLAN: where the "
+                    "VLAN is read back as a sub-interface of its port "
+                    "(see /vlans/vlan/id), the <descr> is the "
+                    "sub-interface's description."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/name",
                 reason=(
                     "An OPNsense <vlan> has no name of its own: the parser "
@@ -316,23 +345,6 @@ class OPNsenseCodec(CodecBase):
                     "timing — VRRP priorities are advisory weights, CARP "
                     "advskews are advertisement-interval offsets, so "
                     "cross-protocol migration loses the timing semantics."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "A routed sub-interface (Cisco `encapsulation dot1Q "
-                    "N`, Junos `unit N vlan-id`) is written as an "
-                    "OPNsense VLAN device on its port (`<vlan>` with "
-                    "`<if>igb1</if>`, `<tag>N</tag>` and "
-                    "`<vlanif>igb1.100</vlanif>`), with the "
-                    "sub-interface's own tag, and its zone assigns that "
-                    "device.  The parser reads it back as a VLAN device "
-                    "and a VLAN of its tag, not as a sub-interface of the "
-                    "port, and OPNsense's VLAN form refuses a device name "
-                    "with a dot in it when the VLAN is saved (a review "
-                    "comment says so)."
                 ),
                 severity="warn",
             ),

@@ -79,7 +79,9 @@ NOT_NAME_ONLY = {
 
 #: Two VLANs with a device and a label, one with a label and no device,
 #: one with a device and no label.  Each device name is OPNsense's own
-#: form, which the port translator renames to a VLAN interface.
+#: form, which the port translator renames to a VLAN interface.  The
+#: devices are on a bridge, each a VLAN interface and a VLAN; on a port
+#: they would be sub-interfaces of it, and no VLAN.
 OPNSENSE = """<?xml version="1.0"?>
 <opnsense>
   <system><hostname>fw</hostname></system>
@@ -87,22 +89,29 @@ OPNSENSE = """<?xml version="1.0"?>
     <lan><if>igb1</if><descr>LAN</descr><enable>1</enable><ipaddr>192.0.2.1</ipaddr><subnet>26</subnet></lan>
     <opt1><if>vlan0.20</if><descr>GUEST</descr><enable>1</enable><ipaddr>198.51.100.1</ipaddr><subnet>26</subnet></opt1>
   </interfaces>
+  <bridges>
+    <bridged><members>lan</members><bridgeif>bridge0</bridgeif></bridged>
+  </bridges>
   <vlans version="1.0.0">
-    <vlan uuid="fakeuuid-0001"><if>igb1</if><tag>20</tag><pcp>0</pcp><proto/>
+    <vlan uuid="fakeuuid-0001"><if>bridge0</if><tag>20</tag><pcp>0</pcp><proto/>
       <descr>Guest Wifi</descr><vlanif>vlan0.20</vlanif></vlan>
-    <vlan uuid="fakeuuid-0002"><if>igb1</if><tag>40</tag><pcp>0</pcp><proto/>
+    <vlan uuid="fakeuuid-0002"><if>bridge0</if><tag>40</tag><pcp>0</pcp><proto/>
       <descr>Spare</descr><vlanif>vlan0.40</vlanif></vlan>
-    <vlan uuid="fakeuuid-0003"><if>igb1</if><tag>50</tag><pcp>0</pcp><proto/>
+    <vlan uuid="fakeuuid-0003"><if>bridge0</if><tag>50</tag><pcp>0</pcp><proto/>
       <descr>Printers</descr></vlan>
-    <vlan uuid="fakeuuid-0004"><if>igb1</if><tag>60</tag><pcp>0</pcp><proto/>
+    <vlan uuid="fakeuuid-0004"><if>bridge0</if><tag>60</tag><pcp>0</pcp><proto/>
       <descr></descr><vlanif>vlan0.60</vlanif></vlan>
   </vlans>
 </opnsense>
 """
 
-ROUTEROS = """/interface vlan
-add comment=Cameras interface=ether2 name=vlan30 vlan-id=30
-add comment="Door Locks" interface=ether2 name=locks vlan-id=31
+#: Two VLAN interfaces on a bridge, each a VLAN of the bridge.  On a
+#: port they would be sub-interfaces of it, and no VLAN.
+ROUTEROS = """/interface bridge
+add name=bridge1 vlan-filtering=yes
+/interface vlan
+add comment=Cameras interface=bridge1 name=vlan30 vlan-id=30
+add comment="Door Locks" interface=bridge1 name=locks vlan-id=31
 /ip address
 add address=198.51.100.65/26 interface=vlan30
 """
@@ -186,8 +195,10 @@ def _capture(path: str, reader) -> tuple[str, dict[int, str]]:
     return text, reader(text)
 
 
+#: The committed OPNsense capture is not here: its VLAN devices are on
+#: a port, sub-interfaces of it and no VLAN
+#: (``codecs/opnsense/test_a_vlan_on_a_port_is_a_sub_interface.py``).
 CAPTURES = {
-    "supergate": ("opnsense", "tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml", _opnsense_labels),
     "crs310": ("mikrotik_routeros", "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc", _routeros_labels),
 }
 
@@ -200,7 +211,6 @@ CAPTURES = {
 #: tree.
 OS10_SVI_OF_ITS_OWN = {
     "opnsense": lambda: _opnsense_interface_labels(OPNSENSE),
-    "supergate": lambda: _opnsense_interface_labels(_source("supergate")[1]),
 }
 
 

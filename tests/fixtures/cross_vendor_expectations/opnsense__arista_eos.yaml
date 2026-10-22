@@ -259,14 +259,18 @@ per_field_expectation:
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].interface_type:
-    disposition: good
-    note: >
-      The OPNsense parser types its VLAN devices (`ianaift:l3ipvlan`) and
-      leaves every other interface untyped, and the Arista round trip gives
-      each the type it had (`vlan0.10` reads back as a VLAN interface).
-      Preserved on the cell compared record by record; on `kitchen_sink.xml`
-      the inventory changes size and the drift is attributed to
-      `interfaces[].name`.
+    disposition: lossy
+    reason: >
+      The OPNsense parser types a VLAN device on a port as a routed
+      sub-interface of it (its port's type) and one on a bridge as a VLAN
+      interface.  The bare pipeline translates no port name, so a
+      sub-interface reaches EOS under its OPNsense name, which the EOS parser
+      reads by its shape as a VLAN interface: the 5 VLAN devices of
+      `user_contrib_supergate_opn25.xml` (`vlan0.10` to `vlan0.150`, on
+      `ixl0`) come back `ianaift:l3ipvlan`.  Through the port translator such
+      a device is `Ethernet<n>.<tag>`, typed as its port.  On
+      `kitchen_sink.xml` the inventory changes size and the drift is
+      attributed to `interfaces[].name`.
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].mtu:

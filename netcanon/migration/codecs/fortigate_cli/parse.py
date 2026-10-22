@@ -82,6 +82,7 @@ from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
 from .._scanner import Body, without_text_bodies
 from ..base import ParseError
+from .port_names import classify_port_name
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
 
 logger = logging.getLogger(__name__)
@@ -788,6 +789,97 @@ def _link_lag_members(intent: CanonicalIntent) -> None:
             )
 
 
+#: What a parent read as a port is typed, by the type its own edit
+#: states.
+_PORT_BY_STATED_TYPE = {
+    "physical": "ianaift:ethernetCsmacd",
+    "aggregate": "ianaift:ieee8023adLag",
+}
+
+#: What a parent read as a port is typed, by its name's kind, where
+#: its edit states no type.
+_PORT_BY_KIND = {
+    "physical": "ianaift:ethernetCsmacd",
+    "lag": "ianaift:ieee8023adLag",
+}
+
+
+def _a_vlan_on_a_port_is_a_sub_interface(
+    blocks: list[_ConfigBlock], intent: CanonicalIntent,
+) -> None:
+    """A VLAN interface whose ``set interface`` is a port or an
+    aggregate is a routed sub-interface of it.
+
+    ``edit "VL_100"`` / ``set vlanid 100`` / ``set interface
+    "LAG_INTERNAL"`` tags the frames of one interface on
+    ``LAG_INTERNAL``, and only there: FortiOS takes the same VLAN id
+    on another interface as another interface.  So its tag is its
+    own (``dot1q_vlan``), it is typed as its parent is, and it makes
+    no VLAN record -- the form a sub-interface has in the tree, from
+    every parser that reads one.  Read as a VLAN interface, it was an
+    SVI and a VLAN no port carried on every target that has the two:
+    ``interface Vlan100`` on IOS-XE, ``irb.100`` on Junos, and nothing
+    on the aggregate.
+
+    The parent is a port where its own edit says ``set type
+    physical``, and an aggregate where it says ``set type
+    aggregate`` without ``set fortilink enable``.  A FortiLink
+    aggregate carries the VLANs of the FortiSwitches it manages, and
+    a hardware or software switch (``set type hard-switch``,
+    ``switch``) carries VLANs as a bridge does: a VLAN interface on
+    one stays a VLAN interface with its VLAN, and so does one on
+    anything else -- a VLAN interface among them (``set vlanid``:
+    Q-in-Q, one tag on another VLAN interface, whatever its name
+    looks like).  Where the parent's edit states no type, or the
+    config has no edit for it, its name decides
+    (:func:`.port_names.classify_port_name`: ``port4``, ``wan1``, but
+    not ``internal`` or ``lan``, which are switches, nor
+    ``fortilink``, the FortiLink interface's own name, which the
+    classifier reads as a port).  Decided after every block: an
+    aggregate may be defined after the VLAN interfaces on it.
+    """
+    stated: dict[str, tuple[str, bool]] = {}
+    for block in blocks:
+        if block.config_path != "system interface":
+            continue
+        for edit in ticked(block.edits):
+            kind = edit.settings.get("type")
+            fortilink = edit.settings.get("fortilink")
+            stated.setdefault(edit.edit_id, (
+                "vlan" if "vlanid" in edit.settings
+                else kind[0].lower() if kind else "",
+                bool(fortilink) and fortilink[0].lower() == "enable",
+            ))
+    made: dict[str, list[CanonicalVlan]] = {}
+    for vlan in intent.vlans:
+        made.setdefault(vlan.name, []).append(vlan)
+    taken_out: set[int] = set()
+    for iface in ticked(intent.interfaces):
+        parent = iface.vlan_parent
+        if (
+            iface.interface_type != "ianaift:l3ipvlan"
+            or not parent or parent == iface.name
+            or not made.get(iface.name)
+        ):
+            continue
+        kind, fortilink = stated.get(parent, ("", False))
+        if fortilink or (not kind and parent.lower() == "fortilink"):
+            continue
+        port_type = (
+            _PORT_BY_STATED_TYPE.get(kind) if kind
+            else _PORT_BY_KIND.get(classify_port_name(parent).kind)
+        )
+        if port_type is None:
+            continue
+        # The VLAN record its edit made, the one named after it.
+        vlan = made[iface.name].pop(0)
+        iface.interface_type = port_type
+        iface.dot1q_vlan = vlan.id
+        taken_out.add(id(vlan))
+    if taken_out:
+        intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in taken_out]
+
+
 def _apply_snmp_sysinfo(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
@@ -1228,6 +1320,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         else:
             ignored_paths.append(block.config_path)
     _link_lag_members(intent)
+    _a_vlan_on_a_port_is_a_sub_interface(blocks, intent)
 
     logger.debug(
         "fortigate_cli parsed: hostname=%r ifaces=%d vlans=%d "

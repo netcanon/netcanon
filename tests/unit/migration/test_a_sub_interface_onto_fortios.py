@@ -11,10 +11,9 @@ than mis-rendered.  FortiOS's own form is a VLAN interface on the port:
 
 What each source holds is typed by hand.  The output is read two ways:
 as text, by a reader of FortiOS's grammar typed here, and with the
-FortiOS parser, which reads such a block back as a VLAN interface and a
-VLAN of its tag (the matrix says so: FortiOS writes a VLAN interface on a
-port and on a switch interface alike).  Each check is handed the defect
-it is for.
+FortiOS parser, which reads such a block back as a sub-interface of the
+port where it reads the port as one: typed as the port, with the tag its
+own, and no VLAN.  Each check is handed the defect it is for.
 """
 
 from __future__ import annotations
@@ -212,10 +211,26 @@ def _text_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
     return problems
 
 
-def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
+#: The outputs whose port the FortiOS parser reads as a port, typed by
+#: hand.  The renderer writes a port's edit with no ``set type``, so the
+#: parser goes by the port's name: a name FortiOS gives a port
+#: (``port2``) is one.  Another vendor's name, which the bare pipeline
+#: leaves as it is, is not, and nor is ``port-0-1-2``, the translator's
+#: name for NX-OS ``Ethernet1/2``, which no FortiGate port has: there
+#: the block is read back as a VLAN interface and a VLAN of its tag.
+_READ_AS_A_SUB_INTERFACE = {
+    ("eos", "plan"), ("iosxe", "plan"), ("iosxr", "plan"),
+    ("junos", "plan"), ("vyos", "plan"),
+}
+
+
+def _parsed_problems(
+    text: str, port: str, subs: tuple[Sub, ...], as_a_sub_interface: bool = True,
+) -> list[str]:
     """What the FortiOS parser reads back: an interface ``<port>.<unit>``
-    with the address, a VLAN interface on *port*, and a VLAN of the tag
-    under that name -- its reading of a VLAN interface on a port."""
+    with the address on *port*; *as_a_sub_interface*, a sub-interface of
+    it with the tag its own and no VLAN under that name, and otherwise a
+    VLAN interface and a VLAN of the tag under that name."""
     tree = get_codec(_FGT).parse(text)
     by_name = {i.name: i for i in tree.interfaces}
     problems: list[str] = []
@@ -227,14 +242,23 @@ def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
             continue
         if [a.ip for a in iface.ipv4_addresses] != [sub.address]:
             problems.append(f"{name} holds {[a.ip for a in iface.ipv4_addresses]}")
-        if iface.interface_type != "ianaift:l3ipvlan":
-            problems.append(f"{name} is read as {iface.interface_type}")
         if iface.vlan_parent != port:
             problems.append(f"{name} is read on {iface.vlan_parent}")
         if iface.enabled != sub.enabled:
             problems.append(f"{name} is read enabled={iface.enabled}")
-        if (sub.tag, name) not in {(v.id, v.name) for v in tree.vlans}:
-            problems.append(f"no VLAN {sub.tag} named {name}")
+        vlans = {(v.id, v.name) for v in tree.vlans}
+        if as_a_sub_interface:
+            if iface.interface_type != "ianaift:ethernetCsmacd":
+                problems.append(f"{name} is read as {iface.interface_type}")
+            if iface.dot1q_vlan != sub.tag:
+                problems.append(f"{name} is read with tag {iface.dot1q_vlan}")
+            if name in {vlan_name for _, vlan_name in vlans}:
+                problems.append(f"a VLAN is named {name}")
+        else:
+            if iface.interface_type != "ianaift:l3ipvlan":
+                problems.append(f"{name} is read as {iface.interface_type}")
+            if (sub.tag, name) not in vlans:
+                problems.append(f"no VLAN {sub.tag} named {name}")
     return problems
 
 
@@ -274,16 +298,19 @@ def test_a_sub_interface_is_a_vlan_interface_on_its_port(key: str, path: str) ->
     job = _job(key, path)
     port = _port(key, path, job)
     assert _text_problems(job.rendered, port, SOURCES[key].subs) == []
-    assert _parsed_problems(job.rendered, port, SOURCES[key].subs) == []
+    assert _parsed_problems(
+        job.rendered, port, SOURCES[key].subs, (key, path) in _READ_AS_A_SUB_INTERFACE,
+    ) == []
 
 
 @pytest.mark.parametrize("key", sorted(SOURCES))
-def test_the_job_says_how_it_is_read_back(key: str) -> None:
-    """The output is what the device runs as the sub-interface; the
-    report says it is read back otherwise, and nothing holds the job."""
+def test_the_job_says_it_is_supported(key: str) -> None:
+    """The output is what the device runs as the sub-interface, and is
+    read back as one where its port has a name FortiOS gives a port:
+    the report lists no loss of it."""
     job = _job(key, "plan")
     assert job.status.value == "completed", job.error
-    assert _DOT1Q in {p.path for p in job.validation.lossy_paths}
+    assert _DOT1Q not in {p.path for p in job.validation.lossy_paths}
     assert _DOT1Q not in {p.path for p in job.validation.unsupported_paths}
 
 
@@ -576,6 +603,23 @@ def test_the_reader_sees_each_defect(broken: str, said: str) -> None:
     sub = (Sub("198.51.100.1", "255.255.255.0", "100", 200, "users"),)
     assert _text_problems(_GOOD, "port2", sub) == []
     assert any(said in p for p in _text_problems(broken, "port2", sub)), _text_problems(broken, "port2", sub)
+
+
+@pytest.mark.parametrize(("broken", "said"), [
+    (_GOOD.replace('        set status up\n    next\n    edit "port2.100"',
+                   '        set type hard-switch\n    next\n    edit "port2.100"'),
+     "is read as ianaift:l3ipvlan"),
+    (_GOOD.replace("set vlanid 200", "set vlanid 100"), "is read with tag 100"),
+    (_GOOD.replace('set interface "port2"', 'set interface "port1"'), "is read on port1"),
+    (_GOOD.replace("        set status up\n    next\nend", "        set status down\n    next\nend"),
+     "is read enabled=False"),
+])
+def test_the_parser_reading_sees_each_defect(broken: str, said: str) -> None:
+    sub = (Sub("198.51.100.1", "255.255.255.0", "100", 200, "users"),)
+    assert _parsed_problems(_GOOD, "port2", sub) == []
+    assert broken != _GOOD
+    problems = _parsed_problems(broken, "port2", sub)
+    assert any(said in p for p in problems), problems
 
 
 def test_the_reader_skips_a_nested_config() -> None:

@@ -23,12 +23,13 @@
         - .ipv4_addresses                from <ipaddr>+<subnet>
         - .ipv6_addresses                from <ipaddrv6>+<subnetv6>
             (incl. link-local scope normalisation for fe80::/10)
-    * CanonicalIntent.vlans              via <vlans><vlan>
-        - .id                            from <tag>
-        - .name                          from <vlanif> (the device)
-        - .description                   from <descr>
-      and the device's CanonicalInterface (its zone's, or one of
-      its own): interface_type l3ipvlan, vlan_parent from <if>
+    * <vlans><vlan> on a port: the device's CanonicalInterface (its
+      zone's, or one of its own) is a routed sub-interface
+        - .interface_type                the port's (ethernetCsmacd)
+        - .dot1q_vlan                    from <tag>
+        - .vlan_parent                   from <if>
+        - .description                   its zone's, else <descr>
+      and no CanonicalVlan
     * CanonicalIntent.dhcp_servers       via <dhcpd><zone>
         - .interface, .start_ip, .end_ip, .gateway, .dns_servers,
           .domain_name, .lease_time
@@ -211,10 +212,8 @@
       <descr>Reserved (disabled)</descr>
     </opt5>
   </interfaces>
-  <!-- VLANs — five 802.1Q tags with descr that maps to canonical
-       CanonicalVlan.name.  Real OPNsense vlan elements carry uuid /
-       <if> / <pcp> / <vlanif> attributes; the parser only reads
-       <tag> + <descr>. -->
+  <!-- VLAN devices — five 802.1Q tags on the port em1, each a routed
+       sub-interface of it. -->
   <vlans>
     <vlan uuid="fakeuuid-0001-0000-0000-000000000010">
       <if>em1</if>

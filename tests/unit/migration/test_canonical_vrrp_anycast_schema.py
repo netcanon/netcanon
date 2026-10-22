@@ -414,7 +414,7 @@ class TestShipBeforeWireUnsupportedDeclarations:
         "mikrotik_routeros": {
             "/interfaces/interface/vrrp-groups/group",
             # GAP 7 -- a routed sub-interface is a VLAN interface on
-            # its port (lossy: read back as a VLAN interface).
+            # its port, read back as a sub-interface of the port.
             "/interfaces/interface/dot1q-vlan",
         },
         # Wave B (CARP variant) — see commit feat(opnsense): wire

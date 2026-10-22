@@ -399,19 +399,25 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list round-trips for the id and the name; each VLAN's description is
-      lost (see `vlans[].description`). Both vendors share the unusual idiom
-      of modelling VLANs as 802.1Q child interfaces (NOT VLAN-centric port
-      lists), which makes this pair relatively clean compared to
-      switch-to-firewall pairs.
+      The OPNsense parser reads a VLAN device on a port as a routed
+      sub-interface of it, with no VLAN record, so the source's list is empty
+      on every cell; it grows on the way back (see `vlans[].id`).  Both
+      vendors model a VLAN as an 802.1Q child interface, and FortiOS writes
+      each device as a VLAN interface on the same parent.
     references: [opn-vlans, fgt-vlans]
 
   vlans[].id:
-    disposition: good
-    note: >
-      OPNsense ``<vlan>/<tag>10</tag>`` ↔ FortiGate ``set vlanid 10``
-      (under a vlan-typed interface edit).  Both vendors share the
-      1-4094 range.
+    disposition: lossy
+    reason: >
+      5 VLAN records appear on `user_contrib_supergate_opn25.xml` and on
+      `kitchen_sink.xml`, none in the source: each VLAN device rides on a port
+      (`ixl0`), so the OPNsense parser reads it as a routed sub-interface, and
+      FortiOS writes it as a VLAN interface on that port.  The bare pipeline
+      translates no port name, so the parent keeps its OPNsense name, which
+      the FortiGate parser does not read as a port, and each is read back as a
+      VLAN interface and a VLAN (fortigate_cli declares `/vlans/vlan/id`
+      lossy).  Through the port translator the parent is a FortiGate port, and
+      each reads back as the sub-interface it is.
     references: [opn-vlans, fgt-vlans]
 
   vlans[].name:

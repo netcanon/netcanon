@@ -126,18 +126,17 @@ nobody mistakes them for one of the nine:
 
 | attribute | records | shape |
 |---|---|---|
-| `dot1q_vlan` | 2 (`eth1.100`, `eth1.200`, kitchen sink) | value → null |
-| `interface_type` | 2 (`eth1.100`, `eth1.200`, kitchen sink) | empty → `ianaift:l3ipvlan` |
+| `interface_type` | 2 (`eth1.100`, `eth1.200`, kitchen sink) | empty → `ianaift:ethernetCsmacd` |
 | `vrf` | 1 (`eth0`, kitchen sink) | `BLUE` → empty |
 | `dhcp_client_v6` | 1 (`eth0`, DHCPv6-PD cell) | `dhcpv6` → empty |
 
-opnsense declares `/interfaces/interface/dot1q-vlan` lossy: the render
-writes `eth1.100` as a `<vlan>` device of tag 100 on `eth1`, and the
-OPNsense parser reads that device back — typed `ianaift:l3ipvlan`, and as a
-VLAN of its tag — not as the interface's tag, so the tag is on the wire and
-`dot1q_vlan` reads back null. The same reading makes two VLAN records (100,
-200) appear on the kitchen sink, which the YAML carries under
-`vlans[].id` and `interface_type` (both `lossy`). The `vrf` emptying is the
+The render writes `eth1.100` as a `<vlan>` device of tag 100 on `eth1`, and
+the OPNsense parser reads that device back as the sub-interface it is: its
+tag kept, typed as its port (`ianaift:ethernetCsmacd`, which the YAML
+carries under `interface_type`), with no VLAN record. Up to 0.7.7 it read
+the device back typed `ianaift:l3ipvlan` and as a VLAN of its tag,
+`dot1q_vlan` came back null, and two VLAN records (100, 200) appeared on the
+kitchen sink. The `vrf` emptying is the
 interface-side face of the whole-VRF drop described below.
 
 ## Source-side gaps vs target-side drops
