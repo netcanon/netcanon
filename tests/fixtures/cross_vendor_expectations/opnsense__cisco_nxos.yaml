@@ -310,7 +310,9 @@ per_field_expectation:
       OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
       its own), which NX-OS writes as `vlan <id> / name vlan0.10` and reads
       back. The operator's label (`USER VLAN`) is the VLAN's description, and
-      is lost: see `vlans[].description`.
+      is lost: see `vlans[].description`.  A device name holds no
+      white space, so the rule that writes `_` for it
+      (`one_value_tree`) does not touch it.
     references: [opnsense-nxos-surface]
 
   "vlans[].description":

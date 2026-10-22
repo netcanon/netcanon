@@ -48,11 +48,14 @@ auth_port, acct_port)`.
 Aruba -> Cisco round-trip:
 
 * `host`: round-trips cleanly.
-* `key`: opaque string round-trips; both vendors accept the
-  literal secret.  Operator best practice rotates secrets on
-  cutover regardless of vendor.
+* `key`: a key written as typed round-trips; both vendors accept
+  the literal secret.  An AOS-S `encrypted-key "<blob>"`
+  (`encrypt-credentials` on) is a form only AOS-S reads: it is held
+  behind `aoss:`, not decoded, and the server is written with no
+  key, beside a review line.
 * `auth_port` / `acct_port`: defaults to 1812 / 1813 on parse
   (Aruba doesn't carry the keyword).  Cisco render emits
   explicit `auth-port 1812 acct-port 1813`.
 
-Disposition: **good**.
+Disposition: **lossy** (an `encrypted-key` is refused; no
+committed capture has one).

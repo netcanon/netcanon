@@ -277,10 +277,25 @@ per_field_expectation:
     references: [nxos-opnsense-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Preserved on all 9 cells that populate it — NX-OS `description` maps to
-      `<descr>`, which OPNsense does not length-limit.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 5 of the 33 records that carry a
+      description are port-channel members and lose it.  Every other
+      record keeps its text: NX-OS `description` maps to `<descr>`,
+      which OPNsense does not length-limit.
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
     references: [nxos-opnsense-surface]
 
   "interfaces[].enabled":
@@ -522,45 +537,60 @@ per_field_expectation:
     references: [nxos-opnsense-surface]
 
   "local_users[].name":
-    disposition: good
-    note: "Preserved on all 9 cells that carry a user (`<system>/<user>/<name>`)."
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512 crypt
+      (`$6$`) in `<password>`, or a genuine plaintext password; anything else is
+      refused with a review comment naming the account, in place of the account.
+      Up to 0.7.7 such an account was written as a `<user>` element with no
+      `<password>`; a refused secret now drops the whole account, as on every
+      other target. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and a `lossy` warning would understate a
+      target with no local accounts. It is a property of the source's secret
+      form, not a gap in the OPNsense user model: an account whose secret
+      OPNsense can consume would still migrate. Create a console admin on the
+      target out of band before cutover, then re-create every account with a
+      native credential.
     references: [nxos-opnsense-surface]
 
   "local_users[].privilege_level":
     disposition: good
     note: >
-      The numeric privilege level round-trips unchanged (`15` -> `15`) on all
-      9 cells, despite the NX-OS matrix declaring
-      `/local-users/user/privilege-level` lossy — the OPNsense codec re-derives
-      it from the rendered group membership and lands on the same value.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Recorded `good` rather than
+      `lossy`: the only drift on this key is the parent record-count collapse,
+      which the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with their
+      privilege level and are counted once, under `local_users[].name`.
     references: [nxos-opnsense-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 10 populated user records: `network-admin` -> `admin` (9
-      records, rendered as `<groupname>admins</groupname>` +
-      `<priv>page-all</priv>`) and `network-operator` -> `user` (1 record,
-      `<groupname>users</groupname>`).  The account survives and lands on the
-      correct side of the admin boundary, but OPNsense's group model is
-      effectively binary here, so any finer NX-OS RBAC role — a custom role
-      with scoped feature rules — has to be rebuilt as an OPNsense group with
-      hand-picked privileges.  Review each migrated account rather than
-      assuming the mapping preserved its scope.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-opnsense-surface]
 
   "local_users[].hashed_password":
-    disposition: unsupported
-    reason: >
-      The credential does not survive at all: shape `5 $5$<salt>$<digest>` ->
-      `""` on every one of the 10 populated user records.  The render emits no
-      password element, only a review comment in its place ("5 hash from
-      source vendor cannot be re-used on OPNsense; reset this user password
-      manually"), because OPNsense's account store expects its own FreeBSD
-      `crypt(3)` form rather than a foreign NX-OS type-5 blob.  Every migrated
-      account therefore arrives with no credential — set passwords on all of
-      them before the config is applied, or the firewall has no usable
-      administrative login.
+    disposition: good
+    note: >
+      No secret is written in a form OPNsense cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account with a stored secret arrives, so there is no value to compare.
+      Recorded `good` rather than `lossy`: the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7
+      such an account was written as a `<user>` element with no `<password>`; a
+      refused secret now drops the whole account, as on every other target. No
+      secret value is quoted here or in the reference doc; only shapes and
+      counts.
     references: [nxos-opnsense-surface]
 
   # -- LAGs --

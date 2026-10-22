@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-21T02:35:32+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261021T020539Z.json",
-  "mesh_run_started_utc": "2026-10-21T02:05:31+00:00",
+  "started_utc": "2026-10-22T02:16:30+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T021625Z.json",
+  "mesh_run_started_utc": "2026-10-22T02:15:54+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,19 +593,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9144,
+    "ALIGNED": 8974,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4284,
-    "EXPECTED_UNSUPPORTED": 2630,
-    "METHODOLOGY_ISSUE_under": 1874,
+    "EXPECTED_LOSSY": 4191,
+    "EXPECTED_UNSUPPORTED": 2665,
+    "METHODOLOGY_ISSUE_under": 1856,
     "METHODOLOGY_ISSUE_over": 18,
-    "STRUCTURAL_ONLY": 5066,
-    "TRIVIAL_EMPTY": 34525,
-    "fields_total": 57545,
+    "STRUCTURAL_ONLY": 5360,
+    "TRIVIAL_EMPTY": 34589,
+    "fields_total": 57657,
     "severity_high": 4,
-    "severity_medium": 287,
-    "severity_low": 6671,
-    "severity_ok": 50583
+    "severity_medium": 285,
+    "severity_low": 6949,
+    "severity_ok": 50419
   },
   "severity_matrix": {
     "arista_eos": {
@@ -774,6 +774,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -798,6 +799,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -822,6 +824,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -856,6 +859,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -880,6 +884,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -904,6 +909,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1353,7 +1359,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -1648,6 +1654,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1672,6 +1679,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1696,6 +1704,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1730,6 +1739,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1754,6 +1764,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -1778,6 +1789,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -2320,7 +2332,7 @@
         },
         "radius_servers": {
           "actual": "trivially_preserved",
-          "expected": "good",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -2557,9 +2569,9 @@
           }
         },
         "interfaces[].mtu": {
-          "actual": "trivially_preserved",
+          "actual": "preserved",
           "expected": "good",
-          "variance": "TRIVIAL_EMPTY",
+          "variance": "ALIGNED",
           "severity": "ok"
         },
         "interfaces[].ipv4_addresses": {
@@ -3189,14 +3201,14 @@
         }
       },
       "summary": {
-        "ALIGNED": 5,
+        "ALIGNED": 6,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 2,
         "METHODOLOGY_ISSUE_under": 5,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 39,
+        "TRIVIAL_EMPTY": 38,
         "fields_total": 55,
         "missing_in_phase1": 3,
         "severity_high": 1,
@@ -3284,6 +3296,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3327,6 +3340,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3351,6 +3365,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3393,6 +3408,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3436,6 +3452,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3460,6 +3477,7 @@
                 "switchport_mode": null,
                 "access_vlan": null,
                 "dot1q_vlan": null,
+                "dot1q_inner_vlan": null,
                 "trunk_allowed_vlans": [],
                 "trunk_native_vlan": null,
                 "voice_vlan": null,
@@ -3759,10 +3777,58 @@
           "severity": "ok"
         },
         "vlans": {
-          "actual": "preserved",
-          "expected": "not_applicable",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "id": 10,
+                "name": "User VLAN 10 SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "target": [
+              {
+                "id": 10,
+                "name": "User_VLAN_10_SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "drift": {
+              "vlans[0] {'id': 10, 'name': 'User VLAN 10 SVI'}": {
+                "name": {
+                  "source": "User VLAN 10 SVI",
+                  "target": "User_VLAN_10_SVI"
+                }
+              }
+            },
+            "source_count": 1,
+            "target_count": 1
+          }
         },
         "static_routes": {
           "actual": "trivially_preserved",
@@ -3901,9 +3967,9 @@
       "summary": {
         "ALIGNED": 4,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 2,
+        "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 1,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 30,
@@ -3911,8 +3977,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 3,
-        "severity_ok": 36
+        "severity_low": 2,
+        "severity_ok": 37
       }
     }
   ],

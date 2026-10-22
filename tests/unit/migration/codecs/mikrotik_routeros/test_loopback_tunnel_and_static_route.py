@@ -311,3 +311,34 @@ def test_mikrotik_static_route_with_interface_only_unchanged():
     assert "/ip route" in out
     assert "gateway=ether2" in out
     assert "%" not in out
+
+
+@pytest.mark.parametrize("kind", ["gre", "eoip", "ipip"])
+def test_mikrotik_tunnel_mtu_is_written_and_read(kind: str) -> None:
+    """A tunnel's MTU is on its ``add`` line (each of the three takes
+    ``mtu``), and the parser reads it back.  It was dropped: a Junos
+    ``st0`` unit's ``family inet mtu`` reached no RouterOS line."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="tun1",
+                interface_type="ianaift:tunnel",
+                tunnel_type=kind,
+                description="vpn",
+                mtu=1420,
+            ),
+        ],
+    )
+
+    out = render_intent(intent)
+
+    adds = [line for line in out.splitlines() if "name=tun1" in line]
+    assert adds == ['add comment="vpn" name=tun1 mtu=1420 remote-address=0.0.0.0']
+    back = {i.name: i for i in parse_intent(out).interfaces}
+    assert back["tun1"].mtu == 1420
+    assert back["tun1"].tunnel_type == kind
+
+
+def test_mikrotik_tunnel_mtu_auto_states_no_number() -> None:
+    tree = parse_intent("/interface gre\nadd mtu=auto name=gre1 remote-address=192.0.2.1\n")
+    assert {i.name: i.mtu for i in tree.interfaces}["gre1"] is None

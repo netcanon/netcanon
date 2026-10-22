@@ -125,6 +125,7 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/dot1q-vlan",              # GAP 7: routed-subif `encapsulation dot1Q N`
+            "/interfaces/interface/dot1q-inner-vlan",        # `encapsulation dot1Q N second-dot1q M`
             # ``switchport voice vlan <N>`` — parsed (_SWITCHPORT_VOICE_RE)
             # and rendered, so it fully round-trips same-vendor (blind-audit
             # 65f9c01 #11; targets that can't carry it declare it unsupported).

@@ -356,12 +356,15 @@ per_field_expectation:
     references: [oc-network-instance, iosxe-multivrf]
 
   vlans:
-    disposition: not_applicable
-    note: >
-      The NETCONF parser doesn't walk `<network-instances><vlans>`.
-      `intent.vlans` is empty after parse regardless of source XML
-      content.  Flips to good once wired (canonical-stable surface:
-      id / name / description / port-membership).
+    disposition: lossy
+    reason: >
+      The NETCONF parser does not walk `<network-
+      instances><vlans>`; the kitchen sink's one VLAN is
+      synthesised from its SVI and named from the SVI's
+      description, which holds white space and is written as one
+      word on the CLI (`User VLAN 10 SVI` lands as
+      `User_VLAN_10_SVI`, with a review line).  A name with no
+      white space is preserved.
     references: [oc-vlan]
 
   static_routes:

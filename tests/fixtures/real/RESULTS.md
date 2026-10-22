@@ -80,7 +80,10 @@ target codec is a Phase 0.5 stub".
 **Known silent drops (by design):** VRFs, Q-in-Q encap, QoS
 service-policies, interface ACL groups, IPv6 addressing, proxy-ARP,
 uRPF, bandwidth hint.  All mapped to existing roadmap buckets (Tier 3
-raw_sections or Fidelity Polish).
+raw_sections or Fidelity Polish).  The Q-in-Q units' inner tags are
+read since (`dot1q_inner_vlan`; CHANGELOG, "A sub-interface's tag
+statement was read for its first id"), and the six reach IOS-XE,
+IOS XR, EOS and Junos with both tags.
 
 **Zero bugs surfaced by the 5 new real captures.**  All parsed
 cleanly on first contact and produced populated canonical trees.

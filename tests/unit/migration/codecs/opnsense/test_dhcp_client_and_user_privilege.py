@@ -294,7 +294,10 @@ def test_opnsense_to_routeros_admin_user_maps_to_full_group() -> None:
     with a system-scope root user must produce
     ``add group=full name=root`` on the MikroTik RouterOS render
     (not the safe-default ``group=read``).  Pre-fix this rendered
-    as read because privilege_level=1 was the parser default."""
+    as read because privilege_level=1 was the parser default.
+
+    The user states no password: a bcrypt one is refused on RouterOS,
+    and the account goes with it (``test_secret_fail_open.py``)."""
     raw = """<?xml version="1.0"?>
 <opnsense>
   <system>
@@ -303,7 +306,6 @@ def test_opnsense_to_routeros_admin_user_maps_to_full_group() -> None:
       <name>root</name>
       <uid>0</uid>
       <scope>system</scope>
-      <password>$2y$10$fakeBcryptForTestSyntheticHashPlaceholder000000000000</password>
     </user>
   </system>
 </opnsense>
