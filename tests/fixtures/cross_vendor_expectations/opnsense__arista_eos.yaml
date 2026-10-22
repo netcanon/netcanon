@@ -373,23 +373,25 @@ per_field_expectation:
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on both cells that hold VLANs: the canonical name is the
-      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
-      its own), which Arista writes as `name vlan0.10` and reads back. The
-      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
-      see `vlans[].description`.
+    disposition: lossy
+    reason: >
+      Drifted on both cells that hold VLANs, by its white space. An OPNsense
+      `<vlan>` has no name of its own: the canonical name is its device's
+      (`vlan0.10`), and its `<descr>` (`USER VLAN`) the description. EOS has
+      one label for a VLAN, its `name`, and a VLAN whose name is only an
+      interface's is written with its description as its name
+      (`_vlan_labels`); the Arista render writes a name with no white
+      space, so `USER VLAN` comes back `USER_VLAN`.
     references: [opnsense-vlans, arista-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
-      (`USER VLAN`) is the canonical description, and the Arista render writes
-      a VLAN's name and no description line. The job says so: Arista declares
-      `/vlans/vlan/description` lossy, which the validation report lists for
-      each VLAN.
+      Comes back empty on every VLAN that carries one: the Arista render writes a VLAN's `name`
+      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      Arista declares `/vlans/vlan/description` lossy for it.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

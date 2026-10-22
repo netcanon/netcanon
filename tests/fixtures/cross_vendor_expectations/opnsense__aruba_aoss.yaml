@@ -372,21 +372,24 @@ per_field_expectation:
   vlans[].name:
     disposition: good
     note: >
-      Preserved on both cells that hold VLANs: the canonical name is the
-      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
-      its own), which AOS-S writes as `name "vlan0.10"` and reads back. The
-      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
-      see `vlans[].description`.
+      Preserved on both cells that hold VLANs. An OPNsense `<vlan>` has no
+      name of its own: the canonical name is its device's (`vlan0.10`), and
+      its `<descr>` (`USER VLAN`) the description. AOS-S has one
+      label for a VLAN, and a VLAN whose name is only an interface's is
+      written with its description as its name (`_vlan_labels`): `name "USER VLAN"`,
+      read back as the name. The reconciler reads that move as preserved
+      (`_vlan_label_moved`); the device keeps its own name as the VLAN
+      interface's.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
-      (`USER VLAN`) is the canonical description, and an AOS-S VLAN has one
-      label, its `name`, which holds the name. The job says so: AOS-S declares
-      `/vlans/vlan/description` lossy, which the validation report lists for
-      each VLAN.
+      Comes back empty on every VLAN that carries one: an AOS-S VLAN has one label, its `name`,
+      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      AOS-S declares `/vlans/vlan/description` lossy for it.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

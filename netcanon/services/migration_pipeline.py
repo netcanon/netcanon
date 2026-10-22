@@ -146,6 +146,7 @@ from typing import Any
 
 from ..migration._one_line import one_line_each, said
 from ..migration._tier3_detection import is_left_out_row
+from ..migration._vlan_labels import vlan_labels_as_names
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..migration.limits import LimitExceeded
 from ..models.migration import (
@@ -341,6 +342,12 @@ def run_plan(
         job.dropped_tier3_sections = list(
             getattr(tree, "dropped_tier3_sections", []) or []
         )
+        # A target whose VLAN has only a name is given a VLAN's label
+        # as its name where the name is only an interface's -- here,
+        # before the port translator (a transform) renames that
+        # interface and the name matches nothing (``_vlan_labels``).
+        if getattr(target, "vlans_have_only_a_name", False):
+            tree = vlan_labels_as_names(tree)
 
         # Stage 3 — transforms
         job.status = MigrationJobStatus.transforming

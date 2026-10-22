@@ -115,6 +115,9 @@ class CiscoNXOSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_nxos",
         vendor_id="cisco_nxos",
@@ -334,9 +337,12 @@ class CiscoNXOSCodec(CodecBase):
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "description line.  Where the VLAN's name is only the "
+                    "name of an interface of the config, or empty, its "
+                    "description is written as its name (_vlan_labels: an "
+                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "description drops on render (silent-loss guard, "
+                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),

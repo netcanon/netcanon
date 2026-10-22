@@ -24,6 +24,11 @@ about the vendor; the references are in
   with a review line beside it -- or, where the target quotes with no
   escape, with ``'`` for each ``"`` and a review line.
 
+A VLAN's description is its label, and a target whose VLAN has only
+a name (``CodecBase.vlans_have_only_a_name``) writes the label of a
+VLAN that has no name of its own AS its name: there it is judged as
+a name.
+
 Where the target's grammar quotes, any of the three may be written
 between its quotes, with the escape it documents.
 
@@ -324,7 +329,10 @@ def _judge(source: str, target: str, field: str, value: str) -> list[str]:
         escape = _escape_here(target, line)
         forms = _quoted(escape, value)
         altered_forms: list[str] = []
-        if kind == "name":
+        if kind == "name" or (
+            field == "vlans[].description"
+            and get_codec(target).vlans_have_only_a_name
+        ):
             altered_forms = [
                 *_quoted(escape, _relabelled(value)), _relabelled(value)]
         elif kind == "text" and '"' in value and escape is _UNQUOTED:

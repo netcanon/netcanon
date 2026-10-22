@@ -421,13 +421,17 @@ per_field_expectation:
     references: [routeros-os10-surface]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. MikroTik stores a VLAN's name as the L3 interface name
-      (e.g. vlan10), NOT a separate descriptive name field. Cross-
-      vendor rendering may conflate the two. Measured over 5 cells:
-      drifted on 1, preserved on 2, both sides empty on 2.
+    disposition: good
+    note: >
+      Preserved on every cell that holds VLANs. RouterOS names a VLAN
+      after its `/interface vlan`, whose `comment=` is the label (the
+      VLAN's description and the interface's). OS10 has one label for a
+      VLAN, its SVI's `description`. Where the VLAN interface's name is an
+      OS10 SVI's (`vlan10`), the interface is that SVI and its comment is
+      written as its description, read back as the VLAN's name, the move
+      the reconciler reads as preserved (`_vlan_label_moved`); where it is
+      not (`clustervlan100`), OS10 makes an SVI for the VLAN with the name
+      as its description.
     references: [routeros-os10-surface]
 
   vlans[].tagged_ports:

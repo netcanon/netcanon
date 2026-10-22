@@ -418,7 +418,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
-| `/vlans/vlan/description` | Lossy | RouterOS exposes a single per-VLAN `comment` field, which the parser maps to the VLAN name; a separate description collides with it on render. |
+| `/vlans/vlan/description` | Lossy | RouterOS has one label for a VLAN, the `comment=` of its `/interface vlan`.  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's description there (for a VLAN with no interface, the VLAN's name), so a VLAN's own description is not written.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos the comment is written as the VLAN's name (see "Cross-paradigm exceptions"). |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-password=` takes the operator's passphrase and RouterOS derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `add name=` line).  A source passphrase is portable and is emitted unchanged. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from RouterOS itself. |
@@ -2401,6 +2401,20 @@ matter; the matrix is honest about both.
   so (`/interfaces/interface/config/ip-mtu-beside-mtu`, lossy).
   OS10 writes none (lossy); AOS-S and the IOS-XE NETCONF codec
   declare it unsupported.  The tree has no IPv6 MTU.
+* **A VLAN's label on a target whose VLAN has only a name.**
+  OPNsense and RouterOS name a VLAN after its interface (`vlan0.10`,
+  `vlan10`); the label an operator typed (an OPNsense `<descr>`, a
+  RouterOS `comment=`) is the VLAN's description.  Onto
+  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos`, `aruba_aoss` and
+  `juniper_junos`, which write one label for a VLAN, a VLAN whose
+  name is only an interface's, or empty, is written with its
+  description as its name (`name USER VLAN`; EOS writes `USER_VLAN`,
+  having no white space in a name, and Junos quotes it:
+  `set vlans "USER VLAN"`).  A name of the VLAN's own is kept, and a
+  description beside it is listed as a loss.  `aruba_aoscx` and
+  `opnsense` write both.  Onto `fortigate_cli`, `mikrotik_routeros` and
+  `dell_os10` the label is not written, and the job lists
+  `/vlans/vlan/description` as a loss.
 * **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`

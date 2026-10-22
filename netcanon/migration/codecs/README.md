@@ -632,6 +632,18 @@ the policy locally:
   parsers) keeps it as it is; the layout is lost on the way out, and
   the job says where.
 
+* **`netcanon/migration/_vlan_labels.py`** — a VLAN's label as its
+  name.  Public API: `vlan_labels_as_names(tree)`,
+  `label_is_its_name(vlan, interface_names)`.  A codec whose VLAN has
+  only a name sets `vlans_have_only_a_name = True` in its class body
+  and calls nothing: `run_plan` and `CodecBase.render` apply the rule
+  (a VLAN named after an interface of the config, or not named, is
+  written with its description as its name).  A public codec that
+  leaves the flag `False` is named, with its reason, in
+  `NOT_NAME_ONLY` in
+  `tests/unit/migration/test_a_vlan_label_is_its_name.py`, which fails
+  for one that is in neither.
+
 * **`netcanon/migration/canonical/transforms.py::project_switchport_to_vlan`**
   — projects per-iface switchport state (`switchport_mode`,
   `access_vlan`, `trunk_allowed_vlans`) back into VLAN-centric
