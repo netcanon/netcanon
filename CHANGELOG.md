@@ -875,6 +875,26 @@ timestamp if your timezone matters for an audit.
   `{ }`, and for a static route, a `vif` or a loopback the source
   has and the output does not.
 
+- **FortiOS: every value written between quotes is escaped, and an
+  `edit` name is read back with its escapes.**  The renderer escaped
+  a description, the host name and an account's name, and wrote an
+  interface's own name, a LAG's members, a VLAN interface's parent, a
+  route's `set device`, a DHCP pool's interface and domain, a RADIUS
+  server, the domain and an NTP server between quotes as they stood.
+  A `"` in a name ended the quoted string and the rest was read as
+  CLI words -- in `set member` another member -- and a `\` in any of
+  them was read as the escape.  (An address holding a `"` is already
+  left out before it is written.)  And the parser read
+  an `edit` name with its outer quotes stripped and its escapes left
+  in, so a name written `edit "a\"b"` came back as `a\"b`.  Now
+  each such value is written with FortiOS's escape (`\"` and `\\`,
+  as the committed FG-100E capture prints them inside a quoted value),
+  and an `edit` id that is one quoted token is read as a `set` value
+  is.  No committed input holds such a name; the output of every one
+  is unchanged.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_every_quoted_value_is_escaped.py`,
+  which reads the output with a reader of its own and the renderer's
+  source for a value between quotes that skips the escape.
 - **A credential or an account's name is written as one value of the
   place it goes, or not at all** (Security, above).  None of the
   word-at-a-time CLIs (IOS-XE CLI, NX-OS, EOS, AOS-CX, OS10, IOS XR)

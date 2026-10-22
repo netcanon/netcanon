@@ -550,7 +550,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if len(tree.dns_servers) >= 2:
             out.append(f"    set secondary {tree.dns_servers[1]}")
         if tree.domain:
-            out.append(f'    set domain "{tree.domain}"')
+            out.append(f'    set domain "{_esc(tree.domain)}"')
         out.append("end")
 
     # --- system ntp (nested subtable) ---
@@ -560,7 +560,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("    config ntpserver")
         for idx, server in enumerate(tree.ntp_servers, start=1):
             out.append(f"        edit {idx}")
-            out.append(f'            set server "{server}"')
+            out.append(f'            set server "{_esc(server)}"')
             out.append("        next")
         out.append("    end")
         out.append("end")
@@ -648,7 +648,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for c in collision_comments:
             out.append(f"    {c}")
         for iface in deduped_ifaces:
-            out.append(f'    edit "{iface.name}"')
+            out.append(f'    edit "{_esc(iface.name)}"')
             if iface.description:
                 # FortiOS alias caps at 25 chars per spec.
                 alias = iface.description[:25]
@@ -658,7 +658,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if lag is not None:
                 out.append("        set type aggregate")
                 if lag.members:
-                    quoted = " ".join(f'"{m}"' for m in lag.members)
+                    quoted = " ".join(
+                        f'"{_esc(m)}"' for m in lag.members
+                    )
                     out.append(f"        set member {quoted}")
                 out.append(
                     f"        set lacp-mode "
@@ -694,15 +696,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(f"        set vlanid {vid}")
                     if stated and parent != stated:
                         out.append(
-                            f"        # review: rides on \"{stated}\" in "
+                            f"        # review: rides on \"{_esc(stated)}\" in "
                             f"the source, which is not in this output; "
                             f"the parent below was chosen"
                             if parent else
-                            f"        # review: rides on \"{stated}\" in "
+                            f"        # review: rides on \"{_esc(stated)}\" in "
                             f"the source, which is not in this output"
                         )
                     if parent:
-                        out.append(f'        set interface "{parent}"')
+                        out.append(
+                            f'        set interface "{_esc(parent)}"'
+                        )
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
             # virtual_gateway_address, and emitting ``set ip  <mask>`` is
@@ -882,11 +886,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
         # VLAN child interface emit (Issue #6).
         for child in vlan_children:
-            out.append(f'    edit "{child["name"]}"')
+            out.append(f'    edit "{_esc(child["name"])}"')
             out.append("        set type vlan")
             out.append(f'        set vlanid {child["vlanid"]}')
             if child.get("parent"):
-                out.append(f'        set interface "{child["parent"]}"')
+                out.append(
+                    f'        set interface "{_esc(child["parent"])}"'
+                )
             if child.get("ip") and child.get("mask"):
                 out.append(f'        set ip {child["ip"]} {child["mask"]}')
                 out.append("        set mode static")
@@ -1088,7 +1094,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("config user radius")
         for idx, server in enumerate(tree.radius_servers, start=1):
             out.append(f'    edit "radius-{idx}"')
-            out.append(f'        set server "{server.host}"')
+            out.append(f'        set server "{_esc(server.host)}"')
             # (#482) The two fallback branches here used to stamp ``ENC``
             # onto whatever arrived — a bare plaintext secret from Aruba
             # or OPNsense became ``set secret ENC <plaintext>``, and any
@@ -1144,13 +1150,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 except (ValueError, ipaddress.AddressValueError):
                     pass
             if pool.interface:
-                out.append(f'        set interface "{pool.interface}"')
+                out.append(
+                    f'        set interface "{_esc(pool.interface)}"'
+                )
             for i, dns in enumerate(pool.dns_servers[:3], start=1):
                 out.append(f"        set dns-server{i} {dns}")
             if pool.dns_servers:
                 out.append("        set dns-service specify")
             if pool.domain_name:
-                out.append(f'        set domain "{pool.domain_name}"')
+                out.append(
+                    f'        set domain "{_esc(pool.domain_name)}"'
+                )
             if pool.start_ip or pool.end_ip:
                 out.append("        config ip-range")
                 out.append("            edit 1")
@@ -1181,7 +1191,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if route.gateway:
             out.append(f"        set gateway {route.gateway}")
         if route.interface:
-            out.append(f'        set device "{route.interface}"')
+            out.append(f'        set device "{_esc(route.interface)}"')
         if route.metric:
             # FortiOS admin distance (default 10); emit only when the
             # canonical metric is set so ordinary routes stay clean.

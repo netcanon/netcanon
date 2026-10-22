@@ -365,5 +365,6 @@ class TestTheChecksCanFail:
         monkeypatch.setattr(fg_parse, "_statements", lambda raw: iter(raw.splitlines()))
         monkeypatch.setattr(fg_parse, "without_quoted_values", lambda raw: raw)
         tree = get_codec("fortigate_cli").parse(_A_MESSAGE_THAT_HOLDS_CONFIG)
-        assert [user.name for user in tree.local_users] == [_Q + "intruder" + chr(92)]
+        # The ``edit`` name is read back through FortiOS's escape.
+        assert [user.name for user in tree.local_users] == ['"intruder"']
         assert tree.source_version == "9.9.9"
