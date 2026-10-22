@@ -68,10 +68,11 @@ Default-table IPv4 routes round-trip cleanly:
   so the loss is structural.
 - **Blackhole / unreachable** — RouterOS has explicit
   `blackhole=yes` / `type=unreachable` flags; the canonical model
-  does not carry this.  Aruba expresses blackhole via `null0`
-  interface-as-gateway form which the aruba_aoss codec does not
-  currently parse.  Cross-vendor fidelity is poor — RouterOS
-  source blackhole routes drop on render with a banner.
+  does not carry this.  AOS-S writes a discard route `ip route
+  <dest> blackhole` (and `reject`, which answers with an ICMP
+  error), which the aruba_aoss codec reads as the tree's discard
+  (`Null0`) and writes back.  Cross-vendor fidelity is poor —
+  RouterOS source blackhole routes drop on render with a banner.
 - **Interface-as-gateway** — RouterOS `gateway=ether2` (connected
   via interface) populates `CanonicalStaticRoute.interface` on
   parse.  Aruba's `ip route` directive does not accept an

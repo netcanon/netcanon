@@ -526,9 +526,87 @@ form (e.g. Cisco type-7) doesn't have a target equivalent, the
 rendered output gets a `# REVIEW: <hash> from <source vendor>`
 comment instead of a plaintext password.
 
-**Action:** re-issue the hash on the target device using the
-target's native CLI (`enable secret`, `set system root-authentication
-plain-text-password`, etc.).
+The account itself is left out with it, on every target: an account
+written without the password it had would be an account with none.
+
+**Action:** re-create the user on the target device and set its
+password with the target's native CLI (`username ... secret`, `set
+system login user ... authentication plain-text-password`, etc.).
+
+### "review: a value of it holds white space or a quote"
+
+The source holds a credential -- a password, an SNMP community, an
+SNMPv3 user or key, a VRRP/HSRP key -- or an account name with a space
+in it (or a `"`), and the target reads that place one word at a time.
+Written as it stood, the second word would have been read as the next
+keyword (on NX-OS `snmp-server community public rw` is a read-write
+community), so the record is left out rather than altered: a secret
+with its space replaced is another secret.
+
+**Action:** create the account, community or key on the device under a
+value the target takes (no white space, no quote), and update whatever
+uses it.  The line names the record; the value is in the source config.
+
+### "review: it holds white space or a quote ... each run of white space is written _"
+
+A host name, VLAN name, VRF name or route name in the source has a
+space (or a `"`) in it, and the target reads that place one word at a
+time.  The name was written with `_` for each run of white space and
+`'` for each `"`, at every place it goes, so the VRF and the interfaces
+in it still agree.  "with a number after it" means another VRF already
+had that name.
+
+**Action:** none is needed for the config to load.  If something
+outside the device matches on the name (monitoring, automation, a
+naming standard), rename it to suit.
+
+### "review: an address that holds white space or a quote"
+
+An NTP, syslog or DNS server, the domain, a route's gateway or a DHCP
+pool's domain, gateway or DNS server in the source holds a space or a
+`"`, which no address does, so the source parser read more than the
+address.  It was left out rather than written as words the target
+would read as something else.  "the
+route is left out whole" means a static route lost its gateway and was
+not written: a route with its destination and no next hop is another
+route.
+
+**Action:** re-create the server or route on the device with the
+address the source device actually uses.
+
+### "review: it holds a double quote, which <target> cannot write between its quotes"
+
+AOS-S, OS10 and VyOS quote this text and document no escape for a `"`
+inside the quotes, so each `"` was written `'`.  "is not documented to
+read in this place" says the same where the target writes the text
+bare.
+
+**Action:** none is needed; edit the text on the device if the quote
+mattered.
+
+### "review: it holds white space, and no <target> page found says this place reads to the end of the line"
+
+The text (an NX-OS SNMP contact, an EOS SNMP location, an IOS XR VRF
+description) was written as it stands, but no vendor page establishes
+that the device reads that place to the end of the line.
+
+**Action:** after loading the config, check the value on the device
+(`show running-config | include <place>`); if it was cut at the first
+space, set it again there, in quotes or with the space taken out.
+
+### "A user with a typed password came out as a review comment on Junos or OPNsense"
+
+By design.  The source held the password as it was typed (IOS-XE
+`password 0`, AOS-CX `password plaintext`, and the like), and the
+config of Junos and OPNsense holds a password only as a hash:
+Junos's `encrypted-password` and OPNsense's `<password>`.  Written
+there, the typed string would be the hash itself, and no password
+would open the account.  The review line names the account and says
+why; it never quotes the password.
+
+**Action:** add the user on the device and set its password there
+(Junos `set system login user <name> authentication
+plain-text-password`, which asks for it; the OPNsense user manager).
 
 ### "My LAG/Port-Channel name changed"
 
@@ -1043,7 +1121,8 @@ The message can also say **"N port(s) are not looked up by their
 hardware in the output"** — on a RouterOS target only.
 `port_mapping_plan.unbound_ports` lists them, each with the factory
 name it should be looked up by.  RouterOS finds a port by its factory
-name, and there are three ways to end without a line that does:
+name, and there are four ways to end without a line that does, or
+with one that a list does not lead to:
 
 * The port's name reads as a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
@@ -1061,11 +1140,16 @@ name, and there are three ways to end without a line that does:
 * Two ports of another vendor were given one name.  The output finds
   the first by it, and the second is listed.  Give each a name of its
   own.
+* The port has a line of its own, and an entry gave it a name that a
+  list cuts: a LAG's members (`slaves=`) are cut at a comma, a route's
+  next hop (`gateway=`) at a comma, an `@` or a `%`.  The list then
+  names something nothing defines.  Give the port a name without
+  them.
 
 If the job also says **"the output could not be read back with the
 target codec"**, no port could be checked at all: every port that
 could have been checked is listed for that reason, whatever its name,
-and the three causes above do not apply.  That is a fault in netcanon
+and the four causes above do not apply.  That is a fault in netcanon
 — report it with the config.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
@@ -1340,8 +1424,8 @@ the text, nor the delimiter (which is yours).
   banner under the other.  Change the banner on the router so that its
   text holds no caret, or remove the banner's lines from the paste.
 - **`<codec>: line <n> is a line of a banner, or of another block of
-  text, and ends in a character ...`** (the six above, and
-  `arista_eos`) -- a line of the banner ends in a form feed, a
+  text, and ends in a character ...`** (the six above, `arista_eos`,
+  and `fortigate_cli` for a quoted value) -- a line of the banner ends in a form feed, a
   vertical tab, a carriage return on its own, or another character
   that ends a line for the parser and not for the device, which ends
   a line at a line feed: where the device ends the banner, and so
@@ -1361,6 +1445,39 @@ See the vendor pages, § "A banner is text":
 a banner the parser refuses is not read by `detect-deployment` either
 (see [Detection proposes a device, and says ports are
 missing](#detection-proposes-a-device-and-says-ports-are-missing)).
+
+### The job says `parse failed:` for a FortiGate config
+
+- **`fortigate_cli: line <n> opens a quoted value that no later line
+  ends ...`** -- FortiOS prints a value of several lines (a
+  certificate, a key, a replacement message's HTML) between its
+  quotes, and the parser reads it whole, up to the line whose quote no
+  backslash escapes.  The value that line opens has no such line after
+  it: the text was cut short, or a quote was lost or added on the way.
+  Read as it stands, the rest of the config would be the value's text.
+  Paste the configuration whole, as the FortiGate prints it (a backup
+  file, or the output of `show`).
+- **`fortigate_cli: line <n> is a line of a banner, or of another
+  block of text, and ends in a character ...`** -- a line of a quoted
+  value ends in a form feed, a vertical tab, a carriage return on its
+  own or the like, where the device ends a line at a line feed.  See
+  the last item of the section above.
+
+See [`vendors/fortigate.md`](vendors/fortigate.md#a-quoted-value-of-several-lines).
+
+### The job warns "... held a line break: it is written on one line"
+
+A value of the config -- an interface's description, a VLAN's name,
+any text -- held a line break, and was written on one line, each run
+of breaks as a space.  No target is given a value of more than one
+line: written as it stood, the text after the break was a line of its
+own in the output, and so a command on the target.  The OPNsense and
+IOS-XE NETCONF parsers keep a break that an element's text holds, and
+the FortiOS parser one in a value printed over several lines.  The
+warning names the place (`interfaces[em0].description`); the job's
+status is not changed by it.  If the layout mattered (a description
+meant to show on two lines), set it on the target by hand.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § C1.
 
 ### The job says `refused:` — "my config was refused"
 

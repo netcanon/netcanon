@@ -193,6 +193,12 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **An account whose password the source holds as typed is left out**
+  as a target, with a review line in its place.  Junos takes a
+  password into its config only as a hash (`encrypted-password`;
+  `plain-text-password` asks at a prompt), and up to 0.7.7 the typed
+  string was written as `encrypted-password "<typed>"`, which no
+  password matches.
 - **Block-form input is counted in the set commands it becomes.**  A
   block-form config is converted to set commands before it is read,
   and the whole path is written again for every statement under it, so

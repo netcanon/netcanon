@@ -290,18 +290,36 @@ per_field_expectation:
     references: [mikrotik_iface_naming]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      RouterOS ``comment="..."`` ↔ OPNsense ``<descr>...</descr>``.
-      Round-trip preserves text content.
-    references: [mikrotik_iface_naming, opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 4 of the 24 records that carry a comment
+      are bonding slaves and lose it.  Every other record keeps its
+      text: RouterOS ``comment="..."`` ↔ OPNsense
+      ``<descr>...</descr>``.
+    references: [mikrotik_iface_naming, opnsense-interfaces, opnsense-laggs]
 
   interfaces[].enabled:
-    disposition: good
-    note: >
-      RouterOS ``disabled=no`` (default) ↔ OPNsense ``<enable/>``
-      element presence (present = enabled).
-    references: [mikrotik_iface_naming, opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      A member has no ``<enable/>`` of its own, so a disabled member
+      is read back as enabled; the comment says ``disabled``.
+      Measured 2026-10-20: the one disabled record is a bonding slave.
+      Every other record keeps its state: RouterOS ``disabled=no``
+      (default) ↔ OPNsense ``<enable/>`` element presence (present =
+      enabled).
+    references: [mikrotik_iface_naming, opnsense-interfaces, opnsense-laggs]
 
   interfaces[].interface_type:
     disposition: lossy

@@ -18,6 +18,7 @@ is a 422, and what a request that predates the feature still gets.
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -788,19 +789,24 @@ class TestAPortsFactoryName:
         """What this request rendered before the feature existed, on a
         committed capture: pinned so that the shared translator cannot
         move it again.  (On the four category panes it rendered no
-        entry at all until every plan endpoint applied the port map.)"""
+        entry at all until every plan endpoint applied the port map.)
+        The capture's ``ether1`` has a name of its own, ``Desktop``,
+        which every line of the config calls it by -- so that is the
+        entry's key."""
         job = client.post(f"/api/v1/migration{path}", json={
             "source": "mikrotik_routeros", "target": "mikrotik_routeros",
             "raw_text": CAPTURE_CRS310,
-            "port_rename_map": {"ether1": "uplink-to-core"},
+            "port_rename_map": {"Desktop": "uplink-to-core"},
         }).json()
         assert job["status"] == "completed", path
-        assert job["port_renames"] == {"ether1": "uplink-to-core"}
+        assert job["port_renames"] == {"Desktop": "uplink-to-core"}
         (line,) = [text for text in _find_lines(job) if "uplink-to-core" in text]
         assert line.startswith("set [ find default-name=ether1 ] name=uplink-to-core ")
         assert job["port_mapping_plan"] is None
 
     def test_with_both_devices_declared_the_hardware_moves(self, client: TestClient) -> None:
+        """Each port is looked up by the port of the target it was
+        paired with, and keeps the name the operator gave it."""
         job = client.post("/api/v1/migration/plan", json={
             "source": "mikrotik_routeros", "target": "mikrotik_routeros",
             "raw_text": CAPTURE_CRS310,
@@ -808,9 +814,23 @@ class TestAPortsFactoryName:
             "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
         }).json()
         assert job["status"] == "completed"
-        assert [line.split("default-name=")[1].split(" ")[0] for line in _find_lines(job)] == [
-            *(f"sfp-sfpplus{n}" for n in range(1, 9)), "sfp28-1", "sfp28-2",
-        ]
+        found = {}
+        for line in _find_lines(job):
+            lookup = re.search(r'find default-name=(\S+) \](?: name=("[^"]*"|\S+))?', line)
+            assert lookup is not None, line
+            found[lookup.group(1)] = (lookup.group(2) or "").strip('"') or None
+        assert found == {
+            "sfp-sfpplus1": "Desktop",
+            "sfp-sfpplus2": "Access Point",
+            "sfp-sfpplus3": "CLUSTER - PVENAS",
+            "sfp-sfpplus4": "PROD - PVENAS",
+            "sfp-sfpplus5": "CLUSTER - PVE5",
+            "sfp-sfpplus6": "PROD - PVE5",
+            "sfp-sfpplus7": "CLUSTER - PVE3",
+            "sfp-sfpplus8": "PROD - PVE3",
+            "sfp28-1": "UPLINKSFP",
+            "sfp28-2": None,  # the capture's sfp-sfpplus2, which has no name of its own
+        }
 
     def test_a_port_the_operator_named_goes_by_that_name_in_the_plan(
         self, client: TestClient,
@@ -904,9 +924,10 @@ vlan 1
    exit
 """
 
-#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
-#: config has an interface for ``lagg0`` and none for ``igb0`` or
-#: ``igb1``, and the parser makes no record for them.
+#: An OPNsense lagg.  Its members are NICs assigned to nothing (OPNsense
+#: adds no other to a lagg): the config has an interface for ``lagg0``
+#: and none for ``igb0`` or ``igb1``, and the parser gives each a
+#: record of its own.
 _OPNSENSE_LAGG = """<?xml version="1.0"?>
 <opnsense>
   <system>
@@ -975,13 +996,14 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert "10.0.0.1" not in job["rendered"]
         assert job["port_mapping_plan"]["overridden"] == ["core-a"]
 
-    def test_a_named_port_the_config_has_no_interface_for_is_reported(
+    def test_a_lagg_member_is_looked_up_by_its_hardware(
         self, client: TestClient,
     ) -> None:
         """The members of an OPNsense lagg are NICs assigned to
-        nothing: the config has no interface for them.  Named by an
-        entry, one is written into ``slaves=`` under a name no line
-        defines; that used to be ``completed``."""
+        nothing: the config has no interface for them, and the parser
+        gives each a record.  Named by an entry, one is looked up by
+        the hardware it was paired with.  (With no record it was
+        written into ``slaves=`` under a name no line defines.)"""
         request = {
             "source": "opnsense", "target": "mikrotik_routeros",
             "raw_text": _OPNSENSE_LAGG,
@@ -995,11 +1017,14 @@ class TestEveryPlacedPortIsFoundByItsHardware:
             **request, "port_rename_map": {"igb0": "up-a"},
         }).json()
         plan = job["port_mapping_plan"]
+        assert _find_lines(job) == [
+            "set [ find default-name=sfp-sfpplus1 ] name=up-a disabled=no",
+            "set [ find default-name=sfp-sfpplus2 ] disabled=no",
+        ]
         assert "slaves=up-a,sfp-sfpplus2" in job["rendered"]
-        assert plan["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
-        assert plan["off_target"] == []
-        assert job["status"] == "partial"
-        assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
+        assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
+        assert plan["target_hardware"] == {"igb0": "sfp-sfpplus1"}
+        assert job["status"] == "completed"
 
     def test_an_aoss_port_only_a_list_names(
         self, client: TestClient,
@@ -1027,13 +1052,39 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
         assert plan["target_hardware"] == {"1": "sfp-sfpplus1", "3": "sfp-sfpplus3"}
 
-    @pytest.mark.parametrize("name", ["my port", "a,b"])
-    def test_and_so_is_one_under_a_name_that_cannot_be_read_back(
-        self, client: TestClient, name: str,
+    def test_and_so_is_one_under_a_name_with_white_space(
+        self, client: TestClient,
     ) -> None:
-        """The member list is written unquoted, so a name with white
-        space or a comma in it is not read back whole.  The port is
-        reported all the same; this used to be ``completed``."""
+        """A name with white space in it is written in a string, on the
+        port's own line and in ``slaves=``, and read back whole."""
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "opnsense", "target": "mikrotik_routeros",
+            "raw_text": _OPNSENSE_LAGG,
+            "source_profile": "opnsense/Protectli-FW4B-IGB",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+            "port_rename_map": {"igb0": "my port"},
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert _find_lines(job) == [
+            'set [ find default-name=sfp-sfpplus1 ] name="my port" disabled=no',
+            "set [ find default-name=sfp-sfpplus2 ] disabled=no",
+        ]
+        assert 'slaves="my port,sfp-sfpplus2"' in job["rendered"]
+        assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
+        assert plan["target_hardware"] == {"igb0": "sfp-sfpplus1"}
+        assert job["status"] == "completed"
+
+    @pytest.mark.parametrize(("name", "written"), [
+        ("a,b", "slaves=a,b,sfp-sfpplus2"),
+        ("a b,c", 'slaves="a b,c,sfp-sfpplus2"'),
+    ])
+    def test_and_one_under_a_name_a_list_cuts_is_reported(
+        self, client: TestClient, name: str, written: str,
+    ) -> None:
+        """A comma parts two members, written bare or in a string, so a
+        name with one in it is not read back whole.  The port is
+        reported, though a line of its own finds its hardware; this
+        used to be ``completed``."""
         resp = client.post("/api/v1/migration/plan", json={
             "source": "opnsense", "target": "mikrotik_routeros",
             "raw_text": _OPNSENSE_LAGG,
@@ -1043,7 +1094,7 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         })
         assert resp.headers["X-Netcanon-Job-Status"] == "partial"
         job = resp.json()
-        assert f"slaves={name},sfp-sfpplus2" in job["rendered"]
+        assert written in job["rendered"]
         assert job["port_mapping_plan"]["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
         assert job["port_mapping_plan"]["off_target"] == []
 

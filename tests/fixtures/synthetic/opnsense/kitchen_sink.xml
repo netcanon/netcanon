@@ -196,20 +196,11 @@
       <ipaddrv6>fe80::1</ipaddrv6>
       <subnetv6>64</subnetv6>
     </opt2>
-    <!-- opt3 — physical interface participating in the LAG below.
-         The parser reverse-links lag_member_of when <laggs>/<lagg>
-         names this interface in <members>. -->
-    <opt3>
-      <enable>1</enable>
-      <if>em2</if>
-      <descr>LAG member 1</descr>
-    </opt3>
-    <!-- opt4 — physical interface participating in the LAG below. -->
-    <opt4>
-      <enable>1</enable>
-      <if>em3</if>
-      <descr>LAG member 2</descr>
-    </opt4>
+    <!-- No zone for em2 or em3: they are the members of the LAG
+         below, and OPNsense adds only an unassigned interface to a
+         LAGG ("Only unassigned interfaces can be added to LAGG",
+         docs.opnsense.org, Other Types).  The zones skip opt3/opt4,
+         as a config whose zones were deleted does. -->
     <!-- opt5 — disabled interface; <enable/> absent so parser sets
          enabled=False.  Description preserved for round-trip. -->
     <opt5>
@@ -296,16 +287,15 @@
       <maxleasetime>86400</maxleasetime>
     </lan>
   </dhcpd>
-  <!-- LAGs — one LACP lagg bundling em2 + em3 (the physical members
-       backing zones opt3/opt4).  Parser maps proto=lacp ->
-       CanonicalLAG.mode="active" and reverse-links members to
-       lag_member_of="lagg0" by matching CanonicalInterface.name.
+  <!-- LAGs — one LACP lagg bundling em2 + em3, two ports no zone
+       assigns.  Parser maps proto=lacp -> CanonicalLAG.mode="active"
+       and gives each member, named here alone, an interface record
+       with lag_member_of="lagg0".
 
-       Canonical interface names come from the <if> child of each
-       zone (see opnsense/parse.py::_parse_interface_zone_canonical),
-       so the LAG <members> list must reference physical port names
-       to drive the reverse-link — matching real OPNsense XML, which
-       stores BSD device names in <members>. -->
+       The LAG <members> list holds physical port names, the BSD
+       device names real OPNsense XML stores there, which are the
+       canonical interface names (a zone's <if> text, see
+       opnsense/parse.py::_parse_interface_zone_canonical). -->
   <laggs version="1.0.0">
     <lagg uuid="fakeuuid-lagg-0000-0000-000000000001">
       <laggif>lagg0</laggif>

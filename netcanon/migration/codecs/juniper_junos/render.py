@@ -73,6 +73,7 @@ from ..._derived_values import (
 from ..._derived_values import (
     review_comment as derived_review_comment,
 )
+from ..._one_value import ADDRESSES, one_value_tree
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -142,7 +143,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     from ...canonical.transforms import project_vlan_to_switchport
     project_vlan_to_switchport(tree)
 
-    out: list[str] = []
+    # A name or a text is written between quotes where it needs them;
+    # an address is never altered, so one that is not one word is left
+    # out and said (a static route whose next hop it is, whole).
+    # Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "Junos", addresses=ADDRESSES,
+    )
+
+    out: list[str] = [f"# {said}" for said in one_value_said]
 
     # --- system ---
     if tree.hostname:
@@ -180,7 +189,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # canonical happens to use a tagged form rather than a bare
         # crypt string.  Empty ``hashed_password`` falls through to
         # the bare ``class`` line below — Junos accepts that form
-        # as a console-only / no-password account.
+        # as a console-only / no-password account.  A TYPED password
+        # is refused here too: Junos takes one only at the prompt of
+        # ``plain-text-password``, and ``encrypted-password "<typed>"``
+        # made the typed string the hash (``_TARGET_ACCEPTS`` notes).
         if (
             user.hashed_password
             and not user.hashed_password.startswith("junos:")
@@ -223,8 +235,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             else:
                 # Foreign-source hash whose algorithm Junos can
                 # consume natively (sha512 -> $6$ / md5crypt -> $1$
-                # via Junos's commit-time hasher; plaintext is
-                # always emit-safe).  Strip the canonical
+                # via Junos's commit-time hasher).  Strip the canonical
                 # ``vendor:alg:`` prefix and emit just the payload.
                 # Unmigratable hashes were already short-circuited
                 # via the ``continue`` above.
@@ -1457,7 +1468,7 @@ def _emit_vrrp_groups_for_address(
             if value:
                 out.append(
                     f"{prefix} vrrp-group {group.group_id} "
-                    f"authentication-key {value}"
+                    f"authentication-key {_quote_if_needed(value)}"
                 )
         if group.description:
             out.append(

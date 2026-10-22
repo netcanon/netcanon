@@ -29,7 +29,9 @@ IPv4 Distributed Anycast Gateway.
   projection from the per-interface `switchport` form)
 - Static routes — default VRF **and** per-VRF (`ip route … vrf X`)
 - LAGs (`port-channel<N>` reconciled with cross-vendor names like
-  `ae<N>` / `Port-channel<N>` / `trk<N>`)
+  `ae<N>` / `Port-channel<N>` / `trk<N>`); `port-channel<N>.<M>` is a
+  sub-interface of the LAG, read as an interface and not as a LAG of
+  its own
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
 translatable with caveats:

@@ -1752,11 +1752,13 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # From (10, 0, 0, 0, 3, 20): the IOSv capture whose every line is
     # at column 0 is refused by the IOS-XE CLI parser now, and is no
     # longer among the captures (it is under `refused/`); two of its
-    # jobs had a name shared with a hardware port.
-    #
-    # From (8, 0, 0, 0, 3, 20): the EVPN leaf's `Loopback2`, the VTEP
-    # source beside `Loopback0`, was `lo2` onto Junos (+1).
-    "cisco_iosxe_cli": (8, 0, 0, 1, 3, 20),
+    # jobs had a name shared with a hardware port.  And from (8, 0, 0,
+    # 0, 3, 20): onto AOS-S, the umbrella capture's routes out `dhcp`
+    # are left out under a review line, AOS-S having no such next hop,
+    # and the job is `partial` for them before any name is checked.
+    # And the EVPN leaf's `Loopback2`, the VTEP source beside
+    # `Loopback0`, was `lo2` onto Junos (+1 logical name dropped).
+    "cisco_iosxe_cli": (8, 0, 0, 1, 3, 19),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     "cisco_iosxr": (4, 0, 13, 1, 1, 2),
@@ -1774,7 +1776,15 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # instances each have one no longer put them on one loopback, and
     # list only the names left as they were (-2 several, +2 left).
     "juniper_junos": (0, 0, 8, 0, 5, 4),
-    "mikrotik_routeros": (0, 0, 0, 0, 21, 7),
+    # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
+    # continued is read whole, so the CRS310 capture's ports are
+    # called by the names the operator gave them (`Desktop`,
+    # `Access Point`).  No classifier reads such a name, so each is
+    # left as the source has it and listed; and `ether1` and
+    # `sfp-sfpplus1`, which the translator had put on one target
+    # port, are not in the config to be put there.  Three jobs that
+    # listed both now list the names alone.
+    "mikrotik_routeros": (0, 0, 0, 0, 24, 4),
     "opnsense": (4, 0, 0, 0, 23, 1),
     "vyos": (17, 0, 0, 0, 0, 0),
 }
@@ -1838,8 +1848,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 5, 65, 46]
-        assert sum(by_reason) == 217
+        assert by_reason == [40, 0, 61, 5, 68, 42]
+        assert sum(by_reason) == 216
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

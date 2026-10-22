@@ -440,6 +440,42 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # VLAN ids are written ``VLAN-<id>``, and a name outside the characters
 # Juniper's page gives (``DEFAULT_VLAN``) is written as it is -- and no cell's
 # round trip shows it; the YAML's reason says so.
+#
+# When the RouterOS renderer began writing a value with white space in it as
+# one string, two entries rose by one and came back down:
+# cisco_iosxe_cli__mikrotik_routeros (`secret=7 <blob>` had read back as `7`)
+# is at 1 again because a type-7 key is now refused on RouterOS, the server
+# written with no secret and the key gone in the round trip; and
+# vyos__mikrotik_routeros (`servers=time1.vyos.net { },...` had read back as
+# one server) is at 0 again because the VyOS parser reads `server <host> { }`
+# as the node it is, and the YAML declares `ntp_servers` good.
+#
+# And four more, each by one, for ``radius_servers``: aruba_aoss__arista_eos
+# (2 to 3), aruba_aoss__cisco_iosxe_cli (3 to 4), aruba_aoss__fortigate_cli
+# (2 to 3) and aruba_aoss__opnsense (6 to 7).  An AOS-S ``encrypted-key
+# "<blob>"`` is a form only AOS-S reads, and since 2026-10 it is refused on
+# every other target (the server kept, with a review line): the field is
+# lossy on every pair from AOS-S.  The only committed AOS-S input with RADIUS
+# is the kitchen sink, whose keys are written as typed, so every cell
+# preserves the key.  Until then the parser had read the blob as the secret,
+# and the three pairs declared ``good``; on the fourth the key was lost on
+# the way back (the FortiGate parser put a typed secret behind
+# ``fortios:``), which no longer happens, and the loss that remains there
+# -- a non-default acct-port -- no capture shows either.  The loss is real
+# and pinned by ``tests/unit/migration/test_a_radius_key_says_its_form.py``;
+# the YAML reasons say so.
+#
+# And three down, each by one, for ``vlans``: aruba_aoss__cisco_iosxe_cli
+# (4 to 3), cisco_iosxe__cisco_iosxe_cli (2 to 1) and opnsense__cisco_iosxe_cli
+# (2 to 1).  A VLAN name that holds white space is written on IOS-XE as one
+# word, with a review line, and the VLAN list is compared whole: the loss
+# each of the three declared is now what their cells show.
+#
+# And fortigate_cli__opnsense down by one (5 to 4), for
+# ``interfaces[].description``: a member of an aggregate has a record of its
+# own, written onto OPNsense in its lagg's ``<members>`` alone, so its
+# ``set alias`` is not written -- the loss the YAML now names, which the
+# synthetic kitchen sink's two members show.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -450,15 +486,15 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__juniper_junos": 4,
     "arista_eos__mikrotik_routeros": 1,
     "arista_eos__opnsense": 6,
-    "aruba_aoss__arista_eos": 2,
+    "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
     "aruba_aoss__cisco_iosxe_cli": 3,
-    "aruba_aoss__fortigate_cli": 2,
+    "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
-    "aruba_aoss__opnsense": 6,
+    "aruba_aoss__opnsense": 7,
     "cisco_iosxe__aruba_aoss": 1,
-    "cisco_iosxe__cisco_iosxe_cli": 2,
+    "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
     "cisco_iosxe__juniper_junos": 1,
     "cisco_iosxe__opnsense": 2,
@@ -475,7 +511,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 5,
     "fortigate_cli__mikrotik_routeros": 2,
-    "fortigate_cli__opnsense": 5,
+    "fortigate_cli__opnsense": 4,
     "juniper_junos__arista_eos": 2,
     "juniper_junos__aruba_aoss": 2,
     "juniper_junos__cisco_iosxe": 2,
@@ -492,7 +528,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "mikrotik_routeros__opnsense": 5,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,
-    "opnsense__cisco_iosxe_cli": 2,
+    "opnsense__cisco_iosxe_cli": 1,
     "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 5,
     "opnsense__mikrotik_routeros": 3,

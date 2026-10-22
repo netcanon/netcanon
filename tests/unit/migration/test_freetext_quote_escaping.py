@@ -12,7 +12,12 @@ did not:
   via ``shlex.split(posix=True)``.
 * ``aruba_aoss`` — emitted ``name "Link "A""`` and the ``"?([^"\\n]+)"?``
   name regex truncated at the first inner quote.  Fixed render-side
-  (``_esc``) + parse-side (widened regex + ``_unquote`` unescape).
+  (``_esc``) + parse-side (widened regex + ``_unquote`` unescape).  That
+  fix wrote ``\\"``, which no HPE page documents (only ``banner motd``
+  takes escape characters, Basic Operation Guide 16.10 p.11), so a
+  ``"`` in an AOS-S label or description is now written ``'`` and said
+  (``_one_value.one_value_tree``, ``no_escape``) -- pinned in
+  :class:`TestAossHasNoEscape` below, out of the round-trip table.
 * ``mikrotik_routeros`` — ``_escape`` escaped ``"`` but NOT ``\\``
   (CODEC-3), and ``_KV_RE`` / ``_parse_kv`` couldn't span an escaped
   quote.  Fixed both sides.
@@ -22,9 +27,9 @@ double-quote in a value string *even when escaped* (vyos.dev/T1246), so
 the correct fix there is sanitisation, not escaping — tracked separately.
 
 Each device documentedly uses ``\\`` as the in-quote escape introducer
-(Junos ``display set``, FortiOS CLI, RouterOS scripting, AOS-S variable
-files), so the rendered output is deployment-valid, and the matched
-parse-side unescape keeps the netcanon round-trip byte-stable.
+(Junos ``display set``, FortiOS CLI, RouterOS scripting), so the rendered
+output is deployment-valid, and the matched parse-side unescape keeps the
+netcanon round-trip byte-stable.
 """
 from __future__ import annotations
 
@@ -47,7 +52,6 @@ pytestmark = pytest.mark.unit
 # (codec factory, description-length cap the codec applies, or None)
 _CODECS = [
     pytest.param(FortiGateCLICodec, 25, id="fortigate_cli"),
-    pytest.param(ArubaAOSSCodec, None, id="aruba_aoss"),
     pytest.param(MikroTikRouterOSCodec, None, id="mikrotik_routeros"),
 ]
 
@@ -98,18 +102,44 @@ class TestFreeTextRoundTrip:
         assert 'say "hi"' not in out
 
 
-class TestVlanNameRoundTrip:
-    """aruba_aoss quotes the VLAN *name* free-text field too, and (unlike
-    mikrotik, which stores the human label on ``vlan.description`` and uses
-    the iface name as ``vlan.name`` by design) round-trips it verbatim."""
+class TestAossHasNoEscape:
+    """AOS-S quotes a VLAN name and a description and documents no escape
+    inside the quotes, so a ``"`` is written ``'``, and the output says so
+    in a review line for each place.  A value with no quote round-trips
+    verbatim, white space and all."""
 
-    def test_aoss_vlan_name_with_quote_round_trips(self):
-        intent = CanonicalIntent(
+    @staticmethod
+    def _render(desc: str, vlan_name: str) -> str:
+        return ArubaAOSSCodec().render(CanonicalIntent(
             hostname="sw1",
-            vlans=[CanonicalVlan(id=10, name='the "core" vlan')],
-        )
-        out = ArubaAOSSCodec().render(intent)
+            interfaces=[CanonicalInterface(name="1", description=desc)],
+            vlans=[CanonicalVlan(id=10, name=vlan_name)],
+        ))
+
+    def test_a_quote_is_written_as_an_apostrophe_and_said(self):
+        out = self._render('say "zqhi"', 'the "zqcore" vlan')
+        assert "   name \"say 'zqhi'\"" in out
+        assert "   name \"the 'zqcore' vlan\"" in out
+        assert '\\"' not in out
+        reviews = [
+            ln for ln in out.splitlines()
+            if ln.startswith(";") and "review:" in ln
+        ]
+        assert len(reviews) == 2
+        assert any(ln.startswith("; the name of VLAN 10 ") for ln in reviews)
+        assert any(
+            ln.startswith("; the description of interface 1 ") for ln in reviews)
+        # A review line names the place, never the value.
+        assert not any("zq" in ln for ln in reviews)
         reparsed = ArubaAOSSCodec().parse(out)
-        v10 = next((v for v in reparsed.vlans if v.id == 10), None)
-        assert v10 is not None
-        assert v10.name == 'the "core" vlan'
+        assert reparsed.interfaces[0].description == "say 'zqhi'"
+        assert [v.name for v in reparsed.vlans if v.id == 10] == [
+            "the 'zqcore' vlan"]
+
+    def test_a_value_with_no_quote_round_trips(self):
+        out = self._render("plain description", "the core vlan")
+        assert "review:" not in out
+        reparsed = ArubaAOSSCodec().parse(out)
+        assert reparsed.interfaces[0].description == "plain description"
+        assert [v.name for v in reparsed.vlans if v.id == 10] == [
+            "the core vlan"]

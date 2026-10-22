@@ -11,6 +11,13 @@ dispositions were resolved through the audit's own `actual_disposition()`
 rather than inferred from the drift shape, so this file and the ratchet agree
 by construction.
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description and MTU are no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` and `mtu` predate that change; the
+> paired expectation YAML has the current measure.
+
 - Fixture cells: **7**
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-08-25
@@ -280,6 +287,12 @@ ifType at all — 157 of 157 records come back empty. The YAML records `lossy`
 (the record survives) and flags the gap.
 
 ## Identity: roles and credentials
+
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — no AOS-CX account reaches OPNsense.**  Two changes.  OPNsense takes a password into its config only as a hash, so a password as typed is now refused there, where up to 0.7.7 it was written into `<password>` as it stood, which opened nothing; and the AOS-CX parser now reads `password ciphertext <value>` by its keyword, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was is ciphertext, not a password as typed.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  Any statement below that an AOS-CX account arrives describes the code before these changes.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__opnsense.yaml`.
+
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **1 of 7** local accounts arrive across the 6 cells that populate users; 6 are refused for a secret OPNsense cannot consume (6 AOS-CX `AQB` device-keyed ciphertext), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__opnsense.yaml`.
 
 **Roles are remapped, not lost.** The AOS-CX `administrators` role renders to
 the OPNsense `admins` group and re-parses as `admin`; `operators` maps to

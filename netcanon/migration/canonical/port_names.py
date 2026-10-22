@@ -393,6 +393,8 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
         yield iface.name
         if iface.lag_member_of:
             yield iface.lag_member_of
+        if iface.vlan_parent:
+            yield iface.vlan_parent
         # VRRP track-interface references are port names too.
         for grp in iface.vrrp_groups:
             yield from grp.track_interfaces
@@ -417,10 +419,11 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
 def _only_referred_to(intent: CanonicalIntent) -> set[str]:
     """The names *intent* holds only where it REFERS to an interface:
     a static route's or a DHCP pool's interface, a VRRP track entry,
-    a VXLAN source -- and in no other place the sweep visits.
+    a VXLAN source, the parent a VLAN interface rides on -- and in no
+    other place the sweep visits.
 
     Counted, not listed from the other side: a name is one of these
-    when every place :func:`_swept_names` finds it is one of the four
+    when every place :func:`_swept_names` finds it is one of those
     named here.  So a field added to the sweep later counts as a
     place the config CONFIGURES a name, until this function is told
     otherwise -- the reading that reports more, not less."""
@@ -428,6 +431,8 @@ def _only_referred_to(intent: CanonicalIntent) -> set[str]:
     for iface in intent.interfaces:
         for grp in iface.vrrp_groups:
             referred.update(grp.track_interfaces)
+        if iface.vlan_parent:
+            referred[iface.vlan_parent] += 1
     referred.update(r.interface for r in intent.static_routes if r.interface)
     referred.update(p.interface for p in intent.dhcp_servers if p.interface)
     referred.update(v.source_interface for v in intent.vxlan_vnis if v.source_interface)
@@ -468,6 +473,8 @@ def rewrite_port_names(
         iface.name = resolve(iface.name)
         if iface.lag_member_of:
             iface.lag_member_of = resolve(iface.lag_member_of)
+        if iface.vlan_parent:
+            iface.vlan_parent = resolve(iface.vlan_parent)
         # (#3) Rewrite each VRRP group's track-interface list so failover
         # tracking survives a rename (a stale name silently disables it).
         for grp in iface.vrrp_groups:
@@ -930,6 +937,7 @@ def translate_port_names(  # noqa: C901
 
         * ``intent.interfaces[].name``
         * ``intent.interfaces[].lag_member_of``
+        * ``intent.interfaces[].vlan_parent``
         * ``intent.interfaces[].vrrp_groups[].track_interfaces[]``
         * ``intent.vlans[].tagged_ports[]``
         * ``intent.vlans[].untagged_ports[]``
@@ -1432,6 +1440,7 @@ def translate_port_names(  # noqa: C901
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
     if user_dropped:
+        warnings.extend(_parents_gone(intent, user_dropped))
         _strip_dropped_ports(intent, user_dropped)
 
     # Resolve every name BEFORE anything is rewritten, in the order the
@@ -1446,6 +1455,7 @@ def translate_port_names(  # noqa: C901
     for name in list(_swept_names(intent)):
         resolve(name)
     if auto_dropped:
+        warnings.extend(_parents_gone(intent, auto_dropped))
         _strip_dropped_ports(intent, auto_dropped)
 
     # Rewrite everywhere a port name might be referenced.  Order doesn't
@@ -1680,6 +1690,21 @@ def translate_port_names(  # noqa: C901
     )
 
 
+def _parents_gone(intent: CanonicalIntent, dropped: set[str]) -> list[str]:
+    """A warning for each VLAN interface that stays while the
+    interface its config says it rides on (``vlan_parent``) is
+    dropped.  :func:`_strip_dropped_ports` clears the reference, and a
+    renderer that has to name a parent then chooses one itself: said
+    here, so that the choice is not made in silence."""
+    return [
+        f"port_rename: {iface.name!r} rides on {iface.vlan_parent!r}, which "
+        f"is not in the output; the target codec chooses the interface it "
+        f"rides on there -- check it"
+        for iface in intent.interfaces
+        if iface.vlan_parent in dropped and iface.name not in dropped
+    ]
+
+
 def _strip_dropped_ports(
     intent: CanonicalIntent, dropped: set[str]
 ) -> None:
@@ -1689,7 +1714,8 @@ def _strip_dropped_ports(
 
         * ``intent.interfaces`` — interfaces whose name is dropped
           are deleted outright.  Surviving interfaces get their
-          ``lag_member_of`` cleared if the referenced LAG is dropped.
+          ``lag_member_of`` cleared if the referenced LAG is dropped,
+          and their ``vlan_parent`` if the interface it names is.
         * ``intent.vlans[].tagged_ports`` / ``untagged_ports`` —
           dropped names filtered out.
         * ``intent.lags`` — LAGs whose name is dropped are deleted;
@@ -1716,6 +1742,8 @@ def _strip_dropped_ports(
     for iface in intent.interfaces:
         if iface.lag_member_of in dropped:
             iface.lag_member_of = None
+        if iface.vlan_parent in dropped:
+            iface.vlan_parent = None
         # (#3) Drop dangling VRRP track-interface references.
         for grp in iface.vrrp_groups:
             grp.track_interfaces = [

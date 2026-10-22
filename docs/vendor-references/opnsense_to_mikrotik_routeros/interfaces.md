@@ -132,8 +132,10 @@ interface=etherN``.  Neither codec currently wires this into
 
 ### lag_member_of
 
-OPNsense ``<laggs>/<lagg>/<members>opt3,opt4</members>`` parsing
-back-links each member to its parent ``<laggif>`` name.  RouterOS
+OPNsense ``<laggs>/<lagg>/<members>igb2,igb3</members>`` parsing
+gives each member -- a device in no zone, since OPNsense adds only an
+unassigned interface to a LAGG -- a record of its own that names its
+parent ``<laggif>``.  RouterOS
 ``/interface bonding name=bond1 slaves=ether3,ether4`` carries the
 back-pointer in a different shape (``slaves=`` parameter on the
 parent rather than ``<members>`` element).  Both codecs round-trip
