@@ -709,6 +709,16 @@ class TestEveryExpanderCountsFirst:
         exc = _refused("juniper_junos", text, TINY)
         assert (exc.kind, exc.exact, exc.asked) == ("words", False, 3 + 40 * 102)
 
+    def test_a_set_line_list_is_counted_in_words(self) -> None:
+        """A set line's bracket list is one statement a value, each
+        with the line's path: the same words as the block form's."""
+        path = " ".join(f"w{n}" for n in range(100))
+        text = "set system host-name T\nset " + path + " key [ " + " ".join(
+            f"v{n}" for n in range(40)) + " ]\n"
+        exc = _refused("juniper_junos", text, TINY)
+        assert (exc.kind, exc.exact, exc.asked) == ("words", False, 40 * 102)
+        assert "words of set commands written out from a bracket list" in str(exc)
+
     def test_vyos_set_lines_are_counted_before_written(self) -> None:
         exc = _refused("vyos", vyos_set_lines(40, 40), TINY)
         assert (exc.kind, exc.exact) == ("text", False)

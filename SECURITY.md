@@ -705,7 +705,7 @@ VLANs" against a device.
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
 | `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
-| `words` | words of set commands written out from block-form Junos | 250,000 | 4,000,000 | 16,000,000 |
+| `words` | words of set commands written out from block-form Junos, or from a Junos set line's bracket list | 250,000 | 4,000,000 | 16,000,000 |
 | `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
 | `seconds` | the time one request may take | 20 | 120 | 600 |
 
@@ -778,7 +778,8 @@ made.  Block-form Junos writes the whole path again for every statement
 under it (a 5,000-word path over 790 statements, 43 KB, was 295 MB and five
 seconds): counted in words -- the `deactivate` line written for a statement
 marked `inactive:`, and the line that stands for an empty block, with the
-rest.  A VyOS set line becomes nested blocks, each
+rest.  So is a Junos set line's bracket list (`vlan members [ A B ]`), a
+statement a value with the line's path again.  A VyOS set line becomes nested blocks, each
 indented once more, so what a line becomes grows with the square of its
 depth: counted in characters; and a set line nested more than 64 levels deep
 is a parse failure, where past about a thousand it was an unexpected error.
