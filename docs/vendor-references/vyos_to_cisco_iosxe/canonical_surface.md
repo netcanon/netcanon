@@ -242,8 +242,9 @@ records with their descriptions and IPv4 addresses intact, but
 the target and is untagged.
 
 There is no expectation key for `interfaces[].dot1q_vlan`, so this loss is
-recorded here rather than in the YAML. It is a *symmetric* declared gap —
-**both** codecs declare `/interfaces/interface/dot1q-vlan` unsupported — so it
+recorded here rather than in the YAML. It is a declared gap of the target —
+`cisco_iosxe` declares `/interfaces/interface/dot1q-vlan` unsupported (VyOS
+sets it, and declares it lossy for its own render) — so it
 is not a `cisco_iosxe` regression; it is a canonical-surface gap that the
 `cisco_iosxe_cli` sibling closes (that codec declares the path supported).
 

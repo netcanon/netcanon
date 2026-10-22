@@ -93,6 +93,15 @@ translatable with caveats:
   `encrypted-password` blobs (re-key cross-vendor); VyOS declares a
   single config-wide `engineid`, which the codec maps onto every v3
   user.
+- **`/interfaces/interface/dot1q-vlan`** — a routed sub-interface of
+  another vendor (`encapsulation dot1Q 200` under
+  `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is a
+  `vif` of its TAG under its port: `eth1.200`, `vif 200`.  Its unit
+  number is not kept where it is not the tag, and two units of one
+  port with one tag are one `vif`, which the job lists as two names
+  on one (`partial`).  Only the port translator makes that name;
+  without it a sub-interface of another vendor's name is written
+  under that name with no tag, beneath a `/* review */` line.
 - **`/interfaces/interface/config/type`** — inferred from the name
   shape (`ethN` → ethernetCsmacd, `lo`/`dumN` → softwareLoopback,
   `bondN` → ieee8023adLag); best-effort.
@@ -202,6 +211,16 @@ real set-form) capture are welcomed via
   config again.  ⚠️ Up to 0.7.7 a `vif` under a **bond** was not
   read at all, and a bond printed in the block form had no members:
   translate a config with a bond again too.
+- **Onto VyOS a sub-interface is named by its tag.**  `vif 200` is
+  VLAN 200 whatever the source called the unit, so a Junos `unit
+  100 vlan-id 200` is `eth1.200`.  An entry in `port_rename_map`
+  that names such a unit `eth1.100` gives it VLAN 100: the job warns
+  and the output has a `/* review */` line before the `vif`.  A
+  Q-in-Q unit is a `vif` of its outer tag, its inner tag listed as a
+  loss, so the units of one service VLAN on a port are one name, which
+  the job lists.  ⚠️ Up to 0.7.7 every such unit was written with its
+  unit number, a VLAN it is not tagged with; translate such a config
+  again.
 - **`protocols bgp` / `protocols ospf` are SHARED with Junos.**  Both
   VyOS and Junos use `set protocols …` — the probe disambiguates by
   config shape, not by that keyword alone.  Pick the right vendor in

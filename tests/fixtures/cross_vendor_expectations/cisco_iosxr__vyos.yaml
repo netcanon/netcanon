@@ -314,10 +314,15 @@ per_field_expectation:
       disappearance.
       One related measurement, same mechanism and NOT independent
       corroboration: the matching `interfaces[].dot1q_vlan` attribute also
-      empties on its 4 populated records (35, 35, 100, 200 -> null),
-      because vyos declares `/interfaces/interface/dot1q-vlan` unsupported
-      (ship-before-wire, GAP 7).  So the tag is lost on both mounts at
-      once.  Re-create each dot1q sub-interface as a VyOS `vif` by hand.
+      empties on its 4 populated records (35, 35, 100, 200 -> null).
+      vyos declares `/interfaces/interface/dot1q-vlan` lossy: a vif's
+      number IS its tag, and only the port translator names a
+      sub-interface `<port>.<tag>` under a VyOS port.  The mesh's bare
+      pipeline translates no port names, so each sub-interface is written
+      under its IOS-XR name with no tag, beneath a `/* review */` line
+      that says so, and the tag is lost on both mounts at once.  Through
+      the plan path (with its port translated) each is a `vif` of its tag
+      on its port.
     references: [iosxr-vyos-surface]
 
   "vlans[].name":

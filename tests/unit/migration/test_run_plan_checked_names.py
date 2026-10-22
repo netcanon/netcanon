@@ -1278,7 +1278,7 @@ _SETTLED_BY = {
 _OR_DEVICES = " Or declare both devices, to pair ports by position."
 _DEVICES_FOR_SOME = (
     " Declaring both devices pairs the hardware ports among these by "
-    "position; the names that are not hardware ports need an entry either way."
+    "position; the other names need an entry either way."
 )
 
 
@@ -1297,8 +1297,8 @@ class TestWhatTheJobSays:
             "each: a name of its own, or null, for all but one of the names "
             "that share one; a target name for a dropped name, or null to "
             "say it is to go. Declaring both devices pairs the hardware "
-            "ports among these by position; the names that are not hardware "
-            "ports need an entry either way."
+            "ports among these by position; the other names need an entry "
+            "either way."
         )
 
     def test_an_entry_for_each_settles_it(self) -> None:
@@ -1792,7 +1792,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # (`lo0.2` is `Loopback2`), so the two captures whose routing
     # instances each have one no longer put them on one loopback, and
     # list only the names left as they were (-2 several, +2 left).
-    "juniper_junos": (0, 0, 8, 0, 5, 4),
+    # And onto VyOS a sub-interface is named by its tag and
+    # `/interfaces/interface/dot1q-vlan` is lossy where it was
+    # unsupported: the EVPN leaf onto VyOS had been `partial` for
+    # that path alone; its `fxp0`, which VyOS has no name for,
+    # holds it (+1 hardware port dropped).
+    "juniper_junos": (0, 0, 9, 0, 5, 4),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -1849,11 +1854,16 @@ def _reason(job: MigrationJob) -> int:
 
 def _a_port_is_among(job: MigrationJob) -> bool:
     """A hardware port is among what *job* lists: what a pair of
-    declared devices would have something to decide about."""
+    declared devices would have something to decide about.  Not
+    two sub-interfaces of one port on one name (onto VyOS, two units
+    with one tag): each goes where its port goes, and a pairing
+    sends both to one port."""
     hardware = set(job.source_ports)
     listed = [*job.unresolved_ports, *job.untranslated_ports]
     for names in job.fused_ports.values():
-        listed.extend(names)
+        on = [re.sub(r"\.[0-9]+$", "", name) for name in names]
+        if len(set(on)) == len(on):
+            listed.extend(names)
     return bool(hardware.intersection(listed))
 
 
@@ -1865,8 +1875,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 5, 68, 44]
-        assert sum(by_reason) == 218
+        assert by_reason == [40, 0, 62, 5, 68, 44]
+        assert sum(by_reason) == 219
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

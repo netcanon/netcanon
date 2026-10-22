@@ -292,11 +292,33 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
         btype, bname = _vyos_type_and_name(name)
         lines.append(f"    {btype} {bname} {{")
         iface = parents[name]
+        if iface is not None and iface.dot1q_vlan is not None:
+            # A tag on what is no vif: VyOS has no tag but a vif's
+            # number, and this block carries none.  (A sub-interface
+            # of another vendor's name, which only the port
+            # translator makes a VyOS name of, or an entry that
+            # named it so.)
+            lines.append("        " + _review(
+                f"review: the source config tags this "
+                f"interface {iface.dot1q_vlan}; on VyOS a tag is a vif "
+                f"of its port, and this block carries none"
+            ))
         if iface is not None:
             lines.extend(_iface_body(iface, "        "))
         if btype == "bonding":
             lines.extend(_bond_extra(lag_by_name.get(name), "        "))
         for vid, viface in sorted(vifs.get(name, []), key=lambda t: t[0]):
+            tag = viface.dot1q_vlan
+            if tag is not None and tag != vid:
+                # A vif's number is its tag, and the tree holds
+                # another: an operator's entry named the
+                # sub-interface so (the translator names one by its
+                # tag).  Written as it was named, and said.
+                lines.append("        " + _review(
+                    f"review: the source config tags this "
+                    f"sub-interface {tag}, and a vif's number is its "
+                    f"VLAN: it carries {vid}"
+                ))
             lines.append(f"        vif {vid} {{")
             lines.extend(_iface_body(viface, "            "))
             lines.append("        }")

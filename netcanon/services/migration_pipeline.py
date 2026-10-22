@@ -1210,7 +1210,9 @@ def _names_message(
     Declaring both devices is offered only where it would settle
     something that is listed.  The pairing is of hardware ports: it
     gives each a port of its own, and does nothing for two loopbacks
-    on one loopback or a tunnel the target has no form for -- a job
+    on one loopback, for two sub-interfaces of ONE port that share a
+    name (onto VyOS, where a sub-interface is named by its tag, two
+    units with one tag), or for a tunnel the target has no form for -- a job
     with both devices declared renders those the same and does not
     hold for them, so sending an operator there for them would be
     sending them to a status that says less.  Where some of what is
@@ -1224,7 +1226,19 @@ def _names_message(
         hardware: ``MigrationJob.source_ports`` -- which of the
             names are hardware ports.
     """
+    from ..migration.canonical.port_names import split_unit
+
     ports = set(hardware)
+
+    def paired_apart(names: list[str]) -> bool:
+        """The pairing would give each of *names* a name of its
+        own: one of them is a hardware port, and no two are units of
+        one port -- a unit goes where its port goes, so two units of
+        one port go to one port, whether or not the config has a
+        line for the port itself."""
+        on = [(split_unit(name) or (name,))[0] for name in names]
+        return bool(ports.intersection(names)) and len(set(on)) == len(on)
+
     said: list[str] = []
     settled_by: list[str] = []
     if fused:
@@ -1273,20 +1287,19 @@ def _names_message(
     )
     # What a pair of declared devices would decide, and what it would not.
     for_devices = (
-        any(ports.intersection(names) for names in fused.values())
+        any(paired_apart(names) for names in fused.values())
         or bool(dropped_ports)
         or bool(ports.intersection(untranslated))
     )
     beyond_devices = (
-        any(not ports.intersection(names) for names in fused.values())
+        any(not paired_apart(names) for names in fused.values())
         or bool(dropped_others)
         or any(name not in ports for name in untranslated)
     )
     if for_devices and beyond_devices:
         said.append(
             "Declaring both devices pairs the hardware ports among these by "
-            "position; the names that are not hardware ports need an entry "
-            "either way."
+            "position; the other names need an entry either way."
         )
     elif for_devices:
         said.append("Or declare both devices, to pair ports by position.")

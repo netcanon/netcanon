@@ -346,9 +346,13 @@ never emits them and there is nothing for FortiGate to lose:
 
 `/dhcp-servers/pool` · `/radius-servers/server/host` ·
 `/radius-servers/server/key` · `/vlans/vlan/id` · `/anycast-gateway-mac` ·
-`/interfaces/interface/dot1q-vlan` ·
 `/interfaces/interface/vrrp-groups/group/*` ·
 `/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
+
+`/interfaces/interface/dot1q-vlan` is not among them: `vyos` declares it
+lossy (for its render of another vendor's sub-interface, a `vif` of its
+tag), and the parser does set it — `eth1.100` and `eth1.200` of the
+kitchen sink carry tags 100 and 200.
 
 `raw_sections` is a near-miss worth naming: VyOS declares
 `/system/raw-sections/version-banner` **lossy**, but the reason states the

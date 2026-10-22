@@ -888,7 +888,15 @@ tests use these exclusively — never CSS classes or element structure.  See
   still fails the job in those two renderers.  A unit is read as text, and
   across vendors one of more than ten digits (`UNIT_MAX_DIGITS`) is
   not sent after its port: no longer run of digits reaches another
-  vendor's renderer by this rule.
+  vendor's renderer by this rule.  And where the target's name IS
+  what the source states apart from it -- a VyOS `vif` number is its
+  802.1Q tag -- the name a rule sends is that, not the source's
+  number: sent with its unit, a Junos `unit 100 vlan-id 200` was
+  `vif 100`, VLAN 100, under a matrix that said only that the tag
+  was not wired.  The codec says so (`units_are_named_by_their_tag`),
+  the translator names such a unit by its tag, and two units with
+  one tag are then one name, which is said; so is an entry that
+  names another number.
   **And a name formatted alone cannot say what the target's name for
   it depends on.**  Junos has one loopback interface, `lo0`: its unit
   0 is the global table's loopback, and each routing instance takes a

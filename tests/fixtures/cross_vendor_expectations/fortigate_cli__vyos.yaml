@@ -329,9 +329,11 @@ per_field_expectation:
       render's vif nesting keys off a parent name matching `ethN`, so the
       FortiGate dotted children `agg1.100` and `port4.300` are emitted as
       flat `ethernet agg1.100` blocks instead.  And the 802.1Q tag itself
-      has nowhere to go regardless: BOTH codecs declare
-      `/interfaces/interface/dot1q-vlan` unsupported.  The migrated box ends
-      up with an interface named after a VLAN that is not on a VLAN.
+      has nowhere to go regardless: the fortigate_cli parser keeps a VLAN
+      interface's tag on its VLAN record, never as a sub-interface's own
+      tag (`dot1q_vlan`, from which vyos writes a `vif`), and the VLAN
+      record is what vyos drops.  The migrated box ends up with an
+      interface named after a VLAN that is not on a VLAN.
       Recorded `unsupported` rather than `lossy` because a vanished record
       is not lossy (#436): `lossy` warns and stays compatible, which would
       badly understate losing the whole VLAN database of an edge firewall.
