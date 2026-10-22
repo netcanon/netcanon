@@ -144,15 +144,16 @@ per_field_expectation:
       on the RouterOS side is a build task, not a migration one.
     references: [vyos-mikrotik-surface]
 
-  # -- Interfaces -- inventory intact, three attributes affected -------------
+  # -- Interfaces -- inventory intact, one attribute affected ----------------
   #
   # The measured record count is the headline: 56 interface records across
   # the 13 cells, 56 after the round-trip, with identical name sets on
   # every cell.  VyOS kernel-style names (`eth0`), dummy interfaces
   # (`dum0`), the loopback (`lo`), the LACP bundle (`bond0`) and even the
   # dot-notation sub-interfaces (`eth1.100`) all come back — the last of
-  # those via their `/ip address` row rather than an `/interface` stanza,
-  # which is what the description and admin-state entries below are about.
+  # those as a VLAN interface on their port (`/interface vlan add
+  # interface=eth1 name=eth1.100 vlan-id=100`), with their description and
+  # admin state.
   # Nothing in this block is a knock-on effect of a vanishing parent.
 
   "interfaces[].name":
@@ -168,57 +169,30 @@ per_field_expectation:
     references: [vyos-mikrotik-surface]
 
   "interfaces[].description":
-    disposition: lossy
-    reason: >
-      Drifts on 1 of 56 interface records, on one cell
-      (`kitchen_sink.conf`): `eth1.100`'s `tenant vlan 100` returns empty
-      while the other 14 populated descriptions round-trip intact as
-      RouterOS `comment="..."`.  Both matrices declare
-      `/interfaces/interface/config/description` supported, so this is a
-      real per-attribute loss and not a declared gap.
-      The cause is a filter mismatch in the RouterOS renderer, verified by
-      reading the render text: an interface is EXCLUDED from
-      `/interface ethernet` by the permissive `_looks_like_vlan_iface()`
-      (any name with a dot followed by digits) but INCLUDED in
-      `/interface vlan` only by the strict `_is_vlan_name()` (`^vlan\d`)
-      or `interface_type == "ianaift:l3ipvlan"`.  A VyOS `eth1.100`
-      matches the exclusion, fails both inclusions — vyos populates
-      `interface_type` on no record at all — and so gets no `/interface`
-      stanza of any kind, surviving only as an
+    disposition: good
+    note: >
+      Preserved on 56 of 56 records: every populated description
+      round-trips as RouterOS `comment="..."`, `eth1.100`'s `tenant vlan
+      100` on `kitchen_sink.conf` included.  A dot-notation sub-interface
+      is a VLAN interface on its port (`/interface vlan add interface=eth1
+      name=eth1.100 vlan-id=100 comment="tenant vlan 100"`).  Up to 0.7.7
+      it got no `/interface` stanza of any kind, surviving only as an
       `/ip address add ... interface=eth1.100` row that carries no
-      `comment=`.
-      This is NOT the VyOS quote-rewrite (vyos.dev/T1246): that alters
-      description punctuation when vyos is the TARGET, and here vyos is
-      the SOURCE.  The string is not re-punctuated, it is gone in full.
-      This and `interfaces[].enabled` are ONE mechanism, not two
-      independent findings — neither corroborates the other, and this
-      entry is here because the attribute is measured on the description,
-      not because admin state also drifts.
+      `comment=`, and the description was gone in full.  Both matrices
+      declare `/interfaces/interface/config/description` supported.
     references: [vyos-mikrotik-surface]
 
   "interfaces[].enabled":
-    disposition: lossy
-    reason: >
-      Drifts on 1 of 56 interface records, on one cell
-      (`kitchen_sink.conf`) — and the direction is the dangerous one:
-      `eth1.200` is `enabled=False` on the VyOS source and comes back
-      `True`.  A port that was administratively DOWN on VyOS comes up
-      ENABLED on RouterOS.  The other 55 records round-trip
-      exactly, including a genuinely disabled `eth3` that renders
-      `disabled=yes` and re-parses shut.
-      Same single mechanism as `interfaces[].description`: the
-      dot-notation sub-interface gets no `/interface` stanza, so no
-      `disabled=yes` is ever emitted for it and the re-parse falls back to
-      the enabled default.  Recorded separately because the attribute is
-      measured here and because the failure direction matters — a
-      description that vanishes is an inconvenience, an admin-down port
-      that comes up is a live circuit nobody asked for.
-      Recorded `lossy` rather than `unsupported`: both matrices declare
-      `/interfaces/interface/config/enabled` supported, the record itself
-      survives, and the target does model admin state — it just was not
-      asked to emit it for this interface shape.
-      Before cutover, list the shut ports on the source and confirm each
-      is still shut on the target.
+    disposition: good
+    note: >
+      Preserved on 56 of 56 records, the shut ones included: `eth3`
+      renders `disabled=yes` and re-parses shut, and so does the shut
+      dot-notation sub-interface `eth1.200` on `kitchen_sink.conf`, a
+      VLAN interface on its port with `disabled=yes`.  Up to 0.7.7
+      `eth1.200` got no `/interface` stanza, no `disabled=yes` was ever
+      emitted for it, and it came back ENABLED: a port that was
+      administratively down on VyOS came up on RouterOS.  Both matrices
+      declare `/interfaces/interface/config/enabled` supported.
     references: [vyos-mikrotik-surface]
 
   "interfaces[].mtu":
@@ -259,11 +233,11 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 7 of 13 cells and 8 of 56 records — and the direction is
+      Drifts on 7 of 13 cells and 10 of 56 records — and the direction is
       the OPPOSITE of a loss, which is the point worth recording.  `vyos`
       populates `interface_type` on ZERO of its 56 records, so there is
       nothing for RouterOS to lose; the round-trip INVENTS a type on
-      eight of them.
+      ten of them.
       Seven are the loopback `lo`, which comes back `ianaift:bridge`.  That
       is a mislabel with a good cause: RouterOS has no loopback primitive,
       so the renderer emits the documented empty-bridge idiom
@@ -276,7 +250,9 @@ per_field_expectation:
       the re-parse invents the same type, which is what makes that cell
       the seventh.  The eighth record is `bond0`, typed
       `ianaift:ieee8023adLag` off `/interface bonding`, which is simply
-      correct.
+      correct, and so are the last two, the dot-notation sub-interfaces
+      `eth1.100` and `eth1.200` on the same cell, typed
+      `ianaift:l3ipvlan` off the VLAN interface each is written as.
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY, and `mikrotik_routeros` states the mechanism: RouterOS does
       not expose IANA ifType, so the codec infers it from the
@@ -321,17 +297,24 @@ per_field_expectation:
   #
   # `vyos` declares `/vlans/vlan/id` UNSUPPORTED, and the id IS the VLAN
   # record's identity — without it no `vlans[]` record is ever created.
-  # Measured: 0 VLAN records on all 13 cells.  All six keys below are
+  # Measured: 0 VLAN records on all 13 cells.  The keys below are
   # therefore source-side gaps, and each says which side the re-authoring
   # belongs on.  VyOS expresses tagging as a dot-notation sub-interface,
-  # which lands in `interfaces[]`, not as a VLAN database.
+  # which lands in `interfaces[]`, not as a VLAN database -- and which the
+  # target writes as a VLAN interface on its port and reads back as a
+  # VLAN of its tag, so the re-parse is not empty everywhere (`vlans[].id`).
 
   "vlans[].id":
-    disposition: not_applicable
-    note: >
-      Source-side gap, declared and measured: `vyos` declares
-      `/vlans/vlan/id` unsupported and produces no VLAN record on any of
-      the 13 cells.  `mikrotik_routeros` declares `/vlans/vlan/id`
+    disposition: lossy
+    reason: >
+      `vyos` declares `/vlans/vlan/id` unsupported and produces no VLAN
+      record on any of the 13 cells, but the re-parse is not empty on the
+      cell with sub-interfaces (`kitchen_sink.conf`, 0 -> 2): each is a
+      VLAN interface on its port (`/interface vlan add interface=eth1
+      name=eth1.100 vlan-id=100`), and the RouterOS parser reads every
+      VLAN interface as a VLAN of its tag.  The target declares
+      `/interfaces/interface/dot1q-vlan` lossy for exactly this
+      read-back.  `mikrotik_routeros` declares `/vlans/vlan/id`
       SUPPORTED and renders `/interface vlan`, so a VLAN database
       re-authored on the target will stick.
     references: [vyos-mikrotik-surface]

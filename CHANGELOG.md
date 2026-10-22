@@ -783,6 +783,31 @@ timestamp if your timezone matters for an audit.
   or a Junos config with tagged units onto Junos, with 0.7.7 or
   earlier, translate it again.
 
+- **A sub-interface of another vendor was written onto RouterOS with
+  nothing that defines it.**  IOS-XE `interface
+  GigabitEthernet1/0/2.10` with `encapsulation dot1Q 10`, a Junos
+  `unit 10 vlan-id 10`, an EOS, NX-OS, IOS XR or VyOS sub-interface:
+  its address was added on `ether2.10`, an interface no line of the
+  output made, and the job was `partial` for it.  It is now
+  RouterOS's own form, a VLAN interface on its port -- `/interface
+  vlan add interface=ether2 name=ether2.10 vlan-id=10`, with its
+  description, MTU and `disabled=yes` where it is shut -- and the job
+  is `completed`, its report saying that the line is read back as a
+  VLAN interface (`/interfaces/interface/dot1q-vlan` is lossy, where
+  it was unsupported).  The tag is the tree's, not the unit's (Junos
+  `unit 100 vlan-id 10` is `name=ether2.100 vlan-id=10`), and a VLAN
+  of the switch with the same id is still written.  A sub-interface
+  that an entry names with no port in it rides on the parent chosen
+  for every VLAN, under a `# review:` line.  A Q-in-Q sub-interface
+  is written with its outer tag, and the job is `partial`, the
+  validation report listing the inner tag
+  (`/interfaces/interface/dot1q-inner-vlan` is unsupported): the
+  IOS-XE carrier capture's job stays `partial` for its six such
+  units.  Over the committed captures one more job onto RouterOS
+  passes the validation report, the IOS XR CST capture's, which the
+  port-name check (below) holds `partial` for its names, so that
+  check now makes 217 of 587 jobs `partial`.
+
 - **An interface's MTU was copied between platforms that count it
   differently.**  IOS-XE, NX-OS, EOS, AOS-CX and RouterOS count the
   payload -- the largest IP packet -- and Junos (the media MTU) and
@@ -3712,13 +3737,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  216 of the 587 jobs that said `completed` are `partial`.  58 of
-  them list a shared name, 65 a hardware port that was dropped, 32 a
-  logical name that was dropped and 110 a name left as the source
-  has it (97 of those a hardware port); 42 list more than one kind.
+  217 of the 587 jobs that said `completed` are `partial`.  58 of
+  them list a shared name, 66 a hardware port that was dropped, 32 a
+  logical name that was dropped and 111 a name left as the source
+  has it (98 of those a hardware port); 43 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 405 jobs that were already `partial`
-  carry the sentence as well.  Each of the 216 is `completed` again,
+  and none to or from `failed`; 404 jobs that were already `partial`
+  carry the sentence as well.  Each of the 217 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of
@@ -3956,9 +3981,16 @@ timestamp if your timezone matters for an audit.
   job's report says so.  The IP MTU an IOS-XE or Junos config leaves
   unstated under a raised `mtu` is taken to be the payload, which no
   vendor page read says.
-- **A sub-interface of another vendor is written onto RouterOS with no
-  `/interface vlan` line.**  Its address is added on `ether2.10`, an
-  interface the output does not define; the job is `partial`.
+- **A RouterOS VLAN interface on a port is not a sub-interface onto
+  another vendor.**  `/interface vlan add interface=ether2
+  name=ether2.10 vlan-id=10` is read as a VLAN interface and a VLAN of
+  its tag, and the port it rides on is not kept in the tree: onto
+  IOS-XE, NX-OS, EOS or Junos it comes out as VLAN 10 and its VLAN
+  interface (`interface Vlan10`, `irb.10`), which no port carries, in
+  a job that says `completed`.  That is also how RouterOS's output
+  for another vendor's sub-interface is read, so a sub-interface
+  taken to RouterOS and on to a third vendor is not a sub-interface
+  there.  Re-create it by hand.
 
 - **A Junos routed port's native VLAN reaches Junos alone.**  `set
   interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units

@@ -24,9 +24,21 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   IPv4 (`/ip address`), IPv6 (`/ipv6 address`).  RouterOS has one
   MTU: another vendor's IP MTU of its own is written as `mtu` where
   no other MTU is stated, and is lost where one is (the job's
-  report says so).  A sub-interface of another vendor gets no
-  `/interface vlan` line yet: its address names an interface the
-  output does not define, and the job is `partial`.
+  report says so).  A sub-interface of another vendor (IOS-XE
+  `GigabitEthernet1/0/2.10` with `encapsulation dot1Q 10`, Junos
+  `unit 10 vlan-id 10`) is a VLAN interface on its port: `/interface
+  vlan add interface=ether2 name=ether2.10 vlan-id=10`.  Read back,
+  it is a VLAN interface and a VLAN of its tag, not a sub-interface
+  of the port; the job's report says so.  A sub-interface you name
+  with no port in it (`wan10`) rides on the parent chosen for every
+  VLAN, under a `# review:` line: move it to its port.  A
+  sub-interface of two tags (IOS-XE `second-dot1q`, EOS `inner`,
+  Junos `vlan-tags`) is written with its outer tag, and the job is
+  `partial`, the validation report listing the inner tag.  ⚠️ Up to
+  0.7.7 such a sub-interface got no line, and its address named an
+  interface the output did not define.  A VLAN interface on a port,
+  read FROM RouterOS, is not yet a sub-interface onto another
+  vendor (see the CHANGELOG's known limitations).
 - Tunnels — `/interface gre`, `/interface eoip`, `/interface ipip`:
   name, comment and `mtu`.  The endpoints are not translated: they
   come out as `remote-address=0.0.0.0`, for you to fill in.

@@ -172,6 +172,20 @@ class MikroTikRouterOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/dot1q-vlan",
+                reason=(
+                    "A routed sub-interface (Cisco `encapsulation dot1Q N`, "
+                    "Junos `unit N vlan-id`) is written as RouterOS's own "
+                    "VLAN interface on its port (`/interface vlan add "
+                    "interface=ether2 name=ether2.10 vlan-id=10`), which "
+                    "the device runs as the sub-interface.  RouterOS writes "
+                    "a VLAN interface on a port and on a bridge alike, so "
+                    "the parser reads it back as a VLAN interface and a "
+                    "VLAN of its tag, not as a sub-interface of the port."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(
                     "RouterOS has one MTU for the payload and the IP packet. An "
@@ -371,17 +385,6 @@ class MikroTikRouterOSCodec(CodecBase):
             ),
         ],
         unsupported=[
-            UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
-                ),
-            ),
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-inner-vlan",
                 reason=(

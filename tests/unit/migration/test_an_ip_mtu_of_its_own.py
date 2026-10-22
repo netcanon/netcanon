@@ -271,13 +271,7 @@ _NO_SUCH_INTERFACE: dict[tuple[str, str], str] = {
 
 #: Cells known to be wrong for a reason that is not the IP MTU, pinned:
 #: the change that mends one fails here until its pin is taken out.
-_OPEN: dict[tuple[str, str], str] = {
-    ("junos-tagged-unit", "mikrotik_routeros"): (
-        "the RouterOS renderer writes no `/interface vlan` for a tagged "
-        "unit whose name is not a VLAN name (`ether2.10`): the address is "
-        "on an interface the output does not define, and its IP MTU with it"
-    ),
-}
+_OPEN: dict[tuple[str, str], str] = {}
 
 
 def _job(source: str, target: str, text: str):

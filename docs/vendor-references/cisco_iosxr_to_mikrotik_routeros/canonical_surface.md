@@ -144,17 +144,18 @@ So **MTU on a physical port survives and MTU on a bundle does not.** On an SP
 box where the jumbo-MTU setting lives on the bundle rather than the members,
 that is the whole jumbo configuration silently reverting to default.
 
-**`description`.** All three cases are routed dot1q sub-interfaces —
-`GigabitEthernet0/0/0/1.35` on both `batfish_ebgp_border*` fixtures and
-`GigabitEthernet0/0/0/1.100` on `kitchen_sink` — and all three fall on
-VLAN-bearing cells, i.e. exactly the cells that already drift structurally. The
-render emits the sub-interface only as the target of an `/ip address` row; there
-is no `/interface … set` row on which to hang a `comment=`, which is consistent
-with the target declaring `/interfaces/interface/dot1q-vlan` unsupported. This
-is one root cause with the count growth, not a second independent one, so
-`interfaces[].description` stays `good` and the artefact is recorded here in
-prose instead. Every other description in the corpus round-trips as a RouterOS
-`comment=`.
+**`description`.** Every description in the corpus round-trips as a RouterOS
+`comment=`, the three routed dot1q sub-interfaces that have one included
+(`GigabitEthernet0/0/0/1.35` on both `batfish_ebgp_border*` fixtures and
+`GigabitEthernet0/0/0/1.100` on `kitchen_sink`): each is a VLAN interface on
+its port (`/interface vlan add interface=GigabitEthernet0/0/0/1
+name=GigabitEthernet0/0/0/1.35 vlan-id=35 comment=…`).  Up to 0.7.7 the render
+emitted a sub-interface only as the target of an `/ip address` row, with no row
+on which to hang a `comment=`, and the three lost it.  The re-parse reads each
+such line as a VLAN interface and a VLAN of its tag (the target declares
+`/interfaces/interface/dot1q-vlan` lossy for that), so on the 4 VLAN-bearing
+cells `vlans[]` holds two records of one id: `vlan<id>` from the IOS-XR VLAN
+record and the sub-interface's own.  `vlans[].id` is recorded `lossy`.
 
 Two attributes were checked and found clean, which is worth recording so nobody
 re-hunts them: **`enabled`** — 74 administratively-down source interfaces across
@@ -252,7 +253,8 @@ re-parses that back as the VLAN name, so `('' → 'vlan35')`, `('' → 'vlan200'
 `('' → 'vlan100')` on the 4 VLAN-bearing cells. The target declares
 `/vlans/vlan/name` lossy for exactly this: *"MikroTik stores a VLAN's name as
 the L3 interface name (e.g. vlan10), NOT a separate descriptive name field."*
-The VLAN **id** is preserved on all 4 cells. Read the drift as a fabricated
+No VLAN **id** is lost on the 4 cells, though each comes back twice (the
+sub-interface is read back as a VLAN of its tag too). Read the drift as a fabricated
 value rather than a destroyed one — the practical consequence is that any
 config-diff or inventory reconciliation after the migration reports VLAN names
 that no operator ever authored.

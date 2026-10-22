@@ -221,14 +221,15 @@ per_field_expectation:
     references: [nxos-routeros-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: unsupported
+    disposition: lossy
     reason: >
       Routed sub-interface 802.1Q tags (`encapsulation dot1Q N`) are not
       populated by any fixture on this pair, so this follows the target
-      matrix, which declares `/interfaces/interface/dot1q-vlan` unsupported
-      (ship-before-wire, GAP 7).  A routed sub-interface would arrive on the
-      target without its tag and would need re-creating as an
-      `/interface vlan` child of the physical port.
+      matrix, which declares `/interfaces/interface/dot1q-vlan` lossy: a
+      routed sub-interface is written as a VLAN interface on its port
+      (`/interface vlan add interface=<port> name=<port>.10 vlan-id=10`)
+      and read back as a VLAN interface and a VLAN of its tag, not as a
+      sub-interface of the port.
     references: [nxos-routeros-surface]
 
   "interfaces[].vrf":

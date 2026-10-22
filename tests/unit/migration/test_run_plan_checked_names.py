@@ -1767,7 +1767,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     "cisco_iosxe_cli": (8, 0, 0, 1, 3, 19),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
-    "cisco_iosxr": (4, 0, 13, 1, 1, 2),
+    # And onto RouterOS a sub-interface is a VLAN interface on its
+    # port, and `/interfaces/interface/dot1q-vlan` is lossy where it
+    # was unsupported.  The CST capture's job was `partial` for the
+    # matrix alone; it is `partial` for its names now,
+    # `MgmtEth0/RP0/CPU0/0` and `BVI500` together (+1 several).
+    "cisco_iosxr": (4, 0, 13, 1, 1, 3),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     "fortigate_cli": (0, 0, 0, 0, 0, 11),
@@ -1854,8 +1859,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 5, 68, 42]
-        assert sum(by_reason) == 216
+        assert by_reason == [40, 0, 61, 5, 68, 43]
+        assert sum(by_reason) == 217
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
