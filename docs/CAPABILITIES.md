@@ -775,6 +775,20 @@ in rendered output find every such site.
      stands in place of the account, never inside it.  FortiOS, RouterOS
      and OPNsense used to write the account without its password, and a
      RouterOS user added with no password has a blank one.
+  5. A password a human typed (`plaintext` to the policy: IOS-XE
+     `password 0`, AOS-CX `password plaintext`, VyOS
+     `plaintext-password`) is an algorithm like any other, accepted only
+     where the target has a line that takes a typed password and hashes
+     it itself.  Junos and OPNsense have none (`encrypted-password` and
+     `<password>` hold a hash; Junos's `plain-text-password` asks at a
+     prompt), so there such an account is left out with a review line:
+
+         # password manager user-name "<name>" -- review: the source
+         holds this password as typed, and Junos takes a password into
+         its config only as a hash; the account is left out: add it on
+         the device and set its password there
+
+     They used to write the typed string as the hash.
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth

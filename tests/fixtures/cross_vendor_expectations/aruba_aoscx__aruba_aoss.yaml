@@ -44,11 +44,11 @@ meta:
     ArubaOS-Switch hardware carrying the same VLANs, VLAN port membership, SVI
     addressing and uplink bundles.  The campus L2 edge is the strong surface —
     hostname, VLAN IDs, VLAN names, tagged and untagged port membership, static
-    routes, SNMP scalars and usernames all survive.  What does not is
+    routes and SNMP scalars all survive.  What does not is
     everything AOS-CX models and AOS-S does not: VRFs, VXLAN and the anycast
     gateway are dropped whole; loopbacks disappear; jumbo MTU, IPv6 addressing
     and a shut SVI's admin state are lost on records that otherwise survive;
-    and the encrypted user secret is re-typed as a cleartext password.
+    and every local account is refused, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-aoss-surface
@@ -469,52 +469,55 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      Drifts on 4 of the 7 cells; 2 preserve every username. AOS-CX stores
-      user passwords as an `AQB...` ciphertext blob that AOS-S cannot ingest,
-      so those accounts are dropped with a review comment rather than written
-      out behind AOS-S's `plaintext "..."` marker -- which would both break
-      the account and put secret-bearing material on a line that claims to be
-      cleartext. Accounts with a consumable secret survive, hence `lossy`.
-      Re-create the dropped accounts on the target. This is the deliberate
-      post-fix behaviour: an unrecognised or unconsumable secret is REFUSED
-      rather than re-emitted under the target's cleartext marker, which
-      previously turned the digest itself into the password. The account
-      vanishing is the cost of not leaking a credential; it is recorded here
-      rather than hidden.
+      0 of 7 accounts arrive across the 6 cells that populate local
+      users; the list is emptied on each.  Each of the 7 holds an AOS-CX
+      ciphertext (`password ciphertext`), encrypted under the key of the
+      switch that made it: 6 `AQB` blobs, and the GL CX 10.09 capture's
+      `admin`, whose publisher put a placeholder word where its
+      ciphertext was.  Up to 0.7.7 the AOS-CX parser read that word by
+      its shape, as a password as typed, and it was written onto this
+      target as one; the parser now reads a value by its keyword, so it
+      is refused like the rest
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      AOS-S can consume a SHA-1 or SHA-256 hash, or a password as typed;
+      anything else is refused on purpose (#461) with a review comment
+      naming the account and no user entry.  Recorded `lossy` rather
+      than `unsupported`: an AOS-CX account configured `password
+      plaintext` is read as typed and arrives, as `password manager
+      user-name "<name>" plaintext "<password>"`, read back tagged
+      `plaintext:` -- the same password under another canonical string;
+      no committed capture has one.  Before cutover, list the source
+      accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [aoscx-aoss-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users, as a consistent
-      re-mapping rather than a drop: `administrators` -> `manager` and
-      `operators` -> `operator`.  The account keeps a privilege level; the
-      canonical string changes to the AOS-S two-level vocabulary, which is why
-      this is lossy (warns, stays compatible) and not unsupported.  Verify the
-      mapping if any source account carries a role outside those two — the
-      aruba_aoss matrix declares nothing at all for `/local-users/*`, so there is
-      no declared behaviour to fall back on.  aruba_aoscx separately declares
-      `/local-users/user/privilege-level` lossy on the source side.
+      No account arrives on the corpus (see `local_users[].name`), so
+      there is no role on the target to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  On an account that arrives, the role is
+      re-mapped onto the AOS-S two-level vocabulary: `administrators` ->
+      `manager`, `operators` -> `operator`.  Recorded `lossy` for that.
     references: [aoscx-aoss-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users, and the failure mode is
-      worse than a drop.  AOS-CX stores the user secret in its own encrypted
-      form — an `AQB`-prefixed ciphertext blob, 184 characters on each of the
-      four real-capture fixtures that carry one (the sanitised and synthetic
-      cells carry short placeholders and behave identically).  The AOS-S render
-      emits the value as `password manager user-name "<user>" plaintext
-      "<secret>"`, and the re-parse returns it tagged `plaintext:`.  Nothing is
-      lost; the secret is RE-TYPED as a literal cleartext password.  Two
-      consequences: no migrated account authenticates with its original password,
-      because the target now treats the ciphertext as the password string itself;
-      and the rendered config carries the source's encrypted secret on a line
-      marked plaintext, so treat any AOS-S render from an AOS-CX source as
-      secret-bearing.  Set passwords on the target by hand before cutover.
-      The ciphertext is deliberately NOT quoted here — only its prefix marker and
-      length class — because it is operator-traceable key material even encrypted.
+      On the corpus no account arrives (see `local_users[].name`): the
+      only drift on this key is the parent record-count collapse, which
+      the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  Recorded `lossy` for an account that
+      arrives: an AOS-CX account configured `password plaintext` is
+      written as `password manager user-name "<name>" plaintext
+      "<password>"`, read back tagged `plaintext:` -- the same password
+      under another canonical string.  Before #461 every AOS-CX
+      ciphertext was written behind that `plaintext` marker, so the
+      account held the ciphertext as its literal password.  No secret
+      value is quoted here or in the reference doc; only shapes and
+      counts.
     references: [aoscx-aoss-surface]
 
   # -- Fabric -- everything AOS-CX has and AOS-S does not --------------------

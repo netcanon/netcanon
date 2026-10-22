@@ -26,7 +26,7 @@
 # What is lost is not structure but content: everything L2-switching
 # (port-to-VLAN membership), everything routing (static routes, VRFs),
 # everything overlay (VXLAN), the anycast/virtual-gateway addressing, SNMPv3
-# users, and the meaning — though not the bytes — of every local password.
+# users, and every local account.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations, a
 # full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
@@ -49,12 +49,12 @@ meta:
     the routed boundary by an OPNsense appliance.  Hostname, the complete
     interface inventory (all 157 records, with names, descriptions, admin
     state, MTU, and every IPv4 and IPv6 address), LACP bundles and their member
-    ports, VLAN IDs and VLAN names, SNMP scalars and local usernames all
-    survive.  What does not survive:
+    ports, VLAN IDs and VLAN names, and SNMP scalars all survive.  What does
+    not survive:
     port-to-VLAN membership and the whole switchport surface, the VLAN-mounted
     SVI record (the subnet relocates, the anycast gateway does not), every
     static route, every VRF, VXLAN, the SNMPv3 user store, the anycast-gateway
-    MAC, and any working local credential.
+    MAC, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-opnsense-surface
@@ -531,47 +531,50 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      1 of 7 accounts arrive across the 6 cells that populate local users; the
-      list shrinks on 5 of them. The 6 accounts that vanish carry 6 AOS-CX `AQB`
-      device-keyed ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or
-      SHA-512 crypt (`$6$`) in `<password>`, or a genuine plaintext password;
-      anything else is refused with a review comment naming the account, in
-      place of the account. Up to 0.7.7 such an account was written as a
-      `<user>` element with no `<password>`; a refused secret now drops the
-      whole account, as on every other target. The survivors are 1 carrying 1
-      plaintext password. Recorded `lossy` rather than `unsupported`: which
-      account survives is decided by its secret form, and accounts with a
-      consumable secret do arrive. Before cutover, list the source accounts,
-      search the render for `review:` comments, and re-create each refused
-      account on the target with a fresh password.
+      No account arrives: 0 of 7 across the 6 cells that populate local
+      users.  Each of the 7 holds an AOS-CX ciphertext (`password
+      ciphertext`), encrypted under the key of the switch that made it:
+      6 `AQB` blobs, and the GL CX 10.09 capture's `admin`, whose
+      publisher put a placeholder word where its ciphertext was.
+      OPNsense's `<password>` is the hash `password_verify()` checks a
+      password against (bcrypt `$2y$` / `$2b$` or SHA-512 crypt `$6$`),
+      so it takes neither an AOS-CX ciphertext nor a password as typed.
+      So each account is refused with a review comment naming it, in
+      place of the account, rather than written as an account with no
+      password.  Up to 0.7.7 the placeholder word was written into
+      `<password>` as it stood, which opened nothing, and an `AQB`
+      account was written as a `<user>` element with no `<password>`.
+      Recorded `unsupported` rather than `lossy`: no AOS-CX secret form
+      reaches OPNsense -- an account configured `password plaintext` is
+      read as typed, which OPNsense takes nowhere
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`) --
+      so no AOS-CX account does.  Re-create the accounts on the target.
     references: [aoscx-opnsense-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      On the 1 account that survives, the role changes: `administrators` ->
-      `admin` on 1. Mechanism: the OPNsense render places an admin-tier account
-      in the `admins` group and everything else in `users`, and the parser maps
-      those back to `admin` / `user`. Accounts refused for their secret vanish
-      with their role and are counted once, under `local_users[].name`; this key
-      is about the value on accounts that survive.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so
+      there is no role on the target to compare.  Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here.
     references: [aoscx-opnsense-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      1 typed password is written into `<password>` as it stands and read back
-      tagged `bcrypt:`. OPNsense checks `<password>` as a hash
-      (`password_verify()`), so such an account is not known to log in with the
-      password it was given (an open item). 6 accounts are refused for their
-      secret (6 AOS-CX `AQB` device-keyed ciphertext) and vanish with it; that
-      loss is recorded once, under `local_users[].name`. Recorded `lossy`
-      because the value changes on surviving accounts. Up to 0.7.7 such an
-      account was written as a `<user>` element with no `<password>`; a refused
-      secret now drops the whole account, as on every other target. No secret
-      value is quoted here or in the reference doc; only shapes and counts.
+    disposition: good
+    note: >
+      No secret is written in a form OPNsense cannot consume.  7
+      accounts are refused for their secret (7 AOS-CX ciphertext, one of
+      them a placeholder word) and vanish with it; that loss is recorded
+      once, under `local_users[].name`.  No account with a stored secret
+      arrives, so there is no value to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [aoscx-opnsense-surface]
 
   # -- Fabric ---------------------------------------------------------------

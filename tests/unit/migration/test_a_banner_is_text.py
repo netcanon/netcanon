@@ -1004,7 +1004,9 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "1438f3eb976a",
     "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "51c85d20a673",
     "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "181fdcc21fb2",
-    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "48321a06dd41",
+    # Its `admin` secret is read by its `ciphertext` keyword, not by its
+    # shape (test_a_typed_password_is_not_a_hash.py): was "48321a06dd41".
+    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "52840754cf06",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
     # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read

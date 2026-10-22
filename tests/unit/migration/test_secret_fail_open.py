@@ -195,10 +195,12 @@ def test_no_target_accept_set_contains_the_unknown_sentinel() -> None:
 def test_genuine_plaintext_is_still_migratable() -> None:
     """A password a human actually typed is still a password.
 
-    The corpus has one: a 5-character alphanumeric secret on an AOS-CX
-    ``admin`` account.  Refusing *everything* unrecognised would have caught it
-    too — which is why the rule keys on structured-secret shape (a ``$``-form
-    or a known vendor ciphertext prefix) rather than on "did I recognise it".
+    The corpus has some (IOS-XE ``password 0``).  Refusing *everything*
+    unrecognised would have caught them too — which is why the rule keys on
+    structured-secret shape (a ``$``-form or a known vendor ciphertext
+    prefix) rather than on "did I recognise it".  The 5-character word on an
+    AOS-CX ``admin`` account this once cited is a ``password ciphertext``
+    its publisher replaced, and the AOS-CX parser now reads it so.
     """
     for target in ("arista_eos", "aruba_aoss", "mikrotik_routeros"):
         assert is_migratable("h0rse", target)

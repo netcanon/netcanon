@@ -8,8 +8,9 @@
 # leaf/spine.  The shared surface is wide — the interface inventory does NOT
 # shrink (157 source interface records -> 157 re-parsed records across the 7
 # committed cells, 0 render errors, 0 re-parse errors), VLAN identity, SVI
-# addressing, VRFs, VXLAN VNIs, static routes, SNMP scalars and local-user
-# identity all survive.
+# addressing, VRFs, VXLAN VNIs, static routes and SNMP scalars all survive;
+# no local account does (AOS-CX holds a password as ciphertext under its own
+# key).
 #
 # The dominant loss on this pair is NAMING, not inventory.  AOS-CX writes
 # two-token interface names (`lag 1`, `vlan 101`, `loopback 0`); the NX-OS
@@ -56,11 +57,11 @@ meta:
     Data-centre re-home: an ArubaOS-CX VSX core / spine-leaf switch replaced by
     a Cisco NX-OS switch carrying the same VLANs, SVI addressing, port-channels,
     VRFs and VXLAN VNIs.  Hostname, VLAN IDs and names, interface descriptions,
-    admin state, MTU, IPv6 addressing, static routes, SNMP scalars, local-user
-    identity, VRF names, VNI-to-VLAN bindings and the fabric anycast-gateway MAC
+    admin state, MTU, IPv6 addressing, static routes, SNMP scalars, VRF names,
+    VNI-to-VLAN bindings and the fabric anycast-gateway MAC
     all survive.  What does not is AOS-CX interface NAMING (and everything the
-    canonical tree keys off it), the per-SVI active-gateway virtual address, and
-    the VLAN description.
+    canonical tree keys off it), the per-SVI active-gateway virtual address,
+    the VLAN description, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-nxos-surface
@@ -505,49 +506,54 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      1 of 7 accounts arrive across the 6 cells that populate local users; the
-      list shrinks on 5 of them. The 6 accounts that vanish carry 6 AOS-CX `AQB`
-      device-keyed ciphertext. NX-OS can consume a `$5$` or `$1$` crypt string
-      under `password 5`, or a genuine plaintext password; anything else is
-      refused on purpose (#461) with a review comment naming the account and no
-      user entry. Before that change the value was written behind `password 0`,
-      the NX-OS cleartext marker, so the account either carried the source's
-      stored secret as its literal password or could not authenticate at all.
-      The survivors are 1 carrying 1 plaintext password. Recorded `lossy` rather
-      than `unsupported`: which account survives is decided by its secret form,
-      and accounts with a consumable secret do arrive. Before cutover, list the
-      source accounts, search the render for `review:` comments, and re-create
-      each refused account on the target with a fresh password.
+      0 of 7 accounts arrive across the 6 cells that populate local
+      users; the list is emptied on each.  Each of the 7 holds an AOS-CX
+      ciphertext (`password ciphertext`), encrypted under the key of the
+      switch that made it: 6 `AQB` blobs, and the GL CX 10.09 capture's
+      `admin`, whose publisher put a placeholder word where its
+      ciphertext was.  Up to 0.7.7 the AOS-CX parser read that word by
+      its shape, as a password as typed, and it was written onto this
+      target as one; the parser now reads a value by its keyword, so it
+      is refused like the rest
+      (`tests/unit/migration/test_a_typed_password_is_not_a_hash.py`).
+      NX-OS can consume a `$5$` or `$1$` crypt string under `password
+      5`, or a password as typed; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry.
+      Recorded `lossy` rather than `unsupported`: an AOS-CX account
+      configured `password plaintext` is read as typed and arrives, as
+      `password 0 <password>`; no committed capture has one.  Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a
+      fresh password.
     references: [aoscx-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      On the 1 account that survives, the role is unchanged. Mechanism:
-      cisco_nxos renders the canonical role verbatim and maps only
-      `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
-      the only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+      No account arrives on the corpus (see `local_users[].name`), so
+      there is no role on the target to compare; the only drift on this
+      key is the parent record-count collapse, which the audit
+      attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here.  On an account that arrives, cisco_nxos
+      renders the canonical role verbatim and maps only `network-admin`
+      / `vdc-admin` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`).
     references: [aoscx-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      No secret is written in a form NX-OS cannot consume. 6 accounts are
-      refused for their secret (6 AOS-CX `AQB` device-keyed ciphertext) and
-      vanish with it; that loss is recorded once, under `local_users[].name`.
-      The 1 secret that arrives is carried with the credential unchanged: 1
-      plaintext password as `password 0`. Before #461 this key read preserved
-      because the value was written behind `password 0`, the NX-OS cleartext
-      marker; that preservation was a leak or a dead credential, not a working
-      one. Recorded `good` rather than `lossy`: the only drift on this key is
-      the parent record-count collapse, which the audit attributes to
-      `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared
-      loss on this key could never be evidenced. No secret value is quoted here
-      or in the reference doc; only shapes and counts.
+      No secret is written in a form NX-OS cannot consume.  On the
+      corpus no account arrives (see `local_users[].name`), so there is
+      no value to compare; the only drift on this key is the parent
+      record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here.  An
+      AOS-CX account configured `password plaintext` is carried with the
+      credential unchanged, as `password 0 <password>`.  Before #461
+      every AOS-CX ciphertext was written behind `password 0`, the NX-OS
+      cleartext marker, so the account held the ciphertext as its
+      literal password.  No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [aoscx-nxos-surface]
 
   # -- Fabric ---------------------------------------------------------------

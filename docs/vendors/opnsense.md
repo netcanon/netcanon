@@ -203,7 +203,10 @@ Provenance in
 
 - **A user whose password cannot be carried is left out** as a target,
   with an XML comment in its place.  Up to 0.7.7 the `<user>` element
-  stayed, with no `<password>`.
+  stayed, with no `<password>`.  A password the source holds as typed
+  (IOS-XE `password 0`, AOS-CX `password plaintext`) is one of them:
+  `<password>` is the hash `password_verify()` checks a password
+  against, and up to 0.7.7 the typed string was written there.
 - **Driver names onto another vendor** — an OPNsense interface is
   named for its FreeBSD driver, and the port translator reads some
   drivers' names (`igb0`, `ix1`, `em0`) and not others (`igc0`).

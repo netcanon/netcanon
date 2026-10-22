@@ -373,6 +373,21 @@ tests use these exclusively — never CSS classes or element structure.  See
   a vendor envelope (`junos:`) or a parser that tags everything one way
   (OPNsense `bcrypt:` over a `$6$` body) must defer to the payload's own
   crypt(3) id (#462).  Fails closed, but refuses every account it mislabels.
+  And never take a TYPED password to be accepted everywhere: `plaintext`
+  is an algorithm like any other, in a target's accept set only where
+  the target has a line that takes a typed password and hashes it
+  itself.  The policy called it "implicitly accepted by every target",
+  and Junos and OPNsense, whose config holds a password only as a hash,
+  wrote the typed string as the hash -- an account no password opens.
+  Guarded by `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`,
+  which reads each target's output as text against that vendor's form
+  for a typed password, typed by hand, not asked of the renderer.  The
+  same holds for anything that REPLACES a secret: the sanitiser faked
+  every tagged hash (`arista:sha512:`, `5 `, `junos:`, `sha1:`) and every
+  AOS-CX ciphertext as `fake-hash-NNNN`, which the policy reads as typed,
+  so a sanitised config held typed passwords where the device held
+  hashes, and on Junos lost the account.  A fake is the same kind of
+  secret as what it replaces (`tests/unit/tools/test_sanitize_keeps_a_secrets_kind.py`).
 - **Never** re-emit a credential that is SALTED TO ITS SOURCE DEVICE.  An
   SNMPv3 USM key is localised against the agent's engine ID, so writing another
   vendor's key into the target's key leaf yields a config that commits cleanly

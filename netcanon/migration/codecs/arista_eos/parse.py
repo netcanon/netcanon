@@ -937,7 +937,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 # separation — the colon is our canonical
                 # interior delimiter and doesn't appear in any
                 # real EOS hash (they're base64-ish: alnum + .
-                # + / + $).
+                # + / + $).  Type 0 is the password as typed (EOS
+                # hashes it), which the shared policy calls
+                # ``plaintext``: tagged ``0`` it was an algorithm no
+                # target takes, and EOS refused its own account.
+                if alg == "0":
+                    alg = "plaintext"
                 hashed = f"arista:{alg}:{parts[2]}"
         intent.local_users.append(CanonicalLocalUser(
             name=name,
