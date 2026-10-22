@@ -138,11 +138,15 @@ per_field_expectation:
     references: [iosxr-aoss-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Both matrices declare `/interfaces/interface/config/description`
-      supported and it is preserved on all 9 cells that populate it (32 of 32
-      described interfaces intact across the 11 real captures).
+    disposition: lossy
+    reason: >
+      AOS-S quotes a description and documents no escape inside
+      the quotes, so each `"` is written `'`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C).  The IOS
+      XR parser keeps the quotes of a description the router
+      prints quoted (the CST design capture's BVI500 and
+      Gi0/0/0/12), so those land between apostrophes.  A
+      description with no `"` is preserved.
     references: [iosxr-aoss-surface]
 
   "interfaces[].enabled":

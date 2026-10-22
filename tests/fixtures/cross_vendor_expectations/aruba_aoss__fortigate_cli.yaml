@@ -356,19 +356,24 @@ per_field_expectation:
   radius_servers:
     disposition: lossy
     reason: >
-      Host / auth_port preserve cleanly.  Aruba's flat
-      ``radius-server host <ip> key "<secret>"`` populates the
+      Host, auth port and a key written as typed round-trip.  Aruba's
+      flat ``radius-server host <ip> key "<secret>"`` populates the
       canonical ``host / key / auth_port / acct_port`` tuple; the
-      FortiGate render emits ``config user radius / edit "<name>" /
-      set server <ip> / set secret ENC <encrypted> / set radius-port
-      1812``.  Shared-secret format is incompatible: Aruba carries
-      plaintext / shadowed strings; FortiOS uses ``ENC <opaque-
-      base64>``.  Cross-vendor migration requires re-keying.
-      FortiOS has no separate acct-port field (derived as
-      auth-port + 1 per RFC default), so non-default Aruba acct-port
-      values drop.  Aruba never carries a server-name (uses host
-      address as identity) so FortiOS render synthesises a name
-      from the host address.
+      FortiGate render emits ``config user radius / edit
+      "radius-<n>" / set server <ip> / set secret <secret>``, the
+      secret as typed, and ``set radius-port <n>`` for a port other
+      than 1812.  An AOS-S ``encrypted-key "<blob>"`` is a form only
+      AOS-S reads: it is held behind ``aoss:``, and the server is
+      written with no secret, beside a review line.  FortiOS has no
+      separate acct-port field (the FortiGate parser reads 1813), so
+      a non-default Aruba acct-port is lost; no committed capture
+      shows it, their acct ports being the default.  Aruba never
+      carries a server-name (the host is the identity), so the
+      FortiGate render synthesises one.  Until 2026-10 the key was
+      lost on the way back -- the FortiGate parser put every ``set
+      secret`` behind ``fortios:``, a typed one included -- and this
+      entry said the render writes ``set secret ENC``, which it has
+      not done since the RADIUS gate.
     references: [radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

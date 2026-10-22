@@ -67,6 +67,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._radius_secrets import AOSS_ENVELOPE
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -109,11 +110,18 @@ _HOSTNAME_RE = re.compile(r"^hostname\s+(\S.*)", re.IGNORECASE)
 _SNMP_COMMUNITY_LINE_RE = re.compile(
     r'^snmp-server\s+community\s+"?([^"\s]+)"?', re.IGNORECASE,
 )
-_SNMP_LOCATION_RE = re.compile(
-    r'^snmp-server\s+location\s+(.+)$', re.IGNORECASE,
+# ``snmp-server [contact <text>] [location <text>]``: one line may set
+# both (HPE prints ``snmp-server contact "IT" location "1OG"``).  A
+# quoted value ends at the quote no backslash escapes (as ``_unquote``
+# reads one) and the next keyword may follow; a bare one is the rest of
+# the line, as before.
+_SNMP_SYSTEM_RE = re.compile(
+    r'^snmp-server[^\S\n]+(?=(?:contact|location)[^\S\n])', re.IGNORECASE,
 )
-_SNMP_CONTACT_RE = re.compile(
-    r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE,
+_SNMP_SYSTEM_FIELD_RE = re.compile(
+    r'(contact|location)[^\S\n]+'
+    r'(?:"((?:[^"\\\n]|\\.)*)"[^\S\n]*|(\S.*))',
+    re.IGNORECASE,
 )
 # SNMPv3 user grammar on Aruba AOS-S (observed on 2930F/3810M):
 #
@@ -219,6 +227,7 @@ _PASSWORD_HASH_CONTINUATION_RE = re.compile(
 # AOS-S RADIUS forms (16.10 Access Security Guide):
 #   radius-server host <ip>
 #   radius-server host <ip> key "<secret>"
+#   radius-server host <ip> encrypted-key "<base64 AES-256 blob>"
 #   radius-server host <ip> auth-port <N> acct-port <N>
 #   radius-server host <ip> auth-port <N> acct-port <N> key "<secret>"
 # Each repeated ``radius-server host <ip>`` line refines the same
@@ -234,16 +243,36 @@ _RADIUS_HOST_RE = re.compile(
 )
 _RADIUS_AUTH_PORT_RE = re.compile(r'\bauth-port\s+(\d+)', re.IGNORECASE)
 _RADIUS_ACCT_PORT_RE = re.compile(r'\bacct-port\s+(\d+)', re.IGNORECASE)
+# ``key`` and ``encrypted-key`` are two words: a ``key`` that follows a
+# hyphen is the end of ``encrypted-key``, whose blob the pattern before
+# 2026-10 read as the literal secret.
 _RADIUS_INLINE_KEY_RE = re.compile(
-    r'\bkey\s+"?([^"]*)"?\s*$',
+    r'(?<![\w-])(key|encrypted-key)\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
 # Global shared-secret fallback (applies to hosts without inline key):
 #   radius-server key "<secret>"
+# and, read the same way as the host line's documented ``encrypted-key``
+# (the global form is inferred from it, not seen in a vendor document):
+#   radius-server encrypted-key "<blob>"
 _RADIUS_KEY_GLOBAL_RE = re.compile(
-    r'^radius-server\s+key\s+"?([^"]*)"?\s*$',
+    r'^radius-server\s+(key|encrypted-key)\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
+
+
+def _radius_key(word: str, value: str) -> str:
+    """The canonical value of ``key "<secret>"`` or ``encrypted-key "<blob>"``.
+
+    ``encrypted-key`` is AES-256 under the switch's ``encrypt-credentials``
+    key (16.10 Access Security Guide): a form only AOS-S reads, carried
+    behind :data:`AOSS_ENVELOPE` so that no other platform takes it for
+    the secret.
+    """
+    value = value.strip().strip('"')
+    if value and word.lower() == "encrypted-key":
+        return f"{AOSS_ENVELOPE}{value}"
+    return value
 _AOS_TRUNK_TYPE_TO_MODE = {
     "lacp": "active",
     "dt-lacp": "active",
@@ -457,8 +486,7 @@ _MEMBER_BLOCK_RE = re.compile(r"^member[ \t]+\S+[ \t]*$", re.IGNORECASE)
 _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _HOSTNAME_RE,
     _SNMP_COMMUNITY_LINE_RE,
-    _SNMP_LOCATION_RE,
-    _SNMP_CONTACT_RE,
+    _SNMP_SYSTEM_RE,
     _SNMP_HOST_RE,
     _SNMPV3_USER_RE,
     _SNMPV3_GROUP_BIND_RE,
@@ -1769,19 +1797,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i += 1
             continue
 
-        loc = _SNMP_LOCATION_RE.match(stripped_line)
-        if loc:
+        system = _SNMP_SYSTEM_RE.match(stripped_line)
+        if system:
             if intent.snmp is None:
                 intent.snmp = CanonicalSNMP()
-            intent.snmp.location = loc.group(1).strip().strip('"')
-            i += 1
-            continue
-
-        contact = _SNMP_CONTACT_RE.match(stripped_line)
-        if contact:
-            if intent.snmp is None:
-                intent.snmp = CanonicalSNMP()
-            intent.snmp.contact = contact.group(1).strip().strip('"')
+            fields, pos = stripped_line, system.end()
+            while field := _SNMP_SYSTEM_FIELD_RE.match(fields, pos):
+                quoted, bare = field.group(2), field.group(3)
+                value = _unescape(quoted) if quoted is not None else bare.strip().strip('"')
+                setattr(intent.snmp, field.group(1).lower(), value)
+                if bare is not None:
+                    break
+                pos = field.end()
             i += 1
             continue
 
@@ -1945,7 +1972,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     pass
             km = _RADIUS_INLINE_KEY_RE.search(rest)
             if km:
-                key = km.group(1).strip().strip('"')
+                key = _radius_key(km.group(1), km.group(2))
             existing = radius_by_host.get(host)
             if existing is None:
                 intent.radius_servers.append(CanonicalRADIUSServer(
@@ -1968,7 +1995,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if rk:
             # Global-scope key — apply to any RADIUS server that
             # didn't carry its own inline key.
-            global_key = rk.group(1).strip().strip('"')
+            global_key = _radius_key(rk.group(1), rk.group(2))
             # Only a server with no key can take it.  Those are kept
             # apart, and every server is looked at once to find them.
             # An empty key gives nothing to anyone: after it every

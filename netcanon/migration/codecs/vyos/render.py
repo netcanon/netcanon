@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import re
 
+from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
 from .._helpers import same_vendor_version
@@ -81,7 +82,21 @@ _TYPE_RANK = {"ethernet": 0, "loopback": 1, "dummy": 2, "bonding": 3}
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as VyOS ``config.boot`` text."""
-    lines: list[str] = []
+    # A name VyOS writes bare is written as one word where it is not
+    # one, at every place it goes; an address is left out; a text it
+    # writes between quotes has each ``"`` written ``'`` (:func:`_q`
+    # says why).  Each is said.  Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "VyOS",
+        names=("hostname", "routing_instances[].name"),
+        addresses=(
+            "domain", "ntp_servers", "dns_servers", "static_routes[].gateway",
+        ),
+        no_escape=(
+            "interfaces[].description", "snmp.location", "snmp.contact",
+        ),
+    )
+    lines: list[str] = [_review(said) for said in one_value_said]
 
     iface_lines = _render_interfaces(tree.interfaces, tree.lags)
     vxlan_lines = _render_vxlan(tree.vxlan_vnis)
@@ -149,6 +164,9 @@ def _q(value: str) -> str:
     common no-quote case included — so the honest, value-specific signal is a
     log line emitted only when a substitution actually happens.  Structured
     values (IP / prefix) never contain a quote, so this is a no-op for them.
+    The fields :func:`~netcanon.migration._one_value.one_value_tree` knows
+    (a description, the SNMP location and contact) reach this function
+    with the substitution already made and said in a review line.
     """
     if '"' in value:
         logger.warning(
@@ -160,6 +178,25 @@ def _q(value: str) -> str:
         )
         value = value.replace('"', "'")
     return f'"{value}"'
+
+
+def _one_leaf_value(value: str) -> str:
+    """A secret as one value of its leaf: quoted where it holds a space.
+
+    Called only for a value :func:`breaks_its_quotes` passed, so
+    :func:`_q` never alters it (a secret with a quote replaced is another
+    secret).  The name says nothing of secrets: CodeQL takes a call whose
+    name does for sensitive data, and followed this one through a test
+    that parses a rendered config into the parser's debug line."""
+    return _q(value) if splits(value) else value
+
+
+def _review(text: str) -> str:
+    """*text* as a ``/* */`` comment that no value in it can close.
+
+    A name is put into the comment as it stands, and ``*/`` in it would
+    end the comment there: the rest of the line would be configuration."""
+    return "/* " + text.replace("*/", "* /") + " */"
 
 
 def _vyos_type_and_name(name: str) -> tuple[str, str]:
@@ -303,8 +340,17 @@ def _render_login(users: list) -> list[str]:
         if u.hashed_password and not is_migratable(u.hashed_password, "vyos"):
             algorithm, _payload = classify_hash(u.hashed_password)
             out.append("        " + format_review_comment(
-                u.name, algorithm, comment_syntax="slash", target_label="VyOS",
+                u.name.replace("*/", "* /"), algorithm,
+                comment_syntax="slash", target_label="VyOS",
             ))
+            continue
+        # A user name is a tag node, one word; a password goes in quotes,
+        # where VyOS refuses a `"` even escaped (vyos.dev/T1246).  Neither
+        # is altered to fit: the user is left out and said.
+        # Policy: :mod:`netcanon.migration._one_value`.
+        payload = classify_hash(u.hashed_password)[1] if u.hashed_password else ""
+        if splits(u.name) or breaks_its_quotes(payload):
+            out.append("        " + _review(left_out(f"user {u.name}", "VyOS")))
             continue
         out.append(f"        user {u.name} {{")
         if u.hashed_password:
@@ -314,7 +360,7 @@ def _render_login(users: list) -> list[str]:
                 else "encrypted-password"
             )
             out.append("            authentication {")
-            out.append(f"                {key} {payload}")
+            out.append(f"                {key} {_one_leaf_value(payload)}")
             out.append("            }")
         out.append("        }")
     out.append("    }")
@@ -380,7 +426,8 @@ def _snmp_v3_review(name: str, source_vendor: str) -> str:
     """
     origin = f"{source_vendor} " if source_vendor else ""
     return (
-        f'        /* snmpv3 user "{name}" -- review: {origin}USM keys are '
+        f'        /* snmpv3 user "{name.replace("*/", "* /")}" -- review: '
+        f"{origin}USM keys are "
         f"localised to the source agent's engine ID, so VyOS cannot re-use "
         f"them; re-create this user and re-key it on the target */"
     )
@@ -439,6 +486,14 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
     if len(engine_ids) == 1:
         out.append(f"            engineid {next(iter(engine_ids))}")
     for u in carried:
+        if splits(u.name) or splits(u.group) or any(
+            breaks_its_quotes(v) for v in (u.auth_passphrase, u.priv_passphrase)
+        ):
+            out.append(
+                "            "
+                + _review(left_out(f"snmpv3 user {u.name}", "VyOS"))
+            )
+            continue
         out.append(f"            user {u.name} {{")
         if u.group:
             out.append(f"                group {u.group}")
@@ -458,7 +513,7 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
         )
         out.append("                auth {")
         out.append(
-            f"                    {auth_leaf} {u.auth_passphrase}"
+            f"                    {auth_leaf} {_one_leaf_value(u.auth_passphrase)}"
         )
         out.append(
             f"                    type {_snmp_auth_type(u.auth_protocol)}"
@@ -467,7 +522,8 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
         if u.priv_protocol and u.priv_passphrase:
             out.append("                privacy {")
             out.append(
-                f"                    {priv_leaf} {u.priv_passphrase}"
+                f"                    {priv_leaf} "
+                f"{_one_leaf_value(u.priv_passphrase)}"
             )
             out.append(
                 f"                    type {_snmp_priv_type(u.priv_protocol)}"
@@ -490,7 +546,10 @@ def _render_service(snmp, source_vendor: str = "") -> list[str]:
     if snmp is None:
         return []
     body: list[str] = []
-    if snmp.community:
+    if splits(snmp.community):
+        # A community is a tag node, one word.
+        body.append("        " + _review(left_out("an SNMP community", "VyOS")))
+    elif snmp.community:
         body.append(f"        community {snmp.community} {{")
         body.append("            authorization ro")
         body.append("        }")
