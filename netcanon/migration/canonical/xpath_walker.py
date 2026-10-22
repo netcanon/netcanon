@@ -139,6 +139,12 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             yield "/interfaces/interface/tunnel-type"
         if iface.mtu is not None:
             yield "/interfaces/interface/config/mtu"
+        if iface.ip_mtu is not None:
+            yield "/interfaces/interface/config/ip-mtu"
+            # A platform with one MTU writes the payload where both
+            # are stated, and the IP MTU has no line.
+            if iface.mtu is not None:
+                yield "/interfaces/interface/config/ip-mtu-beside-mtu"
         if iface.vrf:
             yield "/interfaces/interface/config/vrf"
         if iface.lag_member_of:
@@ -158,6 +164,8 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             yield "/interfaces/interface/access-vlan"
         if iface.dot1q_vlan is not None:
             yield "/interfaces/interface/dot1q-vlan"
+        if iface.dot1q_inner_vlan is not None:
+            yield "/interfaces/interface/dot1q-inner-vlan"
         if iface.trunk_allowed_vlans:
             yield "/interfaces/interface/trunk-allowed-vlans"
         if iface.trunk_native_vlan is not None:

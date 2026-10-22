@@ -43,13 +43,17 @@ back-fills from the global default.
 
 Both codecs round-trip the canonical
 `CanonicalRADIUSServer(host, key, auth_port, acct_port)` tuple
-cleanly.
+for a key written as typed.
 
 * `host`: IPv4 address (string).
-* `key`: shared secret stored opaque per the canonical schema
-  doctrine.  Cross-vendor migration carries the literal secret;
-  operators typically rotate secrets on cutover regardless of
-  vendor.
+* `key`: a key written as typed (`key <secret>`, `key 0 <secret>`)
+  is carried as the literal secret.  A key IOS-XE stored in its own
+  form -- `key 7 <blob>` (Cisco's reversible cipher) or `key 6
+  <blob>` (AES under the router's master key) -- is a form only
+  IOS-XE reads: the parser holds it behind `iosxe:`, it is not
+  decoded, and the AOS-S render writes the server with no key,
+  beside a review line that names the form.  The secret has to be
+  re-entered.
 * `auth_port` / `acct_port`: integers; both vendors default to
   1812 / 1813.
 
@@ -58,4 +62,5 @@ nested address sub-command) condenses to the same canonical record
 as the flat `radius-server host` form.  Aruba renders only the
 flat form.
 
-Disposition: **good**.
+Disposition: **lossy** (a `key 7` / `key 6` is refused; the
+kitchen sink's `key 7` shows it).

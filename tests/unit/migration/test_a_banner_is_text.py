@@ -997,17 +997,28 @@ def _digest(codec: str, path: str) -> str:
 #: was before a banner was read as text (``8210c697``; IOS XR's on
 #: ``efda1659``, before its parser read one).  A value changes
 #: only when a parser's reading of that input is changed on purpose; the
-#: failing assertion prints the new one.
+#: failing assertion prints the new one.  Changed since: the carrier
+#: capture, whose ``second-dot1q`` units hold their inner tag; and,
+#: on purpose, every IOS XR and OS10 input that states an ``mtu``,
+#: when the tree's MTU became the payload (``MTU_BEYOND_THE_PAYLOAD``
+#: in ``codecs/_helpers.py``); every input that states an IP MTU apart
+#: from its MTU, and every AOS-CX input that raises the MTU of an IPv4
+#: interface and leaves its IP MTU at 1500, when the tree gained an IP
+#: MTU of its own (``CanonicalInterface.ip_mtu``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "1438f3eb976a",
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "51c85d20a673",
-    "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "181fdcc21fb2",
-    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "48321a06dd41",
-    "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "ed95de985915",
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "272c7cdc2be8",
+    "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "46ec779d1ff1",
+    # Its `admin` secret is read by its `ciphertext` keyword, not by its
+    # shape (test_a_typed_password_is_not_a_hash.py): was "48321a06dd41".
+    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "7451e92d6bce",
+    "synthetic/aruba_aoscx/kitchen_sink.cfg": "1c1097aeb766",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "12aa29d82a17",
+    # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
+    # as a contact and a location (test_snmp_contact_and_location.py).
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "a4e275c2c670",
@@ -1025,12 +1036,13 @@ BEFORE: dict[str, str] = {
     # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
     # (``test_a_flat_text_is_refused.py``).
     "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
-    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "3c1760c9d5cd",
+    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "454f509eaaf8",
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "c2f10d43a64e",
+    # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",
@@ -1045,16 +1057,16 @@ BEFORE: dict[str, str] = {
     "real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg": "34109f2ee06c",
     "real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg": "a473a68a8205",
     "synthetic/cisco_nxos/kitchen_sink.cfg": "f3cb7a5a89f3",
-    "real/dell_os10/azlocal_tor1.txt": "12f5f4f56315",
-    "real/dell_os10/azlocal_tor2.txt": "521e6b441cdb",
-    "real/dell_os10/azsupport_TOR1_Sample.cfg": "0a2cbd0d5200",
-    "real/dell_os10/azsupport_TOR2_Sample.cfg": "514e02bd8eb7",
-    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "d15cbc035264",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "dfa58f478ee8",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "f440c137762c",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "3a78e4d91421",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "d7d4ead22562",
-    "synthetic/dell_os10/kitchen_sink.cfg": "0cc500ce11ab",
+    "real/dell_os10/azlocal_tor1.txt": "254896e1a85a",
+    "real/dell_os10/azlocal_tor2.txt": "88bb0da08716",
+    "real/dell_os10/azsupport_TOR1_Sample.cfg": "4751d5837437",
+    "real/dell_os10/azsupport_TOR2_Sample.cfg": "c67c68101040",
+    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "048abe38dae0",
+    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "34857fa6db7b",
+    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "621b35863c2d",
+    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "a115f3940371",
+    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "c6abd209a7bc",
+    "synthetic/dell_os10/kitchen_sink.cfg": "2afb408e4714",
     "real/arista_eos/batfish_duplicateprivate_eos4211.txt": "92358f840447",
     "real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt": "0760df6623db",
     "real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt": "06ce2c081564",
@@ -1063,16 +1075,16 @@ BEFORE: dict[str, str] = {
     "synthetic/arista_eos/kitchen_sink.txt": "5f8ca989330b",
     "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
     "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
-    "real/cisco_iosxr/batfish_ibgp_border01.txt": "04fb1591aafb",
-    "real/cisco_iosxr/batfish_ibgp_rr.txt": "26dee33685ac",
+    "real/cisco_iosxr/batfish_ibgp_border01.txt": "639b6fd2954a",
+    "real/cisco_iosxr/batfish_ibgp_rr.txt": "0432b72eff4e",
     "real/cisco_iosxr/batfish_vpnv4_pe1.txt": "d3c44fa0bb3b",
     "real/cisco_iosxr/batfish_vpnv4_pe2.txt": "fa0c9f8fddb3",
     "real/cisco_iosxr/batfish_vpnv4_pe3.txt": "63fcc6d7a988",
-    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "22396ca5c243",
+    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "700193459777",
     "real/cisco_iosxr/xrdtools_isis_r1.cfg": "178d0314da43",
     "real/cisco_iosxr/xrdtools_sr_xrd1.cfg": "74c70c975078",
     "real/cisco_iosxr/xrdtools_srv6_pe1.cfg": "0e4e6ddc0250",
-    "synthetic/cisco_iosxr/kitchen_sink.cfg": "87347d0d4a5c",
+    "synthetic/cisco_iosxr/kitchen_sink.cfg": "75b5a4a7443e",
 }
 
 #: The committed inputs that hold a banner: the body pass changes their

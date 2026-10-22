@@ -162,7 +162,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
-| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  And say what a trunk that states no allowed list carries on the platform: a row in `TRUNK_THAT_STATES_NO_LIST` (`netcanon/migration/codecs/_helpers.py`), which the parser fills an unstated list from — through `TrunksByName`, which keeps what an interface states by its name, so that a stanza met twice is one interface and only a port that SAYS it is a trunk is given the default — or — if the platform has no allowed list, or the parser reads none — the codec's name and the reason in `NO_ALLOWED_LIST` in `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`.  `test_each_codec_is_in_the_table_or_named` fails for a public codec that is in neither (see the Hard Rule on "not stated").  And say whether its VLAN has only a name: `vlans_have_only_a_name = True` where the platform writes one label for a VLAN, so that a label the tree holds as a VLAN's description is written as its name (`_vlan_labels.py`), or the codec's name and the reason in `NOT_NAME_ONLY` in `tests/unit/migration/test_a_vlan_label_is_its_name.py` -- `test_each_public_codec_is_a_target_or_named` fails for a public codec that is in neither |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  And say what a trunk that states no allowed list carries on the platform: a row in `TRUNK_THAT_STATES_NO_LIST` (`netcanon/migration/codecs/_helpers.py`), which the parser fills an unstated list from — through `TrunksByName`, which keeps what an interface states by its name, so that a stanza met twice is one interface and only a port that SAYS it is a trunk is given the default — or — if the platform has no allowed list, or the parser reads none — the codec's name and the reason in `NO_ALLOWED_LIST` in `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`.  `test_each_codec_is_in_the_table_or_named` fails for a public codec that is in neither (see the Hard Rule on "not stated").  And say what its interface `mtu` counts beyond the payload: a row in `MTU_BEYOND_THE_PAYLOAD` (`codecs/_helpers.py`), with the vendor's sentence in `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`, or the codec's name and reason in `NO_INTERFACE_MTU` in `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which fails for a public codec that is in neither (see the Hard Rule on what a number counts).  And say what it does with an IP MTU of its own (`ip_mtu`): reads and writes its statement, writes it as its one `mtu` (`one_mtu_written`), or is named in `_SAID_LOST` in `tests/unit/migration/test_an_ip_mtu_of_its_own.py` with its matrix saying so -- that test fails for a public codec that is in none.  And say whether its VLAN has only a name: `vlans_have_only_a_name = True` where the platform writes one label for a VLAN, so that a label the tree holds as a VLAN's description is written as its name (`_vlan_labels.py`), or the codec's name and the reason in `NOT_NAME_ONLY` in `tests/unit/migration/test_a_vlan_label_is_its_name.py` -- `test_each_public_codec_is_a_target_or_named` fails for a public codec that is in neither |
 | A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  A codec that declares the `vendor_id` of another is one PLATFORM with it: a name the port translator leaves between the two is taken for the platform's own and holds no job.  `test_which_codecs_are_one_platform` in `tests/unit/migration/test_run_plan_checked_names.py` pins the pairs and fails for a new one until it is added there |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
@@ -358,10 +358,36 @@ tests use these exclusively — never CSS classes or element structure.  See
   well the secret was classified.  A new user-rendering codec goes in
   `_USER_RENDERING_TARGETS` in that test file, which fails for any render
   path that skips the gate.
+  And the gate is only half of a refusal: **the account goes with its
+  secret.**  FortiOS, RouterOS and OPNsense called the gate, wrote the
+  review line, and then wrote the account without its password --
+  `edit` and an access profile, `add group=full`, a `<user>` element --
+  and a RouterOS user added with no password has a blank one: on the
+  committed captures, 93 accounts onto FortiOS and 99 onto RouterOS
+  were written with no password, in jobs that reported the review
+  line and nothing else.  Every check asked whether the SECRET reached
+  the output; none asked whether the ACCOUNT did.
+  `test_a_refused_secret_takes_its_account_with_it` reads every
+  target's output for the account's name outside a comment.
   And never let a TAG decide the algorithm when the tag cannot be trusted:
   a vendor envelope (`junos:`) or a parser that tags everything one way
   (OPNsense `bcrypt:` over a `$6$` body) must defer to the payload's own
   crypt(3) id (#462).  Fails closed, but refuses every account it mislabels.
+  And never take a TYPED password to be accepted everywhere: `plaintext`
+  is an algorithm like any other, in a target's accept set only where
+  the target has a line that takes a typed password and hashes it
+  itself.  The policy called it "implicitly accepted by every target",
+  and Junos and OPNsense, whose config holds a password only as a hash,
+  wrote the typed string as the hash -- an account no password opens.
+  Guarded by `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`,
+  which reads each target's output as text against that vendor's form
+  for a typed password, typed by hand, not asked of the renderer.  The
+  same holds for anything that REPLACES a secret: the sanitiser faked
+  every tagged hash (`arista:sha512:`, `5 `, `junos:`, `sha1:`) and every
+  AOS-CX ciphertext as `fake-hash-NNNN`, which the policy reads as typed,
+  so a sanitised config held typed passwords where the device held
+  hashes, and on Junos lost the account.  A fake is the same kind of
+  secret as what it replaces (`tests/unit/tools/test_sanitize_keeps_a_secrets_kind.py`).
 - **Never** re-emit a credential that is SALTED TO ITS SOURCE DEVICE.  An
   SNMPv3 USM key is localised against the agent's engine ID, so writing another
   vendor's key into the target's key leaf yields a config that commits cleanly
@@ -412,7 +438,47 @@ tests use these exclusively — never CSS classes or element structure.  See
   default must not become a false-positive blast: classify by envelope
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
-  unvouched source is refused.
+  unvouched source is refused.  (3) A gate reads what the parsers hand
+  it, and is no better than their reading.  The IOS-XE CLI parser kept
+  a `key 7` type IN the value (`7 <blob>`) and dropped it on the
+  one-line form, the EOS parser read `key 7 <blob>` as the secret `7`,
+  and the AOS-S parser read `encrypted-key "<blob>"` as the plaintext
+  `<blob>`: none carried an envelope, so the gate called each a typed
+  secret and every target wrote the stored form into its
+  literal-secret slot, in jobs that said `completed`.  And the
+  FortiGate parser put EVERY `set secret` behind `fortios:`, so a
+  secret typed without `ENC` was refused everywhere.  What a value is
+  is said by the grammar it was read from, which only its parser has:
+  each parser envelopes its platform's stored form (`iosxe:`, `eos:`,
+  `aoss:`, `fortios:`) and only that platform's renderer writes it
+  back.  **The blind spot:** the gate's tests built their trees with
+  the envelope already on, or parsed the FortiOS `ENC` form alone, so
+  every value they handed it was already right -- and a parser test
+  pinned the IOS-XE value `7 <blob>` as the key.  Guarded by
+  `tests/unit/migration/test_a_radius_key_says_its_form.py`, which
+  sends each stored form of each grammar through its parser onto
+  every target and reads the output as text and with the target's
+  parser; and the envelope-registry test now fails for a snippet its
+  parser reads no keyed server from.
+- **Never** put a value of the tree into a comment that a terminator
+  ends without breaking the terminator in it.  A review comment names
+  what was left out, as the source holds the name, and a block comment
+  ends at its terminator, not at its line: on OPNsense a source account
+  named `x--><user>...</user><!--`, refused for its password, came out
+  as an account the source never had, holding whatever elements the
+  name spelled out; `svc--backup` (XML allows no `--` in a comment) failed
+  the render; on VyOS `a*/system{...}/*` left `system{...}` on the line
+  as nodes.  The account was refused, so every check of accounts looked
+  past it, and every check of a review line read that it was there.
+  Build such a comment with `netcanon/migration/_comments.py`
+  (`comment` / `comment_text`); a line comment is left as it is, since
+  a value with a line break is another rule's.  Guarded by
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  reads each block-comment target's output with a reader of its own
+  (an XML parser; the `/* */` grammar) and reads the source for a block
+  comment built around a value anywhere but there -- a table that is
+  compared for equality, so a new one fails until it is mended or
+  listed with why it may.
 - **Never** hand text nobody vouches for to code whose cost you have not
   measured.  A config is whatever was pasted, a request carries megabytes
   of it, and a pattern at work does not let the server's other threads
@@ -724,6 +790,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   declared and nothing reported — and "the ordinary path did not move"
   had been measured with an empty port map only.  A port's factory
   name says which hardware it IS; it is not a reference to the port.
+  And it is a name the DEVICE gives, whole: the parser took any name
+  that began `ether` and a digit for one, in any letter case, and
+  looked `ether1_ADMIN` up as hardware no device has, while an SFP
+  port the config named only in `/ip address` had none and was
+  looked up by its new name.  The shapes come from the vendor's
+  manual and exports (`is_factory_port_name`), never from a prefix.
   The translator leaves it alone, and `run_plan_with_models` — the one
   caller that knows the target device — sets it, and reads back from
   the tree that is rendered where each port's hardware ended.  Nothing
@@ -766,7 +838,14 @@ tests use these exclusively — never CSS classes or element structure.  See
   was read back, allow for the reader's losses in every branch and
   for every list (a member list and a next hop are not cut at the
   same characters), and give its oracle another way to look (the
-  text).
+  text).  And a port its own line finds is no less lost to a list
+  that cuts its name: when an OPNsense lagg's members were given
+  records, `a,b` had a line of its own and was a member `a` in
+  `slaves=`, in a job that said `completed`.  Judge such a name by
+  every piece a list makes of it, each list by its own cuts: judged
+  by the part before its first comma, `@` or `%`, `,a` and `a%b,c`
+  went unseen in `slaves=`, and `sfp-sfpplus2@x`, which `slaves=`
+  gives back whole, was reported.
   **And a job from a codec to itself changes no name unless an entry
   says so.**  The translator asks the source codec to classify a
   name and the target codec to write it, and that round trip is not
@@ -810,6 +889,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   across vendors one of more than ten digits (`UNIT_MAX_DIGITS`) is
   not sent after its port: no longer run of digits reaches another
   vendor's renderer by this rule.
+  **And a name formatted alone cannot say what the target's name for
+  it depends on.**  Junos has one loopback interface, `lo0`: its unit
+  0 is the global table's loopback, and each routing instance takes a
+  unit of its own.  Formatted a name at a time, `Loopback2` came out
+  as `lo2`, an interface Junos does not have -- the VTEP source of a
+  committed EVPN leaf among them -- in jobs that said `completed`;
+  and read a name at a time, every unit of `lo0` was `lo0` itself, so
+  each routing instance's loopback came out on the one `Loopback0` of
+  every other platform.  Where a target's name for a thing depends on
+  the config's other things, the translator gives the target all of
+  them at once (`CodecBase.place_loopbacks`), and what has no place
+  is dropped and said with its reason, never picked: which of two
+  loopbacks of the global table is `lo0` is the operator's choice.
+  Guarded by `tests/unit/migration/test_a_loopback_is_a_unit_of_lo0.py`,
+  which reads the Junos output by a reader of its own -- each
+  loopback's address on its unit of `lo0`, the unit in its source's
+  routing instance -- and the other platforms' outputs by address.
   **And a warning is not a status.**  Every check above was built
   where devices are declared.  With none, what the translator found
   reached the job as warning lines and the status was the validation
@@ -1387,7 +1483,11 @@ tests use these exclusively — never CSS classes or element structure.  See
   type's number, so a keyword is no type, and an address after a
   type word (`ip route ... Dialer 10.0.0.1`) is the route's gateway.
   Before making a record for the first word of a line, ask what the
-  config STATES under that name, not what the parser read of it.  A
+  config STATES under that name, not what the parser read of it --
+  and of what KIND: `interface Port-channel1.10` states a unit of a
+  LAG, and three parsers that took any header with the LAG's prefix
+  for a LAG made an empty LAG of it, which Junos wrote as `ae10` and
+  FortiOS as an aggregate holding the unit's address.  A
   Junos line under `unit N` configures `<name>.<N>` and states
   nothing on the device the unit hangs off; a line on the device or
   on its unit 0 makes the record whether or not any handler reads
@@ -1448,6 +1548,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   by a reader of its own, the port's name in a line), holds every
   parser to the record on the captures, and pins by name what it
   knows is still open — the change that mends one empties its pin.
+  A LAG's list is such a list: OPNsense adds only an UNASSIGNED
+  interface to a LAGG, so its members are in no zone, the parser
+  made no record for them, and seven targets wrote the LAG with no
+  member, in jobs that said `completed`.  And a record a parser adds
+  is a record every renderer writes: the OPNsense renderer wrote a
+  zone for each, which assigns a member, and a member is now written
+  in `<members>` alone (`tests/unit/migration/test_a_lag_member_has_a_record.py`).
   The same holds the other way: a renderer that leaves a port's
   stanza out because another line of its output names the port asks
   the target's own reader whether that line gives the port back.
@@ -1455,6 +1562,253 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** write a value of the tree on more than one line.  Every
+  renderer writes a config a line at a time and puts a value into its
+  line as it stands, so a value that held a line break was written as
+  lines of its own, and the text after the break was a command: an
+  interface description holding a break and then `username <name>
+  privilege 15 nopassword` came out with that line on its own onto 12
+  of the 13 public codecs.  The OPNsense and IOS-XE NETCONF parsers
+  keep such a value from an element's text, and the FortiOS parser
+  made one of the device's own printout as well -- FortiOS prints a
+  certificate, a key or a replacement message's HTML between its
+  quotes, over several lines, and the parser read each line of it as a
+  statement: a line `end` in the HTML closed the block it was in, and
+  a line `config system admin` after it was an account with no
+  password on IOS-XE and EOS, in jobs that said `completed`.  The rule
+  is ONE for every field of every target, never a list of the fields a
+  target may hold a break in, since a value in the wrong place on such
+  a list is an account: the pipeline (and the sanitiser, before it
+  renders) writes each run of breaks as a space after the transforms
+  -- an operator's map puts values into the tree too -- and says each
+  place in the job's warnings (`one_line_each`), and `CodecBase.render`
+  refuses a tree that still holds one, naming the field and nothing of
+  the value (`netcanon/migration/_one_line.py`).  A break is every
+  character `str.splitlines` ends a line at, not the line feed alone.
+  The walk reads every field a record HOLDS, not the fields the schema
+  declares, and a dict's keys with its values: a value in a place the
+  schema does not name is written all the same.  The parsers' half is
+  the rule on a body that runs to its own end, above: a FortiOS quoted
+  value is read whole, up to the line whose quote no backslash escapes,
+  and the Tier-3 rows and the release are read from the text with its
+  lines emptied (`without_quoted_values`).  **The blind spot that hid
+  it:** every check read a capture, no committed capture's tree holds a
+  value of several lines, and a codec's round trip to itself writes
+  the break and reads the same value back.  `raw_sections`, the one
+  field built for text of several lines, is under the rule too; no
+  parser fills it.  Guarded by
+  `tests/unit/migration/test_a_value_is_one_line.py`, which puts a
+  break into every place of a tree built from the schema and sends the
+  sources that keep one onto every public codec; with the mend taken
+  out the render refuses, and with both gates out the line comes back
+  on every codec it is pinned for; and by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_quoted_value_is_text.py`,
+  which holds where each quoted value of every committed input ends to
+  a reader of its own, a character at a time.
+- **Never** write a value of the tree where the target reads it as
+  more than a value.  RouterOS imports an `.rsc` as a script: outside
+  a string white space parts two words, `;` ends the command, and
+  `$`, `[ ]`, `( )` and `{ }` substitute a variable, run a command or
+  an expression, or open a scope -- and inside a string `$[...]` and
+  `$(...)` run as well.  The renderer escaped `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source vendor came out as that
+  command on the router that imported the output, a value holding `;`
+  ended its command there, and a RADIUS secret `7 <blob>` was a secret
+  `7` and a stray word -- in jobs that said `completed`.  A value is
+  written as it stands only when it is made of characters the
+  vendor's own printout leaves bare (letters, digits and
+  `- . _ / : , %` for RouterOS), and as a string otherwise, escaped
+  by the vendor's rules -- `$` included, as an export escapes it
+  (`_quote_if_needed` and `_escape` in the RouterOS renderer) -- and
+  the parser reads back every form the renderer writes (a quoted
+  `[ find name="..." ]`), in the same change.  An allow-list, never a
+  list of the characters known to be dangerous: what a grammar gives a
+  meaning to is the vendor's to say, and a value nobody vouches for
+  finds the one left off.  **The blind spot that hid it:** every check
+  read the output with the codec's own parser, which reads `$[...]`
+  inside a string as text and a bare value up to its first space as
+  the whole of it -- so a description that runs a command
+  round-tripped, and a secret cut to `7` was a loss the mesh had
+  measured and put down to the secret's encoding.  The guard reads the
+  output with a reader of its own, typed from MikroTik's "Scripting"
+  page, over a tree built from the schema with such text in every
+  place it has and over every committed input, and each of its checks
+  is handed the old rule and fails
+  (`tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`).
+  Still open: the renderers whose lines a device reads a word at a
+  time have not been read for a value with white space in it written
+  bare (SECURITY.md, "Known Limitations").
+- **Never** write a credential where one value goes unless it IS one
+  value there.  A renderer puts a value into its line as it stands,
+  and a word-at-a-time CLI reads a value that holds white space as two
+  words, the second as whatever that place takes next: NX-OS
+  `snmp-server community public rw` is a READ-WRITE community
+  `public`, an EOS community's second word is an ACL name, a password
+  `secret scrypt` sets `secret`.  Every line-grammar renderer did this
+  for every password, community, SNMPv3 user and VRRP/HSRP key, and
+  AOS-S, which quotes and documents no escape, ended a value at its
+  `"`.  Which places quote, and with what escape, is the VENDOR's to
+  say: no word-at-a-time CLI documents a quoted credential, so such a
+  value is not written there, and a secret is never altered to fit (a
+  secret with a space replaced is another secret).  It is left out
+  with the granularity the credential rules above set, and said in a
+  line that names the place and never the value -- three review lines
+  quoted the very key they could not write.  Where the target quotes,
+  escape as it documents (`_one_value.py`; FortiOS and Junos `\"`,
+  VyOS none at all).  **The blind spot that hid it:** no committed
+  input holds such a value, every check read the captures, and a
+  codec's round trip to itself writes the two words and reads the
+  same two back.  And a check of "the secret is in no comment" has to
+  run whether or not the target writes the field: the first version of
+  the guard looked only where the one-word value was written, and the
+  AOS-S line that quoted an MD5 key it could not write passed it.
+  Guarded by `tests/unit/migration/test_a_secret_is_one_value.py`,
+  which reads every target's output as text, and is handed each
+  defect it is for.  Not yet under the rule: RADIUS keys.
+  **What is not a secret is under the same rule, by what it is**
+  (`one_value_tree`, which each line renderer runs on the tree before
+  its first line).  A NAME that labels (host name, VLAN, VRF, route
+  name) may be written as one word (`_` for each run of white space,
+  `'` for a `"`) and said; an ADDRESS (a server, a domain, a gateway)
+  is never altered, so it is left out and said, and a static route
+  whose gateway it is goes WHOLE (a route that keeps its destination
+  without its next hop is another route); a TEXT is written to the end
+  of the line where the vendor documents that place so, written and
+  said where no page does, and quoted where the target quotes (OS10's
+  description: Dell does not keep the spaces of an unquoted one).  A
+  name is changed ON THE TREE, once, never at the line that writes it:
+  a VRF is named on its own stanza, on every interface in it and on
+  every route of it, and a name relabelled at one of those lines and
+  not at another is two VRFs; and a relabel that would give a VRF
+  another VRF's name is told apart.  **The blind spot:** two
+  renderers already wrote the host name with `_`, from a helper whose
+  own docstring said to extend it only after auditing each codec's
+  grammar; nobody did, the other six wrote `hostname a b`, and the
+  IOS-XE route name holding a space was left out with nothing said.
+  Guarded by `tests/unit/migration/test_a_name_is_one_word.py`, which
+  reads every target's output as text with a table of the places
+  that read to the end of the line typed from the vendor references
+  (or a committed capture that prints such a line),
+  counts the places a name goes before and after, and is handed each
+  defect it is for.
+- **Never** fill a slot of the target's grammar with what the slot
+  does not take.  AOS-S takes an address, `vlan <id>`, `reject` or
+  `blackhole` as a static route's next hop (HPE's routing guide), and
+  its renderer wrote whatever the tree held there: a route out an
+  interface came out as `ip route <dest>` with nothing after it, a
+  route to `Null0` the same, a next hop `Trk1` as itself -- 33 such
+  lines over the committed captures, and a config whose one route
+  went to `Null0` made a job that said `completed` -- and a route in a
+  VRF went into the switch's one table.  A slot is filled from the
+  target's grammar, read from the vendor: each value the tree can hold
+  there is written in the form that means it, or left out under a
+  `review:` line in a job that is not `completed`.  And a parser reads
+  the forms its device takes, not the forms its renderer wrote: the
+  AOS-S parser read `ip route <dest> Trk1` back, so a round trip agreed
+  with itself over a line the switch refuses.  Still open, each a
+  change of its own: the tree's only spelling of a discard route is
+  `Null0` in its interface (a FortiOS `blackhole` route parses as a
+  route with no next hop), several renderers write `Null0` as it
+  stands where a next hop goes, not yet held to each vendor's grammar,
+  and the FortiOS, RouterOS and VyOS renderers write a route in a VRF
+  into the global table.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_route_the_switch_takes.py`,
+  which reads the output with a reader of HPE's grammar typed in the
+  test and works out each route's next hop from the source's tree.
+  And a list is read in the form the DEVICE prints, not the form the
+  renderer writes: the VyOS renderer wrote a bond's members as nodes
+  (`interface eth1 { }`), the parser read only that, and a round trip
+  agreed with itself while a bond as VyOS prints it -- one bare
+  `interface eth1` line a member, or `member interface 'eth1'` in the
+  set form -- had no members, and its `vif` units no record.  Guarded
+  by `tests/unit/migration/codecs/vyos/test_a_bond_and_its_units.py`.
+- **Never** read a statement for its first value.  A reader that
+  takes the first id of a line and ignores the rest has read another
+  statement: `encapsulation dot1Q 2234 second-dot1q 15` was VLAN
+  2234, and the six Q-in-Q units of a committed IOS-XE capture -- each
+  a customer's tag inside service VLAN 2234 -- came out as six
+  sub-interfaces of VLAN 2234 alone onto every target that writes a
+  tag, IOS-XE itself among them, in jobs that said `completed`.  So
+  were `second-dot1q any`, a range or a list of inner tags, an IOS XR
+  `dot1ad` tag, an EOS FlexEncap block and a Junos `vlan-id-range`:
+  each read as the tag it begins with, or as no tag at all.  A
+  statement is read WHOLE -- every word accounted for, by a reader
+  that says which forms it takes (`second_dot1q_tags` and `a_tag` in
+  `codecs/_helpers.py`) -- or it is not read: where the tree has no
+  form for what it says, what it governs is left out and a row says
+  so (`without_unread_tags`), since a sub-interface written with
+  fewer tags than it matches is another sub-interface.  And a
+  statement is the stanza's only at the stanza's own depth: the
+  `encapsulation` of an IOS-XE `service instance` is the instance's,
+  and tagged the port it was under.  **The blind spot:** the
+  capture's units round-tripped -- a codec that reads the first id
+  and writes the first id agrees with itself, and the mesh compares
+  two trees that both lost the inner tag.  A field the target
+  needs a second statement for is the same defect from the other
+  side: the Junos renderer wrote each unit's `vlan-id` and never the
+  device's `vlan-tagging`, the statement Juniper puts on the device
+  for its units' tags ("Binding VLAN IDs to Logical Interfaces"),
+  Junos to Junos included.  When a renderer writes a value, ask what
+  else on the device the value depends on.  Guarded by
+  `tests/unit/migration/test_a_tag_statement_is_read_whole.py`,
+  which reads each output with a reader of its own per target, from
+  the capture and from a source typed in each grammar, and hands
+  each check the defect it is for.
+  **And a target that quotes is escaped in EVERY place it quotes, and
+  read back through the same escape.**  The FortiOS renderer escaped a
+  description, a host name and an account's name, and wrote an
+  interface's own name, a LAG's members, a VLAN's parent, a route's
+  device, a DHCP pool's interface and the RADIUS server between quotes
+  as they stood -- a member `port"1` was two members -- and its parser
+  read an `edit` name with the escapes left in, so an escaped name came
+  back as another name.  An escape added line by line covers the lines
+  someone looked at: the guard reads the renderer's SOURCE for a value
+  between quotes that skips `_esc`, as well as the output, with a
+  reader of its own
+  (`tests/unit/migration/codecs/fortigate_cli/test_every_quoted_value_is_escaped.py`).
+- **Never** copy a number from one platform's config into another's
+  without asking what it COUNTS on each.  An interface's `mtu` is the
+  payload on IOS-XE, NX-OS, EOS, AOS-CX and RouterOS; the payload and
+  the 14-byte Ethernet header on Junos and IOS XR, and 4 bytes more
+  for a tag; a frame on OS10.  Every parser read the number as it
+  stood and every renderer wrote it so: a Junos `mtu 1514` -- its
+  default, for a 1500-byte packet -- was IOS-XE `mtu 1514`, an IP MTU
+  14 bytes larger than the source's, and IOS-XE `mtu 9000` was Junos
+  `mtu 9000`, which Cisco itself gives as a packet of 8986 bytes, in
+  jobs that said `completed`.  The tree holds ONE count
+  (`CanonicalInterface.mtu` is the payload), and each platform's
+  count is taken to it and from it at the codec's edge, from one
+  table (`MTU_BEYOND_THE_PAYLOAD` in `codecs/_helpers.py`), each row
+  with the vendor's sentence and its grade in the vendor reference.
+  **The blind spot that hid it:** a number copied as it stands agrees
+  with itself everywhere -- the target's parser reads back the number
+  the renderer wrote, the mesh compares two trees that hold the same
+  integer, a job to itself is the identity -- so no check that reads
+  a value back with the codec's own reading can see that its unit is
+  wrong.  A check of a unit reads the OUTPUT as text, by a reader the
+  test owns, against offsets typed by hand from the vendors'
+  sentences.  Whether a number is an Ethernet one is a fact about
+  the interface (a loopback has no header): the codec's own
+  classifier says, a name it does not read is copied as it stands,
+  and the vendor page says so.  Guarded by
+  `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
+  fails for a public codec that is neither in the table nor named
+  with its reason.
+  **And one number of the config is not always one fact.**  IOS-XE
+  and AOS-CX `ip mtu`, IOS XR `ipv4 mtu` and Junos `family inet mtu`
+  state the IP MTU apart from the MTU, and the tree had no field for
+  it: the AOS-CX parser skipped it (every jumbo VLAN interface of
+  the committed AOS-CX captures was an IP MTU of 1500 on every
+  target), the Junos parser read it as the unit's MTU, and nothing
+  said so -- a value neither tree holds is no drift.  Nor is a
+  default always the MTU's: AOS-CX's IP MTU stays 1500 under a
+  raised `mtu`.  It is a field of its own (`ip_mtu`, `None` where it
+  is the payload), the parser fills a default that a platform's
+  config leaves unstated (`IP_MTU_THAT_IS_NOT_STATED`), and a
+  platform with one MTU declares it lost where both are stated and
+  differ.  Guarded by `tests/unit/migration/test_an_ip_mtu_of_its_own.py`,
+  which reads the IP MTU each output SENDS from its text.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

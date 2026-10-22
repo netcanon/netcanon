@@ -415,6 +415,16 @@ per_field_expectation:
       cross-pair migration silently drops the VRF binding.
     references: [cisco-vrf-cli, cisco-vrf-lite-cg, junos-instance-type]
 
+  interfaces[].dot1q_inner_vlan:
+    disposition: good
+    note: >
+      The six Q-in-Q units of the carrier capture (`encapsulation dot1Q 2234
+      second-dot1q <n>` on `GigabitEthernet2/0/4`) are written `vlan-tags
+      outer 2234 inner <n>` and read back with both tags.  Up to 0.7.7 the
+      source parser read the outer tag alone, and the pair agreed with itself
+      on one tag.
+    references: [cisco-interface-cli, junos-iface-naming]
+
   # ── Tier 1 — VLANs ──
 
   vlans[].id:

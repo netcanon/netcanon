@@ -289,11 +289,12 @@ per_field_expectation:
       mounts L3 on a VLAN record: verified on all 4 populated cells, every
       VLAN record has `ipv4_addresses == []`.  The address for a dot1q VLAN
       lives on its sub-interface (`GigabitEthernet0/0/0/1.35`) and
-      round-trips cleanly there.  Both codecs additionally declare
-      `/vlans/vlan/ipv4/address/ip` lossy with the identical reason — each
-      "renders VLAN SVI / management L3 only from a sibling interface
-      stanza" — so the SVI-on-VLAN shape (the Junos irb / Aruba form) would
-      degrade in BOTH directions; it simply never arises from this source.
+      round-trips cleanly there.  cisco_iosxr declares
+      `/vlans/vlan/ipv4/address/ip` lossy ("renders VLAN SVI / management L3
+      only from a sibling interface stanza"), so the SVI-on-VLAN shape (the
+      Junos irb / Aruba form) would degrade going the other way; cisco_nxos
+      writes such an address as `interface Vlan<N>`
+      (`synthesize_svis_from_vlan_l3`).  It never arises from this source.
     references: [iosxr-nxos-surface]
 
   "vlans[].untagged_ports":

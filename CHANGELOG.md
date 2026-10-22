@@ -28,6 +28,132 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The Docker image no longer carries pip.**  The base image's pip
+  (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
+  intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,
+  CRITICAL), and the gating image scan failed every pull request on
+  it.  netcanon never used that copy -- the server makes no outbound
+  HTTPS request through pip -- but it was in the image.  The runtime
+  stage now uninstalls pip once netcanon is installed, so no copy pip
+  vendors can ship.  If you install packages into the container
+  yourself, `python -m ensurepip` restores a pip, and with it the
+  copy it bundles; build an image of your own on top instead.
+
+- **A value of several lines was written as lines of the config, and
+  the text after a line break was a command on the target.**  Every
+  renderer puts a value into its line as it stands.  An interface
+  description that held a line break and then `username intruder
+  privilege 15 nopassword` -- which the OPNsense and IOS-XE NETCONF
+  parsers keep from an element's text (`&#10;`), and the FortiOS parser
+  from a value printed between quotes over several lines -- came out
+  with that line on its own onto 12 of the 13 public codecs, many of
+  the jobs saying `completed`.  And the FortiOS parser read each line
+  of such a value as a statement: a replacement message whose HTML
+  held a line `end` and then `config system admin` made an account
+  with no password on the IOS-XE and EOS targets, in jobs that said
+  `completed`.  No value is now written on more than one line, and
+  FortiOS reads a quoted value whole (Fixed, below).  If you translated
+  an OPNsense, IOS-XE NETCONF or FortiGate config with 0.7.7 or
+  earlier, look in the old output for lines the source config did not
+  have before it reaches a device.
+
+- **A value of the config was written into a RouterOS output as
+  script, and a description could run a command on the router that
+  imported it.**  RouterOS reads an imported `.rsc` as a script:
+  outside a string white space parts two words, `;` ends the command,
+  and `$`, `[ ]` and `( )` substitute a variable or run a command or
+  an expression -- and inside a string `$[...]` and `$(...)` run as
+  well.  The RouterOS renderer escaped only `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source came out as that command on
+  the router that imported the output, in a job that said
+  `completed`, and a value with a `;` in it -- a RADIUS secret, an
+  SNMP community, a user's name, a DHCP domain -- ended its command
+  there, and what followed was read as the next one.  A value is now
+  written as it stands only when it is made of letters, digits and
+  `- . _ / : , %` (what an export leaves bare), and as a string
+  otherwise, with `\`, `"` and `$` escaped, as an export escapes `$`
+  (Fixed, below).  If you translated a config onto RouterOS with 0.7.7
+  or earlier, read the old output for `$`, `;`, `[` and `(` outside a
+  quoted string, and for `$` inside one, before it reaches a router.
+
+- **A RADIUS key that IOS-XE, EOS or AOS-S had stored in a form of its
+  own was written into the target's config as the secret itself, and
+  the server authenticated nobody.**  IOS-XE `key 7 <blob>` and `key 6
+  <blob>` came out on AOS-S, FortiOS, OPNsense and RouterOS as the
+  secret `7 <blob>` (and `key 0 <secret>` as the secret `0 <secret>`);
+  the one-line `radius-server host ... key 7 <blob>` came out on IOS-XE
+  itself as `key <blob>`, the blob as the secret; EOS `key 7 <blob>`,
+  the form EOS prints, came out as the secret `7` on every target, EOS
+  included (and `key 0 <secret>` as the secret `0`); and AOS-S
+  `encrypted-key "<blob>"` came out as the secret `<blob>` on every
+  target, AOS-S included.  Each such config commits, the server it
+  names rejects every request, and every job said `completed`.  Each
+  parser now holds a stored form behind its platform's envelope, which
+  only that platform's renderer writes back (Fixed, below).  If you
+  translated an IOS-XE, EOS or AOS-S config with a RADIUS key with
+  0.7.7 or earlier, look in the old output for a key written as `7
+  <blob>`, `0 <secret>`, `7` or `0` alone, or an AOS-S blob, and
+  re-enter the secret.
+
+- **A credential that held white space was written as two words, and
+  the second was read as a keyword.**  Every line-grammar renderer put
+  a password, an SNMP community, an SNMPv3 user's name, group or
+  passphrase, and a VRRP/HSRP key into its line as it stood.  A
+  community `public rw` from a source that quotes values (FortiOS,
+  RouterOS, Junos, VyOS, AOS-S) or holds them as element text
+  (OPNsense, IOS-XE over NETCONF) came out on NX-OS as `snmp-server
+  community public rw` -- a READ-WRITE community `public` -- and on EOS
+  as a community whose second word is read as an ACL name; a password
+  `secret scrypt` on NX-OS sets the password `secret`.  On AOS-S, which
+  quotes and documents no escape, a `"` in a value ended it there.
+  Such a value is now left out and said (Fixed, below).  No committed
+  input holds one; a config translated with 0.7.7 or earlier from a
+  source whose credentials hold white space or a quote is worth reading
+  for the lines it wrote.
+
+- **A name written into an OPNsense or VyOS review comment could end the
+  comment, and what followed it was configuration.**  Where a target
+  cannot take an account's password, the account is left out and a
+  review comment names it, as the source holds the name.  OPNsense
+  writes that comment as `<!-- ... -->` and VyOS as `/* ... */`, and
+  neither renderer kept the name from ending it: a source account
+  named `x--><user>...</user><!--` became, on OPNsense, an account the
+  source never had, holding whatever elements the name spelled out (a
+  password hash among them), and `a*/system{...}/*` left `system{...}` on a
+  VyOS line as nodes.  A name that only held `--`, which XML allows
+  nowhere in a comment (`svc--backup`), failed the OPNsense render
+  with an error that said nothing of the name.  Every review comment
+  is now built by one helper (`netcanon/migration/_comments.py`),
+  which writes `*/` as `* /` and puts a space after a hyphen that
+  another follows; a comment that ends at the end of its line is left
+  as it was.  Guarded by
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  reads the OPNsense output with an XML parser and the VyOS output by
+  its comment grammar, and reads the source for any other place that
+  builds a block comment around a value.  The VyOS SNMPv3 review
+  comment, and the one VyOS writes where it leaves out a credential
+  that is not one value, are built by the same helper.
+
+- **A local user whose password could not be carried was written onto
+  FortiOS and RouterOS with no password at all.**  When a target cannot
+  take a source's password hash, the account is to be left out with a
+  review line.  FortiOS, RouterOS and OPNsense wrote the review line
+  and then the account without its password: `edit "<name>"` with its
+  access profile (`super_admin` for a privilege-15 user), `/user add
+  group=full name=<name>`, a `<user>` element.  RouterOS documents that
+  a user added with no password has a blank one, and a FortiOS admin
+  with no `set password` is the same.  Over the committed captures, 93
+  accounts in 66 captures onto FortiOS, 99 in 70 onto RouterOS, and 60
+  in 43 onto OPNsense (where an account with no `<password>` element has no hash to check
+  a password against, so it is not known to log in), in
+  jobs that reported a review line and nothing else.  The account is
+  now left out whole, as on every other target, and the review line
+  stands in its place (Fixed, below).  If you translated a config with
+  local users onto FortiOS or RouterOS with 0.7.7 or earlier, look in
+  the old output for an account under a `review:` line before it
+  reaches a device.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -429,6 +555,49 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A value is written on one line, on every target, and the job says
+  where** (Security, above).  The pipeline writes each run of line
+  breaks in a value -- any character `str.splitlines` ends a line at,
+  not only a line feed -- as one space, after the transforms (an
+  operator's map puts values into the tree too), and says each place
+  in the job's warnings: `interfaces[em0].description held a line
+  break: it is written on one line, ...`.  The sanitiser does the same
+  before it renders.  And `CodecBase.render` refuses a tree that still
+  holds one, naming the field and nothing of the value, so a caller
+  that renders without the pipeline cannot write one either
+  (`netcanon/migration/_one_line.py`).  It is one rule for every field
+  of every target, not a list of which field of which target may hold
+  a break, because a value in the wrong place on such a list is an
+  account; an XML target, or FortiOS between its quotes, loses the
+  layout of such a value.  The walk reads every field a record holds,
+  whatever the schema says it is, and was measured on the largest tree
+  the `standard` limits admit: a small part of what the parse of the
+  same text takes.  No committed capture's tree, nor any of the
+  development corpus's, holds a line break, and every job of every
+  committed input onto every public codec is as it was.
+
+- **FortiOS: a quoted value of several lines is read as one value, not
+  as lines of the config** (Security, above).  FortiOS prints a
+  certificate, a private key or a replacement message's HTML as it is,
+  between its quotes, a quote or a backslash in it escaped with a
+  backslash, and the parser read the text a line at a time.  Besides
+  the account: a line `end` in a value closed the block it was in, and
+  the configuration after it was read
+  as nothing (the job `partial`, with "no source constructs were
+  recognized"); a line of HTML that read `config firewall policy` was
+  a Tier-3 row the config did not have; and a `#config-version` line
+  in a buffer was the config's release.  A statement whose quoted value
+  runs on is now read whole, up to the line whose quote ends it, and
+  the Tier-3 rows and the release are read from the text with that
+  value's lines emptied (`without_quoted_values`).  A value that no
+  later line ends is refused in words, naming the line that opens it
+  and quoting nothing: read, the rest of the config would be the
+  value's text.  So is a line of a value that ends in a character a
+  device does not end a line at (a form feed, a carriage return on its
+  own ...).  The committed captures hold certificates, keys and
+  replacement messages; where each value ends is held to a reader of
+  the test's own, a character at a time, and no capture's tree moves.
+
 - **A sub-interface of another vendor was written onto FortiOS with
   the number in its name for its tag.**  IOS-XE `interface
   GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
@@ -454,15 +623,16 @@ timestamp if your timezone matters for an audit.
   one parent -- two units of a port with one tag, or a VLAN interface
   whose parent is chosen landing on a port a sub-interface tags with
   its id -- the second block is written under a `# review:` line
-  that names the first.  Over the committed captures two more jobs
-  onto FortiOS pass the validation report: the IOS-XE carrier
-  capture, which is `completed` -- the IOS-XE parser reads
-  `encapsulation dot1Q 2234 second-dot1q 15` as its outer tag alone,
-  so its six Q-in-Q units come out on one tag, as they do onto every
-  target that writes a sub-interface's tag, five of them under that
-  line -- and the IOS XR CST capture,
-  which the port-name check (below) holds `partial` for its names,
-  so that check now makes 214 of 590 jobs `partial`.
+  that names the first.  A Q-in-Q sub-interface is written with its
+  outer tag, and the job is `partial`, the validation report listing
+  the inner tag (`/interfaces/interface/dot1q-inner-vlan` is
+  unsupported): the IOS-XE carrier capture's job stays `partial`
+  for its six such units, which share an outer tag on one port, so
+  five of them are under that line.  Over the committed captures
+  one more job onto FortiOS passes the validation report, the IOS XR
+  PA3 design capture's, which the port-name check (below) holds
+  `partial` for its names, so that check now makes 218 of 588 jobs
+  `partial`.
 
 - **A RouterOS line broken by an export was joined with a space, and
   a value carried onto the next line was lost.**  An `export` breaks
@@ -620,6 +790,673 @@ timestamp if your timezone matters for an audit.
   reconciler reads an interface that had no description and comes
   back with its VLAN's name as preserved
   (`_vlan_label_on_its_interface`).
+
+- **A loopback onto Junos was written as an interface Junos does not
+  have, and the loopbacks of a Junos config's routing instances were
+  written as one loopback onto every other platform.**  Junos has one
+  loopback interface, `lo0`: its unit 0 is the loopback of the global
+  routing table, and each routing instance takes a unit of its own
+  ("you must place each additional unit in a separate routing
+  instance", Juniper, *Loopback Interfaces*).  The port translator
+  named one name at a time, and so wrote `Loopback2` as `lo2` --
+  among the committed captures, the VTEP source of the Cisco Live
+  EVPN leaf, an IOS XR route reflector's second loopback and the AOS-CX
+  leaves' `loopback 1` -- in jobs that said `completed`; and it read
+  each unit of `lo0` as `lo0` itself, so that every routing
+  instance's loopback came out on `Loopback0`, beside the global
+  one.  The translator now gives Junos every loopback of the config
+  at once (`CodecBase.place_loopbacks`): the one loopback of the
+  global table is `lo0`, and of several there the one numbered 0 is;
+  a routing instance's one loopback numbered N is `lo0.N`, in that
+  routing instance.  A loopback that has no place -- a second one in
+  the global table, one of several in a routing instance, one with
+  no number or numbered 0 in a routing instance, a number two routing
+  instances share, a unit an entry of the rename map has taken -- is
+  dropped, listed in `unresolved_ports`, and its warning says why;
+  which of two loopbacks is `lo0` is not chosen for you.  The other
+  way, `lo0.N` is loopback N (`Loopback2` on IOS-XE), and a unit
+  written with more digits than Junos numbers a unit with is a name
+  the translator does not read.  The count of
+  jobs the port-name check makes `partial` is now 216 of 587: the
+  four jobs onto Junos above.  If you translated a config with a
+  loopback other than 0 onto Junos, or a Junos config whose routing
+  instances have loopbacks onto another vendor, with 0.7.7 or
+  earlier, translate it again.
+- **A sub-interface's tag statement was read for its first id.**
+  `encapsulation dot1Q 2234 second-dot1q 15` was VLAN 2234: the six
+  Q-in-Q units the carrier capture has on `GigabitEthernet2/0/4`, each
+  a customer's tag inside service VLAN 2234, came out as six
+  sub-interfaces of VLAN 2234 alone onto every target that writes a
+  tag, IOS-XE itself among them, in jobs that said `completed` (it was
+  a known limitation).  The tree holds an inner tag now
+  (`dot1q_inner_vlan`, both tags 802.1Q), which IOS-XE and IOS XR
+  (`encapsulation dot1q N second-dot1q M`), EOS (`encapsulation dot1q
+  vlan N inner M`) and Junos (`vlan-tags outer N inner M`) read and
+  write; onto the other targets the validation report lists it and the
+  job is `partial`.  A tag statement that is not one tag and at most
+  one inner tag was read as the id it begins with, or as no tag at
+  all: `second-dot1q any`, a range or a list of inner tags,
+  `encapsulation dot1Q N native`, an IOS XR `dot1ad` tag, an EOS
+  FlexEncap block (`encapsulation vlan`), a Junos `vlan-id-range`,
+  `vlan-id none`, an `inner-range`, two tag statements on one unit, or
+  a TPID other than `0x8100`.  Such a sub-interface is now left out,
+  its addresses and its VRF with it, and a row says so (`interface
+  GigabitEthernet0/0/1.20: encapsulation dot1Q 20 second-dot1q any --
+  not one 802.1Q tag and at most one inner tag, so the sub-interface is
+  not translated`): written with fewer tags than it matches, it is
+  another sub-interface.  The row does not change the job's status.
+  A tag statement in a submode -- the `encapsulation` of an IOS-XE
+  `service instance` -- is the submode's, and no longer tags the port
+  it is under.  The Junos renderer wrote a unit's `vlan-id` and never
+  the statement on its device that makes a tag mean anything:
+  `vlan-tagging` for units of one tag, `stacked-vlan-tagging` for
+  units of two, and `flexible-vlan-tagging` for both (Juniper,
+  "Binding VLAN IDs to Logical Interfaces"), on a port, an `ae`
+  bundle, a channel or a `reth` -- Junos to Junos included, though
+  both committed captures that have tagged units say `vlan-tagging`.
+  A routed port's `native-vlan-id`, read and then written on no path,
+  is written with `flexible-vlan-tagging` beside it ("To accept
+  untagged packets, include the native-vlan-id statement and the
+  flexible-vlan-tagging statement").  A unit with an address and no
+  tag beside tagged units -- the address on the port of an IOS-XE
+  router-on-a-stick -- is written as it stands with a `# review:`
+  line: Juniper documents untagged frames on such a device only
+  through `native-vlan-id` and a unit of that id, which the output
+  cannot choose without a guess, and a forum report has a unit with no
+  tag there refused at commit.  A device's own unit 0 tag (`unit 0
+  vlan-id 5`), read and not written, is written.  A VLAN map that
+  drops a sub-interface's outer tag clears its inner tag with it and
+  says so; a map does not move an inner tag, which is a customer's,
+  not a VLAN of the device.  VyOS QinQ (`vif-s <id> vif-c <id>`),
+  dropped with nothing said, is left out with a row: its service tag
+  is 802.1ad, Ethertype 0x88a8 by default (VyOS, "QinQ (802.1ad)"),
+  which the tree has no form for.  If you translated a Q-in-Q config,
+  or a Junos config with tagged units onto Junos, with 0.7.7 or
+  earlier, translate it again.
+
+- **A sub-interface of another vendor was written onto RouterOS with
+  nothing that defines it.**  IOS-XE `interface
+  GigabitEthernet1/0/2.10` with `encapsulation dot1Q 10`, a Junos
+  `unit 10 vlan-id 10`, an EOS, NX-OS, IOS XR or VyOS sub-interface:
+  its address was added on `ether2.10`, an interface no line of the
+  output made, and the job was `partial` for it.  It is now
+  RouterOS's own form, a VLAN interface on its port -- `/interface
+  vlan add interface=ether2 name=ether2.10 vlan-id=10`, with its
+  description, MTU and `disabled=yes` where it is shut -- and the job
+  is `completed`, its report saying that the line is read back as a
+  VLAN interface (`/interfaces/interface/dot1q-vlan` is lossy, where
+  it was unsupported).  The tag is the tree's, not the unit's (Junos
+  `unit 100 vlan-id 10` is `name=ether2.100 vlan-id=10`), and a VLAN
+  of the switch with the same id is still written.  A sub-interface
+  that an entry names with no port in it rides on the parent chosen
+  for every VLAN, under a `# review:` line.  A Q-in-Q sub-interface
+  is written with its outer tag, and the job is `partial`, the
+  validation report listing the inner tag
+  (`/interfaces/interface/dot1q-inner-vlan` is unsupported): the
+  IOS-XE carrier capture's job stays `partial` for its six such
+  units.  Over the committed captures one more job onto RouterOS
+  passes the validation report, the IOS XR CST capture's, which the
+  port-name check (below) holds `partial` for its names, so that
+  check now makes 217 of 587 jobs `partial`.
+
+- **An interface's MTU was copied between platforms that count it
+  differently.**  IOS-XE, NX-OS, EOS, AOS-CX and RouterOS count the
+  payload -- the largest IP packet -- and Junos (the media MTU) and
+  IOS XR count the 14-byte Ethernet header as well, and 4 bytes more
+  for a tag; a Dell OS10 link MTU is a frame.  Every parser read the
+  number as it stood and every renderer wrote it so: a Junos `mtu
+  1514` -- its own default, for a 1500-byte packet -- came out as
+  IOS-XE `mtu 1514`, an IP MTU 14 bytes larger than the source's, and
+  IOS-XE `mtu 9000` as Junos or IOS XR `mtu 9000`, an IP MTU of 8986
+  (the example Cisco itself gives), with OS10 a further 8 bytes off,
+  in jobs that said `completed`.  Every check agreed with the copy:
+  the target's parser read back the number the renderer wrote, and
+  the cross-mesh audit compared two trees that held the same number.
+  `CanonicalInterface.mtu` is now the payload, and each platform's
+  count is taken to it and from it at the codec's edge, from one
+  table (`MTU_BEYOND_THE_PAYLOAD` in `codecs/_helpers.py`): a Junos
+  port, aggregate or `irb` and an IOS XR port, management port or
+  bundle subtract 14, and 4 for each tag of a port or sub-interface
+  (a Junos device counts the tags its tagging statement names: one
+  under `vlan-tagging`, two under `stacked-vlan-tagging` and
+  `flexible-vlan-tagging`); an OS10 port, lane, port-channel or VLAN
+  interface subtracts 22.  A job from a codec to itself writes the
+  number it read.  Every IOS XR and OS10 input that states an MTU
+  parses to a tree it did not before, on purpose.  The vendors'
+  sentences, and what is inferred,
+  are in `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
+  ⚠️ Check the MTUs of configs migrated from or to Junos, IOS XR or
+  OS10 with 0.7.7 or earlier.  Guarded by
+  `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
+  reads each target's output as text against offsets typed by hand.
+- **An IP MTU of its own was lost, or written as the interface MTU.**
+  IOS-XE and AOS-CX `ip mtu`, IOS XR `ipv4 mtu` and Junos `family inet
+  mtu` state the largest IP packet apart from the interface MTU, and
+  the tree had no field for it.  The AOS-CX parser skipped `ip mtu`,
+  so every jumbo VLAN interface of the committed AOS-CX captures --
+  `ip mtu 9198` and no `mtu` -- came out with no MTU line on every
+  target, an IP MTU of 1500, in jobs that said `completed`; the IOS-XE
+  and IOS XR parsers skipped theirs; and the Junos parser read a
+  unit's `family inet mtu` as the unit's MTU, which IOS-XE and IOS XR
+  then wrote as an interface `mtu`.  The other way, AOS-CX -- whose IP
+  MTU stays 1500 under a raised `mtu` unless `ip mtu` says otherwise
+  -- was written `mtu 9000` alone for an IOS-XE port that sent
+  9000-byte IP packets.  Every check agreed, since neither tree held
+  the number.  `CanonicalInterface.ip_mtu` now holds it where it is
+  not the payload: the four platforms read and write their own
+  statement, and AOS-CX fills in its default of 1500 where a config
+  raises `mtu` on an IPv4 interface and states no `ip mtu`, and writes
+  `ip mtu` for a payload above it.  NX-OS, EOS, RouterOS, FortiOS,
+  VyOS and OPNsense have one MTU: they write the IP MTU as that MTU
+  where the tree states no payload, and where both are stated and
+  differ, the capability matrix says the IP MTU is lost (`lossy`).
+  OS10 writes none (`lossy`: the statement that sets it is not
+  established); AOS-S, whose IP MTU is the switch's, and the IOS-XE
+  NETCONF codec declare it `unsupported`.  A RouterOS VLAN interface,
+  whose `add` line carried no MTU from any source, now writes `mtu=`
+  and the parser reads it back.  The committed AOS-CX inputs that
+  state an `ip mtu` other than their `mtu` or raise `mtu` on an IPv4
+  port, the IOS-XE input that states `ip mtu`, and the RouterOS
+  captures whose VLAN interfaces state `mtu=` parse to a tree they did
+  not before, on purpose.  The vendors' sentences are in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
+  ⚠️ Check the MTUs of VLAN interfaces migrated from AOS-CX with
+  0.7.7 or earlier.  Guarded by
+  `tests/unit/migration/test_an_ip_mtu_of_its_own.py`, which reads
+  the IP MTU each output sends from its text, by a reader per
+  grammar, with each platform's value for an IP MTU it does not state
+  typed by hand.
+- **A Junos IRB unit's MTU was lost where the unit was folded onto
+  its VLAN.**  The Junos parser folds an IRB unit that a VLAN names
+  (`set vlans v100 l3-interface irb.100`) onto that VLAN -- its
+  address goes on the VLAN record and its own record is taken out --
+  unless the unit holds something a VLAN record cannot: a
+  description, a VRF, an IPv6 address.  A VLAN record holds no MTU
+  either, and an MTU was not on that list, so a unit with `family
+  inet mtu 9000` was folded and its MTU lost on every target, Junos
+  to Junos included, in a job that reported nothing.  Such a unit is
+  now left as it is (`irb.100`, with its address and its MTU).  No
+  committed input has an IRB unit with an MTU, so no committed parse
+  moves.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_an_irb_units_mtu_is_kept.py`.
+- **A unit of a Junos loopback, tunnel, aggregate or management port
+  was written under a name Junos refuses.**  The parser reads `set
+  interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the
+  renderer wrote such a name back as `set interfaces lo0 unit 10`
+  only where the device was shaped like a port (`ge-0/0/0`).  Every
+  other device was written `set interfaces lo0.10 unit 0 ...`, which
+  Junos refuses at commit -- no Junos interface has a dot in its
+  name.  So were the `lo0` units that the routing instances of both
+  committed Junos captures take, and the `st0` units of a VPN, so
+  that every routing instance and security zone named a unit no line
+  of the output defined; so was a unit of `ae`, `reth`, `me0`, `em0`,
+  `fxp0` or `vme`, and a unit of an aggregate lost its `vlan-id` as
+  well, from Junos and from an IOS-XE, EOS or NX-OS
+  `Port-channel1.10` alike.  All in jobs that said `completed`.  A
+  unit above 0 of any device is now written under it (`set
+  interfaces lo0 unit 10`, `set interfaces ae1 unit 10 vlan-id 10`),
+  and so is the unit of a management port that follows its port onto
+  a declared device (`em0 unit 5`; it was a known limitation).  A
+  unit 0 is split on a port shape only, as before: of another device
+  it would be that device's own unit 0 (`irb.0` is still the IRB's).
+  A unit's MTU, which the parser did not read and the renderer wrote
+  only under such a name, is written and read per family (`set
+  interfaces st0 unit 100 family inet mtu 1420`, on `family inet`
+  where the unit has no address), and where the device states no MTU
+  that holds it, a `# review:` line says so: Juniper requires the
+  device's media MTU to hold a family MTU and its encapsulation
+  overhead.  A Junos unit's MTU now reaches the other targets too,
+  and onto RouterOS a tunnel's `add` line, which carried no MTU from
+  any source, now writes it (`mtu=1420`) and the parser reads it
+  back.
+  On the bare pipeline (the demo's and
+  the cross-mesh audit's), where no port name is translated, a
+  sub-interface of another vendor is written as `set interfaces
+  GigabitEthernet0/0/0/1 unit 35 vlan-id 35`, the form the port
+  translator's path already gave it under the translated name.  If
+  you translated a Junos config with units of `lo0`, `st0`, an
+  aggregate or a management port, or a port-channel sub-interface,
+  onto Junos with 0.7.7 or earlier, translate it again.
+
+- **A RouterOS value with white space or script in it was cut, or
+  read as more than a value** (Security, above).  A LAG's members, a
+  route's next hop, an SNMP community, a RADIUS secret, a list of NTP
+  or DNS servers or a user's name that held a space was written bare,
+  and the router -- and the parser -- read its first word:
+  `slaves=my port,sfp-sfpplus2` was a member `my` and a stray word,
+  `secret=7 <blob>` a secret `7`.  An SNMPv3 passphrase or a
+  description that held `$` was written into a string unescaped, and
+  the router substituted a variable for it.  Every value the renderer
+  takes from the tree is now written bare only when it is made of
+  letters, digits and `- . _ / : , %`, and as a string otherwise, with
+  `\`, `"` and `$` escaped; the parser reads a quoted `[ find
+  name="..." ]` and `[ find default-name="..." ]` back whole.  The
+  read-back that reports a placed port no line of the output finds
+  (`unbound_ports`) now allows only for what the parser still cuts a
+  list at -- a comma in `slaves=`, and a comma, `@` and `%` in
+  `gateway=` -- so a port given a name with white space is reported by
+  that name.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`,
+  which reads the output with a reader of its own, typed from
+  MikroTik's "Scripting" page, for a tree with such text in every
+  place the schema has, and for every committed input.
+
+- **A RADIUS key is read in the form its platform stored it**
+  (Security, above).  The IOS-XE CLI parser reads `key [0|6|7]
+  <secret>` in the `radius server` stanza and on the one-line
+  `radius-server host` form alike; the EOS parser reads `key [<type>]
+  <secret>`; the AOS-S parser reads `encrypted-key` on a host line and
+  on the global `radius-server` line, where its `key` pattern had
+  matched inside the word.  A key with no type, or type 0, is the
+  secret as typed, and migrates to every target.  Any other type, and
+  an AOS-S `encrypted-key`, is held behind `iosxe:`, `eos:` or `aoss:`
+  and written back as the device wrote it onto its own platform; onto
+  any other target the server is kept with no key, beside a review
+  line that names the form (`Cisco IOS-XE type 7`, `Arista EOS type
+  7`, `AOS-S encrypted-key`) and says to re-enter the secret.  A
+  plaintext secret that begins with a number and a space is written
+  `key 0 <secret>` on IOS-XE and EOS, so that its number is not read
+  as a type.  And the other way: the FortiGate parser put every `set
+  secret` behind `fortios:`, so a secret typed without `ENC` -- the
+  secret itself -- was refused on every other target as if it were
+  encrypted; only `ENC <blob>` is held behind the envelope now.  The
+  gate's own tests had built their trees with the envelope already on,
+  or parsed the FortiOS `ENC` form alone, and a parser test pinned the
+  IOS-XE value `7 <blob>` as the key.  Guarded by
+  `tests/unit/migration/test_a_radius_key_says_its_form.py`, which
+  sends each form through its parser onto all six targets that render
+  RADIUS, and reads the output as text and with the target's parser.
+
+- **A VyOS node with nothing under it, printed on one line, was read
+  as a word of the line above it.**  VyOS prints a node that holds
+  nothing as `<name> { }` on one line -- `server time1.vyos.net { }`
+  under `system ntp`, `loopback lo { }` under `interfaces`, `vif 100
+  { }`, `next-hop 192.0.2.254 { }` -- and the parser opened a block
+  only at a line that ends in `{`.  It read such a line as a leaf
+  whose value ran to the end of the line: the NTP server was
+  `time1.vyos.net { }`, written with its braces onto every target
+  that renders NTP (`ntp server time1.vyos.net { }` on EOS and IOS-XE
+  CLI, inside the `servers=` list on RouterOS), in jobs that reported
+  nothing; and an empty `loopback lo`, an empty `vif` and a static
+  route whose `next-hop` holds nothing were not in the tree at all.
+  Such a line now opens a block and closes it, or -- where its one
+  word is a leaf, as in `disable { }` -- is that leaf with no value:
+  the reading the set form gives the same path, which a test holds
+  the parser to, typed by hand in both grammars
+  (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+  One committed capture prints the form
+  (`houdev_vyos_dhcpv6_pd_client.conf`): its NTP servers now cross
+  whole onto every target that renders NTP, and its `lo` is an
+  interface -- written by the targets that write an interface with
+  nothing set, and left out, as every such interface is, on EOS,
+  AOS-S, IOS-XE CLI, FortiOS and Junos.  No job over the committed
+  inputs changes its status.  If you translated a VyOS `config.boot`
+  with 0.7.7 or earlier, look in the output for a name that ends in
+  `{ }`, and for a static route, a `vif` or a loopback the source
+  has and the output does not.
+
+- **FortiOS: every value written between quotes is escaped, and an
+  `edit` name is read back with its escapes.**  The renderer escaped
+  a description, the host name and an account's name, and wrote an
+  interface's own name, a LAG's members, a VLAN interface's parent, a
+  route's `set device`, a DHCP pool's interface and domain, a RADIUS
+  server, the domain and an NTP server between quotes as they stood.
+  A `"` in a name ended the quoted string and the rest was read as
+  CLI words -- in `set member` another member -- and a `\` in any of
+  them was read as the escape.  (An address holding a `"` is already
+  left out before it is written.)  And the parser read
+  an `edit` name with its outer quotes stripped and its escapes left
+  in, so a name written `edit "a\"b"` came back as `a\"b`.  Now
+  each such value is written with FortiOS's escape (`\"` and `\\`,
+  as the committed FG-100E capture prints them inside a quoted value),
+  and an `edit` id that is one quoted token is read as a `set` value
+  is.  No committed input holds such a name; the output of every one
+  is unchanged.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_every_quoted_value_is_escaped.py`,
+  which reads the output with a reader of its own and the renderer's
+  source for a value between quotes that skips the escape.
+- **A credential or an account's name is written as one value of the
+  place it goes, or not at all** (Security, above).  None of the
+  word-at-a-time CLIs (IOS-XE CLI, NX-OS, EOS, AOS-CX, OS10, IOS XR)
+  documents a quoted form for a credential, so a value that holds
+  white space or a `"` is not written there and is never altered to
+  fit: a local user is left out whole, an SNMPv3 user whole, an SNMP
+  community with every trap host that would carry it (never an
+  invented `public`), and a VRRP/HSRP key alone, the group kept --
+  each with a `review:` line that names the place and never the value
+  (`netcanon/migration/_one_value.py`).  Where the target quotes, the
+  value is quoted with that platform's escape: FortiOS now escapes an
+  account's name, its access profile, the community, an SNMPv3 user
+  and its keys and a VRRP key; Junos quotes a VRRP
+  `authentication-key`; VyOS quotes a password or passphrase that
+  holds a space, and leaves out a user or community whose NAME holds
+  one (a tag node) or a secret that holds a `"` (VyOS refuses one even
+  escaped).  AOS-S leaves out a credential that holds a `"`.  Three
+  review lines quoted the key they could not write (the EOS and IOS-XE
+  "authentication blob" lines and the AOS-S VRRP line); they name the
+  scheme now.  And a password typed in the source -- AOS-S
+  `plaintext`, AOS-CX `password plaintext`, VyOS `plaintext-password`,
+  an OS10 password that is not a crypt string -- was written onto FortiOS as `set password ENC <the password>`, a
+  claim that it is a blob this FortiGate encrypted (six accounts over
+  the committed inputs; a test pinned it).  It is written `set password
+  "<the password>"`, for FortiOS to encrypt on save.  Guarded by
+  `tests/unit/migration/test_a_secret_is_one_value.py`, which renders
+  every synthetic kitchen sink with each credential set to a value with
+  white space and one with a quote, onto every public line-grammar
+  codec, and reads the output as text.  Not yet under the rule: RADIUS
+  keys.  Names, addresses and text: the next entry.
+
+- **A name, an address or a line of text is written as one value of
+  the place it goes, or left out and said.**  The rule above, for what
+  labels and what points.  Six line targets wrote `hostname core sw 1`
+  as it stood, and a VRF named `blue net` came out as `vrf definition
+  blue net` -- a VRF `blue` and a word the router reads as the next
+  keyword; `_naming.py` made a host name one word on two codecs only;
+  the IOS-XE renderer dropped a static route's name that held a space
+  and said nothing.  Now, where the target reads one word:
+  * a **name** (host name, VLAN name, VRF name, a route's name) that
+    holds white space or a `"` is written with `_` for each run of
+    white space and `'` for each `"` -- once, on the tree, before a
+    line is written, so every place the name goes agrees.  A VRF
+    renamed so takes its new name to every interface, route and EVPN
+    type-5 route that names it, with a number after it where another
+    VRF already has that name.  AOS-CX reads a VLAN's name to the end
+    of the line (a committed capture prints `name VLAN 11`), so it is
+    written whole there;
+  * an **address** (the domain, an NTP, syslog or DNS server, a route's
+    gateway, a DHCP pool's domain, gateway or DNS servers) that holds
+    white space or a `"` is left out on every line target, the quoting
+    ones included: no address holds a space, and a route whose gateway
+    is left out is left out whole -- with its destination and no next
+    hop it would be another route;
+  * **text** (a description, the SNMP location and contact) is written
+    to the end of the line where the vendor says that place reads it
+    so.  OS10 now quotes a description that holds white space, as Dell
+    documents.  Where the target quotes with no escape (AOS-S, OS10,
+    VyOS) a `"` is written `'`: AOS-S wrote `\"`, which no HPE page
+    documents.  A place no vendor page says reads the whole line (the
+    NX-OS SNMP contact, the EOS SNMP location, an IOS XR VRF
+    description) is written as it stands, under a review line that
+    says so.
+  Each change is a `review:` line at the top of the output that names
+  the place and never the value (`one_value_tree` in
+  `netcanon/migration/_one_value.py`).  FortiOS now escapes the host
+  name.  Guarded by `tests/unit/migration/test_a_name_is_one_word.py`,
+  which sets each such field of every synthetic kitchen sink to a value
+  with white space and one with a quote, renders it onto every public
+  line-grammar codec, and reads the output as text against the places
+  each vendor documents, typed by hand.  Not yet under the rule:
+  RouterOS, whose quoting is a change of its own.
+
+- **An AOS-S `snmp-server contact "IT" location "1OG"` line was one
+  contact.**  HPE prints the contact and the location on one line (a
+  committed WB.16.08 capture does), and the parser took the rest of the
+  line after `contact` for the contact: `IT" location "1OG`, a value
+  with two quotes in it written onto every target, and no location.  A
+  quoted value now ends at its closing quote and the next keyword is
+  read; a bare one is still the rest of the line.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_snmp_contact_and_location.py`.
+
+- **A password typed in the source was written onto Junos and OPNsense
+  as if it were a hash.**  IOS-XE `password 0`, AOS-CX `password
+  plaintext`, VyOS `plaintext-password` and the like hold a password
+  as it was typed, and every target but two has a line that takes one
+  and hashes it itself.  Junos and OPNsense have none: Juniper
+  documents `encrypted-password`, which takes a hash, and
+  `plain-text-password`, which takes no value and asks at a prompt;
+  OPNsense's `<password>` is the hash PHP's `password_verify()` checks
+  a password against.  The Junos renderer wrote `authentication
+  encrypted-password "<typed>"` and the OPNsense renderer the typed
+  string into `<password>`: an account no password opens, in a job
+  that reported nothing, because the shared policy took a typed
+  password to be accepted by every target.  Such an account is now
+  left out on both, with a review line that says why and quotes
+  nothing of the password.  And the EOS parser read its own `secret 0
+  <typed>` as an algorithm `0` that no target takes, so an EOS account
+  with a typed password was refused on every target, EOS included; it
+  is read as typed.  Guarded by
+  `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`, which
+  reads every user-rendering target's output as text against each
+  vendor's form for a typed password, typed by hand, and the target's
+  parser for the password read back.  FortiOS's `set password ENC
+  <typed>` is mended by the change that quotes every secret as one
+  value, and pinned there until it merges.
+
+- **An AOS-CX password is read by its keyword, not by its shape.**
+  The parser read `password ciphertext <value>` as ciphertext only
+  where the value began `AQB`, so a ciphertext of any other shape was
+  taken for a password as typed and written onto every other target
+  behind its cleartext form -- on a committed capture, the GL CX 10.09
+  `admin`, whose publisher put a placeholder word where its ciphertext
+  was -- and `password plaintext <value>` that began `AQB` was taken
+  for ciphertext.  `ciphertext` is now ciphertext and `plaintext` is
+  typed, whatever the value looks like (a value whose shape disagrees
+  with its keyword is tagged `aoscx:<kind>:`).  The ciphertext is
+  device-keyed and refused on every target but AOS-CX, so no committed
+  AOS-CX account reaches another vendor; the expectations of the pairs
+  from AOS-CX are re-authored from a round trip of the corpus, and
+  their summaries, which still said every username survives, are
+  corrected (stale since #461).
+
+- **The sanitiser faked a stored hash as a password as typed.**  It
+  recognised a few bare shapes (`$6$...`, `ENC ...`) and faked every
+  other secret as `fake-hash-NNNN`.  But a parser writes a tag in
+  front of most stored secrets (EOS `arista:sha512:`, NX-OS and IOS-XE
+  `5 `, AOS-S `sha1:`, Junos `junos:`), and an AOS-CX ciphertext
+  begins `AQB`, which no rule knew: each came out of the sanitiser as
+  a typed password, written behind the device's cleartext marker
+  (`secret 0 fake-hash-0001`) -- a sanitised config that was not the
+  config, and, with the change above, one whose Junos and OPNsense
+  translation lost the account.  A fake is now the same kind of secret
+  as what it replaces: a parser's tag is kept and its payload faked,
+  every crypt(3) id and the AOS-CX ciphertext keep their shape, and
+  text before a colon that no parser writes is faked with the rest.
+  Guarded by `tests/unit/tools/test_sanitize_keeps_a_secrets_kind.py`,
+  which sanitises every committed input that holds a stored secret and
+  holds each secret's kind, as the shared policy reads it, to the
+  original's.
+
+- **A refused password takes its account with it on FortiOS, RouterOS
+  and OPNsense** (Security, above).  The review line is written in
+  place of the account (`edit`, `/user add`, `<user>`), never inside
+  it.  Guarded by `test_a_refused_secret_takes_its_account_with_it` in
+  `tests/unit/migration/test_secret_fail_open.py`, which reads every
+  user-rendering target's output for the account's name outside a
+  comment; it failed on exactly these three.  The expectations of the
+  pairs onto them are re-authored from a round trip of the corpus:
+  from IOS XR and NX-OS no account arrives on any of the three (every
+  stored secret is a form none of them takes), so `local_users[].name`
+  is `unsupported` there; from VyOS and AOS-CX it is `lossy` (from
+  AOS-CX onto OPNsense `unsupported`, since an AOS-CX password is read
+  by its keyword, above).
+
+- **An AOS-S output held static routes the switch does not take, and
+  a route of a VRF in its one table.**  HPE: "The next-hop can be
+  either a gateway IP address, a VLAN, or the keyword "reject" or
+  "blackhole"" (ArubaOS-Switch Multicast and Routing Guide,
+  "Configuring a static route"), and the guide names no VRF.  The
+  renderer wrote whatever the tree held where the next hop goes: a
+  route out an interface came out as `ip route <dest>` with nothing
+  after it -- a route to `Null0` and one out `Vlan20` included -- and
+  a next hop the AOS-S parser had read from `Trk1` as `ip route <dest>
+  Trk1`, a line it read back; 33 such lines over the committed
+  captures, from IOS-XE, IOS XR and FortiOS, and a config whose one
+  route went to `Null0` made a job that said `completed`.  A route in
+  a VRF was written into the switch's one table, where it routed
+  traffic the source routed in another (10 lines over the captures).
+  A route to `Null0` is now written `blackhole`, a route out a VLAN
+  interface `vlan <id>`, both with their `distance`; a route out any
+  other interface (a routed port, a LAG, a tunnel, IOS-XE's `dhcp`) or
+  in a VRF is left out under a `; review:` line that names it, and a
+  route that names an interface makes the job `partial` -- the ones
+  written as `vlan` or `blackhole` too, since the capability matrix
+  reads the field and not its value (`/routing/static-route/interface`
+  is lossy at error level).  The parser reads the `vlan <id>` and
+  `blackhole` forms, IPv4 and IPv6, which it took for nothing, in
+  silence; `reject` (a discard that answers with an ICMP error, which
+  the tree cannot say) and every other route line it does not read --
+  a next hop `Trk1` among them -- is now a row of
+  `dropped_tier3_sections`.  If you translated a config onto AOS-S
+  with 0.7.7 or earlier, look in the output for `ip route` lines with
+  no next hop or a port's name after the destination, and for routes
+  the source held in a VRF.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_route_the_switch_takes.py`,
+  which reads the output with a reader of HPE's grammar typed in the
+  test, never the AOS-S parser, and works out each route's next hop
+  from the source's own tree, over each form from IOS-XE and every
+  committed capture onto AOS-S.  The port-name check's count below
+  moves by one: the IOS-XE umbrella capture onto AOS-S is `partial`
+  for its routes out `dhcp` before any name is checked.
+
+- **A RouterOS port was looked up by a name the device did not give
+  it.**  `set [ find default-name=<name> ]` finds a port by the name
+  the device gave it, and the parser recorded that name only for a
+  `set [ find default-name= ]` line or a name that BEGAN `ether` and
+  a digit, in any letter case.  An SFP, SFP+, SFP28 or combo port the
+  config names only in `/ip address`, a bonding's `slaves=` or a
+  VRRP's `interface=` had none, so an entry that gave it a name of
+  its own was written `set [ find name=<new> ]`, a lookup no device
+  matches; and a name an operator chose (`ether1_ADMIN`,
+  `ether2-master`, `Ether1`) was written `find
+  default-name=ether1_ADMIN`, which matches nothing either -- each in
+  a job that said `completed`.  A factory name is now one MikroTik's
+  manual or an export of a real device shows (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, and the QSFP lanes
+  `qsfpplusN-L`, `qsfp28-N-L`, `qsfp56-N-L`, `qsfp56-dd-N-L`), whole
+  and in lower case (`port_names.is_factory_port_name`), given to a
+  record of a port once the whole config has been read
+  (`parse._name_the_hardware`); the renderer asks the same question.
+  The classifier reads `sfp28-N`, `comboN` and `qsfp28-N-L` as ports,
+  which it read as nothing, and no longer reads a port name in
+  another letter case (`SFP-SFPPLUS1`, `Ether1`) -- RouterOS keeps an
+  operator's names as free text -- so onto another vendor such a name
+  is listed as one the translator could not read.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_factory_name_is_the_devices.py`,
+  which reads the lookup lines of the output as text, and is handed
+  the old parse and render.  The cross-mesh audit is unchanged.
+- **A sub-interface of a LAG was also read as a LAG of its own.**
+  The IOS-XE CLI, NX-OS and IOS XR parsers took every `interface`
+  header that began `Port-channel`, `port-channel` or `Bundle-Ether`
+  for a declaration of a LAG, so `interface Port-channel1.10` -- a
+  routed unit with a tag and an address -- was also an empty LAG
+  called `Port-channel1.10`, and each target that writes a LAG wrote
+  it: Junos an `ae10` with LACP (and a device count to match), RouterOS
+  a bonding `bond1.10`, OPNsense a `lagg`, AOS-S a line saying a LAG
+  had no members, and FortiOS the unit itself as an LACP aggregate
+  holding the unit's address, where a VLAN on its parent was meant.
+  No job's status moved for it.  Only `<prefix><N>` declares a LAG
+  now, and the unit is an interface, as it was beside.  Guarded by
+  `tests/unit/migration/test_a_unit_of_a_lag_is_no_lag.py`, which
+  reads the LAGs every target's output declares as text, by a reader
+  of its grammar, and with its parser, and is handed the old parse.
+  No committed capture has such a unit; the cross-mesh audit is
+  unchanged.
+- **A VyOS bond lost its members and its units.**  VyOS prints a
+  bond's members as a leaf of many values -- `member { interface eth1
+  }` in `show configuration`, `member interface 'eth1'` in `show
+  configuration commands` -- and the parser read neither: a bond in
+  the block form had no members, and a bond in the set form had
+  members called `'eth1'`, quotes and all, beside two interfaces of
+  those names.  A `vif` under a bond was not read, and its address
+  was lost on every target, in jobs that said `completed`.  The
+  renderer wrote each member as a node (`interface eth1 { }`), not
+  the grammar of the leaf, and a unit of a LAG from another vendor as
+  `ethernet bond1.10`, an ethernet port of that name.  Members are
+  read in both printed forms (and in the old node form, so that
+  earlier outputs read back) and written one bare line each; a `vif`
+  under a bond is a unit, `bondN.<vid>`, written under its bond.  A
+  bond's unit onto VyOS is `partial` as an ethernet's is, since the
+  codec declares the 802.1Q tag unsupported.  Guarded by
+  `tests/unit/migration/codecs/vyos/test_a_bond_and_its_units.py`,
+  which holds every printed form to one tree typed by hand, reads the
+  renderer's output as text, and finds the unit by its address in
+  every target's output with the target's parser.  No committed
+  capture has a bond; the synthetic kitchen sink now prints its
+  members as VyOS does.
+- **An OPNsense LAGG's members were no members on seven targets, and
+  the OPNsense output assigned every member.**  OPNsense adds only an
+  unassigned interface to a LAGG ("Only unassigned interfaces can be
+  added to LAGG", docs.opnsense.org, Other Types), so a member is
+  named in `<laggs>` alone, and the parser made an interface record
+  only for a zone of `<interfaces>`.  Seven renderers write a LAG on
+  each member's own stanza: onto EOS the LAG was not written at all,
+  and onto IOS-XE CLI, IOS-XR, NX-OS, Junos, AOS-CX and OS10 it was a
+  LAG with no member, in jobs that could say `completed`.  Each
+  member now has a record of its own that names its LAG, and a
+  FortiGate aggregate that names a member no `edit` configures (a
+  pasted fragment: FortiOS prints every port) gives it one the same
+  way.  The OPNsense renderer wrote a zone for every interface, a
+  member included: a config OPNsense refuses.  A member of a LAGG is
+  now written in its `<members>` alone, and where its record held
+  something a zone would have carried (a description, an MTU, an
+  address, a disabled state), a comment in the `<lagg>` names the
+  member and the elements not written, and no value.  The OPNsense
+  synthetic fixture assigned its two members as zones; it no longer
+  does.  No committed capture has a LAGG.  If you translated an
+  OPNsense config with a LAGG with 0.7.7 or earlier, translate it
+  again, or add the members on the target by hand.
+  Given a record, a member onto RouterOS with both devices declared
+  has a line of its own that finds its hardware, and a name an entry
+  gave it with a comma in it (`a,b`) was no longer reported, though
+  `slaves=` is cut at the comma and read back as a member `a`: the
+  job said `completed`.  A port a list cuts the name of is now listed
+  in `unbound_ports` whether or not a line of its own finds it -- an
+  AOS-S trunk member under such a name was not listed either.  And
+  such a name is judged by every piece the list makes of it, where it
+  was judged by the part before its first comma, `@` or `%`: a name
+  that begins with one (`,a`, and `%a` as a next hop) or holds `@` or
+  `%` ahead of a comma (`a%b,c`) was listed in `off_target` only, or
+  not at all.
+
+- **A RouterOS tunnel that was shut came out enabled.**  The
+  RouterOS renderer writes a tunnel as an `add` line under
+  `/interface gre`, `eoip` or `ipip`, and wrote no `disabled=` there,
+  though the parser reads one and every other section it writes says
+  so of a shut item: an `add` without it makes the tunnel enabled.  A
+  tunnel that was shut on the source -- a RouterOS `disabled=yes`, an
+  IOS-XE `shutdown` -- was therefore up on the target, in a job that
+  reported nothing.  Such a tunnel is now written `disabled=yes`.
+  MikroTik's GRE and EoIP pages list `disabled (yes | no; Default:
+  no)`; the IPIP page lists no such row but prints the `X - disabled`
+  flag, so an IPIP item takes it too (inferred).  No committed input
+  holds a shut tunnel, so no committed output moves.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_disabled_tunnel_is_written.py`,
+  which reads each output with a key=value reader of its own and with
+  the parser, and hands its check the defect.
+- **An address held on a VLAN record was not written by NX-OS or
+  AOS-CX, and EOS wrote a second one as a primary address.**  A tree
+  can hold a VLAN's address on the VLAN record with no interface for
+  it: the Junos parser folds the address of an `irb.<N>` that a VLAN
+  binds with `l3-interface` onto the VLAN, and keeps no interface for
+  the unit.  EOS and IOS-XE write an `interface Vlan<N>` for such a
+  VLAN (`synthesize_svis_from_vlan_l3`).  NX-OS and AOS-CX wrote
+  nothing and declared the path lossy, so the job's validation report
+  listed it and the address was in no line: on the committed
+  `saidvandeklundert_snmpv3_junos172`, the gateway of VLAN 698 was in
+  neither output.  Both now write the interface (`interface Vlan<N>`,
+  with `feature interface-vlan`, on NX-OS; `interface vlan <N>` on
+  AOS-CX), and neither matrix declares `/vlans/vlan/ipv4/address/ip`
+  lossy any more; the address's anycast virtual gateway is still not
+  written, and stays declared lossy.  A VLAN record's addresses after
+  the first are now marked secondary when the interface is written:
+  the EOS renderer writes `secondary` from that mark, and wrote a
+  Junos `irb` unit with two addresses as two `ip address` lines with
+  no `secondary`, in a job that said `completed`.  (IOS-XE writes it
+  for every address after the first, and was right.)  And the
+  interface was looked for by the name `Vlan<N>` alone, so where port
+  names are not translated -- a `render` of a tree another codec
+  parsed, as the cross-mesh audit does; not the API or the demo,
+  which translate them -- an AOS-CX tree, whose interface of VLAN 101
+  is `vlan 101`, got an `interface Vlan101` beside it on EOS and
+  IOS-XE: one address on two interfaces, the second without the
+  first's description or `shutdown`.  An interface of the VLAN is now
+  found however a codec spells it (`Vlan10`, `vlan10`, `vlan 10`).
+  On that path the AOS-CX address no longer reaches EOS at all (the
+  EOS parser reads no `interface vlan 101`, as it reads no `lag 1`),
+  and its expectation says so.  If you translated onto NX-OS or AOS-CX
+  with 0.7.7 or earlier a Junos config whose VLANs hold their gateway
+  on an `irb` unit, translate it again; onto EOS, check every `irb`
+  unit that has more than one address.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -2274,7 +3111,8 @@ timestamp if your timezone matters for an audit.
   `partial`.  A unit now goes with a port the translator drops,
   where it stayed behind (NX-OS sub-interfaces onto AOS-S, which has
   no name for `Ethernet1/1`).  And Junos `vlan-tagging` on the parent
-  port is read and written on no path.
+  port was read and written on no path (it is written now: a
+  sub-interface's tag statement is read whole, above).
 
   One more thing to check on an output with sub-interfaces.  VyOS
   and FortiOS take the VLAN id from the NUMBER in the interface's
@@ -2959,8 +3797,7 @@ timestamp if your timezone matters for an audit.
     interfaces apart: AOS-S `1/1` and the uplink-module port `1/A1`
     both `Ethernet1`; six interfaces of a Catalyst on `Ethernet1`;
     VyOS `eth0` and `eth1` both `port1` on FortiOS, which numbers
-    from 1; Junos `ae0` and `ae1` both `Port-channel1`; a
-    per-instance loopback `lo0.2` on `Loopback0` beside `lo0`;
+    from 1; Junos `ae0` and `ae1` both `Port-channel1`;
   - **a name dropped** because the target has no name for it.  A
     hardware port — a management port onto a platform with no form
     for one, a breakout lane — and the sub-interfaces that went
@@ -2991,13 +3828,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  214 of the 590 jobs that said `completed` are `partial`.  62 of
-  them list a shared name, 65 a hardware port that was dropped, 29 a
+  218 of the 588 jobs that said `completed` are `partial`.  59 of
+  them list a shared name, 66 a hardware port that was dropped, 32 a
   logical name that was dropped and 112 a name left as the source
-  has it (99 of those a hardware port); 46 list more than one kind.
+  has it (99 of those a hardware port); 44 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 400 jobs that were already `partial`
-  carry the sentence as well.  Each of the 214 is `completed` again,
+  and none to or from `failed`; 403 jobs that were already `partial`
+  carry the sentence as well.  Each of the 218 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of
@@ -3190,6 +4027,84 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **What goes with a name the translator drops is not said.**  A
+  static route out of the name, a DHCP pool on it, a VRRP group's
+  track of it and a VXLAN source interface (VTEP) that is the name
+  are removed with it, and the job lists the name
+  (`unresolved_ports`, so it is `partial`) but not those lines.  A
+  loopback that has no place on Junos is such a name: the Cisco Live
+  EVPN leaf's `Loopback2` is its VTEP source, and the Junos output
+  has no `vtep-source-interface` line.  Read the source config for
+  what referred to each name in `unresolved_ports` before you settle
+  it.
+- **An MTU is converted only where the codec reads the interface's
+  name.**  A name its classifier does not read -- a Junos `reth0` or
+  channelised `xe-0/0/6:2`, a wildcard `interface-range` member, an
+  IOS XR `BVI` -- and a loopback or tunnel are copied as they stand,
+  since what their number counts is not established here.  Whether
+  the media MTU of a Junos trunk in `family ethernet-switching` has to
+  hold a tag is not established, and none is counted.  A jumbo value
+  near a platform's maximum can pass it once converted (IOS-XE `mtu
+  9216` is Junos `mtu 9230`, above the EX range); the device refuses
+  the line at commit.  The IOS-XE NETCONF codec carries no MTU into
+  the tree.
+- **A Q-in-Q sub-interface reaches four targets.**  IOS-XE, IOS XR,
+  EOS and Junos write a sub-interface's inner tag; onto NX-OS, whose
+  sub-interface statement this codec writes is one tag, and onto the
+  targets with no routed sub-interface of their own, the job is
+  `partial` and the validation report lists the inner tag.  A
+  RouterOS `/interface vlan` or a FortiOS VLAN interface whose own
+  interface is a VLAN interface -- Q-in-Q on those platforms -- is
+  read as a VLAN interface of one tag on that VLAN interface, not as
+  a sub-interface of two tags; the job is `partial` onto a target
+  that writes tags.  A VyOS `vif-s` block, and an 802.1ad tag from
+  any source, is left out with a row.  A VyOS `vif 0` is read as a
+  sub-interface of tag 0, which no 802.1Q VLAN has, and is written
+  so onto the targets that write a tag; the IOS-XE, IOS XR and EOS
+  parsers leave such a stanza out, with a row, when they read it.
+- **The tree has no IPv6 MTU, and some IP MTUs are not carried.**
+  IOS-XE and IOS XR `ipv6 mtu` and a Junos unit 0's `family inet6 mtu`
+  are not read.  A Junos unit's `family inet6 mtu` above unit 0 is
+  read as the unit's MTU, and so is written for IPv4 as well where the
+  unit carries IPv4 and states no `family inet mtu`.  A target with
+  one MTU (NX-OS, EOS, RouterOS, FortiOS, VyOS, OPNsense) loses an IP
+  MTU stated beside a different MTU, and OS10 writes no IP MTU; the
+  job's report says so.  The IP MTU an IOS-XE or Junos config leaves
+  unstated under a raised `mtu` is taken to be the payload, which no
+  vendor page read says.
+- **A RouterOS VLAN interface on a port is not a sub-interface onto
+  another vendor.**  `/interface vlan add interface=ether2
+  name=ether2.10 vlan-id=10` is read as a VLAN interface and a VLAN of
+  its tag, and the port it rides on is not kept in the tree: onto
+  IOS-XE, NX-OS, EOS or Junos it comes out as VLAN 10 and its VLAN
+  interface (`interface Vlan10`, `irb.10`), which no port carries, in
+  a job that says `completed`.  That is also how RouterOS's output
+  for another vendor's sub-interface is read, so a sub-interface
+  taken to RouterOS and on to a third vendor is not a sub-interface
+  there.  Re-create it by hand.
+
+- **A Junos routed port's native VLAN reaches Junos alone.**  `set
+  interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units
+  is read into the field a trunk's native VLAN is kept in, so the
+  IOS-XE renderer writes it as `switchport trunk native vlan 100` on
+  a routed port and EOS drops it, with nothing said.
+  `encapsulation flexible-ethernet-services` on a Junos port is not
+  read, and is not written, with nothing said either.
+
+- **A RADIUS key stored in a platform's own form is not decoded, and
+  goes only to its own platform.**  Cisco type 7 is a reversible
+  cipher and could be decoded to the secret; Netcanon does not decode
+  it, so an IOS-XE `key 7` is refused on every other target, with the
+  server kept and a review line.  Whether EOS's type 7 is Cisco's is
+  not established, so an IOS-XE `key 7` is not written into EOS, nor
+  an EOS one into IOS-XE.  The global AOS-S `radius-server
+  encrypted-key` line is read on the strength of the host-line form
+  HPE documents; the global form itself is inferred.  A refused key is
+  said by the review line in the output alone, and the job still says
+  `completed`, as for a FortiOS `ENC` secret.  And a plaintext secret
+  that itself begins with one of the envelopes (`iosxe:`, `eos:`,
+  `aoss:`, `fortios:`) is read as that stored form: refused on every
+  other target, and on its own platform written in the stored form.
 - **A config pasted without its indentation is not translated by most
   block parsers: they refuse it in words.**  The IOS XR parser
   refuses it for the router's reason: IOS XR places a line by its
@@ -3253,9 +4168,20 @@ timestamp if your timezone matters for an audit.
   taken for its text: none of them is read, and none is translated, in
   a job that says nothing else of it.  The banner's row counts its
   lines.  Nor is the value of `crypto key generate rsa ... pubkey`
-  passed over: no source shows how it is printed.  Whether the parsers
-  of the other grammars (Junos, VyOS, FortiOS, RouterOS) read a
-  multi-line free-text value as configuration is not measured.
+  passed over: no source shows how it is printed.  (FortiOS reads a
+  quoted value of several lines whole; Junos, VyOS and RouterOS are
+  the next bullet.)
+- **The Junos and VyOS parsers read a set-form text a line at a
+  time**: a line after a quote that no later quote on its line ends is
+  read as a statement of its own.  Whether either device prints a
+  value of several lines so is not established.  RouterOS prints a
+  line break in a quoted value as `\n`, and its parser reads that as
+  the letter `n`: the value is written with an `n` where the break
+  was.
+- **A value of several lines loses its layout on every target**, the
+  ones that could hold it included (OPNsense and IOS-XE over NETCONF,
+  in an element's text, and FortiOS between its quotes): it is written
+  on one line, each run of breaks as a space, and the job says where.
 - **AOS-S `banner exec` is read as `banner motd` is**, though no HPE
   page shows the type; and whether an OS10 banner ends at its
   delimiter in the middle of a line is not established (Dell names "a
@@ -3671,17 +4597,12 @@ timestamp if your timezone matters for an audit.
   `gateway=Null0`; onto EOS it is right as it stands.  Over the
   committed captures 25 of the 385 jobs that are still `completed`
   have such a name.  Read a finished job's warnings for that line.
-- **A LAG member the config has no interface for is no member in
-  the output of seven targets.**  The members of an OPNsense lagg
-  are as a rule NICs assigned to nothing, and a FortiGate aggregate
-  can name a member that has no `edit` stanza; those two parsers
-  make no record for such a member.  Onto EOS, AOS-CX, IOS-XE CLI,
-  IOS-XR, NX-OS, OS10 and Junos, which write a LAG on each member's
-  own stanza, the LAG comes out with no member, in a job that can be
-  `completed`.  Shown on configs typed for the purpose; no committed
-  capture has such a member.  (For an AOS-S port named only in a
-  VLAN's list or on a `trunk` line this was so on more targets, VLAN
-  membership included: the first entry under Fixed.)
+- **A FortiGate aggregate under a name the translator cannot read
+  is no LAG on EOS, OS10 and VyOS.**  `agg1` keeps its name, and
+  those three write an interface `agg1` that is no LAG, beside its
+  members as plain ports, in a `partial` job that lists the name
+  (`untranslated_ports`).  Give the aggregate a name in the port
+  map.
 - **AOS-CX writes no VLAN line for a port under a name it cannot
   read as a port.**  A port left under its source name, or given a
   name of the operator's own (`{"1": "uplink-x"}`), has its stanza
@@ -3760,15 +4681,13 @@ timestamp if your timezone matters for an audit.
   10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
   `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
   RouterOS and VyOS).
-- **A non-zero unit of a Junos management port follows its port under
-  a name Junos does not accept.**  `me0 unit 5` comes out as
-  `set interfaces me0.5 unit 0 ...`.  Map it by hand.
 - **On RouterOS only a declared target device can move a port onto
   other hardware.**  Without one, an entry of `port_rename_map` names
-  the port.  The output then finds it by the factory name it had
-  where the config states one — a `set [ find default-name= ]` line,
-  or a name of the form `etherN`.  A port the export mentions only
-  elsewhere (an SFP port with nothing but an address) has no factory
+  the port.  The output then finds it by the factory name it had: a
+  `set [ find default-name= ]` line's, or the port's own name where
+  that is one a MikroTik device gives a port (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, the QSFP lanes).  A port
+  known only by a name of yours, with no such line, has no factory
   name recorded, and naming it renders a lookup by the NEW name
   (`set [ find name=WAN ]`), which matches no port: declare both
   devices, or add the port's `/interface ethernet` line.
@@ -3866,6 +4785,17 @@ timestamp if your timezone matters for an audit.
   are sourced separately: the four Arista profiles' `lags.max` is not a
   vendor figure (Arista publishes ports per LAG, not a LAG count), and the
   QFX5120 figures were read from a reseller's copy of Juniper's datasheet.
+- **The RouterOS parser reads `\` and the character after it as that
+  character.**  An export writes a character outside ASCII as hex
+  escapes (`\C3\A9`), a line break as `\n` and a space as `\_`; the
+  parser reads them as the letters (`C3A9`, `n`, `_`), so such a
+  description or name reaches the target spelt so.
+- **The renderers whose lines a device reads a word at a time have not
+  been read for a value with white space in it written bare.**  The
+  RouterOS renderer writes such a value as one string (Security,
+  above); whether an IOS-XE, NX-OS, EOS, AOS-CX, AOS-S, OS10 or IOS XR
+  line can be given more words by a value from another vendor -- an
+  SNMP community, a RADIUS key -- is not established here.
 
 ## [0.7.7] - 2026-10-07
 

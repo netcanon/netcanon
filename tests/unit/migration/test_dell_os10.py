@@ -322,7 +322,8 @@ class TestInterfaceStanzaTraps:
         intent = codec.parse(raw)
         assert [i.name for i in intent.interfaces] == ["vlan101", "vlan102"]
         svi = intent.interfaces[0]
-        assert svi.mtu == 9216, "indented `!` truncated the stanza"
+        # ``mtu 9216`` is a link MTU, a frame; the tree's MTU is the payload.
+        assert svi.mtu == 9194, "indented `!` truncated the stanza"
         assert svi.ipv4_addresses[0].ip == "172.22.56.2"
         # The VRRP block sits BEHIND the indented `!`, which makes it the
         # strongest available proof that the separator did not close the
@@ -365,7 +366,7 @@ class TestInterfaceStanzaTraps:
         assert [a.ip for a in mgmt.ipv4_addresses] == ["192.168.33.44"]
         assert mgmt.ipv6_addresses == []
         assert svi.ipv4_addresses == []
-        assert svi.mtu == 9216
+        assert svi.mtu == 9194  # the link MTU 9216 less the frame's 22 bytes
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +465,7 @@ class TestSwitchport:
         eth = next(i for i in intent.interfaces if i.name == "ethernet1/1/30")
         assert eth.switchport_mode is None
         assert eth.lag_member_of == "port-channel100"
-        assert eth.mtu == 9216
+        assert eth.mtu == 9194  # the link MTU 9216 less the frame's 22 bytes
 
 
 # ---------------------------------------------------------------------------

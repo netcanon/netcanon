@@ -58,8 +58,9 @@ Default-VRF static routes round-trip cleanly.  Per-VRF static routes
 * Cisco -> Aruba: the Cisco codec parses the VRF into
   `CanonicalStaticRoute.vrf` and would round-trip it, but Aruba
   AOS-S has no VRF concept (the `aruba_aoss` codec declares
-  `/routing/static-route/vrf` `unsupported`), so the VRF is dropped
-  on render and the route lands in the global table.
+  `/routing/static-route/vrf` `unsupported`), so the route is left
+  out of the output under a `; review:` line rather than written
+  into the switch's one table.
 * Aruba -> Cisco: never populated on the Aruba side (no VRF
   concept), so this direction is not affected.
 
