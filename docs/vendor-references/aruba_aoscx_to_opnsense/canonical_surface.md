@@ -44,7 +44,8 @@ identity — while the L2 switching it sat on top of stays behind.
 
 Read this first, because it inverts the reflex the other `aruba_aoscx` pairs
 train. On `aruba_aoscx__arista_eos` the interface inventory **shrinks**; on
-`aruba_aoscx__fortigate_cli` it **grows**. Here it is preserved **exactly**:
+`aruba_aoscx__fortigate_cli` it **grows**. Here it was measured as preserved
+**exactly** (see the note below the table for what has changed since):
 
 | cell | source ifaces | target ifaces | VLANs | LAGs |
 |---|---|---|---|---|
@@ -63,6 +64,15 @@ making all nine `interfaces[].*` keys measure as drifted for a single reason —
 **does not apply on this pair**. Every `good` below is a real observation about
 a real surviving record, and every `lossy` is an independent per-attribute
 measurement taken on records that exist on both sides.
+
+> **Since the VLAN-device change** (the table above was measured before it):
+> no source record is lost, but the interface inventory now **grows** on every
+> cell. The render writes each VLAN as an OPNsense `<vlan>` device — under the
+> SVI's name where the source has one (`vlan 101`), otherwise as
+> `<parent>_vlan<id>` (`lag 1_vlan1`) — and the OPNsense parser reads a
+> `<parent>_vlan<id>` device back as an interface record of its own
+> (`ianaift:l3ipvlan`). The pair's expectation YAML holds the current
+> disposition (`interfaces[].name` lossy, for the shape of the inventory).
 
 ### Interface sub-fields, measured independently
 
@@ -111,6 +121,10 @@ is independent — there is no record-count effect for it to be confused with.
 | routing_instances[].name / description | 0 | 3 | 4 |
 | anycast_gateway_mac | 0 | 5 | 2 |
 
+The `interfaces[].name`, `vlans[].name` and `vlans[].description` rows were
+measured before the VLAN-device change; the pair's expectation YAML holds the
+current disposition (all three lossy — see "a moved label" below).
+
 Fields trivially empty on all 7 cells: `domain`, `dns_servers`, `ntp_servers`,
 `timezone`, `syslog_servers`, `dhcp_servers`, `radius_servers`,
 `evpn_type5_routes`, `raw_sections`, `apply_groups`, `group_content`,
@@ -122,7 +136,8 @@ Corpus totals for the surfaces that lose content:
 - `virtual_gateway_address` values at the VLAN mount: **15 → 0** (dropped)
 - `untagged_ports` entries: **64 → 0** (13 VLAN records)
 - `tagged_ports` entries: **32 → 0** (11 VLAN records)
-- VLAN descriptions: **6 → 0**
+- VLAN names: each comes back named after its OPNsense device (since the
+  VLAN-device change; see below)
 - static routes: **3 → 0** (2 cells)
 - VRFs: **6 → 0** (3 cells) · interface `vrf` bindings: **10 → 0**
 - VXLAN VNIs: **4 → 0** (3 cells)
@@ -155,14 +170,18 @@ went. Recorded `lossy`: `unsupported` would tell an operator the subnet does
 not migrate, which is false and is the more damaging error. What *is* genuinely
 gone is the anycast companion — 15/15 `virtual_gateway_address` values.
 
-**2. `vlans[].description` — a surviving record, an emptied scalar.** The
-vanish classifier calls this a total drop because all 6 populated descriptions
-land as `''`. The VLAN record survives with its id *and* its name, so nothing
-is blocked, and `opnsense` declares `/vlans/vlan/description` **lossy** in its
-own matrix. The classifier is record-blind; the two signals only appear to
-disagree. The mechanism is visible in the render: the single `<descr>` element
-per VLAN entry is occupied by the VLAN **name**, so the canonical description
-has no second slot.
+**2. `vlans[].name` / `vlans[].description` — a surviving record, a moved
+label.** (Rewritten for the VLAN-device change; the description used to come
+back empty.) An OPNsense `<vlan>` has no name of its own. The render writes
+each VLAN as a `<vlan>` device — under the SVI's name where the source has one
+(`vlan 101`), otherwise as `<parent>_vlan<id>` (`lag 1_vlan1`) — with the
+VLAN's description as its `<descr>`, or its name where it has none; the
+OPNsense parser names the VLAN after the device and reads `<descr>` as its
+description. So `PROD-WEB` comes back as the description of a VLAN named
+`vlan 101`, and where a VLAN has both (`USERS`, beside `User access VLAN`, on
+`kitchen_sink.cfg`) the description is kept and the name is lost. The VLAN
+record survives with its id, so nothing is blocked: `opnsense` declares
+`/vlans/vlan/name` **lossy** and `/vlans/vlan/description` **supported**.
 
 **3. `interfaces[].interface_type` — total for the attribute, harmless for the
 record.** All 157 canonical types arrive as the empty string, because
@@ -215,11 +234,14 @@ on the source and renders as a single entry:
       <pcp>0</pcp>
       <proto/>
       <descr>CORE-ROUTING</descr>
-      <vlanif>lag 101_vlan4000</vlanif>
+      <vlanif>vlan 4000</vlanif>
+      <!-- review: OPNsense's VLAN form refuses the device name vlan 4000 when this VLAN is saved; it takes vlan0 followed by digits and dots, or lag 101_vlan4000 -->
     </vlan>
 ```
 
-The second bundle's membership is simply absent. Check the parent chosen for
+The device keeps the SVI's name (`vlan 4000`), which OPNsense's VLAN form does
+not take, and the render says so beside it. The second bundle's membership is
+simply absent. Check the parent chosen for
 every VLAN child before pushing the config, and rebuild trunk membership on
 whatever L2 switching remains behind the firewall.
 
@@ -370,22 +392,22 @@ end to end; they fail at different halves of it.
 
 ## What actually survives a cutover
 
-Worth stating positively, because most of this file is loss. This is also the
-only `aruba_aoscx` pair in the mesh where `interfaces[].name`, `vlans[].id`
-**and** `lags` are all clean at once — interface, VLAN and LAG record counts
-every one preserved exactly:
+Worth stating positively, because most of this file is loss. No interface,
+VLAN or LAG record is lost (since the VLAN-device change the interface
+inventory also gains the VLAN devices — see the structural finding):
 
 - `hostname` — 7/7 cells.
 - **The entire interface inventory** — 157/157 records, with names,
   descriptions, admin state and MTU intact, every IPv4 and IPv6 address kept
   (the anycast companion is the part that is not — see below).
 - `lags` — 34 records, 44 member ports, 7/7 cells, including mode.
-- `vlans[].id` and `vlans[].name` — 30/30 records, both fields.
+- `vlans[].id` — 30/30 records. (The name comes back as the description, or
+  not at all — see "a moved label" above.)
 - SVI subnets — relocated onto the sibling interface record, not lost.
 - `local_users[].name` — 6/6 populated cells.
 - SNMP community, location and contact.
 
 Everything an operator must rebuild by hand: port-to-VLAN membership and the
-whole switchport surface, VLAN descriptions, first-hop/anycast gateway
+whole switchport surface, VLAN names, first-hop/anycast gateway
 addressing, every static route, VRFs and per-port VRF binding, VXLAN, SNMPv3
 users, SNMP trap receivers, syslog, NTP, timezone, and every local password.

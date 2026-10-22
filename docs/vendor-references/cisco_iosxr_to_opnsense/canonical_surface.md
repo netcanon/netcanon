@@ -64,6 +64,16 @@ on all 12 cells:
 and so do description, admin state, MTU, IPv4 and IPv6 addressing and LAG
 membership — zero drift on every one of those, on every cell.
 
+> **Since the VLAN-device change** (the table above was measured before it):
+> no source record is lost, but the inventory now **grows** by one record on
+> each cell that holds a VLAN. The render links the VLAN that the IOS-XR parser
+> makes from a sub-interface's `encapsulation dot1q` tag to no interface, so it
+> writes it as a `<vlan>` device of its own, `<parent>_vlan<id>` on a port it
+> picks (`MgmtEth0/RP0/CPU0/0_vlan35` on `batfish_ebgp_border01`), which the
+> OPNsense parser reads back as an interface record (`ianaift:l3ipvlan`). The
+> pair's expectation YAML holds the current disposition (`interfaces[].name`
+> lossy, for the shape of the inventory, not its contents).
+
 So the losses on this pair are **real per-attribute and per-record losses**,
 each independently caused, not one structural signal reflected in a dozen
 mirrors. Two consequences worth stating loudly:
@@ -116,6 +126,10 @@ from the interface side, not an independent finding.
 | local_users[].role | 0 | 9 | 3 |
 | local_users[].hashed_password | 0 | 9 | 3 |
 
+The `interfaces[].name` row, and `vlans[].name` among the empty fields below,
+were measured before the VLAN-device change; the pair's expectation YAML holds
+the current disposition (both lossy — see the VLAN section).
+
 Fields trivially empty on all 12 cells: `dns_servers`, `timezone`,
 `syslog_servers`, `interfaces[].vrrp_groups`, every `vlans[]` sub-field except
 `id`, `dhcp_servers`, all five `snmp.*` keys, `radius_servers`, all three
@@ -165,11 +179,16 @@ round-trip.
 `name` is hard-coded empty and there is no port membership, no address and no
 description. IOS-XR has no `vlan N / name X` stanza to harvest them from.
 
-So `vlans[].name`, `vlans[].description`, `vlans[].ipv4_addresses`,
-`vlans[].tagged_ports` and `vlans[].untagged_ports` are **source-side gaps**,
-recorded `not_applicable`, even though `cisco_iosxr` declares
-`/vlans/vlan/name` supported. The declaration describes the codec's render
-side; the parse never produces one.
+So `vlans[].description`, `vlans[].ipv4_addresses`, `vlans[].tagged_ports`
+and `vlans[].untagged_ports` are **source-side gaps**, recorded
+`not_applicable`. `opnsense` declares `/vlans/vlan/description` supported (it
+is the `<vlan>`'s `<descr>`), so a source that supplied one would keep it.
+
+`vlans[].name` is the exception since the VLAN-device change, recorded `lossy`:
+the round trip gives each VLAN a name it did not have. An OPNsense `<vlan>` has
+no name of its own, so the OPNsense parser names a VLAN after the device the
+render wrote for it (`MgmtEth0/RP0/CPU0/0_vlan35`). It drifts by gaining a
+name, never by losing one.
 
 **Do not read `vlans[].id: good` as "the VLAN migrated."** On all 4 of those
 cells the sub-interface tag that *generated* the VLAN record —

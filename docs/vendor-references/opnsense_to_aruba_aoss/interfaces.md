@@ -77,10 +77,13 @@ OPNsense -> Aruba:
   Port-rename mesh handles via the codec's `classify_port_name` /
   `format_port_identity` delegates.  The mapping is operator-driven
   (which OPNsense zone becomes which Aruba port).
-- `interfaces[].description`: **good** — OPNsense `<descr>` (no
+- `interfaces[].description`: **lossy** — OPNsense `<descr>` (no
   length limit) ↔ Aruba `name "<x>"` (64-character limit).  Cross-
   pair may truncate when OPNsense description exceeds Aruba's
-  limit.
+  limit.  A VLAN device's own description (the zone's `<descr>`,
+  `Voice VLAN gateway` on `vlan0.20`) is lost: Aruba has one label
+  for a VLAN interface, the VLAN's `name`, which holds the VLAN's
+  name (`Vlan20` comes back described `vlan0.20`).
 - `interfaces[].enabled`: **good** — `<enable>1</enable>` /
   absence ↔ Aruba `enable` / `disable`.
 - `interfaces[].interface_type`: **lossy** — OPNsense doesn't

@@ -118,6 +118,19 @@ per_field_expectation:
       this surface.
     references: [os10-opnsense-surface]
 
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      No source record is lost — every OS10 name comes back verbatim — but the
+      inventory grows on 9 of 10 cells: a VLAN that has no SVI in the source
+      is written as a `<parent>_vlan<id>` `<vlan>` device
+      (`port-channel10_vlan701`), which the OPNsense parser reads back as an
+      interface record of its own (`ianaift:l3ipvlan`). Recorded `lossy` for
+      the shape of the inventory, not its contents. This key comes first among
+      the `interfaces[]` keys so that the reconciler attributes the count
+      drift to it.
+    references: [os10-opnsense-surface]
+
   interfaces[].description:
     disposition: lossy
     reason: >
@@ -129,7 +142,16 @@ per_field_expectation:
       names the member and the elements left out, never their values.
       Measured 2026-10-20: 9 of the 175 records that carry a
       description are port-channel members and lose it.  Every other
-      record keeps its text.
+      record keeps its text, checked by name on the cells whose
+      inventory grows, where the reconciler compares the list as a
+      whole and attributes the drift to `interfaces[].name`.
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
     references: [os10-opnsense-surface]
 
   interfaces[].enabled:
@@ -142,13 +164,15 @@ per_field_expectation:
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. OS10 interface-type is inferred from the name prefix
-      (ethernet -> ethernetCsmacd, vlan -> l3ipvlan, port-channel ->
-      ieee8023adLag, loopback -> softwareLoopback, mgmt ->
-      ethernetCsmacd). Inference is best-effort and will not recover
-      every IANA type a cross-vendor source carried. Measured over 1
-      cell: drifted on 1, preserved on 0, both sides empty on 0.
+      The anchor renders but the value does not survive the round trip. OS10
+      interface-type is inferred from the name prefix (ethernet ->
+      ethernetCsmacd, vlan -> l3ipvlan, port-channel -> ieee8023adLag,
+      loopback -> softwareLoopback, mgmt -> ethernetCsmacd). Inference is
+      best-effort and will not recover every IANA type a cross-vendor source
+      carried. Measured over 1 cell: drifted on 1, preserved on 0, both sides
+      empty on 0. The OPNsense parser types a `<vlan>` device
+      `ianaift:l3ipvlan`, so a VLAN interface the render writes as one comes
+      back with that type; every other interface comes back untyped.
     references: [os10-opnsense-surface]
 
   interfaces[].ipv4_addresses:
@@ -184,13 +208,6 @@ per_field_expectation:
       Measured 2026-10-20: 8 of the 121 records that carry an MTU are
       port-channel members and lose it.  Every other record keeps its
       value.
-    references: [os10-opnsense-surface]
-
-  interfaces[].name:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
     references: [os10-opnsense-surface]
 
   interfaces[].vrrp_groups:
@@ -411,11 +428,12 @@ per_field_expectation:
     references: [os10-opnsense-surface]
 
   vlans[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (1 of 1 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      OS10 (its one label is the name) states no VLAN description; the round
+      trip gives each named VLAN one, its name, which the OPNsense render
+      writes as the device's `<descr>` (see `vlans[].name`). Drifts on every
+      cell, by gaining the name, never by losing a value.
     references: [os10-opnsense-surface]
 
   vlans[].id:
@@ -428,22 +446,31 @@ per_field_expectation:
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Renders VLAN SVI / management L3 only from a sibling
-      interface stanza; an L3 address carried on the VLAN record
-      itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto
-      CanonicalVlan.ipv4_addresses) is dropped on render because this
-      codec does not synthesize an SVI from the VLAN record. Declared
-      lossy so validate_against surfaces the loss instead of reporting
-      severity:ok (blind-audit 3ec11f3 T0-2). Measured over 1 cell:
-      drifted on 1, preserved on 0, both sides empty on 0.
+      The OS10 parser carries an `interface vlan<N>` address on the canonical
+      VLAN record as well as on the interface. The address reaches the output:
+      the render writes the VLAN interface the source states (`vlan461`) as a
+      zone whose `<if>` is the VLAN's `<vlan>` device, with the address on the
+      zone. Read back, the OPNsense parser puts the address on that interface
+      record, not on the VLAN — an OPNsense `<vlan>` holds no address — so the
+      VLAN record comes back without it. Recorded `lossy` for the record the
+      address sits on, not for the output.
     references: [os10-opnsense-surface]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`vlan710`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`port-channel10_vlan701`); and
+      it writes the VLAN's name as the device's `<descr>` where the VLAN has
+      no description. An OPNsense `<vlan>` has no name of its own: the
+      OPNsense parser names a VLAN after its device (`<vlanif>`) and reads
+      `<descr>` as its description. The OS10 parser names a VLAN from its
+      SVI's description, the one label OS10 has for a VLAN; so `mgmt
+      10.0.1.0/24` comes back as the description of a VLAN named `vlan710`,
+      and a VLAN with no name comes back named after its device. Drifts on
+      every cell.
     references: [os10-opnsense-surface]
 
   vlans[].tagged_ports:

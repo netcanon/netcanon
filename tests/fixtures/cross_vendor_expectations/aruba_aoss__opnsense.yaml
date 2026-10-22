@@ -13,9 +13,10 @@
 #     parse + render wires up the corresponding `<system>` children
 #     (Aruba has no domain directive, so domain is N/A here)
 #   * interfaces (IP, enable, descr) — good
-#   * VLANs — id good; name/description collapse; port-membership and
-#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
-#     lists, no first-class SVI)
+#   * VLANs — id good; a VLAN comes back named after its OPNsense
+#     device, its name in the description; port-membership and SVI
+#     sub-fields unsupported (OPNsense has no VLAN-centric port lists,
+#     no first-class SVI)
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     model is two-stage, codec doesn't currently render either)
 #   * DHCP server scopes — N/A (Aruba is relay-only; canonical list
@@ -237,13 +238,16 @@ per_field_expectation:
   interfaces[].name:
     disposition: lossy
     reason: >
-      Aruba bare-numeric (``1``, ``13``) / letter-uplink (``A1``)
-      / ``Trk1`` does not survive on OPNsense.  The operator-
-      facing label on OPNsense is the zone tag (``<wan>`` /
-      ``<lan>`` / ``<optN>``); the BSD device name lives in
-      ``<if>``.  Port-rename mesh handles the conversion via the
-      codec's ``classify_port_name`` / ``format_port_identity``
-      delegates.  Canonical preserves the source string verbatim.
+      Aruba bare-numeric (``1``, ``13``) / letter-uplink (``A1``) / ``Trk1``
+      does not survive on OPNsense. The operator- facing label on OPNsense is
+      the zone tag (``<wan>`` / ``<lan>`` / ``<optN>``); the BSD device name
+      lives in ``<if>``. Port-rename mesh handles the conversion via the
+      codec's ``classify_port_name`` / ``format_port_identity`` delegates.
+      Canonical preserves the source string verbatim. What the round trip
+      measures on this key is an addition, not a loss: a VLAN the render links
+      to no VLAN interface of the source is written as a `<parent>_vlan<id>`
+      device, which the OPNsense parser reads back as an interface record of
+      its own (`ianaift:l3ipvlan`). No source record is lost.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].description:
@@ -271,11 +275,13 @@ per_field_expectation:
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      Aruba codec infers from name shape (bare number ->
-      ethernetCsmacd, ``Trk`` -> port-channel, ``Vlan`` ->
-      l3ipvlan).  OPNsense doesn't surface a type field; the
-      cross-pair drops the type hint.  Codec capability matrix
-      declares this lossy on the Aruba side.
+      Aruba codec infers from name shape (bare number -> ethernetCsmacd,
+      ``Trk`` -> port-channel, ``Vlan`` -> l3ipvlan). OPNsense doesn't surface
+      a type field; the cross-pair drops the type hint. Codec capability
+      matrix declares this lossy on the Aruba side. The OPNsense parser types
+      a `<vlan>` device `ianaift:l3ipvlan`, so a VLAN interface the render
+      writes as one comes back with that type; every other interface comes
+      back untyped.
     references: [aruba-interfaces, opnsense-interfaces]
 
   interfaces[].mtu:
@@ -392,8 +398,9 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries
-      below.
+      sub-fields are lost or move (the name to the description,
+      the address to the VLAN's interface) — see ``vlans[].*``
+      entries below.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].id:
@@ -406,18 +413,24 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Aruba per-VLAN ``name "<x>"`` (32-char truncation).
-      OPNsense's nearest equivalent is ``<descr>`` — which is also
-      where the canonical ``description`` lands.  Two canonical
-      fields collapse to one OPNsense XML field; one drops on
-      render.
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`Vlan2`), otherwise as `<parent>_vlan<id>` on a port that
+      carries the VLAN or a default one (`1_vlan2`); and it writes the VLAN's
+      name as the device's `<descr>` where the VLAN has no description. An
+      OPNsense `<vlan>` has no name of its own: the OPNsense parser names a
+      VLAN after its device (`<vlanif>`) and reads `<descr>` as its
+      description. So `servers` comes back as the description of a VLAN named
+      `Vlan2`, and `DEFAULT_VLAN` as that of `1_vlan1`. Drifts on every cell.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.
+      AOS-S states no VLAN description; the round trip gives each named VLAN
+      one, its name, which the OPNsense render writes as the device's
+      `<descr>` (see `vlans[].name`). Drifts on every cell, by gaining the
+      name, never by losing a value.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].tagged_ports:
@@ -442,14 +455,15 @@ per_field_expectation:
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
-      Aruba's per-VLAN ``ip address X/N`` (absorbed onto the
-      canonical VLAN record by ``_svi_absorption.py``) has no
-      first-class OPNsense equivalent.  The OPNsense pattern is
-      to assign the VLAN sub-interface to a zone and put the
-      address on the zone (``<opt2>``).  The canonical model
-      carries the SVI address but the OPNsense render path
-      doesn't synthesise the corresponding zone — operator-
-      curated.
+      Aruba's per-VLAN `ip address X/N` is absorbed onto the canonical VLAN
+      record by `_svi_absorption.py`, beside the `Vlan<N>` interface the
+      parser makes for it. The address reaches the output: the render writes
+      the VLAN interface the source states (`Vlan10`) as a zone whose `<if>`
+      is the VLAN's `<vlan>` device, with the address on the zone. Read back,
+      the OPNsense parser puts the address on that interface record, not on
+      the VLAN — an OPNsense `<vlan>` holds no address — so the VLAN record
+      comes back without it. Recorded `lossy` for the record the address sits
+      on, not for the output.
     references: [opnsense-vlans, aruba-vlans]
 
   static_routes:

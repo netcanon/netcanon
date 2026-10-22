@@ -644,6 +644,37 @@ timestamp if your timezone matters for an audit.
   chosen as before and a `# review:` line in the VLAN's block names
   the one the source stated.  Between FortiOS and RouterOS the parent
   now goes both ways.
+- **An OPNsense VLAN device was not defined in the output, and its
+  tag was read from its name.**  A `<vlan>` is a VLAN device: `<if>`
+  the device it rides on, `<tag>`, and `<vlanif>` the device's own
+  name, which a zone's `<if>` assigns.  OPNsense names a new device
+  `vlan01`, `vlan02` ... (`<parent>_vlan<tag>` on older configs), so
+  the digits of the name are not the tag.  The parser kept a
+  `<vlan>`'s tag and `<descr>` only, and the renderer wrote every VLAN
+  as `<parent>_vlan<tag>` on a parent it chose: OPNsense to OPNsense,
+  each zone on a VLAN named a device the output did not define, and
+  the five VLANs of the supergate capture came out on its WAN port, in
+  a job that said `completed`.  Onto FortiOS, `vlan01` of VLAN 20 was
+  `set vlanid 1`, beside a second interface made for VLAN 20.  The
+  parser now reads a `<vlan>` whole: the device is given its zone's
+  record, or a record of its own where no zone assigns it
+  (`ianaift:l3ipvlan`, `vlan_parent` from `<if>`), and the VLAN is
+  named after the device, its `<descr>` its description.  The
+  renderer writes each VLAN interface of the tree as the device of
+  that name on its parent, writes no zone for a device that holds
+  nothing a zone holds, and says in a comment where OPNsense's VLAN
+  form would refuse the name; an SVI from another vendor is named
+  `vlan0.<id>` (it was `lagg0.<id>`, which the form refuses).  A
+  device that is not one 802.1Q tag -- `802.1ad`, a blank `<proto>`
+  on a device another VLAN rides on (OPNsense sends that as 802.1ad),
+  a `<proto>` OPNsense does not have, a tag outside 1-4094 -- is left
+  out with a row of `dropped_tier3_sections`, and so are what rides on
+  it, its zone and a DHCP pool on it; a `<pcp>` other than 0 is said
+  in a row.  The FortiOS renderer now takes a VLAN interface's tag
+  from the VLAN named after it before the digits of its name, as the
+  RouterOS renderer already did.  The OPNsense capability matrix says
+  what moved: a VLAN's name is its device (`lossy`), its `<descr>` its
+  description (`supported`).
 
 - **A loopback onto Junos was written as an interface Junos does not
   have, and the loopbacks of a Junos config's routing instances were
@@ -4349,12 +4380,45 @@ timestamp if your timezone matters for an audit.
   the port, and its address on a `bridge1` nothing defines; with
   `"vlan5"`, the port becomes VLAN 5 of the other port.  Give the
   port another name.
-- **The interface a VLAN rides on is carried between RouterOS and
-  FortiOS only**, and its loss onto another vendor is not reported:
-  no other codec writes a VLAN interface on a parent the config
-  names.  From another vendor, a VLAN interface of a RouterOS or
-  FortiOS output is on a parent the renderer chooses.  OPNsense's
-  `<vlan><if>` is not kept either; no committed capture has one.
+- **The interface a VLAN rides on is carried between RouterOS,
+  FortiOS and OPNsense only**, and its loss onto another vendor is not
+  reported: no other codec writes a VLAN interface on a parent the
+  config names.  From another vendor, a VLAN interface of a RouterOS,
+  FortiOS or OPNsense output is on a parent the renderer chooses.
+- **An OPNsense VLAN device named `vlan0.<n>` is the SVI of VLAN `n`
+  onto another vendor, whatever its tag.**  The port-name translator
+  reads the digits after the dot as the VLAN: a device `vlan0.5` of
+  tag 10 comes out as `interface Vlan5` on IOS-XE, NX-OS and EOS, the
+  `irb` unit 5 on Junos, and RouterOS VLAN 5, carrying VLAN 10's
+  address, in jobs that say `completed`.  The supergate capture's
+  devices are named after their tags, and are right.
+- **An OPNsense 802.1ad (QinQ) device is not translated.**  It is left
+  out with its zone and what rides on it, and said in a row: the
+  canonical tree holds no 802.1ad tag.
+- **An OPNsense VLAN's label is not in the output onto most other
+  vendors.**  An OPNsense `<vlan>` has no name of its own: its label
+  is its `<descr>`, which the tree holds as the VLAN's description,
+  the VLAN named after its device (`vlan0.10`).  IOS-XE CLI, NX-OS,
+  EOS, Junos and FortiOS write no description for a VLAN, AOS-S and
+  OS10 have one label for it, which holds the name, and RouterOS
+  gives a VLAN interface's one `comment=` to the interface's own
+  description: onto those the label (`USER VLAN`) is not in the
+  output, and the job lists `/vlans/vlan/description` as a loss for
+  each VLAN.  Until this change the label was the VLAN's name there.
+  AOS-CX writes both.
+- **A VLAN onto OPNsense keeps one label.**  An OPNsense `<vlan>`
+  has one, `<descr>`: the renderer writes the VLAN's description
+  there, or its name where it has none, so a VLAN with both loses its
+  name; and read back, every VLAN is named after its device.  The
+  job lists `/vlans/vlan/name` as a loss for each VLAN.
+- **A sub-interface onto OPNsense is not written as a VLAN device.**
+  Its zone names the port and its unit (`igb1.35`), which no `<vlan>`
+  of the output defines, and the VLAN the IOS XR parser makes of its
+  `encapsulation dot1q` tag is written as a device of its own,
+  `<parent>_vlan<id>` on a port the renderer picks -- on two IOS XR
+  captures `opt_mgmt`, the name the port translator gives a
+  management port, which is no device either.  The jobs are
+  `partial` for other reasons; nothing names this.
 - **A RouterOS port an operator named is not placed by its factory
   name onto another vendor.**  With no devices declared it is
   translated only by an entry of `port_rename_map`; the job lists it

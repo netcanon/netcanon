@@ -16,15 +16,16 @@ Retrieved: 2026-05-01
 ## What the OPNsense source populates
 
 The OPNsense codec parses `<interfaces>` zone elements (`<wan>`,
-`<lan>`, `<optN>`) into a list of `CanonicalInterface` records.
-Per the codec's `parse.py`:
+`<lan>`, `<optN>`) into a list of `CanonicalInterface` records;
+a `<vlans>/<vlan>` device that no zone assigns gets a record of
+its own.  Per the codec's `parse.py`:
 
 | Canonical field | Populated? | Source XML element |
 |---|---|---|
 | `name` | yes | `<wan>` / `<lan>` / `<optN>` zone label (operator-facing) |
 | `description` | yes | `<descr>` |
 | `enabled` | yes | `<enable/>` empty element (present = enabled) |
-| `interface_type` | NO | OPNsense doesn't surface a type field |
+| `interface_type` | VLAN devices only | a `<vlans>/<vlan>` device is typed `ianaift:l3ipvlan`; every other interface is untyped |
 | `mtu` | yes | `<mtu>` integer (when set) |
 | `ipv4_addresses` | yes | `<ipaddr>` + `<subnet>` (CIDR prefix) |
 | `ipv6_addresses` | yes | `<ipaddrv6>` + `<subnetv6>` (CIDR prefix) |
@@ -75,8 +76,9 @@ The `cisco_iosxe._render_canonical(intent)` walks
 Render limits:
 
 - The `<config><type>` slot accepts whatever the canonical
-  `interface_type` carries — but OPNsense source never populates
-  it, so the slot is empty on this pair.
+  `interface_type` carries — OPNsense source populates it only on
+  a VLAN device (`ianaift:l3ipvlan`), so the slot is empty for
+  every other interface on this pair.
 - The renderer does NOT emit `<config><mtu>` even when
   `intent.interfaces[i].mtu` is set.  This is a render-side wire-up
   gap (the codec lists `/interfaces/interface/config/mtu` under
@@ -95,7 +97,7 @@ Render limits:
 | `interfaces[].name` | lossy | round-trips through rename mesh; OPNsense zone label / BSD device name doesn't match Cisco speed-encoded shape |
 | `interfaces[].description` | good | free-text |
 | `interfaces[].enabled` | good | `<enable/>` -> YANG bool |
-| `interfaces[].interface_type` | not_applicable | OPNsense source doesn't populate |
+| `interfaces[].interface_type` | good | VLAN devices (`ianaift:l3ipvlan`) written into `<config>/<type>` and read back; every other interface stays untyped |
 | `interfaces[].mtu` | lossy | OPNsense source populates; cisco_iosxe render doesn't emit `<config><mtu>` (matrix declares lossy) |
 | `interfaces[].ipv4_addresses` | good | mechanical conversion to OpenConfig `openconfig-if-ip:ipv4` |
 | `interfaces[].ipv6_addresses` | lossy | scope discriminator: source preserves; OpenConfig render doesn't emit address-type enum |

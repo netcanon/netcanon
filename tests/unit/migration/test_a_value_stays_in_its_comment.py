@@ -231,6 +231,10 @@ _BUILT_ELSEWHERE: dict[tuple[str, str], str] = {
         "an ET.Comment whose text is format_review_comment(..., 'xml'), "
         "which is built by _comments"
     ),
+    ("netcanon/migration/codecs/opnsense/render.py", "write_device"): (
+        "an ET.Comment of a VLAN device whose text is _comment_text(...), "
+        "which is comment_text(..., 'xml') from _comments"
+    ),
 }
 
 

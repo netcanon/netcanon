@@ -421,24 +421,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             target_iface.vrrp_groups.append(group)
 
     # ----- <vlans> block -----
+    # Each <vlan> is a VLAN DEVICE: a kernel interface, named by its
+    # <vlanif>, that sends frames out of its parent <if> with its <tag>.
+    # A zone assigns it by that name.  See _parse_vlan_devices.
+    left_out_devices: set[str] = set()
     vlans_el = root.find("vlans")
     if vlans_el is not None:
-        for vlan_el in ticked(vlans_el.findall("vlan")):
-            tag_el = vlan_el.find("tag")
-            if tag_el is not None and tag_el.text:
-                try:
-                    vid = int(tag_el.text.strip())
-                except ValueError as e:
-                    raise ParseError(
-                        f"opnsense: non-integer <tag> {tag_el.text!r}",
-                        path="/vlans/vlan/tag",
-                        snippet=(tag_el.text or "")[:120],
-                    ) from e
-                descr_el = vlan_el.find("descr")
-                intent.vlans.append(CanonicalVlan(
-                    id=vid,
-                    name=(descr_el.text or "").strip() if descr_el is not None else "",
-                ))
+        left_out_devices = _parse_vlan_devices(vlans_el, intent)
 
     # ----- <dhcpd> block (Tier 2 DHCP) -----
     dhcpd_el = root.find("dhcpd")
@@ -446,6 +435,15 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         for zone_el in dhcpd_el:
             pool = _parse_opnsense_dhcp_zone(zone_el, iface_alias_to_canonical)
             if pool is None:
+                continue
+            if pool.interface in left_out_devices:
+                # The zone is on a VLAN device that is not translated
+                # (its row says why), and the pool goes with it.
+                intent.dropped_tier3_sections.append(
+                    f"<dhcpd><{zone_el.tag}>: on {pool.interface}, a VLAN "
+                    f"device that is not translated, so its DHCP pool is "
+                    f"not either"
+                )
                 continue
             if not pool.interface:
                 # The zone is assigned to no device, so the pool has
@@ -824,6 +822,178 @@ def _parse_interface_zone(el: ET.Element) -> dict[str, Any] | None:
     if not found_any:
         return None
     return iface
+
+
+#: What ``<vlans><vlan><proto>`` may hold (core ``Vlan.xml``): blank for
+#: "Automatic", ``802.1q`` or ``802.1ad``.
+_VLAN_PROTOS = frozenset({"", "802.1q", "802.1ad"})
+
+
+def _text_of(el: ET.Element, tag: str) -> str:
+    """The stripped text of *el*'s child *tag*, or ``""``."""
+    child = el.find(tag)
+    return (child.text or "").strip() if child is not None else ""
+
+
+def _parse_vlan_devices(
+    vlans_el: ET.Element, intent: CanonicalIntent,
+) -> set[str]:
+    """Read every ``<vlan>`` of *vlans_el* into *intent*.
+
+    A ``<vlan>`` is a VLAN device (core ``Vlan.xml``): ``<if>`` the
+    device it rides on, ``<tag>`` 1-4094, ``<pcp>``, ``<proto>``,
+    ``<descr>``, and ``<vlanif>`` the device's own name, which a zone's
+    ``<if>`` assigns.  OPNsense picks that name itself (``vlan01``,
+    ``vlan02``... or ``<parent>_vlan<tag>`` on older configs) or takes
+    one typed as ``vlan0`` and digits and dots (``Vlan.php``), so its
+    digits are not the tag.  The device is given the record its zone
+    made, or a record of its own where no zone assigns it, typed
+    ``ianaift:l3ipvlan`` with ``vlan_parent`` set to ``<if>``; and a
+    :class:`CanonicalVlan` named after it, its ``<descr>`` its
+    description -- the RouterOS and FortiOS parsers link a VLAN
+    interface to its tag by that name, and the renderers find the tag
+    by it.  Read for its tag alone, every VLAN of a config came back on
+    one guessed parent under another device name, and each zone on a
+    VLAN named a device the output did not have.
+
+    A device is not translated where its tag is not one 802.1Q tag:
+    ``<proto>802.1ad</proto>``, a blank ``<proto>`` on a device another
+    VLAN rides on (``interfaces.inc`` sends that as 802.1ad: QinQ), a
+    ``<proto>`` the model does not have, or a tag outside 1-4094.  Nor
+    is a device that rides on one of those.  Each is left out with a
+    row, and so is the zone on it, whose record is taken out: the
+    canonical tree holds no 802.1ad tag, and written as an 802.1Q tag
+    it would be another VLAN on the wire.  A ``<pcp>`` other than 0 is
+    said in a row; the VLAN is kept.
+
+    Args:
+        vlans_el: The ``<vlans>`` element.
+        intent: The tree, whose ``<interfaces>`` have been read.
+
+    Returns:
+        The names of the devices left out, so that what else is on
+        them (a DHCP pool) is left out with them.
+
+    Raises:
+        ParseError: A ``<tag>`` that is not an integer.
+    """
+    entries: list[dict[str, Any]] = []
+    for vlan_el in ticked(vlans_el.findall("vlan")):
+        tag_el = vlan_el.find("tag")
+        if tag_el is None or not tag_el.text:
+            continue
+        try:
+            vid = int(tag_el.text.strip())
+        except ValueError as e:
+            raise ParseError(
+                f"opnsense: non-integer <tag> {tag_el.text!r}",
+                path="/vlans/vlan/tag",
+                snippet=(tag_el.text or "")[:120],
+            ) from e
+        entries.append({
+            "tag": vid,
+            "parent": _text_of(vlan_el, "if"),
+            "device": _text_of(vlan_el, "vlanif"),
+            "descr": _text_of(vlan_el, "descr"),
+            "proto": _text_of(vlan_el, "proto").lower(),
+            "pcp": _text_of(vlan_el, "pcp"),
+        })
+
+    # What rides on what.  A device another VLAN rides on is sent as
+    # 802.1ad when its <proto> is blank (interfaces.inc,
+    # interfaces_vlan_configure).
+    children: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        if entry["parent"]:
+            children.setdefault(entry["parent"], []).append(entry)
+
+    def where(entry: dict[str, Any]) -> str:
+        return f"<vlans><vlan> {entry['device'] or 'with no <vlanif>'}"
+
+    left_out: set[str] = set()
+    reasons: dict[int, str] = {}
+    for entry in entries:
+        proto = entry["proto"]
+        if proto not in _VLAN_PROTOS:
+            reasons[id(entry)] = (
+                f"{where(entry)}: <proto> is not 802.1q or 802.1ad -- not "
+                f"one 802.1Q tag, so the VLAN device is not translated"
+            )
+        elif proto == "802.1ad" or (
+            not proto and entry["device"] and entry["device"] in children
+        ):
+            reasons[id(entry)] = (
+                f"{where(entry)}: an 802.1ad (QinQ) tag -- not one 802.1Q "
+                f"tag, so the VLAN device is not translated"
+            )
+        elif not 1 <= entry["tag"] <= 4094:
+            reasons[id(entry)] = (
+                f"{where(entry)}: <tag> is not 1-4094 -- not an 802.1Q "
+                f"tag, so the VLAN device is not translated"
+            )
+    # What rides on a device that is left out goes with it: walked
+    # from those devices, each entry once.
+    walk = [entry for entry in entries if id(entry) in reasons]
+    while walk:
+        entry = walk.pop()
+        if entry["device"]:
+            left_out.add(entry["device"])
+            for child in children.get(entry["device"], ()):
+                if id(child) not in reasons:
+                    reasons[id(child)] = (
+                        f"{where(child)}: rides on {entry['device']}, "
+                        f"which is not translated, so the VLAN device is "
+                        f"not either"
+                    )
+                    walk.append(child)
+
+    named: dict[str, CanonicalInterface] = {}
+    for iface in intent.interfaces:
+        named.setdefault(iface.name, iface)
+    zoned = set(named)
+    made: set[str] = set()
+    for entry in entries:
+        reason = reasons.get(id(entry))
+        if reason is not None:
+            intent.dropped_tier3_sections.append(
+                reason + (", nor the zone on it" if entry["device"] in zoned else "")
+            )
+            continue
+        device = entry["device"]
+        if not device:
+            # No device: OPNsense makes none (it creates the device
+            # named by <vlanif>), so there is a VLAN and nothing on it.
+            intent.vlans.append(CanonicalVlan(
+                id=entry["tag"], description=entry["descr"],
+            ))
+            continue
+        if device in made:
+            intent.dropped_tier3_sections.append(
+                f"{where(entry)}: a second <vlan> for the same device -- "
+                f"not translated"
+            )
+            continue
+        made.add(device)
+        record = named.get(device)
+        if record is None:
+            record = CanonicalInterface(name=device)
+            intent.interfaces.append(record)
+            named[device] = record
+        record.interface_type = "ianaift:l3ipvlan"
+        record.vlan_parent = entry["parent"] or None
+        intent.vlans.append(CanonicalVlan(
+            id=entry["tag"], name=device, description=entry["descr"],
+        ))
+        if entry["pcp"] not in ("", "0"):
+            intent.dropped_tier3_sections.append(
+                f"{where(entry)}: <pcp> other than 0 -- the priority its "
+                f"frames are sent with is not translated"
+            )
+    if left_out:
+        intent.interfaces = [
+            iface for iface in intent.interfaces if iface.name not in left_out
+        ]
+    return left_out
 
 
 def _parse_opnsense_dhcp_zone(

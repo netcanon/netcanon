@@ -28,6 +28,8 @@ The binding constraint on this pair is not the capability matrices, it is `test_
 
 Across the 1 cell, 14 source interface records produce 14 re-parsed records — the interface inventory is intact.
 
+> **Since the VLAN-device change** (this file was measured before it): no source record is lost, but the inventory now **grows**. A VLAN that has no SVI in the source is written as a `<parent>_vlan<id>` `<vlan>` device (`port-channel100_vlan1` on the kitchen sink), which the OPNsense parser reads back as an interface record of its own (`ianaift:l3ipvlan`). And a VLAN's name no longer comes back: an OPNsense `<vlan>` has no name of its own, so the OPNsense parser names a VLAN after its device (`<vlanif>`: the SVI's name, `vlan461`, where the source has one) and reads `<descr>` — where the render writes the VLAN's name, OS10 stating no VLAN description — as its description. `TENANT-A-GATEWAY` comes back as the description of a VLAN named `vlan461`. The pair's expectation YAML holds the current dispositions: `interfaces[].name`, `vlans[].name` and `vlans[].description` are `lossy`.
+
 ## Disposition summary
 
 | Disposition | Fields |
@@ -36,6 +38,8 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 | `lossy` | 9 |
 | `unsupported` | 10 |
 | `not_applicable` | 7 |
+
+Counted before the VLAN-device change, which moved three fields from `good` to `lossy` (see the structural finding); the pair's expectation YAML holds the current disposition.
 
 ## Per-field measurement
 
@@ -58,7 +62,7 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 | `interfaces[].ipv6_addresses` | good | 1 | 0 | 0 |
 | `interfaces[].lag_member_of` | good | 1 | 0 | 0 |
 | `interfaces[].mtu` | good | 1 | 0 | 0 |
-| `interfaces[].name` | good | 1 | 0 | 0 |
+| `interfaces[].name` | lossy | — | — | — |
 | `interfaces[].vrrp_groups` | lossy | 0 | 1 | 0 |
 | `lags` | good | 1 | 0 | 0 |
 | `local_users` | lossy | 0 | 1 | 0 |
@@ -79,16 +83,18 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 | `static_routes` | unsupported | 0 | 1 | 0 |
 | `syslog_servers` | unsupported | 0 | 0 | 1 |
 | `timezone` | unsupported | 0 | 0 | 1 |
-| `vlans[].description` | good | 0 | 0 | 1 |
+| `vlans[].description` | lossy | — | — | — |
 | `vlans[].id` | good | 1 | 0 | 0 |
 | `vlans[].ipv4_addresses` | lossy | 0 | 1 | 0 |
-| `vlans[].name` | good | 1 | 0 | 0 |
+| `vlans[].name` | lossy | — | — | — |
 | `vlans[].tagged_ports` | unsupported | 0 | 1 | 0 |
 | `vlans[].untagged_ports` | unsupported | 0 | 1 | 0 |
 | `vxlan_vnis` | unsupported | 0 | 0 | 1 |
 | `vxlan_vnis[].mcast_group` | not_applicable | 0 | 0 | 1 |
 | `vxlan_vnis[].vlan_id` | not_applicable | 0 | 0 | 1 |
 | `vxlan_vnis[].vni` | unsupported | 0 | 0 | 1 |
+
+The three rows shown `—` were measured `good` before the VLAN-device change; their counts are left out rather than restated, and the structural finding above says what changed.
 
 ## Observed loss mechanisms
 

@@ -399,12 +399,11 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries below.
-      Both vendors share the unusual idiom of modelling VLANs as
-      802.1Q child interfaces (NOT VLAN-centric port lists), which
-      makes this pair relatively clean compared to switch-to-firewall
-      pairs.
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`). Both vendors share the unusual idiom
+      of modelling VLANs as 802.1Q child interfaces (NOT VLAN-centric port
+      lists), which makes this pair relatively clean compared to
+      switch-to-firewall pairs.
     references: [opn-vlans, fgt-vlans]
 
   vlans[].id:
@@ -416,20 +415,23 @@ per_field_expectation:
     references: [opn-vlans, fgt-vlans]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's ``<descr>`` is the only label field; canonical
-      ``name`` and ``description`` both populate from it on parse,
-      so both fields carry the same text.  FortiGate ``set alias``
-      is the closest analogue but caps at 25 characters; long
-      OPNsense descriptions truncate on FortiGate render.
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which FortiGate writes as the VLAN interface's name and reads
+      back. The operator's label (`USER VLAN`) is the VLAN's description, and
+      is lost: see `vlans[].description`.
     references: [opn-vlans, fgt-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same rationale as ``vlans[].name`` — one OPNsense XML field
-      populating two canonical fields.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and the FortiGate render
+      writes a VLAN's name and no separate description. The job says so:
+      FortiGate declares `/vlans/vlan/description` lossy, which the validation
+      report lists for each VLAN.
     references: [opn-vlans, fgt-vlans]
 
   vlans[].tagged_ports:

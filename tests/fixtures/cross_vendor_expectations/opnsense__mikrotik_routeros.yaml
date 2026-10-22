@@ -266,10 +266,11 @@ per_field_expectation:
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      OPNsense doesn't surface a type field — canonical
-      ``interface_type`` hint is empty after an OPNsense parse.
-      RouterOS codec also lossy on type (infers from default-name
-      prefix per its capability matrix lossy entry).
+      The OPNsense parser types its VLAN devices (`ianaift:l3ipvlan`) and
+      leaves every other interface untyped. The VLAN devices come back typed
+      as they were; the drift is `lo0`, which the RouterOS render writes under
+      `/interface bridge` and which comes back typed as a bridge
+      (`ianaift:bridge`), on `user_contrib_supergate_opn25.xml`.
     references: [mikrotik_iface_naming]
 
   interfaces[].mtu:
@@ -364,8 +365,8 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list itself round-trips for the id field.  Per-VLAN sub-
-      fields collapse — see ``vlans[].*`` entries below.
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`).
     references: [opnsense-vlans, mikrotik_vlan]
 
   vlans[].id:
@@ -376,24 +377,25 @@ per_field_expectation:
     references: [opnsense-vlans, mikrotik_vlan]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's ``<descr>`` lands in canonical ``name`` (per the
-      OPNsense parse module).  RouterOS conflates the L3 interface
-      name (``vlan10``) with the descriptive VLAN name on Plane 1
-      (per the MikroTik codec's ``LossyPath`` on
-      ``/vlans/vlan/name``).  Cross-pair render emits the OPNsense
-      ``<descr>`` value into the RouterOS Plane-1 ``name=`` field —
-      semantic conflation but no data loss.
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which RouterOS writes as the VLAN interface's `name=` and
+      reads back. The operator's label (`USER VLAN`) is the VLAN's
+      description, and is lost: see `vlans[].description`.
     references: [opnsense-vlans, mikrotik_vlan]
 
   vlans[].description:
-    disposition: not_applicable
-    note: >
-      OPNsense doesn't model a separate description field; the
-      ``<descr>`` lands in canonical ``name`` instead, leaving
-      ``description`` empty on parse.  RouterOS render emits no
-      separate description anyway.
+    disposition: lossy
+    reason: >
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and RouterOS has one
+      `comment=` for a VLAN interface, which the render gives the interface's
+      own description (the zone's: `USERVLAN`, `Voice VLAN gateway`), so the
+      VLAN's label does not reach the output. The job says so: RouterOS
+      declares `/vlans/vlan/description` lossy, which the validation report
+      lists for each VLAN.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:

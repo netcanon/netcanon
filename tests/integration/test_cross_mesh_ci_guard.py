@@ -476,6 +476,29 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # own, written onto OPNsense in its lagg's ``<members>`` alone, so its
 # ``set alias`` is not written -- the loss the YAML now names, which the
 # synthetic kitchen sink's two members show.
+#
+# And one pair is seeded at 1 that was absent: opnsense__aruba_aoss.  Its
+# ``interfaces[].description`` loss was observed on one cell only, where the
+# comparator lined records up by position after a rename; the OPNsense VLAN
+# devices of that cell are now compared as a list whose size changes, and the
+# drift is attributed to ``interfaces[].name``.  The loss is real -- AOS-S has
+# one label for a VLAN interface, the VLAN's ``name``, so the description
+# OPNsense gives a VLAN device's zone is not in the output, on both cells that
+# hold one -- and no cell's comparison shows it; the YAML's reason says so.
+# The same re-measure lowered seven OPNsense entries to what they observe.
+#
+# And five entries onto or from OPNsense are what the union of that change
+# with the LAG-member one measures.  cisco_iosxe_cli__opnsense (4: the
+# member's ``ipv4_addresses`` and ``mtu``), cisco_nxos__opnsense (1) and
+# dell_os10__opnsense (1: ``interfaces[].description``) and
+# juniper_junos__opnsense (5: ``description`` and ``enabled``) hold a loss
+# that is real -- a member of a LAG is written in its lagg alone -- and
+# that no cell shows any more: every cell that holds such a member now has
+# VLAN devices read back from ``<vlans>``, so its list is compared whole.
+# Each YAML reason says so.  opnsense__juniper_junos stays at 4: the
+# Junos renderer writes a VLAN device with no address as a unit of its
+# device, so the kitchen sink keeps all ten names and ``interfaces[].name``
+# is still preserved on every cell.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -485,19 +508,18 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__fortigate_cli": 3,
     "arista_eos__juniper_junos": 4,
     "arista_eos__mikrotik_routeros": 1,
-    "arista_eos__opnsense": 6,
+    "arista_eos__opnsense": 4,
     "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
     "aruba_aoss__cisco_iosxe_cli": 3,
     "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
-    "aruba_aoss__opnsense": 7,
+    "aruba_aoss__opnsense": 5,
     "cisco_iosxe__aruba_aoss": 1,
     "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
     "cisco_iosxe__juniper_junos": 1,
-    "cisco_iosxe__opnsense": 2,
     "cisco_iosxe_cli__arista_eos": 2,
     "cisco_iosxe_cli__aruba_aoss": 2,
     "cisco_iosxe_cli__cisco_iosxe": 2,
@@ -505,6 +527,8 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__juniper_junos": 4,
     "cisco_iosxe_cli__mikrotik_routeros": 1,
     "cisco_iosxe_cli__opnsense": 4,
+    "cisco_nxos__opnsense": 1,
+    "dell_os10__opnsense": 1,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,
     "fortigate_cli__cisco_iosxe": 3,
@@ -528,9 +552,10 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "mikrotik_routeros__opnsense": 5,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,
+    "opnsense__aruba_aoss": 1,
     "opnsense__cisco_iosxe_cli": 1,
     "opnsense__fortigate_cli": 5,
-    "opnsense__juniper_junos": 5,
+    "opnsense__juniper_junos": 4,
     "opnsense__mikrotik_routeros": 3,
 }
 

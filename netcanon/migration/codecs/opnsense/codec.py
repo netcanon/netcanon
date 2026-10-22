@@ -148,7 +148,8 @@ class OPNsenseCodec(CodecBase):
             # OPNsense <ipaddrv6>{dhcp6|slaac|track6|6rd|6to4}</ipaddrv6>
             "/interfaces/interface/dhcp-client-v6",
             "/vlans/vlan/id",
-            "/vlans/vlan/name",
+            # A <vlan>'s <descr>; its name is its device (lossy below).
+            "/vlans/vlan/description",
             # Tier 2 — SNMP (OPNsense snmpd plugin)
             "/snmp/community",
             "/snmp/location",
@@ -257,12 +258,13 @@ class OPNsenseCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/vlans/vlan/description",
+                path="/vlans/vlan/name",
                 reason=(
-                    "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "An OPNsense <vlan> has no name of its own: the parser "
+                    "names a VLAN after its device (<vlanif>), and the "
+                    "render writes another vendor's VLAN name as the "
+                    "<descr> where the VLAN has no description, and drops "
+                    "it where it has one."
                 ),
                 severity="warn",
             ),

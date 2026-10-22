@@ -148,14 +148,20 @@ per_field_expectation:
   # corroborated by its siblings.
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Preserved on 12 of 12 cells.  IOS-XR's 4-segment names
+    disposition: lossy
+    reason: >
+      No source record is lost — IOS-XR's 4-segment names
       (`GigabitEthernet0/0/0/1.35`, `MgmtEth0/RP0/CPU0/0`) come back
-      byte-identical through the OPNsense render — the inventory does not
-      shrink on this pair, which is what makes every other `interfaces[].*`
-      key below an independent measurement rather than an echo of a
-      structural drop.
+      byte-identical through the OPNsense render — but the inventory grows by
+      one record on each of the 4 cells that hold a VLAN. The IOS-XR parser
+      makes a VLAN from a sub-interface's `encapsulation dot1q` tag; the
+      render links that VLAN to no interface, and so writes it as a `<vlan>`
+      device of its own, `<parent>_vlan<id>` on a port it picks
+      (`MgmtEth0/RP0/CPU0/0_vlan35` for the VLAN 35 of
+      `GigabitEthernet0/0/0/1.35`), which the OPNsense parser reads back as an
+      interface record (`ianaift:l3ipvlan`). The sub-interface keeps its own
+      record. Recorded `lossy` for the shape of the inventory, not its
+      contents.
     references: [iosxr-opnsense-surface]
 
   "interfaces[].description":
@@ -268,7 +274,8 @@ per_field_expectation:
   # `CanonicalVlan(id=vid, name="")` — name hard-coded empty, no port
   # membership, no address, no description.  IOS-XR has no `vlan N / name X`
   # stanza to harvest.  So every VLAN sub-field except `id` is a source-side
-  # gap on this pair, regardless of what either matrix declares.
+  # gap on this pair, except the name, which the OPNsense round trip gives
+  # each VLAN (see `vlans[].name`).
 
   "vlans[].id":
     disposition: good
@@ -284,15 +291,14 @@ per_field_expectation:
     references: [iosxr-opnsense-surface]
 
   "vlans[].name":
-    disposition: not_applicable
-    note: >
-      Source-side gap, verified in the codec rather than inferred: the
-      cisco_iosxr parser constructs every VLAN record as
-      `CanonicalVlan(id=vid, name="")`, so no IOS-XR source ever carries a
-      VLAN name for this pair to migrate.  cisco_iosxr does declare
-      `/vlans/vlan/name` supported, but that declaration describes its render
-      side; its parse never produces one.  opnsense declares the same path
-      supported, so a name authored on the firewall will stick.
+    disposition: lossy
+    reason: >
+      The IOS-XR parser names no VLAN (`CanonicalVlan(id=vid, name="")`:
+      IOS-XR has no `vlan N / name X` stanza), and the round trip gives each
+      one a name: an OPNsense `<vlan>` has no name of its own, so the OPNsense
+      parser names a VLAN after the device the render wrote for it
+      (`MgmtEth0/RP0/CPU0/0_vlan35`). Drifts on the 4 cells that hold a VLAN,
+      by gaining a name, never by losing one.
     references: [iosxr-opnsense-surface]
 
   "vlans[].ipv4_addresses":
@@ -330,11 +336,10 @@ per_field_expectation:
   "vlans[].description":
     disposition: not_applicable
     note: >
-      Source-side gap: the synthesised VLAN record has no description field
-      populated, and IOS-XR has no VLAN stanza to carry one.  opnsense
-      declares `/vlans/vlan/description` LOSSY — it renders the VLAN name but
-      not a separate description line — so this would degrade on the target
-      even if a source could supply it.
+      Source-side gap: the synthesised VLAN record has no description, and
+      IOS-XR has no VLAN stanza to carry one. opnsense declares
+      `/vlans/vlan/description` supported — it is the `<vlan>`'s `<descr>` —
+      so a source that supplied one would keep it.
     references: [iosxr-opnsense-surface]
 
   # -- Routing -- the dominant loss on this pair -----------------------------

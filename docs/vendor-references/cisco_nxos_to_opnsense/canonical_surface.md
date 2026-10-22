@@ -52,6 +52,17 @@ every source record survives as a record, so those three fields are addressed
 by SUB-FIELD keys only in the expectation YAML and no `STRUCTURAL_ONLY`
 collapse occurs on this pair.
 
+> **Since the VLAN-device change** (the table and paragraph above, and the
+> aggregate below, were measured before it): no source record is lost, but on
+> the cells where a VLAN has no VLAN interface the interface inventory now
+> **grows**. The render writes such a VLAN as a `<parent>_vlan<id>` `<vlan>`
+> device (`Ethernet1/4_vlan30` on the kitchen sink), which the OPNsense parser
+> reads back as an interface record of its own (`ianaift:l3ipvlan`); the YAML
+> states the addition under `interfaces[].name` (the reconciler attributes the
+> count drift to `interfaces[].switchport_mode`). `vlans[].name` and
+> `vlans[].description` now drift as well (see the notes below). The pair's
+> expectation YAML holds the current disposition.
+
 ## Drifting sub-fields (the authoritative aggregate)
 
 Only the sub-fields listed here drift anywhere in the pair. Every other
@@ -105,7 +116,10 @@ elided for length):
 </interfaces>
 <vlans>
   <vlan><if>port-channel1</if><tag>10</tag><descr>PROD</descr>
-    <vlanif>port-channel1_vlan10</vlanif></vlan>
+    <vlanif>Vlan10</vlanif>
+    <!-- review: OPNsense's VLAN form refuses the device name Vlan10 when
+         this VLAN is saved; it takes vlan0 followed by digits and dots, or
+         port-channel1_vlan10 --></vlan>
 </vlans>
 <laggs>
   <lagg><laggif>port-channel1</laggif>
@@ -164,12 +178,16 @@ render — which is exactly what the whole-record drops below measure.
   both are declared unsupported on the matrix. Combined with
   `interfaces[].access_vlan` / `trunk_allowed_vlans`, both directions of the
   port-to-VLAN mapping disappear together — capture it off the Nexus first.
-* **`vlans[].name` survives; `vlans[].description` is untested.** The name
-  lands in the VLAN entry's `<descr>` and re-parses intact on all 5 cells that
-  populate it. The matrix declares `/vlans/vlan/description` lossy because
-  `<descr>` is a single slot shared with the canonical description — but the
-  NX-OS parser folds `vlan / name <X>` into `name` and never populates
-  `description`, so the collision is never exercised on this pair.
+* **`vlans[].name` does not come back; it returns as the description.** An
+  OPNsense `<vlan>` has no name of its own. The render writes each VLAN as a
+  `<vlan>` device — under the name of the source's VLAN interface where there
+  is one (`Vlan10`), otherwise as `<parent>_vlan<id>` (`Ethernet1/4_vlan30`)
+  — with the VLAN's name as its `<descr>`, since NX-OS states no VLAN
+  description. The OPNsense parser names the VLAN after the device and reads
+  `<descr>` as its description, so `PROD` comes back as the description of a
+  VLAN named `Vlan10`. The matrix declares `/vlans/vlan/name` lossy and
+  `/vlans/vlan/description` supported; `vlans[].description` drifts only by
+  gaining the name.
 * **The whole L2 switching surface drops.** `switchport_mode` (29
   occurrences, `trunk` / `access` -> `null`), `access_vlan` (13, e.g. `10` ->
   `null`), `trunk_allowed_vlans` (10, `[10, 2000]` -> `[]`) and

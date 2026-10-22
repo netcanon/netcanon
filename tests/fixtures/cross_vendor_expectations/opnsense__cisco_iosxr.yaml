@@ -281,7 +281,8 @@ per_field_expectation:
       Good only in the narrow sense that matters to the ratchet: where a VLAN
       record survives, its name survives with it.  On this pair no record
       survives — see `vlans[].id`, which owns the loss for the whole list.
-      Operator-assigned VLAN names (`USER VLAN`, `MGMT VLAN`, ...) are gone
+      The operator's VLAN labels (`USER VLAN`, `MGMT VLAN`, ... — an
+      OPNsense `<vlan>`'s `<descr>`, the canonical description) are gone
       with the table; capture them before migrating.  A loss declared here
       would be collapsed to STRUCTURAL_ONLY and could never be evidenced, so
       it is stated in prose rather than as a disposition.
@@ -318,9 +319,9 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      Structurally owned by `vlans[].id`.  Not populated on any committed
-      OPNsense cell — the codec carries the VLAN label in `name`, not
-      `description` — so there is no observation here either way.
+      Structurally owned by `vlans[].id`. Populated on both cells that hold
+      VLANs — an OPNsense `<vlan>`'s `<descr>` (`USER VLAN`) is its
+      description — and lost with the table, which `vlans[].id` claims once.
     references: [opnsense-iosxr-surface]
 
   # -- Routing ---------------------------------------------------------------

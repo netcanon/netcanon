@@ -304,26 +304,25 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "vlans[].name":
-    disposition: lossy
-    reason: >
-      A name that holds white space is written with `_` for each
-      run of it and `'` for a `"`, with a review line
-      (`one_value_tree`, docs/CAPABILITIES.md section C): NX-OS
-      documents a VLAN name of letters, digits, `-` and `_` only.
-      OPNsense's `<descr>` is the canonical VLAN name, so `USER
-      VLAN` lands as `USER_VLAN`.  A name with no white space is
-      preserved.
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which NX-OS writes as `vlan <id> / name vlan0.10` and reads
+      back. The operator's label (`USER VLAN`) is the VLAN's description, and
+      is lost: see `vlans[].description`.  A device name holds no
+      white space, so the rule that writes `_` for it
+      (`one_value_tree`) does not touch it.
     references: [opnsense-nxos-surface]
 
   "vlans[].description":
     disposition: lossy
     reason: >
-      Not exercised by the corpus — the OPNsense parser folds `<descr>` into
-      `name` and leaves `description` empty on every VLAN record — so this
-      rests on the target's declaration, stated plainly rather than implied.
-      The cisco_nxos matrix declares `/vlans/vlan/description` lossy: the
-      render emits the VLAN name but no separate description line, so a
-      canonical description distinct from the name would drop.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and the NX-OS render writes
+      a VLAN's name and no separate description line. The job says so: NX-OS
+      declares `/vlans/vlan/description` lossy, which the validation report
+      lists for each VLAN.
     references: [opnsense-nxos-surface]
 
   "vlans[].tagged_ports":

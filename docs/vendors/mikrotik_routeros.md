@@ -285,9 +285,9 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   RouterOS the VLAN is written on it again.  An entry of
   `port_rename_map` for the parent moves its VLANs with it; an entry
   that drops it is said in the job's warnings, and the renderer then
-  chooses a parent for the VLAN as below.  Onto FortiOS the parent is
-  carried, and a FortiGate VLAN comes with its own.  Onto any other
-  vendor it is not — no other codec writes a VLAN interface on a
+  chooses a parent for the VLAN as below.  Onto FortiOS and OPNsense
+  the parent is carried, and a FortiGate VLAN or an OPNsense VLAN
+  device comes with its own.  Onto any other vendor it is not — no other codec writes a VLAN interface on a
   parent the config names — and nothing reports it.  From any other
   vendor every VLAN interface of a RouterOS output is on ONE parent
   the renderer chooses: the config's one port with an address or an

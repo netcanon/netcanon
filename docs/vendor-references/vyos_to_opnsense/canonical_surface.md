@@ -153,8 +153,10 @@ group content, no anycast gateway MAC, no timezone, no syslog servers and no
 `interface_type` on any of the 56 interface records.
 
 These are recorded `not_applicable`, not `unsupported`. The distinction is
-operational: opnsense declares `/vlans/vlan/id` and `/vlans/vlan/name`
-**supported**, and declares `/interfaces/interface/vrrp-groups/group` **lossy**
+operational: opnsense declares `/vlans/vlan/id` and `/vlans/vlan/description`
+**supported** (`/vlans/vlan/name` is **lossy**: an OPNsense `<vlan>` has no
+name of its own, so a VLAN is named after its device, `<vlanif>`), and declares
+`/interfaces/interface/vrrp-groups/group` **lossy**
 rather than absent — so re-authoring VLANs and CARP-based first-hop redundancy
 on the target will stick. The migration report should say that rather than
 implying the firewall cannot hold them.

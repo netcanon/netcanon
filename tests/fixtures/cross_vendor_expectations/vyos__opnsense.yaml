@@ -278,8 +278,9 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Same source-side gap: no VLAN record is ever produced, so there is no
-      name to carry.  opnsense declares `/vlans/vlan/name` supported, which
-      would matter for a source that actually emits a VLAN database.
+      name to carry. An OPNsense `<vlan>` has no name of its own (opnsense
+      declares `/vlans/vlan/name` lossy: a VLAN is named after its device),
+      which would matter for a source that emits a VLAN database.
     references: [vyos-opnsense-surface]
 
   "vlans[].ipv4_addresses":
@@ -322,9 +323,9 @@ per_field_expectation:
     note: >
       Source-side gap: vyos declares no path under `/vlans/vlan/` beyond the
       unsupported `id` and address entries, and emits no VLAN description on
-      any cell.  opnsense declares `/vlans/vlan/description` LOSSY — it
-      renders the VLAN name but not a separate description line — which
-      again matters only for a source that produces one.
+      any cell. opnsense declares `/vlans/vlan/description` supported — it is
+      the `<vlan>`'s `<descr>` — which again matters only for a source that
+      produces one.
     references: [vyos-opnsense-surface]
 
   # -- Routing -- the router surface the firewall does not render ------------

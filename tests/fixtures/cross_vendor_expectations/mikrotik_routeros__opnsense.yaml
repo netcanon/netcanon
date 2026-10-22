@@ -17,9 +17,10 @@
 #     render wires up the corresponding `<system>` children
 #   * interfaces (IP, MTU, enable, descr) — good (with rename-mesh
 #     handling for etherN <-> zone-tag conversion)
-#   * VLANs — id good; name/description collapse; port-membership and
-#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
-#     lists, no first-class SVI)
+#   * VLANs — id, name and description good; the name is the device's,
+#     which OPNsense's VLAN form refuses (a review comment says so);
+#     port-membership and SVI sub-fields unsupported (OPNsense has no
+#     VLAN-centric port lists, no first-class SVI)
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     two-stage model; codec doesn't currently render either)
 #   * DHCP server scopes — lossy (interface-keyed pool model on
@@ -324,10 +325,13 @@ per_field_expectation:
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      RouterOS does not expose IANA ifType (codec infers from
-      default-name prefix per its capability matrix lossy entry on
-      ``/interfaces/interface/config/type``).  OPNsense doesn't
-      surface a type field; the cross-pair drops the type hint.
+      RouterOS does not expose IANA ifType (codec infers from default-name
+      prefix per its capability matrix lossy entry on
+      ``/interfaces/interface/config/type``). OPNsense doesn't surface a type
+      field; the cross-pair drops the type hint. The OPNsense parser types a
+      `<vlan>` device `ianaift:l3ipvlan`, so a VLAN interface the render
+      writes as one comes back with that type; every other interface comes
+      back untyped.
     references: [mikrotik_iface_naming]
 
   interfaces[].mtu:
@@ -437,10 +441,12 @@ per_field_expectation:
     references: [vrf-unsupported]
 
   vlans:
-    disposition: lossy
-    reason: >
-      The list itself round-trips for the id field.  Per-VLAN sub-
-      fields collapse or drop — see ``vlans[].*`` entries below.
+    disposition: good
+    note: >
+      The list round-trips whole on every cell that holds VLANs: each RouterOS
+      VLAN interface is written as the `<vlan>` device of the same name on the
+      parent the config states, and comes back with its id, name and
+      description.
     references: [mikrotik_vlan, opnsense-vlans]
 
   vlans[].id:
@@ -453,21 +459,23 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      RouterOS conflates the L3 interface name (``vlan10``) with
-      the descriptive VLAN name on Plane 1 (per the MikroTik codec's
-      ``LossyPath`` on ``/vlans/vlan/name``).  OPNsense's nearest
-      equivalent is ``<descr>`` — which is also where the canonical
-      ``description`` lands.  Two canonical fields collapse to one
-      OPNsense XML field; one drops on render.
+      The value survives — a RouterOS VLAN is named after its interface
+      (`vlan100`, `gn-mgmt`), and the OPNsense render writes that interface as
+      the VLAN's device under the same name, which the OPNsense parser reads
+      back as the VLAN's name — but not in a form OPNsense takes: its VLAN
+      form refuses a device name other than `vlan0` followed by digits and
+      dots, or `<parent>_vlan<id>`, when the VLAN is saved, and the render
+      says so in a `review:` comment beside each such device (every VLAN of
+      this corpus). Recorded `lossy` for that: the name is carried under a
+      review line, not into a config OPNsense keeps as it is.
     references: [mikrotik_vlan, opnsense-vlans]
 
   vlans[].description:
-    disposition: lossy
-    reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.  RouterOS has no first-class
-      description field on either Plane 1 or Plane 2 anyway, so the
-      canonical value is typically empty after a RouterOS parse.
+    disposition: good
+    note: >
+      Preserved on every cell that populates it: the RouterOS parser takes a
+      VLAN's description from its interface's `comment`, the OPNsense render
+      writes it as the device's `<descr>`, and it comes back unchanged.
     references: [opnsense-vlans, mikrotik_bridge_vlan]
 
   vlans[].tagged_ports:

@@ -100,9 +100,12 @@ OPNsense ``<enable/>`` element (present = enabled) ↔ RouterOS
 
 ### interface_type
 
-OPNsense doesn't surface an ifType field — canonical ``interface_type``
-hint is empty after an OPNsense parse.  RouterOS codec also lossy
-on type (infers from default-name prefix).
+The OPNsense parser types its VLAN devices (``ianaift:l3ipvlan``)
+and leaves every other interface untyped.  The VLAN devices come
+back typed as they were; the drift is ``lo0``, which the RouterOS
+render writes under ``/interface bridge`` and which comes back typed
+as a bridge (``ianaift:bridge``), on
+``user_contrib_supergate_opn25.xml``.
 
 ### mtu
 
@@ -157,7 +160,7 @@ either; field structurally absent.
 | `interfaces[].default_name` | lossy (RouterOS-only concept; arrives empty) |
 | `interfaces[].description` | good |
 | `interfaces[].enabled` | good |
-| `interfaces[].interface_type` | lossy (no OPNsense ifType field) |
+| `interfaces[].interface_type` | lossy (`lo0` comes back typed as a bridge) |
 | `interfaces[].mtu` | good |
 | `interfaces[].ipv4_addresses` | good |
 | `interfaces[].ipv6_addresses` | good |

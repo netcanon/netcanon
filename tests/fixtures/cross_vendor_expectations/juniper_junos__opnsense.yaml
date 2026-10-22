@@ -322,12 +322,16 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Junos's media-prefix form (``ge-0/0/0``, ``xe-0/0/47``, ``ae0``,
-      ``irb``, ``lo0``, ``em0``) does not survive on OPNsense.  The
-      operator-facing label on OPNsense is the zone tag (``<wan>`` /
-      ``<lan>`` / ``<optN>``); the BSD device name lives in ``<if>``.
-      Port-rename mesh handles the conversion via the codec's
-      ``classify_port_name`` / ``format_port_identity`` delegates.
-      Canonical preserves the source string verbatim.
+      ``irb``, ``lo0``, ``em0``) does not survive on OPNsense. The
+      operator-facing label on OPNsense is the zone tag (``<wan>`` / ``<lan>``
+      / ``<optN>``); the BSD device name lives in ``<if>``. Port-rename mesh
+      handles the conversion via the codec's ``classify_port_name`` /
+      ``format_port_identity`` delegates. Canonical preserves the source
+      string verbatim. What the round trip measures on this key is an
+      addition, not a loss: a VLAN the render links to no VLAN interface of
+      the source is written as a `<parent>_vlan<id>` device, which the
+      OPNsense parser reads back as an interface record of its own
+      (`ianaift:l3ipvlan`). No source record is lost.
     references: [junos-iface-naming, opnsense-interfaces]
 
   interfaces[].description:
@@ -344,6 +348,13 @@ per_field_expectation:
       Every other record keeps its text: Junos ``description "X"``
       (quoted when whitespace) ↔ OPNsense ``<descr>X</descr>`` (no
       length limit).
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
     references: [junos-iface-fundamentals, opnsense-interfaces, opnsense-laggs]
 
   interfaces[].enabled:
@@ -362,14 +373,23 @@ per_field_expectation:
       disable`` (presence = disabled) ↔ OPNsense empty ``<enable/>``
       element (presence = enabled).  Inverted polarity; codec
       normalises.
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
     references: [opnsense-interfaces, opnsense-laggs]
 
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      Junos infers from media prefix (``ge-`` → ethernetCsmacd,
-      ``lo`` → softwareLoopback).  OPNsense doesn't surface a type
-      field; the cross-pair drops the type hint.
+      Junos infers from media prefix (``ge-`` → ethernetCsmacd, ``lo`` →
+      softwareLoopback). OPNsense doesn't surface a type field; the cross-pair
+      drops the type hint. The OPNsense parser types a `<vlan>` device
+      `ianaift:l3ipvlan`, so a VLAN interface the render writes as one comes
+      back with that type; every other interface comes back untyped.
 
   interfaces[].mtu:
     disposition: good
@@ -498,18 +518,27 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Junos VLAN names allow letters, digits, hyphens, periods only
-      (up to 255 chars).  OPNsense's nearest equivalent is ``<descr>``
-      — which is also where the canonical ``description`` lands.
-      Two canonical fields collapse to one OPNsense XML field; one
-      drops on render.
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`irb.100`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`xe-0/0/0_vlan2021`); and it
+      writes the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So `V2021` comes back as the description of a VLAN
+      named `xe-0/0/0_vlan2021`, and `TENANT_A_DATA` as that of `irb.100`.
+      Drifts on every cell that holds VLANs.
     references: [junos-vlans-statement, opnsense-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.
+      No Junos source on this corpus gives a VLAN a description; the round
+      trip gives each named VLAN one, its name, which the OPNsense render
+      writes as the device's `<descr>` (see `vlans[].name`). Drifts on every
+      cell that holds VLANs, by gaining the name, never by losing a value. A
+      Junos `description` on a VLAN would be kept and its name lost: the
+      render gives `<descr>` the description first.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:
