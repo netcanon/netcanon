@@ -15,7 +15,7 @@
 # campus L2 surface, which the VyOS side cannot even express.
 #
 # READ THIS FIRST: the interface inventory is FULLY PRESERVED on this pair.
-# 55 interface records in across 13 cells, 55 out, identical name sets on
+# 56 interface records in across 13 cells, 56 out, identical name sets on
 # every cell, zero records vanishing.  Every `interfaces[].*` loss below is
 # therefore a genuine per-attribute loss standing on its own measurement, and
 # every interface sub-field that survives is `good` rather than dragged down
@@ -149,8 +149,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, two attributes lost -------------------
   #
-  # The measured record count is the headline: 55 interface records across the
-  # 13 cells, 55 after the round-trip, identical name sets on every cell.  The
+  # The measured record count is the headline: 56 interface records across the
+  # 13 cells, 56 after the round-trip, identical name sets on every cell.  The
   # AOS-CX render passes VyOS Linux device names (`eth0`, `lo`, `dum0`,
   # `bond0`) and `vif` sub-interfaces (`eth1.100`) through untranslated, so
   # nothing is re-shaped and nothing is dropped.  Nothing below is a knock-on
@@ -159,7 +159,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells — 55 source interface records, 55 after
+      Preserved on 13 of 13 cells — 56 source interface records, 56 after
       parse -> render -> re-parse, same names.  The AOS-CX render does not
       re-shape VyOS device naming, does not collapse `eth1.100` / `eth1.200`
       `vif` sub-interfaces into SVIs, and does not drop the loopback (`lo`),
@@ -186,7 +186,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 55 of 55 records — zero differing.  Both
+      Admin state preserved on 56 of 56 records — zero differing.  Both
       matrices declare `/interfaces/interface/config/enabled` supported, and
       the render emits an explicit `shutdown` / `no shutdown` on every
       interface stanza.  The 2 shut ports on the corpus (`eth1.200` and
@@ -196,7 +196,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  MTU is actually populated on exactly
+      Preserved on 56 of 56 records.  MTU is actually populated on exactly
       one of them (`eth0` on `kitchen_sink.conf`, 1500) and it round-trips as
       `mtu 1500` on the AOS-CX stanza.  Both matrices declare
       `/interfaces/interface/config/mtu` supported.  One populated record is
@@ -207,7 +207,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records across the 5 cells that carry IPv6 — 20
+      Preserved on 56 of 56 records across the 5 cells that carry IPv6 — 20
       addresses in, 20 out, address and prefix-length intact.  Both matrices
       declare `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.  The vyos side additionally re-infers `scope` from the
@@ -218,7 +218,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records across the 9 cells that carry IPv4 — 21
+      Preserved on 56 of 56 records across the 9 cells that carry IPv4 — 21
       addresses in, 21 out.  This is the field the migration most depends on
       and it is clean.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
@@ -232,7 +232,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on all 13 cells and on all 55 of 55 records, uniformly and in
+      Drifts on all 13 cells and on all 56 of 56 records, uniformly and in
       one shape — and the direction is the opposite of the usual one.  The
       VyOS parse leaves `interface_type` EMPTY on every record; the AOS-CX
       round-trip returns `ianaift:other` on every record.  The target does
@@ -284,7 +284,7 @@ per_field_expectation:
       reaches the target.  aruba_aoscx declares the SAME subtree unsupported,
       stating that AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is
       a later phase.
-      Measured: 0 differing of 55 records, because both sides are empty on
+      Measured: 0 differing of 56 records, because both sides are empty on
       all of them.  Recorded `unsupported` rather than `not_applicable`
       precisely because the target declares it too — unlike most source-side
       gaps on this pair, re-authoring first-hop redundancy on the AOS-CX side
@@ -326,10 +326,10 @@ per_field_expectation:
       interface record (an `ethN` or a `vif` sub-interface), never on a VLAN
       record, and vyos declares the `/vlans/vlan/ipv4/address/*` secondary,
       virtual-gateway-address and virtual-gateway-mac paths unsupported.
-      aruba_aoscx declares `/vlans/vlan/ipv4/address/ip` LOSSY — it renders
-      an SVI only from a sibling interface stanza, not from L3 carried on the
-      VLAN record — which would matter for a source that actually produces
-      one.  The corresponding addressing lives in
+      aruba_aoscx writes an address carried on the VLAN record as `interface
+      vlan <N>` (`synthesize_svis_from_vlan_l3`), which would matter for a
+      source that actually produces one.  The corresponding addressing lives
+      in
       `interfaces[].ipv4_addresses`, which is `good`.
     references: [vyos-aoscx-surface]
 

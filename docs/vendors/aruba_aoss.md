@@ -27,7 +27,15 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   on modular 5400R) port-id ranges, descriptions, IPv4 SVI L3
 - VLANs — ID, name, tagged/untagged port lists with comma-separated
   range expansion (`A2-A6,A8-A10,A12-A24`), `primary-vlan`
-- Static routes (incl. `ip default-gateway` form)
+- Static routes (incl. `ip default-gateway` form), with a next hop
+  in the forms HPE's routing guide gives: an address, `vlan <id>`
+  (a route out `Vlan<id>` elsewhere) and `blackhole` (a route to
+  `Null0`), each with its `distance`.  `reject` discards with an ICMP
+  error the canonical tree cannot say, so it is not read; it is listed
+  with every other route line the parser does not read.  A route out
+  another interface (a routed port, a LAG, a tunnel) or in a VRF --
+  AOS-S has none -- is left out of the output under a `; review:`
+  line, and the job is `partial`
 - LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`).  The
   device writes a LAG `trk1` on its `trunk` line and `Trk1` everywhere
   else; it is one name here, `trk1`, as a key of a rename map (`Trk1`
@@ -380,6 +388,37 @@ have.
 
 ## Common gotchas
 
+- **A RADIUS `encrypted-key` is carried to AOS-S only.**  With
+  `encrypt-credentials` on, AOS-S prints a RADIUS key as
+  `encrypted-key "<blob>"`, on a host line or on the global
+  `radius-server` line (the global form is inferred from the host
+  form HPE documents).  It is written back as it was onto AOS-S; onto
+  any other target the server is written with no key, beside a review
+  line: re-enter the secret there.  `key "<secret>"` migrates
+  everywhere.  ⚠️ With 0.7.7 or earlier, the blob came out as the
+  secret itself on every target, AOS-S included (`key "<blob>"`).
+  Look for such a key in an old output.
+- **A credential that holds a `"` is left out as a target.**  AOS-S
+  writes a password, the SNMP community, an SNMPv3 user and its keys
+  and a VRRP password between double quotes, and HPE documents no
+  escape for a quote there (only `banner motd` takes escape
+  characters): a `"` would end the value and the rest of it would be
+  read as CLI words.  Such a record is left out with a `review:` line
+  that names it and not the value — a local user and an SNMPv3 user
+  whole, the community with its trap hosts, a VRRP password alone.
+  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A `"` in a host name, VLAN name, description or the SNMP location
+  or contact is written `'` as a target**, for the same reason, with a
+  `review:` line for each place; up to 0.7.7 it was written behind a
+  backslash, which no HPE page documents.  An NTP or DNS server, the
+  domain or a route's gateway that holds white space or a `"` is left
+  out and said, the route whole.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **`snmp-server contact "IT" location "1OG"` is two values.**  The
+  switch prints the contact and the location on one line (a committed
+  WB.16.08 capture does).  Up to 0.7.7 the parser read the contact as
+  `IT" location "1OG` and no location, and wrote that onto every
+  target; translate such a config again.
 - **Renaming or dropping `Vlan<N>` in the rename modal changes
   nothing.**  A translation from AOS-S to AOS-S lists each VLAN's
   routed interface under *Other names in the config*.  AOS-S writes

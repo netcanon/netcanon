@@ -142,13 +142,18 @@ from .._helpers import (
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
+    ip_mtu_read,
     keyword_stanza_rows,
+    mtu_read,
+    second_dot1q_tags,
     spaced_port_name,
     without_keyword_stanzas,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
 from ..base import ParseError
+from . import port_names as _port_names
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +209,10 @@ _IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``ipv4 mtu 9000`` -- the largest IPv4 packet, its header included
+#: (Cisco: "MTU config and show commands, at L2 and L3, include the
+#: header size of their corresponding layer").
+_IPV4_MTU_RE = re.compile(r"^\s+ipv4\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 #: ``ipv4 address 198.51.100.1 255.255.255.252 [secondary]`` — dotted
 #: mask, NOT CIDR.  Mirrors IOS-XE's ``ip address`` shape but with the
 #: ``ipv4`` keyword.
@@ -227,6 +236,24 @@ _INDENTED_VRF_RE = re.compile(r"^\s+vrf\s+(\S+)\s*$", re.IGNORECASE)
 _ENCAP_DOT1Q_RE = re.compile(
     r"^\s+encapsulation\s+dot1q\s+(\d+)", re.IGNORECASE,
 )
+
+
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement:
+    ``encapsulation dot1q ...``, or ``encapsulation dot1ad ...``, whose
+    outer tag is an 802.1ad service tag the tree has no form for.
+
+    Its tags are read whole by
+    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags`, and
+    a stanza whose statement is not read whole is taken out before any
+    reader sees it (``without_unread_tags``).
+    """
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() in ("dot1q", "dot1ad")
+    )
 #: ``bundle id <N> mode <active|passive|on>`` → member of Bundle-Ether<N>.
 _BUNDLE_ID_RE = re.compile(
     r"^\s+bundle\s+id\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
@@ -669,7 +696,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # ``range`` or ``breakout``, is taken out the same way; its row
     # is the header line, a section.)
     raw, headers = without_keyword_stanzas(raw)
-    intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *rows]
+    # So is a sub-interface whose tag statement is not read whole: a
+    # range, a list or ``any``, ``exact``, ``dot1ad``.  Written with its
+    # first tag alone it was another sub-interface on every target.
+    # Its row says the statement.
+    raw, unread = without_unread_tags(
+        raw, _is_tag_statement, second_dot1q_tags,
+    )
+    intent.dropped_tier3_sections = [
+        *keyword_stanza_rows(headers), *rows, *unread,
+    ]
 
     intent.hostname = _extract_hostname(raw)
     intent.domain = _extract_domain(raw)
@@ -785,11 +821,13 @@ def _new_iface_scratch(name: str) -> dict:
         "enabled": True,
         "type": _infer_type(name),
         "mtu": None,
+        "ipv4_mtu": None,
         "ipv4": [],
         "ipv6": [],
         "vrf": "",
         "lag_member_of": None,
         "dot1q_vlan": None,
+        "dot1q_inner_vlan": None,
         # The indent of the stanza's first body line: a line indented
         # deeper is a submode's (:func:`_in_a_submode`).
         "body_indent": None,
@@ -841,6 +879,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             except ValueError:
                 pass
             return
+        mm = _IPV4_MTU_RE.match(line)
+        if mm:
+            try:
+                current["ipv4_mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
+            return
         im = _IPV4_RE.match(line)
         if im:
             try:
@@ -882,13 +927,15 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # <vid>`` also feeds _parse_dot1q_vlans (VLAN synthesis for
         # VLAN-centric targets); here we ALSO record it on the interface's
         # dedicated dot1q_vlan so the render emits the true tag (not just
-        # when the sub-iface unit number coincides with the tag).
-        em = _ENCAP_DOT1Q_RE.match(line)
-        if em:
-            try:
-                current["dot1q_vlan"] = int(em.group(1))
-            except ValueError:
-                pass
+        # when the sub-iface unit number coincides with the tag).  The
+        # statement is read whole: ``second-dot1q <inner>`` is the inner
+        # tag of a Q-in-Q sub-interface, and a stanza whose statement is
+        # not read whole was taken out before this reader.
+        statement = line.strip()
+        if _is_tag_statement(statement):
+            tags = second_dot1q_tags(statement)
+            if tags is not None:
+                current["dot1q_vlan"], current["dot1q_inner_vlan"] = tags
             return
 
     # Loop skeleton (open on `interface`, close on a column-0 line, flush
@@ -903,6 +950,22 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     )
 
 
+def _payload(raw: dict) -> int | None:
+    """The tree's MTU, the payload, of an interface whose stanza states
+    ``mtu``: the number less the Ethernet header, and 4 bytes for the
+    tag of a sub-interface that carries one (Cisco: "add 4 bytes for
+    each VLAN tag configured on the sub-interface").  Copied as it
+    stood, ``mtu 1514`` -- the default of an IOS XR Ethernet interface
+    -- was ``mtu 1514`` on IOS-XE, NX-OS, EOS and AOS-CX, an IP MTU 14
+    bytes larger than the source's.  A Q-in-Q sub-interface's
+    ``second-dot1q`` is a tag as well."""
+    stated = raw.get("mtu")
+    if stated is None or not _port_names.mtu_counts_a_header(raw["name"]):
+        return stated
+    tags = 0 if raw.get("dot1q_vlan") is None else 1 + (raw.get("dot1q_inner_vlan") is not None)
+    return mtu_read("cisco_iosxr", stated, tags=tags)
+
+
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     """Convert the parse-time scratch dict into a CanonicalInterface."""
     return CanonicalInterface(
@@ -910,7 +973,11 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         description=raw.get("description", ""),
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
-        mtu=raw.get("mtu"),
+        mtu=_payload(raw),
+        ip_mtu=ip_mtu_read(
+            "cisco_iosxr", raw.get("ipv4_mtu"), _payload(raw),
+            ipv4=bool(raw.get("ipv4")),
+        ),
         ipv4_addresses=[
             CanonicalIPv4Address(
                 ip=a["ip"],
@@ -930,6 +997,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         vrf=raw.get("vrf", ""),
         lag_member_of=raw.get("lag_member_of"),
         dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
+        dot1q_inner_vlan=raw.get("dot1q_inner_vlan"),  # ``second-dot1q``
     )
 
 
@@ -1251,6 +1319,9 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
       * a ``bundle id <N> mode <m>`` line under a physical port declares
         that port a member of ``Bundle-Ether<N>``.
 
+    ``interface Bundle-Ether<N>.<M>`` is a sub-interface of the bundle,
+    an interface and no LAG of its own.
+
     Mode is the first member's mode (XR ``on`` → canonical ``static``);
     an empty bundle keeps :attr:`CanonicalLAG.mode` default.
     """
@@ -1264,7 +1335,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     depth: dict = {"body_indent": None}
 
     def _note_header(name: str) -> None:
-        if name.lower().startswith("bundle-ether"):
+        if re.fullmatch(r"bundle-ether\d+", name, re.IGNORECASE):
             declared.add(name)
 
     for line in ticked(raw.splitlines()):

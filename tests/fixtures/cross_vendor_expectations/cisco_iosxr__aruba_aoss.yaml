@@ -138,11 +138,15 @@ per_field_expectation:
     references: [iosxr-aoss-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Both matrices declare `/interfaces/interface/config/description`
-      supported and it is preserved on all 9 cells that populate it (32 of 32
-      described interfaces intact across the 11 real captures).
+    disposition: lossy
+    reason: >
+      AOS-S quotes a description and documents no escape inside
+      the quotes, so each `"` is written `'`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C).  The IOS
+      XR parser keeps the quotes of a description the router
+      prints quoted (the CST design capture's BVI500 and
+      Gi0/0/0/12), so those land between apostrophes.  A
+      description with no `"` is preserved.
     references: [iosxr-aoss-surface]
 
   "interfaces[].enabled":
@@ -156,7 +160,8 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: lossy
     reason: >
-      `9216` -> `null`: the aruba_aoss codec neither parses nor renders a
+      `9202` -> `null` (IOS XR `mtu 9216` counts the 14-byte Ethernet
+      header, so the canonical payload is 9202): the aruba_aoss codec neither parses nor renders a
       per-interface MTU, so jumbo-frame configuration is dropped while the
       interface and its addressing survive intact.  Measured on all 4 cells
       that set it (`9216` x3, `9192` x1); the render contains no `mtu` line of
@@ -311,21 +316,19 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      Drifts on 6 of the 6 cells that populate it, with two distinct
-      mechanisms, one of which fails DANGEROUSLY rather than loudly.
-      (1) VRF binding is stripped while the route SURVIVES.  aruba_aoss
-      declares `/routing/static-route/vrf` unsupported ("parses-and-ignores in
-      v1"), so `11.0.0.0/8 via 11.1.1.2` leaves VRF `blue` and
-      `10.99.0.0/16 via 203.0.113.2` leaves VRF `CUSTOMER-A`, both landing
-      unscoped in the global table.  Nothing in the render marks it.  The
-      failure mode is not a missing route but a route in the wrong table —
-      a leak between customers rather than an outage.  Audit every per-VRF
-      route by hand before cutover.
-      (2) Routes whose only next-hop is an INTERFACE vanish outright, because
-      AOS-S renders destination + gateway only: `192.0.2.0/24 -> Null0`,
-      `0.0.0.0/1 -> Null0`, `192.0.2.1/32 -> Null0` and
-      `2001:db8:23:23::2/128 -> BVI500` are all absent from the target intent.
-      Discard/blackhole routes therefore do not migrate at all.
+      Drifts on 4 of the 6 cells that populate it, each for a route AOS-S
+      has no form for, which is left out of the output under a `; review:`
+      line in a job that is `partial`.
+      (1) A route in a VRF: AOS-S has none, so `11.0.0.0/8 via 11.1.1.2` in
+      VRF `blue`, `10.99.0.0/16 via 203.0.113.2` in VRF `CUSTOMER-A` and the
+      `AZURE` default route are left out.  They were once written into the
+      switch's one table, a leak between customers; build the separation the
+      target needs before cutover.
+      (2) A route out an interface AOS-S cannot name as a next hop
+      (`2001:db8:23:23::2/128 -> BVI500`) is left out the same way.  A
+      discard route (`-> Null0`) is written `blackhole` and comes back
+      intact, which is why two cells preserve the field under a `lossy`
+      disposition.
       Routes with a real gateway and no VRF round-trip intact.  aruba_aoss
       additionally declares `/routing/static-route/metric` and `/description`
       lossy; neither fires on this corpus (no IOS-XR cell sets them), so those

@@ -199,6 +199,30 @@ class DellOS10Codec(CodecBase):
         # rather than merely asserted here.
         lossy=[
             LossyPath(
+                path="/interfaces/interface/config/ip-mtu",
+                reason=(
+                    "OS10's IP MTU is a setting apart from its link MTU (Dell "
+                    "prints `MTU 9216 bytes, IP MTU 1500 bytes`), and how a "
+                    "config sets it is not established, so the renderer writes "
+                    "none: an interface's IP MTU of its own (IOS-XE or AOS-CX "
+                    "`ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "OS10's IP MTU is a setting apart from its link MTU (Dell "
+                    "prints `MTU 9216 bytes, IP MTU 1500 bytes`), and how a "
+                    "config sets it is not established, so the renderer writes "
+                    "none: an interface's IP MTU of its own (IOS-XE or AOS-CX "
+                    "`ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "Renders the VRF as `ip vrf <name>`, which has no mac-vrf "
@@ -583,6 +607,13 @@ class DellOS10Codec(CodecBase):
                 reason=(
                     "OS10 routed sub-interfaces are not modelled in Phase 1; "
                     "no capture in the corpus carries one."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "OS10 routed sub-interfaces are not modelled, so the inner "
+                    "tag of a Q-in-Q sub-interface has no form here either."
                 ),
             ),
             UnsupportedPath(

@@ -637,8 +637,9 @@ class TestOpnsenseLaggMembers:
             "</laggs>\n</opnsense>\n"
         )
         tree = OPN.parse(text)
+        # ``igb9``, which no zone assigns, is given a record of its own.
         assert [(i.name, i.lag_member_of) for i in tree.interfaces] == [
-            ("igb0", "lagg0"), ("igb1", "lagg1"), ("igb0", "lagg0"),
+            ("igb0", "lagg0"), ("igb1", "lagg1"), ("igb0", "lagg0"), ("igb9", "lagg0"),
         ]
         assert [(lag.name, lag.members) for lag in tree.lags] == [
             ("lagg0", ["igb0", "igb9"]), ("lagg1", ["igb0", "igb1"]),

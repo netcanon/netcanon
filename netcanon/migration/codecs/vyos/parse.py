@@ -58,6 +58,13 @@ Grammar notes that shape the walker:
   pair so the canonical value is quote-agnostic (round-trip stable).
 * **Comments** — ``/* ... */`` node comments and ``//`` trailer lines
   (incl. the ``// vyos-config-version`` stamp) are skipped.
+* **A node with nothing under it is printed on one line** —
+  ``server time1.vyos.net { }``, ``loopback lo { }``, ``disable { }``.
+  Such a line opens a block and closes it, or, where its one word is a
+  leaf (:data:`_SETFORM_LEAVES`), is that leaf with no value: the same
+  reading the set-form reader gives the path.  Read as a leaf, the
+  braces were part of a name (an NTP server ``time1.vyos.net { }`` on
+  every target) and an empty ``loopback lo`` was no interface.
 
 Phase 2 added ``bonding`` LAGs, ``system login`` local users, and
 ``system`` / ``service`` NTP servers.  Phase 3 added ``service snmp``
@@ -205,6 +212,10 @@ def _is_v6(addr: str) -> bool:
 _SETFORM_TAG_NODES = frozenset({
     "ethernet", "loopback", "dummy", "bonding", "vxlan", "bridge",
     "wireguard", "tunnel", "vti", "pppoe", "geneve", "vif",
+    # ``vif-s <id> { vif-c <id> { ... } }``, as VyOS prints a QinQ
+    # block: read as containers, a set-form ``vif-s`` was a block with
+    # no id, and its row could not say which.
+    "vif-s", "vif-c",
     "route", "route6", "next-hop",
     "name",            # `vrf name <X>` (and Tier-3 `firewall name <X>`)
     "community", "user", "server", "interface",
@@ -481,10 +492,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         typ, arg = stk[1]
         # A ``bonding bondN`` block is an L3-capable interface (it can
         # carry address / description / mtu); its ``mode`` / ``member``
-        # are handled separately in the leaf / block-open dispatch.
+        # are handled separately in the leaf / block-open dispatch.  It
+        # takes a ``vif`` as an ethernet does: a unit of the LAG.
         if typ == "bonding" and arg and len(stk) == 2:
             return _touch_iface(arg, "bonding")
-        if typ not in _IFACE_BLOCK_TYPES or not arg:
+        if (typ not in _IFACE_BLOCK_TYPES and typ != "bonding") or not arg:
             return None
         if len(stk) == 2:
             return _touch_iface(arg, typ)
@@ -505,12 +517,31 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ``system name-server`` dedup (perf review P2): a ``seen`` set keeps the
     # per-line membership test O(1) instead of an O(N^2) growing-list scan.
     seen_dns_servers = set(intent.dns_servers)
+    # The row of each ``vif-s`` block, once each (the codec's
+    # ``parse()`` keeps them beside the Tier-3 rows).
+    vif_s_rows: dict[str, None] = {}
     for raw_line in ticked(raw.splitlines()):
         line = raw_line.strip()
         if (
             not line or line.startswith(("//", "/*", "*"))
         ):
             continue
+
+        # A node with nothing under it, printed on one line (``server
+        # time1.vyos.net { }``): a block that opens and closes at once,
+        # or -- where its one word is a leaf -- that leaf with no value.
+        closes_at_once = False
+        if line.endswith("}") and line != "}":
+            opened = line[:-1].rstrip()
+            if opened.endswith("{"):
+                head = opened[:-1].rstrip()
+                if not head:
+                    continue
+                if " " not in head and head in _SETFORM_LEAVES:
+                    line = head
+                else:
+                    line = f"{head} {{"
+                    closes_at_once = True
 
         if line == "}":
             if stack:
@@ -530,6 +561,23 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 _current_iface(stack)
                 if node[0] == "bonding" and node[1]:
                     _touch_lag(node[1])
+            # ``vif-s <id>`` is a service VLAN, its ``vif-c <id>`` blocks
+            # the sub-interfaces inside it, and the S-tag "uses the
+            # Ethertype 0x88a8 by default" (VyOS, "QinQ (802.1ad)"): an
+            # 802.1ad tag, which the tree has no form for.  Not read, the
+            # block and its addresses were gone with nothing said, in
+            # jobs that said ``completed``.  It is not translated, and a
+            # row says so.
+            elif (
+                node[0] == "vif-s"
+                and len(stack) == 3
+                and stack[0][0] == "interfaces"
+            ):
+                vif_s_rows[
+                    f"interfaces {stack[1][0]} {stack[1][1]} vif-s {node[1]}: "
+                    f"an 802.1ad service VLAN; it and its vif-c "
+                    f"sub-interfaces are not translated"
+                ] = None
             # A ``user <name>`` block under ``system { login { ... } }``.
             elif (
                 node[0] == "user" and node[1]
@@ -538,8 +586,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[1][0] == "login"
             ):
                 _touch_user(node[1])
-            # A bond member declared 1.3+/1.4-style:
-            # ``interfaces / bonding bondN / member / interface ethN``.
+            # A bond member written as a block,
+            # ``interfaces / bonding bondN / member / interface ethN { }``:
+            # the form this renderer wrote before it wrote VyOS's own
+            # (the bare leaf, read below), and the shape the set form
+            # becomes here, where ``interface`` is a tag node -- with the
+            # quotes ``show configuration commands`` puts round a leaf's
+            # value, which are no part of the name.
             elif (
                 node[0] == "interface" and node[1]
                 and len(stack) == 4
@@ -547,7 +600,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[1][0] == "bonding"
                 and stack[2][0] == "member"
             ):
-                _add_lag_member(stack[1][1], node[1])
+                _add_lag_member(stack[1][1], _unquote(node[1]))
             # ── Phase 5: an ``interfaces vxlan vxlanN`` netdev (one VNI
             # per netdev — NOT a generic L3 interface; handled separately
             # from ``_current_iface``).
@@ -607,6 +660,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # A ``next-hop`` block under ``static route`` creates a route.
             elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
+            if closes_at_once:
+                stack.pop()
+                if node[0] == "next-hop":
+                    cur_route = None
             continue
 
         # ── Leaf line: "<key> <value...>" or bare "<key>" ──
@@ -672,6 +729,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _touch_lag(stack[1][1])["mode"] = (
                 "active" if value == "802.3ad" else "static"
             )
+            continue
+
+        # ── Phase 2: bond member as VyOS prints it: ``member interface``
+        # is a leaf of many values, one line each
+        # (interfaces / bonding bondN / member / interface ethN) ──
+        if (
+            key == "interface" and value
+            and len(stack) == 3
+            and stack[0][0] == "interfaces"
+            and stack[1][0] == "bonding"
+            and stack[2][0] == "member"
+        ):
+            _add_lag_member(stack[1][1], value)
             continue
 
         # ── Phase 2: bond member, legacy 1.2 form
@@ -888,6 +958,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             )
         )
     intent.vxlan_vnis = sorted(vxlan_vnis, key=lambda v: v.vni)
+    intent.dropped_tier3_sections = list(vif_s_rows)
 
     logger.debug(
         "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "

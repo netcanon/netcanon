@@ -136,6 +136,7 @@ class MikroTikRouterOSCodec(CodecBase):
         version_range="7.x",
         device_classes=[DeviceClass.router, DeviceClass.firewall],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
@@ -170,6 +171,19 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "RouterOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/lags/lag/mode",
                 reason=(
@@ -366,6 +380,17 @@ class MikroTikRouterOSCodec(CodecBase):
                     "(ship-before-wire, GAP 7) so a routed sub-interface "
                     "tag is flagged as a drop, not silently mis-rendered "
                     "as an L2 access-mode VLAN."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  A RouterOS "
+                    "`/interface vlan` on another `/interface vlan` is read as "
+                    "a VLAN interface of one tag, which is not this field.  "
+                    "Declared so that it is reported as a drop."
                 ),
             ),
             UnsupportedPath(

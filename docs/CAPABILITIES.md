@@ -54,7 +54,7 @@ the L2/L3 layer only.  The two-clause test for setting it lives in
 | `fortigate_cli`   | Fortinet FortiGate | firewall | nested `config / edit / set / next / end` CLI | bidirectional | certified |
 | `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
-| `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
+| `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`, and `bondN.<vid>` under a bond) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
 | `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP; validated against 14 real OS10 captures that all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because those captures carry live password hashes and are held out-of-tree, so no REAL corpus is committed; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
 
 Backup-side device-definition YAMLs ship for every codec family above
@@ -100,7 +100,8 @@ names the canonical surface, not a blanket guarantee.
 * `hostname`, `domain`
 * `interfaces` — `name`, `description`, `enabled`, IPv4 + IPv6
   addresses, `vrf` binding, `kind` (physical / mgmt / loopback /
-  uplink), `mtu`, `lag_member_of`, `dhcp_client_v6` (IPv6 DHCPv6 /
+  uplink), `mtu`, `ip_mtu` (an IP MTU apart from the MTU), `lag_member_of`,
+  `dhcp_client_v6` (IPv6 DHCPv6 /
   SLAAC mode discriminator), `tunnel_type` (GRE / EoIP / IPIP /
   IPSEC / VXLAN encap discriminator)
 * `vlans` — `id`, `name`, `tagged_ports`, `untagged_ports`, SVI L3
@@ -275,6 +276,7 @@ matrix flags the gap honestly rather than masquerading as drift.
 | Path (granular) | Class |
 |---|---|
 | `/interfaces/interface/config/mtu` | Lossy (YANG MTU drops platform-specific IP-vs-link distinction) |
+| `/interfaces/interface/config/ip-mtu` | Unsupported (no IP MTU is carried between OpenConfig and the tree) |
 | `/system/{hostname,dns-server,ntp-server}` | Unsupported |
 | `/vlans/vlan/{id,name}` | Unsupported |
 | `/routing/static-route` | Unsupported |
@@ -349,7 +351,8 @@ text").
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/routing/static-route/vrf` | Unsupported | AOS-S has no VRF (HPE's routing guide names none): a route in a VRF is left out under a `; review:` line rather than written into the switch's one table. |
+| `/routing/static-route/interface` | Lossy (error) | AOS-S takes an address, `vlan <id>`, `reject` or `blackhole` as a next hop.  A route to `Null0` is written `blackhole` and one out a VLAN interface `vlan <id>`; a route out any other interface is left out under a `; review:` line.  The job is `partial` for any route that names an interface, since the matrix reads the field and not its value. |
 | `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
 | `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's passphrase and AOS-S derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmpv3 user` line, and the `snmpv3 group` binding drops with it) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
@@ -367,7 +370,7 @@ text").
 | `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Supported (Wave C) | `virtual-gateway-v6-mac M`. |
 | `/routing/static-route/vrf` | Supported (v0.2.0) | `set routing-instances <NAME> routing-options static route <dest> next-hop <gw>` harvests onto `CanonicalStaticRoute.vrf` and renders back out (the routing-instances dispatcher now descends into `routing-options static`).  Top-level `set routing-options static route` lines round-trip with `vrf=""`.  next-hop form only — `discard` / `reject` blackhole routes and the explicit `rib <name>` form (e.g. IPv6 `inet6.0`) are not modelled, same as the global table; a VRF implied solely by a static route does not materialise an empty routing-instance. |
 | `/anycast-gateway-mac` | Unsupported | Junos has no chassis-wide anycast-gateway MAC; per-IRB-unit overrides live on `CanonicalIPv4Address.virtual_gateway_mac` (the `virtual-gateway-v4-mac` / `-v6-mac` grammar) and round-trip through the supported per-address surface instead.  Cross-vendor migration from a source carrying a system-wide MAC (Arista, NX-OS) must distribute the value across every IRB unit's per-address MAC on the receiving Junos side. |
-| `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips). Per-unit subinterface attributes beyond the address + 802.1Q tag remain unmodelled. |
+| `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips), and an inner tag (`vlan-tags outer N inner M`) on `/interfaces/interface/dot1q-inner-vlan`; the device is written `vlan-tagging`, `stacked-vlan-tagging` or `flexible-vlan-tagging` as its units need. A unit whose tag statement matches more than one tag (a range, a list, a TPID other than 0x8100) is left out, with a row. Per-unit subinterface attributes beyond the address + 802.1Q tags remain unmodelled. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there: the render refuses it (review comment, and the user's VACM `security-to-group` binding is dropped with it) rather than emitting a key that authenticates nobody.  A source PASSPHRASE is portable and is routed through `authentication-password`, from which Junos derives the key on commit, and the parser reads that leaf back.  The parser also records WHICH leaf carried the value, so a Junos config that stores a passphrase in `authentication-password` now classifies as portable and migrates, instead of failing closed because the kind was inferred per-codec. |
@@ -376,6 +379,15 @@ text").
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
 
 #### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
+
+A quoted value printed over several lines -- a certificate, a private
+key, a replacement message's HTML -- is read whole, up to
+the line whose quote no backslash escapes, and none of its lines is
+read as configuration: not by the parser, not by the Tier-3 detector,
+and not for the release.  One that no later line ends, or with a line
+that ends in a form feed or the like, is refused (see
+[`vendors/fortigate.md`](vendors/fortigate.md) § "A quoted value of
+several lines").  Such a value reaches every target on one line (§ C1).
 
 | Path | Class | Reason |
 |---|---|---|
@@ -440,7 +452,9 @@ its indentation").
 
 Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
 HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
-Anycast Gateway).  A banner, ended at the next occurrence of its
+Anycast Gateway).  An address held on a VLAN record (the address of a
+Junos `irb` unit a VLAN binds) is written as `interface Vlan<N>`;
+its anycast virtual gateway is not.  A banner, ended at the next occurrence of its
 delimiter anywhere, and a `scheduler job`'s commands, ended by a line
 `end-job`, are text and are not read as configuration; one with no
 end, or with a line that ends in a form feed or the like, is refused
@@ -465,6 +479,7 @@ text").  The lossy / unsupported exceptions:
 | `/routing-protocols/ospf` | Unsupported | Tier-3. |
 | `/routing-protocols/eigrp` | Unsupported | Tier-3. |
 | `/routing-protocols/isis` | Unsupported | Tier-3. |
+| `/interfaces/interface/dot1q-inner-vlan` | Unsupported | The sub-interface statement this codec writes, `encapsulation dot1q <id>`, is one tag: the inner tag of a Q-in-Q sub-interface (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) is reported as a drop and the job is `partial`. |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | ACLs are Tier-3 — auto-translating ACL semantics across vendors risks subtly-permissive rules.  Operator authors firewall policy manually (mirrors cisco_iosxe_cli). |
 | `/firewall` | Unsupported | NX-OS hosts no stateful firewall; declared unsupported for cross-vendor surface consistency. |
 | `/nat` | Unsupported | NX-OS hosts no typical edge NAT. |
@@ -519,7 +534,10 @@ without its indentation").
 
 Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
 v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
-Distinct from the campus `aruba_aoss` (AOS-S) codec.  A banner, ended
+Distinct from the campus `aruba_aoss` (AOS-S) codec.  An address held
+on a VLAN record (the address of a Junos `irb` unit a VLAN binds) is
+written as `interface vlan <N>`; its anycast virtual gateway is not.
+A banner, ended
 at the first later line that ENDS with its one delimiter (one with
 text after it is the banner's text), is text and is not read as
 configuration; one with no end, more than one character after its
@@ -566,6 +584,7 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/routing-instances/instance/table` | Lossy | VyOS requires a numeric `table <id>` on every `vrf name <X>`; the canonical RoutingInstance carries no table number, so a deterministic id (`100 + sort-index`) is synthesised on render.  The original table id is not preserved. |
 | `/vxlan-vnis/source-interface` | Lossy | The VTEP source is `source-address <ip>` (or `source-interface <if>`) on the vxlan netdev; the opaque string round-trips same-vendor but a cross-vendor source (e.g. `Loopback0`) is re-emitted verbatim and may need an operator port-rename. |
 | `/vxlan-vnis/vlan-id` | Lossy | VyOS models ONE VNI per `vxlan vxlanN` netdev with no on-device VLAN (the L2 binding lives on a separate `bridge`); the required canonical `vlan_id` is synthesised from the VNI and the netdev name regenerated `vxlan<index>` on render — both deterministic (stable same-vendor, advisory cross-vendor). |
+| `/interfaces/interface/dot1q-inner-vlan` | Unsupported | VyOS QinQ (`vif-s <id> vif-c <id>`) is not this field: its service tag is 802.1ad, Ethertype 0x88a8 by default.  The parser leaves a `vif-s` block out with a row of the Tier-3 banner, and a source's inner 802.1Q tag is reported as a drop. |
 | `/vlans/vlan/id` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static routes (`vrf name <X> { protocols static route … }`) are deferred past the Phase-3 VRF wire-up; the `vrf name` instances + per-interface binding ARE supported. |
 | `/vxlan-vnis/l2vni-route-target` | Unsupported | EVPN per-VNI RD/RT lives under `protocols bgp … address-family l2vpn-evpn` (Tier-3, dropped); the L2 VLAN↔VNI binding is supported but the control-plane RD/RT is not auto-translated. |
@@ -623,6 +642,7 @@ text").  The lossy / unsupported exceptions:
 | `/dhcp-servers/pool` + `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | v1 parses no DHCP server pool. |
 | `/radius-servers/server/{host,key}` | Unsupported | v1 parses no AAA `radius-server` config. |
 | `/interfaces/interface/dot1q-vlan` | Unsupported | Per-port dot1q sub-interface VLAN tagging is not modelled. |
+| `/interfaces/interface/dot1q-inner-vlan` | Unsupported | Nor is the inner tag of a Q-in-Q sub-interface. |
 | `/interfaces/interface/voice-vlan` | Unsupported | Per-port voice VLAN is not modelled. |
 | `/routing-protocols/{bgp,ospf,eigrp,isis}` | Unsupported | Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | ACLs are Tier-3 — auto-translating risks subtly-permissive rules. |
@@ -763,6 +783,24 @@ in rendered output find every such site.
      since #462 both defer to the crypt(3) id inside the payload (`$9$`
      excepted, being both Juniper-reversible and Cisco type-9).  OPNsense
      accepts bcrypt and SHA-512 crypt.
+  4. The account goes with its secret, on every target: the review line
+     stands in place of the account, never inside it.  FortiOS, RouterOS
+     and OPNsense used to write the account without its password, and a
+     RouterOS user added with no password has a blank one.
+  5. A password a human typed (`plaintext` to the policy: IOS-XE
+     `password 0`, AOS-CX `password plaintext`, VyOS
+     `plaintext-password`) is an algorithm like any other, accepted only
+     where the target has a line that takes a typed password and hashes
+     it itself.  Junos and OPNsense have none (`encrypted-password` and
+     `<password>` hold a hash; Junos's `plain-text-password` asks at a
+     prompt), so there such an account is left out with a review line:
+
+         # password manager user-name "<name>" -- review: the source
+         holds this password as typed, and Junos takes a password into
+         its config only as a hash; the account is left out: add it on
+         the device and set its password there
+
+     They used to write the typed string as the hash.
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth
@@ -835,6 +873,21 @@ in rendered output find every such site.
   FortiGate re-render of its own config would refuse its own key — FortiOS
   values classify `encrypted`, which no target accepts from a foreign source.
 
+* **RADIUS shared-secret portability**
+  ([`_radius_secrets.py`](../netcanon/migration/_radius_secrets.py)).  A
+  shared secret written as typed (`key <secret>`, `key 0 <secret>`,
+  FortiOS `set secret <secret>`, OPNsense `<radius_secret>`, RouterOS
+  `secret=`) migrates to every target.  A secret the source stored in a
+  form of its own -- IOS-XE `key 7` / `key 6`, EOS `key 7`, AOS-S
+  `encrypted-key`, FortiOS `set secret ENC` -- is written back as it was
+  onto its own platform only.  Onto any other target the server is kept
+  with no key, beside a review line in the target's comment syntax:
+
+      ; radius-server host 192.0.2.10 -- review: the source device stored this shared secret in its own encoded form (Cisco IOS-XE type 7), which is not carried to Aruba AOS-S; re-enter the secret manually
+
+  The secret is not decoded (Cisco type 7 could be, and is not), and the
+  job still says `completed`: the review line is where it is said.
+
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
@@ -851,6 +904,56 @@ in rendered output find every such site.
   syntax but unverified IPv6 syntax; the renderer emits the IPv6
   address as a comment-form review line rather than guessing.
 
+* **A credential that would not be one value**
+  ([`_one_value.py`](../netcanon/migration/_one_value.py)).  A local
+  user's name, password or role, an SNMP community, an SNMPv3 user's
+  name, group or keys, and a VRRP/HSRP key that holds white space or a
+  `"` is not written where the target reads one word (IOS-XE CLI,
+  NX-OS, EOS, AOS-CX, OS10, IOS XR, and a VyOS user or community name)
+  or where it quotes with no escape (AOS-S, for a `"`), and is never
+  altered to fit.  The record is left out with a line of the form:
+
+      username <name> -- review: a value of it holds white space or a
+      quote, which <target> does not read as one value; it is left out,
+      re-create it on the device
+
+  A local user and an SNMPv3 user go whole; a community goes with every
+  trap host that would carry it; a VRRP/HSRP key goes alone and the
+  group stays.  The line never holds the secret.  RADIUS keys are not
+  yet under this rule.
+
+* **A name, an address or a line of text that would not be one
+  value** (`one_value_tree`, same module).  The same test for what is
+  not a secret, made once on the tree before any line is written:
+
+  - a host name, VLAN name, VRF name or a route's name that holds white
+    space or a `"` where the target reads one word (IOS-XE CLI, NX-OS,
+    EOS, AOS-CX, OS10, IOS XR, VyOS) is written with `_` for each run
+    of white space and `'` for each `"`, at every place it goes -- a
+    renamed VRF takes its interfaces and routes with it, with a number
+    after it where another VRF has that name.  AOS-CX writes a VLAN's
+    name whole: the switch reads it to the end of the line;
+  - an address -- the domain, an NTP, syslog or DNS server, a route's
+    gateway, a DHCP pool's domain, gateway or DNS servers -- that holds
+    white space or a `"` is left out on every line target, and a route
+    whose gateway is left out goes whole;
+  - a description or the SNMP location or contact is written to the
+    end of the line where the vendor says that place reads it so; OS10
+    quotes a description that holds white space; AOS-S, OS10 and VyOS,
+    which quote with no escape, write a `"` as `'`; and a place no
+    vendor page says reads the whole line (the NX-OS SNMP contact, the
+    EOS SNMP location, an IOS XR VRF description) is written as it
+    stands.
+
+  Each is said in a line at the top of the output, of the form:
+
+      the name of VLAN 10 -- review: it holds white space or a quote,
+      which <target> does not read as one word; each run of white space
+      is written _ and each double quote '
+
+  The line names the place and never holds the value.  RouterOS is not
+  yet under this rule.
+
 * **MikroTik IPsec tunnel placeholders**.  When the canonical
   carries an IPsec peer with an empty/placeholder address, the
   renderer emits the line plus `comment="review: tunnel endpoint
@@ -865,6 +968,27 @@ in rendered output find every such site.
   `classify_port_name` can't place it, the renderer emits
   `! interface <name> -- review: foreign port` rather than
   emitting an interface stanza for an unknown chassis position.
+
+### C1. A value of several lines (a job warning)
+
+No target is given a value of more than one line, whatever the field.
+A description, a name or any other text value that holds a line break
+-- which the OPNsense and IOS-XE NETCONF parsers keep from an
+element's text, and the FortiOS parser from a value printed between
+quotes over several lines -- is written on one line, each run of
+breaks (any character `str.splitlines` ends a line at) as one space,
+and the job says where, one warning a value:
+
+    interfaces[em0].description held a line break: it is written on
+    one line, each break as a space, because no target is given a
+    value of more than one line
+
+Written as it stood, the text after the break was a line of its own in
+the output, and so a command on the target.  The job's status is not
+changed: the value's words are all there.  What is lost is the layout,
+on the targets that could have held it too (an XML target, FortiOS
+between its quotes).  A caller that renders a tree without the
+pipeline is refused (`RenderError`), naming the field.
 
 ### D. Validation severity (`ok` / `warn` / `block`)
 
@@ -898,8 +1022,8 @@ capability matrix has no path for:
   of two interfaces is written as one.  Aruba AOS-S `1/1` and the
   uplink-module port `1/A1` are both `Ethernet1` on EOS; VyOS `eth0`
   and `eth1` are both `port1` on FortiOS, which numbers from 1; Junos
-  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; a Junos
-  per-instance loopback `lo0.2` is put on `Loopback0` beside `lo0`.
+  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; IOS-XE
+  `Loopback0` and `Loopback1` are both `loopback1` on AOS-S.
   Any two names count — a LAG or a loopback as much as a port —
   and they are compared as each platform tells interfaces apart
   (`Trk1` and `trk1` are one port on AOS-S; `DMZ` and `dmz` are two
@@ -1073,22 +1197,19 @@ What still says `completed`, and is yours to check:
   10.50.0.0 255.255.0.0 Null0` onto
   RouterOS is `gateway=Null0`, in a job that can be `completed`.
   Read a finished job's warnings for that line.
-* **A LAG member the config has no interface for.**  The members
-  of an OPNsense lagg are as a rule NICs assigned to nothing, and a
-  FortiGate aggregate can name a member that has no `edit` stanza.
-  Those two parsers make no interface record for such a member, and
-  a target that writes a LAG on each member's own stanza — EOS,
-  AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10, Junos — writes the LAG
-  with no member, in a job that can be `completed`.  (AOS-S, FortiOS,
-  RouterOS and OPNsense write the member list.  So does VyOS for a
-  LAG it writes as `bond<N>`; one left under a name it does not read
-  as a LAG — a FortiGate `agg1` — comes out an `ethernet` interface
-  with no member, in a `partial` job that lists it.)  Compare each
-  LAG's members in the output with the source.  An AOS-S port that
-  a config names only in a VLAN's list or on a `trunk` line was such
-  a port too, VLAN membership included, in release 0.7.7 and
-  earlier; its parser now gives it a record
-  (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)).
+* **A LAG under a name the target does not read as a LAG.**  A
+  FortiGate aggregate keeps its own name (`agg1`) where the
+  translator cannot read it, and EOS, OS10 and VyOS then write an
+  interface of that name that is no LAG, its members beside it as
+  plain ports, in a `partial` job that lists the name
+  (`untranslated_ports`).  Give the aggregate a name in the port
+  map.  A member the config has no interface for — an OPNsense
+  lagg's, which OPNsense assigns to no zone, one a FortiGate
+  aggregate names with no `edit` of its own, an AOS-S port named only
+  on a `trunk` line — was no member on seven targets in release 0.7.7
+  and earlier; each parser now gives it a record
+  (see [`vendors/opnsense.md`](vendors/opnsense.md),
+  [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)).
 * **A port on AOS-CX under a name AOS-CX cannot read as a port.**
   That renderer writes a port's VLANs only where the port's name
   reads as a port or a LAG.  A port left under its source name, or
@@ -1711,7 +1832,7 @@ What you get back, on the job's `port_mapping_plan`:
 * **`unbound_ports`** — RouterOS targets only: ports that no line of
   their own in the output looks up by their hardware, each with that
   hardware.  The finished output is read back to find them, and each
-  port is judged by its own line.  Three ways.  The port's name reads
+  port is judged by its own line.  Four ways.  The port's name reads
   as another kind of interface: RouterOS output has no Ethernet line
   for a name shaped like a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`),
@@ -1722,7 +1843,11 @@ What you get back, on the job's `port_mapping_plan`:
   route — and your entry gave it a name that is no port of the
   target, which the output then uses (`slaves=`, `gateway=`) and
   nothing defines.  Or you gave two ports of another vendor one name:
-  the output finds the first by it, and the second is listed.  The
+  the output finds the first by it, and the second is listed.  Or the
+  port has a line of its own, and a list that names it cuts your
+  name — `slaves=` at a comma, `gateway=` at a comma, an `@` or a
+  `%`: the LAG or the route then names something nothing defines
+  (`a`, for `a,b`).  The
   entry for such a port is not listed in `off_target` as well.  The
   job is `partial` while this is not empty: name the port with a port
   of the target (that moves it there), or — where the config has an
@@ -1869,13 +1994,15 @@ nothing, as before.
   looks two interfaces up by one factory name, no pairing is made at
   all.  **Without devices declared an entry never moves a port**: it
   names it.  The output then finds the port by the factory name it
-  had where the config states one (a `set [ find default-name= ]`
-  line, or a name of the form `etherN`); a port the export mentions
-  only elsewhere has none recorded, and naming it renders a lookup by
-  the new name (`set [ find name=WAN ]`), which matches no port —
-  declare both devices, or add the port's `/interface ethernet` line.
+  had: a `set [ find default-name= ]` line's, or the port's own name
+  where that is one a MikroTik device gives a port (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, the QSFP lanes; whole and in
+  lower case).  A port known only by a name of yours, with no such
+  line, has none recorded, and naming it renders a lookup by the new
+  name (`set [ find name=WAN ]`), which matches no port — declare
+  both devices, or add the port's `/interface ethernet` line.
 * A RouterOS port named so that it reads as another port (a bridge
-  called `SFP-SFPPLUS1`) is translated by that reading, as it is
+  called `sfp-sfpplus1`) is translated by that reading, as it is
   without devices declared, and is displaced if that puts it on a
   port of the target.  And a port named so that it reads as a LAG, a
   VLAN, a bridge or a loopback is paired as the port it is, but the
@@ -1895,22 +2022,23 @@ nothing, as before.
   nothing — and that is said in a line of the plan, not in
   `unbound_ports`: the job is `completed`, because keeping it was
   your decision.
-* RouterOS output writes a LAG's members and a route's next hop
-  unquoted, so a name with white space or a comma in it breaks the
-  line it is written into, whether or not the port has an interface.
-  A placed port with no interface is still reported under such a
-  name in the ordinary cases (`my port`, `a,b`).  It is not where the
-  name begins with a comma, `@` or `%`, holds `@` or `%` ahead of the
-  white space or comma, is wrapped in double quotes, or has a line
-  break in it: the entry is then listed in `off_target` only.
+* A RouterOS LAG's members (`slaves=`) are cut at a comma, and a
+  route's next hop (`gateway=`) at a comma, an `@` or a `%`, so a
+  name that holds one is pieces there, whether or not the port has
+  an interface.  (White space no longer cuts either: a list that
+  holds it is written as a string, and read back whole.)  A placed
+  port under such a name is reported (`a,b`, `,a`, `a%b,c`), whether
+  or not a line of its own finds it.  It is not where no piece of
+  the name is read back as a name — a next hop that begins with `@`
+  (`@a`: what follows is read as a routing table) — nor where the
+  name has a line break in it: the entry of a port with no interface
+  is then listed in `off_target` only, and a next hop by a port that
+  has one is not reported at all.
 * **A next hop that is not exactly an interface's name is not
   followed** when the interface moves: a RouterOS route with several
   gateways or a routing-table suffix, and — across vendors — a Junos
   unit next hop.  The plan lists the route (`stale_next_hops`) and the
   job is `partial`.
-* **A non-zero unit of a Junos management port** (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`).  Map it by hand.
 * A FortiGate VLAN interface the codec reads as a physical port
   (`DMZ` beside a port `dmz`) or as a management port (`MGMT`), and
   its stock `fortilink` aggregate,
@@ -1948,9 +2076,9 @@ nothing, as before.
   job.  Check the VLAN id of every sub-interface on those two.
 
   Not followed across vendors: a unit of a **loopback** or of a
-  **management port** (a Junos `lo0.5` is put on the target's
-  loopback beside `lo0`, and the job warns that two names share
-  it) — a management port by its name (EOS `Management1.5`) or by
+  **management port** (a Junos `lo0.5` is the loopback of a routing
+  instance, and is the target's loopback 5, `Loopback5`) — a
+  management port by its name (EOS `Management1.5`) or by
   what its config says of it (the Catalyst port in `Mgmt-vrf`,
   whose name reads as any other port's); a unit of a port the
   source codec's classifier does not know
@@ -2248,6 +2376,31 @@ matter; the matrix is honest about both.
   the supplied password itself, so `_user_secrets._TARGET_ACCEPTS`
   permits only `plaintext` for `mikrotik_routeros`.  Cross-vendor
   hashes always trigger a review comment.
+* **An interface's MTU counts different bytes on different
+  platforms.**  The tree holds the payload, the largest IP packet:
+  the number IOS-XE, NX-OS, EOS, AOS-CX, RouterOS, FortiOS, VyOS and
+  OPNsense state.  A Junos media MTU and an IOS XR `mtu` count the
+  14-byte Ethernet header as well, and 4 bytes more for a tag; a Dell
+  OS10 link MTU is a frame, taken as 22 bytes more.  So IOS-XE `mtu
+  9000` is written Junos `mtu 9014`, and OS10 `mtu 9216` is IOS-XE
+  `mtu 9194`.  A loopback, a tunnel, or a name the codec's classifier
+  does not read is copied as it stands.  The IP MTU (`ip mtu`,
+  `family inet mtu`) is another field (next).  The vendors' sentences are in
+  [the vendor reference](vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
+* **An IP MTU of its own is carried where the target has one.**
+  IOS-XE and AOS-CX `ip mtu`, IOS XR `ipv4 mtu` and Junos `family
+  inet mtu` state the largest IP packet apart from the MTU; the
+  tree holds it as `ip_mtu` where it is not the payload, and those
+  four write it as their own statement.  AOS-CX's IP MTU stays 1500
+  under a raised `mtu` unless `ip mtu` says otherwise, so a port
+  that sends jumbo IP packets elsewhere is written `ip mtu` there,
+  and an AOS-CX port with `mtu 9198` alone is an IP MTU of 1500
+  elsewhere.  NX-OS, EOS, RouterOS, FortiOS, VyOS and OPNsense have
+  one MTU: an IP MTU with no MTU beside it is written as that MTU,
+  and one beside a different MTU is lost, and the job's report says
+  so (`/interfaces/interface/config/ip-mtu-beside-mtu`, lossy).
+  OS10 writes none (lossy); AOS-S and the IOS-XE NETCONF codec
+  declare it unsupported.  The tree has no IPv6 MTU.
 * **A VLAN's label on a target whose VLAN has only a name.**
   OPNsense and RouterOS name a VLAN after its interface (`vlan0.10`,
   `vlan10`); the label an operator typed (an OPNsense `<descr>`, a

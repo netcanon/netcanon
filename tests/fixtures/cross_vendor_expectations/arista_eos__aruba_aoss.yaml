@@ -236,9 +236,10 @@ per_field_expectation:
       Per-VRF static routes (``ip route vrf X ...``) are
       harvested from the Arista source onto
       ``CanonicalStaticRoute.vrf``, but the aruba_aoss target
-      has no VRF / routing-instance model and renders every
-      route into the global table, dropping the per-VRF
-      binding.  IPv6 default routes
+      has no VRF / routing-instance model, so such a route is
+      left out of the output under a ``; review:`` line (the
+      ``MGMT`` default route of both EVPN-leaf cells) rather
+      than written into the switch's one table.  IPv6 default routes
       (``ipv6 route ::/0 <gw>``) are not reliably parsed on the
       Aruba side either, so cross-vendor IPv6 routes also drop.
       Known target-side gap (aruba_aoss has no VRF model).
@@ -307,16 +308,21 @@ per_field_expectation:
     references: [local_users]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Arista's ``radius-server host <ip> key "..."`` form (Cisco-
       derived grammar) lands on the canonical
       ``host / key / auth_port / acct_port`` tuple cleanly.
       Aruba render emits the same shape — both vendors share
       Cisco-style grammar.  Default ports (1812 / 1813)
       preserved.  RADIUS shared secrets are NOT engineID-salted,
-      so cross-vendor migration of a key works without
-      re-keying.
+      so a key written as typed migrates without re-keying.
+      EOS prints a key in its own form, ``key 7 <blob>``: it is
+      held behind ``eos:``, not decoded, and the server is written
+      with no key, beside a review line that names the form.  No
+      committed EOS capture has a RADIUS server; until 2026-10 a ``key
+      7`` was read as the secret ``7``, and this entry called the
+      field good.
     references: [radius]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

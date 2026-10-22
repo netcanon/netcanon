@@ -1,5 +1,7 @@
 # AOS-CX → Cisco IOS-XE CLI: measured canonical surface
 
+> **Update 2026-10-20 — the IOS-XE render no longer writes a second VLAN interface beside an AOS-CX `interface vlan <N>`.**  `synthesize_svis_from_vlan_l3` now recognises a VLAN interface however a codec spells it (`Vlan10`, `vlan10`, `vlan 10`), so a VLAN whose address is already on `interface vlan 101` gets no `interface Vlan101` as well.  That duplicate carried the VLAN's address on two interfaces, the second without the first's description or shutdown.  Measured after the change: `mgmt` is not rendered, so five cells drift by one interface record (9 -> 8 on two, 18 -> 17, 42 -> 41, 13 -> 12), and the other two now align record by record, which shows the active gateway lost on the address it belongs to (`vlan 1` on `canu_csm17_spine001_ipv6_vrf`).  What is said below of the synthesized `Vlan101` / `Vlan102`, and the interface counts, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
 
@@ -181,6 +183,9 @@ no supported, lossy or unsupported entry — while its renderer emits
 `channel-group` lines and its parser reconstructs `Port-channelN`. That is a
 matrix under-declaration, the same shape as the one recorded on the arista_eos
 pair, and it belongs in a codec change rather than in a pair expectation file.
+
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — an AOS-CX password is read by its keyword.**  The AOS-CX parser read `password ciphertext <value>` by the value's shape, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was was taken for a password as typed and written onto IOS-XE as one.  It is now read as the ciphertext it is, and refused like the 6 `AQB` accounts.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  An account configured `password plaintext` is read as typed and would arrive; no committed capture has one.  Any statement below that an AOS-CX account arrives, with or without a working password, describes the code before this change or before #461.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_iosxe_cli.yaml`.
 
 **2. `local_users[].hashed_password` is `good`, and `good` here is a hazard.**
 The field round-trips byte-for-byte on all 6 populated cells. It survives

@@ -109,6 +109,7 @@ class AristaEOSCodec(CodecBase):
         version_range="4.20+",
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
+            "/interfaces/interface/config/ip-mtu",  # written as the one `mtu` where the tree states no payload
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
@@ -124,6 +125,7 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
             "/interfaces/interface/dot1q-vlan",   # GAP 7: routed-subif `encapsulation dot1q vlan N`
+            "/interfaces/interface/dot1q-inner-vlan",  # `encapsulation dot1q vlan N inner M`
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -151,6 +153,19 @@ class AristaEOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "EOS has one MTU for the payload and the IP packet. An "
+                    "interface whose source states an IP MTU apart from its MTU "
+                    "(IOS-XE or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos "
+                    "`family inet mtu`, or AOS-CX's default IP MTU of 1500 "
+                    "under a raised `mtu`) is written with the MTU, and IP "
+                    "packets up to the MTU are sent: its IP MTU of its own is "
+                    "not in the output."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing-instances/instance/description",
                 reason=(
                     "The VRF/routing-instance is harvested with its rd + "
@@ -174,12 +189,14 @@ class AristaEOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
-                    "VLAN-SVI mount render gap: this codec renders a VLAN's L3 "
-                    "by synthesizing an `interface Vlan<N>` "
-                    "(synthesize_svis_from_vlan_l3), which copies only "
-                    "ip+prefix_length, so the is_secondary flag on a VLAN-"
-                    "record address is dropped. The SVI L3 itself round-trips, "
-                    "so declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount: this codec renders a VLAN's L3 by "
+                    "synthesizing an `interface Vlan<N>` "
+                    "(synthesize_svis_from_vlan_l3), which writes an address "
+                    "after the first `secondary` by its position; the "
+                    "record's own is_secondary flag is not read, and the parse "
+                    "folds only ip+prefix_length back onto the VLAN. The SVI "
+                    "L3 itself round-trips, so declared lossy (blind-audit "
+                    "f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
@@ -437,10 +454,13 @@ class AristaEOSCodec(CodecBase):
         # the parser deliberately drops — see
         # netcanon/migration/_tier3_detection.py.  Notification-only.
         # Read from the text the parser read: a banner's (or any other
-        # body's) lines up to its ``EOF`` are text, not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(
-            without_bodies(raw),
-        )
+        # body's) lines up to its ``EOF`` are text, not stanzas.  After
+        # them, the rows the parser itself made: a sub-interface whose
+        # tag statement it does not read whole.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_iosxe_cli(without_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

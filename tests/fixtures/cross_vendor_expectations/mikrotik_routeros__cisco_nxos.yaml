@@ -320,15 +320,18 @@ per_field_expectation:
     references: [routeros-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on every cell that holds VLANs. RouterOS names a VLAN
-      after its `/interface vlan` (`vlan10`), and its `comment=` is the
-      VLAN's description. NX-OS has one label for a VLAN: a VLAN
-      whose name is only an interface's is written with its description
-      as its name (`_vlan_labels`), and one with none with its
-      interface's name. The reconciler reads the first as preserved
-      (`_vlan_label_moved`).
+    disposition: lossy
+    reason: >
+      RouterOS names a VLAN after its `/interface vlan` (`vlan10`), and
+      its `comment=` is the VLAN's description. NX-OS has one label for
+      a VLAN: a VLAN whose name is only an interface's is written with
+      its description as its name (`_vlan_labels`), and one with none
+      with its interface's name. The reconciler reads the first as
+      preserved (`_vlan_label_moved`). A label that holds white space
+      is then written with `_` for each run of it, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): the kitchen
+      sink's `comment="Users VLAN"` is `vlan 100 / name Users_VLAN`,
+      which is drift.
     references: [routeros-nxos-surface]
 
   "vlans[].description":

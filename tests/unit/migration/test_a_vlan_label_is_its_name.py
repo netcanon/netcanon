@@ -222,9 +222,15 @@ READERS = {
 }
 
 
+#: The targets that write a VLAN's name as one word, each run of white
+#: space ``_`` with a review line (``one_value_tree``); AOS-S quotes it.
+ONE_WORD = ("arista_eos", "cisco_iosxe_cli", "cisco_nxos")
+
+
 def _as_written(target: str, label: str) -> str:
-    """The label as the target writes a name: EOS takes no white space."""
-    return re.sub(r"\s+", "_", label) if target == "arista_eos" else label
+    """The label as the target writes a name: EOS, IOS-XE and NX-OS
+    read no white space in one."""
+    return re.sub(r"\s+", "_", label) if target in ONE_WORD else label
 
 
 def _render(source: str, text: str, target: str, path: str) -> str:

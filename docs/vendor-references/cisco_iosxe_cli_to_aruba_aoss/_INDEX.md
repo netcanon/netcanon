@@ -30,7 +30,7 @@ CLI lineage but diverge on:
 | `system_services.md` | Hostname / DNS / NTP-vs-SNTP / timezone / syslog. |
 | `vrf_unsupported.md` | Cisco VRFs parse-and-ignore on Cisco codec; Aruba AOS-S has no VRF concept. |
 | `routing_protocols_unsupported.md` | BGP / OSPF / EIGRP — all parse-and-ignore on both codecs. |
-| `radius.md` | RADIUS host + key + auth/acct ports round-trip. |
+| `radius.md` | RADIUS host + auth/acct ports round-trip; a key written as typed migrates, a `key 7` / `key 6` is refused (re-enter it). |
 | `dhcp_relay_versus_pool.md` | Cisco's `ip dhcp pool` server config has no Aruba target (AOS-S is relay-only). |
 | `spanning_tree.md` | Cisco PVST+ / rapid-pvst vs Aruba MSTP; canonical field not modelled, Tier 3. |
 

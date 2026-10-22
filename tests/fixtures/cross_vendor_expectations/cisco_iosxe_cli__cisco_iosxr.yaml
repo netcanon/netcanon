@@ -238,6 +238,16 @@ per_field_expectation:
       there.
     references: [iosxecli-iosxr-surface]
 
+  "interfaces[].dot1q_inner_vlan":
+    disposition: good
+    note: >
+      The six Q-in-Q units of the carrier capture (`encapsulation dot1Q 2234
+      second-dot1q <n>` on `GigabitEthernet2/0/4`) are written `encapsulation
+      dot1q 2234 second-dot1q <n>` and read back with both tags.  Up to 0.7.7
+      the source parser read the outer tag alone, and the pair agreed with
+      itself on one tag.
+    references: [iosxecli-iosxr-surface]
+
   # -- VLANs -- the campus surface that does not survive at all -------------
   #
   # `vlans[].id` is written FIRST deliberately: it owns this parent list's
@@ -261,8 +271,9 @@ per_field_expectation:
       measurement is the authority for that.
       The sixth drifting cell moves the OTHER way: `ntc_carrier_interfaces.txt`
       has 0 source VLANs and 1 after the round-trip, because the XR render
-      writes `encapsulation dot1q 2234` on its sub-interfaces and re-parsing
-      that line materialises a VLAN record the source never had.  A fabricated
+      writes `encapsulation dot1q 2234 second-dot1q <inner>` on its
+      sub-interfaces and re-parsing that line materialises a VLAN record (the
+      outer tag, 2234) the source never had.  A fabricated
       record, not a rescued one.
       `unsupported` rather than `lossy` per #436 — `lossy` warns and stays
       compatible, which would badly understate a switch losing its entire VLAN
