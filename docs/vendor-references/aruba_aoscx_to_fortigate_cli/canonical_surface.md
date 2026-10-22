@@ -137,12 +137,13 @@ A real FortiGate rejects a duplicate subnet across interfaces. **Three of
 seven cells produce a render that will not apply as-is.** Delete one of the
 two entries — normally the passthrough `vlan <id>` copy — before pushing.
 
-Note also `set interface "lag 1"` on every child. The renderer parents VLAN
-children to the *first* `CanonicalLAG` on the tree
-(`_build_vlan_children`, "operators almost always trunk VLANs over a LAG"),
-regardless of that VLAN's real membership: on `core1_1`, VLAN 4000 was tagged
-on `lag 101` and `lag 102`, and still lands on `lag 1`. Re-parent every VLAN
-child by hand.
+Note also the `set interface` of each child. The renderer parents a VLAN
+child to the LAG or port that carries the VLAN in the source
+(`vlan_carriers` in `codecs/_helpers.py`): on `core1_1`, VLAN 4000, tagged on
+`lag 101` and `lag 102`, lands on `lag 101`, and the others on `lag 1`. A
+FortiOS VLAN has one parent, so the second LAG is not written: re-create a
+child on each other port that carries the VLAN by hand. Up to 0.7.7 every
+child landed on the first LAG of the tree, whatever its VLAN's membership.
 
 ## Per-field measurement (7 cells)
 
