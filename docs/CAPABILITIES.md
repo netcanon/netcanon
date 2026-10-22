@@ -896,6 +896,38 @@ in rendered output find every such site.
   group stays.  The line never holds the secret.  RADIUS keys are not
   yet under this rule.
 
+* **A name, an address or a line of text that would not be one
+  value** (`one_value_tree`, same module).  The same test for what is
+  not a secret, made once on the tree before any line is written:
+
+  - a host name, VLAN name, VRF name or a route's name that holds white
+    space or a `"` where the target reads one word (IOS-XE CLI, NX-OS,
+    EOS, AOS-CX, OS10, IOS XR, VyOS) is written with `_` for each run
+    of white space and `'` for each `"`, at every place it goes -- a
+    renamed VRF takes its interfaces and routes with it, with a number
+    after it where another VRF has that name.  AOS-CX writes a VLAN's
+    name whole: the switch reads it to the end of the line;
+  - an address -- the domain, an NTP, syslog or DNS server, a route's
+    gateway, a DHCP pool's domain, gateway or DNS servers -- that holds
+    white space or a `"` is left out on every line target, and a route
+    whose gateway is left out goes whole;
+  - a description or the SNMP location or contact is written to the
+    end of the line where the vendor says that place reads it so; OS10
+    quotes a description that holds white space; AOS-S, OS10 and VyOS,
+    which quote with no escape, write a `"` as `'`; and a place no
+    vendor page says reads the whole line (the NX-OS SNMP contact, the
+    EOS SNMP location, an IOS XR VRF description) is written as it
+    stands.
+
+  Each is said in a line at the top of the output, of the form:
+
+      the name of VLAN 10 -- review: it holds white space or a quote,
+      which <target> does not read as one word; each run of white space
+      is written _ and each double quote '
+
+  The line names the place and never holds the value.  RouterOS is not
+  yet under this rule.
+
 * **MikroTik IPsec tunnel placeholders**.  When the canonical
   carries an IPsec peer with an empty/placeholder address, the
   renderer emits the line plus `comment="review: tunnel endpoint

@@ -767,7 +767,58 @@ timestamp if your timezone matters for an audit.
   every synthetic kitchen sink with each credential set to a value with
   white space and one with a quote, onto every public line-grammar
   codec, and reads the output as text.  Not yet under the rule: RADIUS
-  keys, and names that label (host name, VLAN, VRF) and addresses.
+  keys.  Names, addresses and text: the next entry.
+
+- **A name, an address or a line of text is written as one value of
+  the place it goes, or left out and said.**  The rule above, for what
+  labels and what points.  Six line targets wrote `hostname core sw 1`
+  as it stood, and a VRF named `blue net` came out as `vrf definition
+  blue net` -- a VRF `blue` and a word the router reads as the next
+  keyword; `_naming.py` made a host name one word on two codecs only;
+  the IOS-XE renderer dropped a static route's name that held a space
+  and said nothing.  Now, where the target reads one word:
+  * a **name** (host name, VLAN name, VRF name, a route's name) that
+    holds white space or a `"` is written with `_` for each run of
+    white space and `'` for each `"` -- once, on the tree, before a
+    line is written, so every place the name goes agrees.  A VRF
+    renamed so takes its new name to every interface, route and EVPN
+    type-5 route that names it, with a number after it where another
+    VRF already has that name.  AOS-CX reads a VLAN's name to the end
+    of the line (a committed capture prints `name VLAN 11`), so it is
+    written whole there;
+  * an **address** (the domain, an NTP, syslog or DNS server, a route's
+    gateway, a DHCP pool's domain, gateway or DNS servers) that holds
+    white space or a `"` is left out on every line target, the quoting
+    ones included: no address holds a space, and a route whose gateway
+    is left out is left out whole -- with its destination and no next
+    hop it would be another route;
+  * **text** (a description, the SNMP location and contact) is written
+    to the end of the line where the vendor says that place reads it
+    so.  OS10 now quotes a description that holds white space, as Dell
+    documents.  Where the target quotes with no escape (AOS-S, OS10,
+    VyOS) a `"` is written `'`: AOS-S wrote `\"`, which no HPE page
+    documents.  A place no vendor page says reads the whole line (the
+    NX-OS SNMP contact, the EOS SNMP location, an IOS XR VRF
+    description) is written as it stands, under a review line that
+    says so.
+  Each change is a `review:` line at the top of the output that names
+  the place and never the value (`one_value_tree` in
+  `netcanon/migration/_one_value.py`).  FortiOS now escapes the host
+  name.  Guarded by `tests/unit/migration/test_a_name_is_one_word.py`,
+  which sets each such field of every synthetic kitchen sink to a value
+  with white space and one with a quote, renders it onto every public
+  line-grammar codec, and reads the output as text against the places
+  each vendor documents, typed by hand.  Not yet under the rule:
+  RouterOS, whose quoting is a change of its own.
+
+- **An AOS-S `snmp-server contact "IT" location "1OG"` line was one
+  contact.**  HPE prints the contact and the location on one line (a
+  committed WB.16.08 capture does), and the parser took the rest of the
+  line after `contact` for the contact: `IT" location "1OG`, a value
+  with two quotes in it written onto every target, and no location.  A
+  quoted value now ends at its closing quote and the next keyword is
+  read; a bare one is still the rest of the line.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_snmp_contact_and_location.py`.
 
 - **A refused password takes its account with it on FortiOS, RouterOS
   and OPNsense** (Security, above).  The review line is written in

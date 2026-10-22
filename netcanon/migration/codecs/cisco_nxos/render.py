@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import re
 
-from ..._one_value import left_out, splits
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
@@ -126,11 +126,25 @@ def _render_management_plane(tree: CanonicalIntent) -> list[str]:
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco NX-OS config text."""
+    # A name that is not one word where NX-OS reads one is written as
+    # one, at every place it goes; an address is left out; a contact,
+    # whose place Cisco's pages disagree on, is written and said.
+    # Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "NX-OS",
+        names=("hostname", "vlans[].name", "routing_instances[].name"),
+        addresses=(
+            "domain", "ntp_servers", "syslog_servers", "dns_servers",
+            "static_routes[].gateway",
+        ),
+        unread_text=("snmp.contact",),
+    )
     hostname = tree.hostname or "switch"
     lines: list[str] = []
 
     # ── Banner / version / vdc wrapper ──
     lines.append("!Command: show running-config")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append("")
     lines.append(f"version {_version_token(tree)} Bios:version")
     lines.append(f"hostname {hostname}")

@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-22T01:08:53+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T010850Z.json",
-  "mesh_run_started_utc": "2026-10-22T01:08:29+00:00",
+  "started_utc": "2026-10-22T01:16:35+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T011633Z.json",
+  "mesh_run_started_utc": "2026-10-22T01:16:12+00:00",
   "cells_total": 1443,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -593,19 +593,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9272,
+    "ALIGNED": 9223,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4112,
-    "EXPECTED_UNSUPPORTED": 2707,
-    "METHODOLOGY_ISSUE_under": 1881,
+    "EXPECTED_LOSSY": 4131,
+    "EXPECTED_UNSUPPORTED": 2709,
+    "METHODOLOGY_ISSUE_under": 1909,
     "METHODOLOGY_ISSUE_over": 21,
     "STRUCTURAL_ONLY": 4793,
     "TRIVIAL_EMPTY": 34755,
     "fields_total": 57545,
     "severity_high": 4,
-    "severity_medium": 287,
-    "severity_low": 6408,
-    "severity_ok": 50846
+    "severity_medium": 285,
+    "severity_low": 6438,
+    "severity_ok": 50818
   },
   "severity_matrix": {
     "arista_eos": {
@@ -3759,10 +3759,58 @@
           "severity": "ok"
         },
         "vlans": {
-          "actual": "preserved",
-          "expected": "not_applicable",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "id": 10,
+                "name": "User VLAN 10 SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "target": [
+              {
+                "id": 10,
+                "name": "User_VLAN_10_SVI",
+                "description": "",
+                "tagged_ports": [],
+                "untagged_ports": [],
+                "ipv4_addresses": [
+                  {
+                    "ip": "10.10.10.1",
+                    "prefix_length": 24,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            ],
+            "drift": {
+              "vlans[0] {'id': 10, 'name': 'User VLAN 10 SVI'}": {
+                "name": {
+                  "source": "User VLAN 10 SVI",
+                  "target": "User_VLAN_10_SVI"
+                }
+              }
+            },
+            "source_count": 1,
+            "target_count": 1
+          }
         },
         "static_routes": {
           "actual": "trivially_preserved",
@@ -3901,9 +3949,9 @@
       "summary": {
         "ALIGNED": 4,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 2,
+        "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 1,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 30,
@@ -3911,8 +3959,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 3,
-        "severity_ok": 36
+        "severity_low": 2,
+        "severity_ok": 37
       }
     }
   ],

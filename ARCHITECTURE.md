@@ -871,12 +871,28 @@ under the rule.  Guarded by
 `tests/unit/migration/test_a_secret_is_one_value.py`, which reads the
 output as text.
 
+What is not a secret goes through `one_value_tree(tree, ...)`, which
+each line renderer runs before its first line and which returns the
+tree to write (a copy, when anything changes) and the review lines to
+put at the top of the output.  Each renderer names the fields it writes
+as one word, by kind: a NAME that labels (host name, VLAN name, VRF
+name, route name) is written as `one_word()` makes it -- `_` for each
+run of white space, `'` for a `"` -- on the tree, so that every place
+it goes agrees (a VRF with every interface, route and EVPN prefix in
+it, and a name that would then be another VRF's told apart); an
+ADDRESS (a server, a domain, a gateway, a DHCP pool's options) is
+never altered and is left out, a static route whose gateway it is
+whole; a TEXT in a place no vendor page says reads to the end of the
+line is written and said, and one between quotes with no escape
+(AOS-S, VyOS, OS10) has each `"` written `'`.  Guarded by
+`tests/unit/migration/test_a_name_is_one_word.py`.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
-Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
-in hostname / domain / VRF-name tokens; renderers call
-`sanitise_hostname()` so the wire form round-trips through the
-target's own parser.  Source state preserved on canonical, sanitised
-only at the wire boundary.
+Arista EOS and Cisco IOS-XE wrote the host name through
+`sanitise_hostname()` before `one_value_tree` did it for every line
+renderer, with a review line; the calls are kept and change nothing
+now.  Source state preserved on canonical, sanitised only at the wire
+boundary.
 
 **A value is written on one line** (`netcanon/migration/_one_line.py`).
 Every renderer puts a value into its line as it stands, so a value that

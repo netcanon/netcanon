@@ -276,12 +276,14 @@ per_field_expectation:
     references: [aoscx-nxos-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells — `PROD-WEB`, `PROD-DB`, `CORE-ROUTING` and
-      the CANU `NMN` / `HMN` / `CMN` names all survive.  Note this is the VLAN
-      NAME only; the separate canonical VLAN description does not survive (see
-      `vlans[].description`).
+    disposition: lossy
+    reason: >
+      A name that holds white space is written with `_` for each
+      run of it and `'` for a `"`, with a review line
+      (`one_value_tree`, docs/CAPABILITIES.md section C): NX-OS
+      documents a VLAN name of letters, digits, `-` and `_` only.
+      The DCN arch3 leaves' `VLAN 11` lands as `VLAN_11`.  A name
+      with no white space is preserved.
     references: [aoscx-nxos-surface]
 
   "vlans[].ipv4_addresses":

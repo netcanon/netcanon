@@ -399,6 +399,18 @@ have.
   that names it and not the value — a local user and an SNMPv3 user
   whole, the community with its trap hosts, a VRRP password alone.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A `"` in a host name, VLAN name, description or the SNMP location
+  or contact is written `'` as a target**, for the same reason, with a
+  `review:` line for each place; up to 0.7.7 it was written behind a
+  backslash, which no HPE page documents.  An NTP or DNS server, the
+  domain or a route's gateway that holds white space or a `"` is left
+  out and said, the route whole.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **`snmp-server contact "IT" location "1OG"` is two values.**  The
+  switch prints the contact and the location on one line (a committed
+  WB.16.08 capture does).  Up to 0.7.7 the parser read the contact as
+  `IT" location "1OG` and no location, and wrote that onto every
+  target; translate such a config again.
 - **Renaming or dropping `Vlan<N>` in the rename modal changes
   nothing.**  A translation from AOS-S to AOS-S lists each VLAN's
   routed interface under *Other names in the config*.  AOS-S writes

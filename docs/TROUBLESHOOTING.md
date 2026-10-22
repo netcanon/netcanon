@@ -547,6 +547,53 @@ with its space replaced is another secret.
 value the target takes (no white space, no quote), and update whatever
 uses it.  The line names the record; the value is in the source config.
 
+### "review: it holds white space or a quote ... each run of white space is written _"
+
+A host name, VLAN name, VRF name or route name in the source has a
+space (or a `"`) in it, and the target reads that place one word at a
+time.  The name was written with `_` for each run of white space and
+`'` for each `"`, at every place it goes, so the VRF and the interfaces
+in it still agree.  "with a number after it" means another VRF already
+had that name.
+
+**Action:** none is needed for the config to load.  If something
+outside the device matches on the name (monitoring, automation, a
+naming standard), rename it to suit.
+
+### "review: an address that holds white space or a quote"
+
+An NTP, syslog or DNS server, the domain, a route's gateway or a DHCP
+pool's domain, gateway or DNS server in the source holds a space or a
+`"`, which no address does, so the source parser read more than the
+address.  It was left out rather than written as words the target
+would read as something else.  "the
+route is left out whole" means a static route lost its gateway and was
+not written: a route with its destination and no next hop is another
+route.
+
+**Action:** re-create the server or route on the device with the
+address the source device actually uses.
+
+### "review: it holds a double quote, which <target> cannot write between its quotes"
+
+AOS-S, OS10 and VyOS quote this text and document no escape for a `"`
+inside the quotes, so each `"` was written `'`.  "is not documented to
+read in this place" says the same where the target writes the text
+bare.
+
+**Action:** none is needed; edit the text on the device if the quote
+mattered.
+
+### "review: it holds white space, and no <target> page found says this place reads to the end of the line"
+
+The text (an NX-OS SNMP contact, an EOS SNMP location, an IOS XR VRF
+description) was written as it stands, but no vendor page establishes
+that the device reads that place to the end of the line.
+
+**Action:** after loading the config, check the value on the device
+(`show running-config | include <place>`); if it was cut at the first
+space, set it again there, in quotes or with the space taken out.
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG

@@ -464,6 +464,12 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # -- a non-default acct-port -- no capture shows either.  The loss is real
 # and pinned by ``tests/unit/migration/test_a_radius_key_says_its_form.py``;
 # the YAML reasons say so.
+#
+# And three down, each by one, for ``vlans``: aruba_aoss__cisco_iosxe_cli
+# (4 to 3), cisco_iosxe__cisco_iosxe_cli (2 to 1) and opnsense__cisco_iosxe_cli
+# (2 to 1).  A VLAN name that holds white space is written on IOS-XE as one
+# word, with a review line, and the VLAN list is compared whole: the loss
+# each of the three declared is now what their cells show.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -476,13 +482,13 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__opnsense": 6,
     "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
-    "aruba_aoss__cisco_iosxe_cli": 4,
+    "aruba_aoss__cisco_iosxe_cli": 3,
     "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
     "aruba_aoss__opnsense": 7,
     "cisco_iosxe__aruba_aoss": 1,
-    "cisco_iosxe__cisco_iosxe_cli": 2,
+    "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
     "cisco_iosxe__juniper_junos": 1,
     "cisco_iosxe__opnsense": 2,
@@ -516,7 +522,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "mikrotik_routeros__opnsense": 5,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,
-    "opnsense__cisco_iosxe_cli": 2,
+    "opnsense__cisco_iosxe_cli": 1,
     "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 5,
     "opnsense__mikrotik_routeros": 3,

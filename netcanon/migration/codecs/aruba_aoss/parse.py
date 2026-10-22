@@ -110,11 +110,18 @@ _HOSTNAME_RE = re.compile(r"^hostname\s+(\S.*)", re.IGNORECASE)
 _SNMP_COMMUNITY_LINE_RE = re.compile(
     r'^snmp-server\s+community\s+"?([^"\s]+)"?', re.IGNORECASE,
 )
-_SNMP_LOCATION_RE = re.compile(
-    r'^snmp-server\s+location\s+(.+)$', re.IGNORECASE,
+# ``snmp-server [contact <text>] [location <text>]``: one line may set
+# both (HPE prints ``snmp-server contact "IT" location "1OG"``).  A
+# quoted value ends at the quote no backslash escapes (as ``_unquote``
+# reads one) and the next keyword may follow; a bare one is the rest of
+# the line, as before.
+_SNMP_SYSTEM_RE = re.compile(
+    r'^snmp-server[^\S\n]+(?=(?:contact|location)[^\S\n])', re.IGNORECASE,
 )
-_SNMP_CONTACT_RE = re.compile(
-    r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE,
+_SNMP_SYSTEM_FIELD_RE = re.compile(
+    r'(contact|location)[^\S\n]+'
+    r'(?:"((?:[^"\\\n]|\\.)*)"[^\S\n]*|(\S.*))',
+    re.IGNORECASE,
 )
 # SNMPv3 user grammar on Aruba AOS-S (observed on 2930F/3810M):
 #
@@ -479,8 +486,7 @@ _MEMBER_BLOCK_RE = re.compile(r"^member[ \t]+\S+[ \t]*$", re.IGNORECASE)
 _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _HOSTNAME_RE,
     _SNMP_COMMUNITY_LINE_RE,
-    _SNMP_LOCATION_RE,
-    _SNMP_CONTACT_RE,
+    _SNMP_SYSTEM_RE,
     _SNMP_HOST_RE,
     _SNMPV3_USER_RE,
     _SNMPV3_GROUP_BIND_RE,
@@ -1791,19 +1797,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i += 1
             continue
 
-        loc = _SNMP_LOCATION_RE.match(stripped_line)
-        if loc:
+        system = _SNMP_SYSTEM_RE.match(stripped_line)
+        if system:
             if intent.snmp is None:
                 intent.snmp = CanonicalSNMP()
-            intent.snmp.location = loc.group(1).strip().strip('"')
-            i += 1
-            continue
-
-        contact = _SNMP_CONTACT_RE.match(stripped_line)
-        if contact:
-            if intent.snmp is None:
-                intent.snmp = CanonicalSNMP()
-            intent.snmp.contact = contact.group(1).strip().strip('"')
+            fields, pos = stripped_line, system.end()
+            while field := _SNMP_SYSTEM_FIELD_RE.match(fields, pos):
+                quoted, bare = field.group(2), field.group(3)
+                value = _unescape(quoted) if quoted is not None else bare.strip().strip('"')
+                setattr(intent.snmp, field.group(1).lower(), value)
+                if bare is not None:
+                    break
+                pos = field.end()
             i += 1
             continue
 

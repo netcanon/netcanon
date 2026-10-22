@@ -1007,7 +1007,9 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "48321a06dd41",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "12aa29d82a17",
+    # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
+    # as a contact and a location (test_snmp_contact_and_location.py).
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "a4e275c2c670",
