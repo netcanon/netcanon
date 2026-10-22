@@ -311,7 +311,8 @@ class CodecBase(ABC):
     #: This platform's VLAN has a name and no label apart from it, so
     #: the renderer writes ``CanonicalVlan.name`` and nothing of
     #: ``.description`` (IOS-XE, NX-OS, EOS and AOS-S ``name``, Junos
-    #: ``set vlans <name>``).  Where a VLAN's name is only the name of an
+    #: ``set vlans <name>``, the one ``description`` of an OS10
+    #: ``interface vlan``).  Where a VLAN's name is only the name of an
     #: interface of the config, or empty, and it has a description, the
     #: description is written as its name
     #: (:mod:`netcanon.migration._vlan_labels`): applied by

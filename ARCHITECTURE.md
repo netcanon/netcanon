@@ -932,8 +932,9 @@ command.
 OPNsense and RouterOS have no name for a VLAN of its own: the tree
 names it after its interface (`vlan0.10`, `vlan10`) and holds the
 label an operator typed (an OPNsense `<descr>`, a RouterOS
-`comment=`) as its description.  IOS-XE CLI, NX-OS, EOS, AOS-S and
-Junos write one label for a VLAN, its name, and say so
+`comment=`) as its description.  IOS-XE CLI, NX-OS, EOS, AOS-S,
+Junos and OS10 write one label for a VLAN, its name (on OS10 its
+SVI's description), and say so
 (`CodecBase.vlans_have_only_a_name`).  Onto those,
 `vlan_labels_as_names` MOVES a VLAN's description into its name
 where the name is empty or only the name of an interface of the
@@ -945,10 +946,9 @@ then matches nothing; and at the render boundary
 (`CodecBase.render`), on a copy, for a tree that did not come
 through the pipeline.  Moved, not copied: the job's validation then
 lists no description loss for a label that is in the output.
-FortiOS, RouterOS and OS10 are not among them -- a VLAN is an
-interface whose name other lines refer to, or (OS10) the name is
-written only as the description of an SVI the renderer makes --
-and `tests/unit/migration/test_a_vlan_label_is_its_name.py` names
+FortiOS and RouterOS are not among them -- a VLAN is an interface
+whose name other lines refer to -- and
+`tests/unit/migration/test_a_vlan_label_is_its_name.py` names
 every public codec that is not, with its reason.
 
 **Switchport ↔ VLAN projection**

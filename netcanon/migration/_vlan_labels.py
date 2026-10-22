@@ -12,10 +12,10 @@ so that their renderers (and FortiOS's) find the tag by it.
 
 A target whose VLAN has a name and nothing else
 (``CodecBase.vlans_have_only_a_name``: ``vlan 10`` / ``name X`` on
-IOS-XE, NX-OS, EOS and AOS-S, ``set vlans X`` on Junos) wrote that
-interface name, and the label was lost: after OPNsense's VLAN was
-named after its device, ``USER VLAN`` came out as ``name vlan0.10``
-on IOS-XE.
+IOS-XE, NX-OS, EOS and AOS-S, ``set vlans X`` on Junos, the one
+``description`` of an OS10 ``interface vlan``) wrote that interface
+name, and the label was lost: after OPNsense's VLAN was named after
+its device, ``USER VLAN`` came out as ``name vlan0.10`` on IOS-XE.
 So on such a target the label is the name, where the name is only an
 interface name or empty.  A name the config chose for the VLAN itself
 is kept (an AOS-CX ``name``), and its label is lost there, as each

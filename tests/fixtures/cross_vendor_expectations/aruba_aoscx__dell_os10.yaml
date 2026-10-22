@@ -130,16 +130,21 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 7, preserved on 0, both
+      trip. Measured over 7 cells: drifted on 5, preserved on 2, both
       sides empty on 0.
     references: [aoscx-os10-surface]
 
   interfaces[].enabled:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 7, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 7 cells. On 5 further cells the whole
+      `interfaces` list drifted at once (records added or dropped),
+      and the reconciler attributes that single structural event to
+      one owner sub-field rather than counting it against every
+      sibling. So this field shows no loss of its own on this pair:
+      the parent-level drift is recorded against that owner key, and
+      declaring it lossy here would over-claim a second, independent
+      loss that the corpus does not exhibit.
     references: [aoscx-os10-surface]
 
   interfaces[].interface_type:
@@ -179,11 +184,16 @@ per_field_expectation:
     references: [aoscx-os10-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 7, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 7 cells. On 5 further cells the whole
+      `interfaces` list drifted at once (records added or dropped),
+      and the reconciler attributes that single structural event to
+      one owner sub-field rather than counting it against every
+      sibling. So this field shows no loss of its own on this pair:
+      the parent-level drift is recorded against that owner key, and
+      declaring it lossy here would over-claim a second, independent
+      loss that the corpus does not exhibit.
     references: [aoscx-os10-surface]
 
   interfaces[].name:
@@ -431,10 +441,16 @@ per_field_expectation:
     references: [aoscx-os10-surface]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on 5 of 7 cells; the other two drift on the record
-      count only (see vlans[].id). Both codecs model this surface.
+    disposition: lossy
+    reason: >
+      OS10 has one label for a VLAN, its SVI's `description`, which
+      the parser reads as the VLAN's name. An AOS-CX SVI that states
+      a description of its own (`interface vlan 101` / `description
+      PROD-WEB-SVI` beside `vlan 101` / `name PROD-WEB`) keeps it,
+      and the VLAN's name is written only in a `! review:` line of
+      its stanza, so the name reads back as the SVI's description.
+      Measured over 7 cells: drifted on 4 (two of them on the record
+      count only, see vlans[].id), preserved on 3.
     references: [aoscx-os10-surface]
 
   vlans[].tagged_ports:
