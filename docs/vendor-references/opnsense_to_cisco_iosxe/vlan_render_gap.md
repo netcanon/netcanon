@@ -21,9 +21,10 @@ interface on a parent NIC:
 </vlans>
 ```
 
-The OPNsense parser maps `<descr>` into canonical
-`CanonicalVlan.name` (per `parse.py`), leaving
-`CanonicalVlan.description` empty.  Tagged/untagged port lists are
+An OPNsense `<vlan>` has no name of its own: the OPNsense parser
+names `CanonicalVlan.name` after the VLAN's device (`<vlanif>`,
+e.g. `vlan0.10`) and reads `<descr>` into
+`CanonicalVlan.description` (per `parse.py`).  Tagged/untagged port lists are
 not a thing on OPNsense — every `<vlan>` rides its parent NIC, no
 per-port toggles.  L3 addressing of a VLAN is via a zone (`<optN>`)
 mapped to the synthesised vlan device (`em1_vlan10`); the OPNsense
@@ -59,19 +60,19 @@ But the cisco_iosxe target codec emits none of this.
 
 | Canonical field | Disposition | Reason |
 |---|---|---|
-| `vlans` | unsupported | OPNsense source populates id + name; target render emits no `<vlans>` element |
+| `vlans` | unsupported | OPNsense source populates id + name + description; target render emits no `<vlans>` element |
 | `vlans[].id` | unsupported | same as parent |
-| `vlans[].name` | unsupported | same |
-| `vlans[].description` | unsupported | OPNsense source leaves empty (collapses into `name`); target render also emits nothing |
+| `vlans[].name` | unsupported | same; the name is the OPNsense device (`vlan0.10`) |
+| `vlans[].description` | unsupported | same; OPNsense source populates it from `<descr>` (`USER VLAN`), and the label goes with the table |
 | `vlans[].tagged_ports` | not_applicable | OPNsense source never populates |
 | `vlans[].untagged_ports` | not_applicable | OPNsense source never populates |
 | `vlans[].ipv4_addresses` | not_applicable | OPNsense source doesn't currently populate (zone-side L3) |
 
 The `unsupported` label here reflects render-side gap: OPNsense
-source DOES populate VLAN id + name, but the cisco_iosxe target
-render drops the data.  When render-side wire-up lands, the
-disposition flips to `good` for id, `lossy` for name (canonical
-collapse), and stays `not_applicable` for the port-membership
+source DOES populate VLAN id, name and description, but the
+cisco_iosxe target render drops the data.  When render-side
+wire-up lands, the disposition flips to `good` for id, and stays
+`not_applicable` for the port-membership
 sub-fields (OPNsense parser doesn't and won't populate, since
 OPNsense isn't a switch).
 

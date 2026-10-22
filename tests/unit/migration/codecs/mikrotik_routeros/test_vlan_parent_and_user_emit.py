@@ -433,12 +433,13 @@ def test_user_with_foreign_hash_emits_no_password_field():
 def test_mikrotik_unmigratable_hash_emits_review_comment():
     """Foreign bcrypt hash from OPNsense → RouterOS render emits a
     ``# password manager user-name "<n>" -- review: bcrypt hash …``
-    line immediately above the ``add group=... name=<n>`` line.
-    Without this signal an operator reading the migrated config
-    sees a user with no password and no hint that one ever
-    existed.  The user is still added (the comment supplements,
-    doesn't replace, the ``add`` line).  Surfaced as issue #18 in
-    ``tests/fixtures/real/user_smoke_findings.md``.
+    line IN PLACE of the ``add group=... name=<n>`` line.  Surfaced
+    as issue #18 in ``tests/fixtures/real/user_smoke_findings.md``.
+
+    The ``add`` line used to stay, without its password, and RouterOS
+    gives a user added with no password a blank one ("If not
+    specified, it is left blank"): a ``group=full`` user anyone could
+    log in as.  A refused secret drops the whole account.
     """
     intent = CanonicalIntent(
         local_users=[
@@ -461,24 +462,9 @@ def test_mikrotik_unmigratable_hash_emits_review_comment():
     assert expected_comment in out, (
         f"expected review comment not found in render output:\n{out}"
     )
-    # The user is still added with the right group / name — the
-    # comment supplements rather than replaces the add line.
-    assert "add group=full name=root" in out, out
-
-    # The comment line precedes the add line (interleaved shape).
-    lines = out.splitlines()
-    comment_idx = next(
-        i for i, line in enumerate(lines)
-        if line == expected_comment
-    )
-    add_idx = next(
-        i for i, line in enumerate(lines)
-        if line == "add group=full name=root"
-    )
-    assert comment_idx < add_idx, (
-        f"comment line at {comment_idx} expected before add line at "
-        f"{add_idx}\n{out}"
-    )
+    # The account is NOT added: written without its password it
+    # would be an account with a blank one.
+    assert "name=root" not in out, out
 
 
 def test_mikrotik_user_with_no_hashed_password_no_comment():

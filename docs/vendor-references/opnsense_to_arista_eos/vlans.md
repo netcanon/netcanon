@@ -80,12 +80,16 @@ Canonical fields covered (`CanonicalVlan`).
 
 - `vlans[].id`: **good** — OPNsense `<tag>N</tag>` ↔ Arista
   `vlan N`.  Both vendors share 1-4094.
-- `vlans[].name`: **lossy** — OPNsense's `<descr>` is the only
-  label field; canonical `name` and `description` both populate
-  from it on parse, so both fields carry the same text.  Arista
-  `name <X>` lands cleanly with no Arista-side loss; the loss is
-  upstream (OPNsense never carried distinct fields).
-- `vlans[].description`: **lossy** — same rationale as `name`.
+- `vlans[].name`: **good** — an OPNsense `<vlan>` has no name of
+  its own: the opnsense parser names the canonical VLAN after its
+  device (`<vlanif>`, e.g. `vlan0.10`), which Arista writes as
+  `name vlan0.10` and reads back.
+- `vlans[].description`: **lossy** — the parser reads `<descr>`
+  (the operator's label, e.g. `USER VLAN`) as the canonical
+  description, and the Arista render writes a VLAN's `name` and
+  no description line, so the label is lost.  Arista declares
+  `/vlans/vlan/description` lossy, which the validation report
+  lists for each VLAN.
 - `vlans[].tagged_ports` / `untagged_ports`: **not_applicable** —
   OPNsense never populates per-VLAN port-membership lists on
   parse (no per-VLAN port concept).  Arista target render emits
@@ -96,7 +100,9 @@ Canonical fields covered (`CanonicalVlan`).
   OPNsense doesn't have a first-class SVI concept; the closest
   equivalent is a zone interface (`<opt2>`) referencing the
   VLAN's `<vlanif>` device name with the IP on the zone.  The
-  opnsense codec does not currently project the zone-side IP
-  back onto a `CanonicalVlan.ipv4_addresses` record; cross-pair
-  render emits no `interface Vlan<N>` SVI block on the Arista
-  target.
+  opnsense codec does not project the zone-side IP onto a
+  `CanonicalVlan.ipv4_addresses` record: it puts it on the zone's
+  interface record, named after the device, which the Arista
+  target writes as that interface (`interface vlan0.20` /
+  `ip address 192.168.20.1/24` on the kitchen sink).  The address
+  reaches the output; the VLAN record holds none.

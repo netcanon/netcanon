@@ -12,8 +12,10 @@ VLAN handling on this cross-pair has TWO independent gaps stacked:
 
 1. The cisco_iosxe SOURCE codec's `parse()` does not walk `<vlans>`
    or the `openconfig-vlan:switched-vlan` augment under
-   `<ethernet>`.  `intent.vlans` is empty after parse, regardless
-   of what the device's NETCONF reply carries.
+   `<ethernet>`.  Nothing in those subtrees reaches `intent.vlans`;
+   the one VLAN record the parse makes on this corpus is VLAN 10 of
+   `kitchen_sink.xml`, from its SVI (`Vlan10`), named
+   `User VLAN 10 SVI`.
 2. The OPNsense TARGET codec doesn't model VLAN-centric port
    membership.  OPNsense's `<vlans>/<vlan>` carries `<if>` (parent
    NIC) + `<tag>` + `<descr>`, no per-VLAN port list.  Trunking is
@@ -62,28 +64,30 @@ switch.  Cisco's
 
 | Canonical field | Disposition | Reason |
 |---|---|---|
-| `vlans` | not_applicable | source parser doesn't read `<vlans>` |
-| `vlans[].id` | not_applicable | same as parent |
-| `vlans[].name` | not_applicable | same as parent |
-| `vlans[].description` | not_applicable | same as parent |
+| `vlans` | lossy | source parser doesn't read `<vlans>`; the one VLAN it makes from an SVI comes back without the SVI's address and, since an OPNsense `<vlan>` has no name of its own, named after the device the render writes for it (`GigabitEthernet0/0/0_vlan10`), its name moved to the description |
+| `vlans[].id` | (see `vlans`) | the tag comes back |
+| `vlans[].name` | (see `vlans`) | comes back as the device name; the OPNsense parser names a VLAN after its `<vlanif>` |
+| `vlans[].description` | (see `vlans`) | gains the name, which the render writes as the device's `<descr>` |
 | `vlans[].tagged_ports` | not_applicable | source parser doesn't read; OPNsense target also unsupported |
 | `vlans[].untagged_ports` | not_applicable | same as tagged_ports |
-| `vlans[].ipv4_addresses` | not_applicable | source parser doesn't read; OPNsense's L3-on-VLAN model is zone-side anyway |
+| `vlans[].ipv4_addresses` | (see `vlans`) | an OPNsense `<vlan>` holds no address; the address stays on the interface |
 
 Note: this differs from the `cisco_iosxe_cli__opnsense.yaml`
 sibling pair where the CLI parser DOES populate `intent.vlans` and
 the cross-pair runs into the OPNsense render-side modelling
 boundary (resulting in `lossy` for the id/name/description and
 `unsupported` for the port-membership lists).  On the NETCONF
-direction the source-parse gap dominates and everything is
+direction the source-parse gap dominates: the only VLAN is the one
+made from an SVI, and the port-membership lists stay
 `not_applicable`.
 
 When (if) parser-side wire-up lands for `<vlans>` in the
 cisco_iosxe codec, the dispositions on this pair would flip:
 
 - `vlans[].id`: `not_applicable` -> `good`
-- `vlans[].name` / `vlans[].description`: -> `lossy` (collapse into
-  OPNsense `<descr>`)
+- `vlans[].name` / `vlans[].description`: -> `lossy` (an OPNsense
+  `<vlan>` has no name of its own: a VLAN comes back named after its
+  device, its name as its description)
 - `vlans[].tagged_ports` / `untagged_ports`: -> `unsupported`
   (OPNsense target doesn't model)
 - `vlans[].ipv4_addresses`: -> `lossy` (OPNsense moves L3 to zone side)

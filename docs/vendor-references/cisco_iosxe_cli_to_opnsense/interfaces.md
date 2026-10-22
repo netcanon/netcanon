@@ -114,7 +114,12 @@ Disposition by sub-field:
   rendered as-is on OPNsense (the operator-facing label is
   ``wan`` / ``lan`` / ``opt<N>``; the BSD device name slot is for
   FreeBSD driver names).  The port-rename mesh handles this; canonical
-  carries whatever the source emitted.
+  carries whatever the source emitted.  The round trip can also add
+  records: a VLAN the render links to no VLAN interface of the source
+  is written as a ``<parent>_vlan<id>`` device
+  (``Port-channel1_vlan10``), which the OPNsense parser reads back as
+  an interface of its own (``ianaift:l3ipvlan``).  No source record is
+  lost.
 - ``description``: **good** — both vendors round-trip free-form
   descriptions.  Cisco truncates at 240 chars; OPNsense imposes no
   length limit.

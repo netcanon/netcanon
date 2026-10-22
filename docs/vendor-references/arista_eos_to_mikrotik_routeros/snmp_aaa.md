@@ -138,9 +138,9 @@ banner; the rest land in raw_sections.
 **RADIUS** — lossy:
 
 * Host / auth_port / acct_port round-trip cleanly.
-* Shared secret: Arista's `key 7 ...` (type-7 reversible) or
-  cleartext `key K` -> RouterOS's `secret=K`.  Both codecs pass
-  through verbatim.
+* Shared secret: cleartext `key K` -> RouterOS's `secret=K`.
+  Arista's `key 7 ...` is held behind `eos:`, not decoded, and the
+  server is written with no secret, beside a review comment.
 * Service binding: RouterOS's `service=login,ppp,wireless,...`
   versus Arista's method-list / server-group model is not
   modelled canonically.  Arista `aaa group server radius` /

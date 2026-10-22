@@ -62,14 +62,16 @@ Aruba VLAN-centric model:
 OPNsense -> Aruba:
 
 - `vlans[].id`: **good** — both vendors share 1-4094.
-- `vlans[].name`: **lossy** — OPNsense `<descr>` is the only label
-  field; canonical `name` and `description` both populate from it
-  on parse, so both fields carry the same text.  Aruba's per-VLAN
-  `name "<x>"` lands cleanly with no Aruba-side loss; the loss is
-  upstream (OPNsense never carried distinct `name` and `description`
-  in the first place).
-- `vlans[].description`: **lossy** — same rationale; one OPNsense
-  XML field populating two canonical fields.
+- `vlans[].name`: **good** — an OPNsense `<vlan>` has no name of
+  its own: the opnsense parser names the canonical VLAN after its
+  device (`<vlanif>`, e.g. `vlan0.10`), which Aruba writes as
+  `name "vlan0.10"` and reads back.
+- `vlans[].description`: **lossy** — the parser reads `<descr>`
+  (the operator's label, e.g. `USER VLAN`) as the canonical
+  description, and an Aruba VLAN has one label, its `name`, which
+  holds the name, so the label is lost.  AOS-S declares
+  `/vlans/vlan/description` lossy, which the validation report
+  lists for each VLAN.
 - `vlans[].tagged_ports` / `untagged_ports`: **not_applicable** —
   OPNsense never populates the port-membership lists on parse (no
   per-VLAN port concept).  Aruba target render emits no `tagged` /

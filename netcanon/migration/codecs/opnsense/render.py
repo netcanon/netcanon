@@ -35,9 +35,11 @@ of keeping both directions adjacent to the code that uses them.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from ..._comments import comment_text
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
@@ -50,9 +52,10 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ...canonical.intent import CanonicalIntent
+from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from ...canonical.transforms import is_every_vlan
 from ..base import RenderError
+from .port_names import classify_port_name
 
 # ---------------------------------------------------------------------------
 # Top-level render entry — codec.render() is a one-line delegator to this.
@@ -147,6 +150,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="plain",
                         target_label="OPNsense",
+                        secret=server.key,
                     )
             ET.SubElement(auth_el, "radius_auth_port").text = (
                 str(server.auth_port)
@@ -167,46 +171,38 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         # tests/fixtures/real/user_smoke_findings.md issue #1).
         #
         # Policy lives in :mod:`netcanon.migration._user_secrets`
-        # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt, sha512}``;
-        # PHP's password_verify() also consumes a ``$6$`` crypt string).
+        # (``_TARGET_ACCEPTS["opnsense"] = {bcrypt, sha512}``; PHP's
+        # password_verify() also consumes a ``$6$`` crypt string).
         # When the hash is unmigratable, emit a comment-form review
-        # line INSIDE the ``<user>`` element naming the source
-        # algorithm so the operator knows what to reset from, and
-        # skip the ``<password>`` child entirely.  Plaintext is
-        # accepted verbatim (operator-supplied).
+        # line IN PLACE of the ``<user>`` element, naming the source
+        # algorithm so the operator knows what to reset from: a
+        # refused secret drops the whole account, never the password
+        # alone (the element used to stay, with no ``<password>``).
+        # A TYPED password is refused the same way: ``<password>`` is
+        # what password_verify() checks a password against, and the
+        # typed string written there opened nothing.
         for user in intent.local_users:
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "opnsense",
+            ):
+                # The shared helper natively produces an
+                # XML-comment-safe body (single-dash separator for
+                # ``comment_syntax="xml"``).
+                algorithm, _payload = classify_hash(user.hashed_password)
+                review = format_review_comment(
+                    user.name, algorithm, comment_syntax="xml",
+                    target_label="OPNsense",
+                )
+                body = review.removeprefix("<!-- ").removesuffix(" -->")
+                sys_el.append(ET.Comment(body))
+                continue
             user_el = ET.SubElement(sys_el, "user")
             ET.SubElement(user_el, "name").text = user.name
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "opnsense"):
-                    # Strip the ``alg:`` tag so OPNsense's
-                    # <password> element carries the raw value
-                    # (e.g. ``$2y$10$...`` for bcrypt; the literal
-                    # password for plaintext).
-                    algorithm, payload = classify_hash(user.hashed_password)
-                    if algorithm == "plaintext":
-                        hash_out = payload or user.hashed_password
-                    else:
-                        hash_out = payload
-                    ET.SubElement(user_el, "password").text = hash_out
-                else:
-                    # Comment-form review line — XML comment syntax
-                    # places a sibling <!-- ... --> node inside the
-                    # <user> element so the operator sees a clear
-                    # "reset this password" reminder rather than a
-                    # broken hash literal masquerading as bcrypt.
-                    #
-                    # The shared helper natively produces an
-                    # XML-comment-safe body (single-dash separator
-                    # for ``comment_syntax="xml"``) so we can embed
-                    # the body directly without local post-processing.
-                    algorithm, _payload = classify_hash(user.hashed_password)
-                    review = format_review_comment(
-                        user.name, algorithm, comment_syntax="xml",
-                        target_label="OPNsense",
-                    )
-                    body = review.removeprefix("<!-- ").removesuffix(" -->")
-                    user_el.append(ET.Comment(body))
+                # Strip the ``alg:`` tag so OPNsense's <password>
+                # element carries the raw hash (e.g. ``$2y$10$...``).
+                _algorithm, payload = classify_hash(user.hashed_password)
+                ET.SubElement(user_el, "password").text = payload
             # Sub-finding 19 round-trip: emit ``<scope>system</scope>``
             # only for admin-tier users so the parser's new symmetric
             # rule (scope=system OR priv=page-all OR groupname=admins
@@ -255,10 +251,29 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     #      empty so disabled / sparse ifaces survive round-trip.
     #   2. Zone-tag mangling — ``_zone_tag_for`` is lossy; the ``<if>``
     #      child carries the unmangled name so reparse can recover it.
-    if intent.interfaces:
+    #
+    # A member of a LAG is not assigned: OPNsense adds only an
+    # unassigned interface to a LAGG ("Only unassigned interfaces can
+    # be added to LAGG", docs.opnsense.org, Other Types).  It is
+    # written in its ``<lagg>``'s ``<members>`` alone, and what it held
+    # that a zone would have carried is said there (``_members_of``,
+    # ``_held_by``).  A member is a RECORD, not a name: another record
+    # under the member's name keeps its zone.
+    lagg_members = _members_of(intent)
+    member_records = {
+        id(record) for _, record in lagg_members.values() if record is not None
+    }
+    # A VLAN device that holds nothing a zone holds is written in
+    # <vlans> alone (see _unassigned_vlan_devices).
+    unassigned = _unassigned_vlan_devices(intent)
+    zones = [
+        i for i in intent.interfaces
+        if id(i) not in member_records and id(i) not in unassigned
+    ]
+    if zones:
         ifaces_el = ET.SubElement(root, "interfaces")
         used_tags: dict[str, int] = {}
-        for iface in intent.interfaces:
+        for iface in zones:
             base_tag = _zone_tag_for(iface.name)
             # Disambiguate collisions: if two distinct canonical names
             # sanitise to the same tag (e.g. ``A1`` and ``a1`` both
@@ -271,93 +286,96 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                 zone_name = f"{base_tag}_{seen + 1}"
             used_tags[base_tag] = seen + 1
             zone_el = ET.SubElement(ifaces_el, zone_name)
-            # Always emit ``<if>`` FIRST carrying the canonical name
-            # verbatim — keeps the iface name round-trippable across
-            # the lossy zone-tag sanitisation, and ensures sparse /
-            # disabled-only interfaces are never empty (so the parser
-            # doesn't drop them under the empty-stub rule).
-            ET.SubElement(zone_el, "if").text = iface.name
-            # kind=mgmt cascade marker — when the canonical interface
-            # carries the explicit mgmt role (cisco_iosxe_cli's
-            # Mgmt-vrf promotion, arista's Management<N> classifier,
-            # junos's fxp0), surface a ``<descr>Management</descr>``
-            # so the OPNsense UI labels the zone clearly even when
-            # the source had no human-readable description.  An
-            # operator-supplied description still wins.  Documented
-            # at docs.opnsense.org/manual/interfaces.html — the
-            # ``<descr>`` element is the zone label in the GUI.
-            if iface.description:
-                ET.SubElement(zone_el, "descr").text = iface.description
-            elif iface.kind == "mgmt":
-                ET.SubElement(zone_el, "descr").text = "Management"
-            if iface.enabled:
-                ET.SubElement(zone_el, "enable")
-            if iface.mtu is not None:
-                ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
-            # Sub-finding 9a round-trip: a CanonicalInterface with
-            # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
-            # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
-            # form so parse → render → parse preserves the flag.
-            # Static IPs take precedence — a DHCP-client interface
-            # with a manually-pinned address shouldn't exist in
-            # OPNsense's data model, but if both are set the static
-            # wins (matches the parser's IF/ELIF order).
-            if iface.ipv4_addresses:
-                ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
-                ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
-            elif iface.dhcp_client:
-                ET.SubElement(zone_el, "ipaddr").text = "dhcp"
-            # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
-            # Only one v6 address fits the OPNsense schema.
-            #
-            # ``dhcp_client_v6`` (dhcp6 / slaac / track6 / 6rd / 6to4)
-            # is the keyword form on ``<ipaddrv6>`` — no ``<subnetv6>``
-            # accompanies it.  Static address takes precedence (OPNsense
-            # doesn't accept both); the parser's IF/ELIF order matches.
-            if iface.ipv6_addresses:
-                ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
-                ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
-            elif iface.dhcp_client_v6:
-                ET.SubElement(zone_el, "ipaddrv6").text = iface.dhcp_client_v6
+            _zone_body(zone_el, iface)
 
-    # VLANs — emit <vlans><vlan> per CanonicalVlan.  Real OPNsense
-    # <vlan> elements REQUIRE a <if> child naming the parent
-    # physical / lagg interface; without it the VLAN cannot bind
-    # at the kernel level and OPNsense's UI also refuses to save.
-    # See real fixtures under tests/fixtures/real/opnsense/ — every
-    # <vlan> carries <if>, <tag>, <pcp>, <proto/>, <descr>, <vlanif>
-    # in that order, and the OPNsense docs at
-    # https://docs.opnsense.org/manual/other-interfaces.html confirm
-    # parent-interface + tag are mandatory.  Emitting a <vlan> with
-    # only <tag> (the prior bug) leaked invalid XML to operators
-    # — see tests/fixtures/real/user_smoke_findings.md issue #5.
+    # VLANs.  A <vlan> is a VLAN device (core ``Vlan.xml``): <if> the
+    # device it rides on, <tag>, <pcp>, <proto>, <descr>, and <vlanif>
+    # the device's name, which a zone's <if> assigns.  OPNsense's
+    # model requires <if>, <tag> and <vlanif>
+    # (https://docs.opnsense.org/manual/other-interfaces.html).
     #
-    # Parent-interface lookup walks LAGs and physical interfaces in
-    # canonical order: prefer a LAG that carries this VLAN on its
-    # trunk, then fall back to "first lagg", then "first physical".
-    if intent.vlans:
+    # A VLAN interface of the tree is written as the device of that
+    # name, so that the zone written for it above names a device this
+    # output defines, on the parent the config states.  Before, every
+    # VLAN was written as ``<parent>_vlan<tag>`` on a parent chosen
+    # here: each zone on a VLAN named a device the output did not
+    # have, and the committed capture's five VLANs came out on its
+    # WAN port.  A VLAN no interface is for is still written on a
+    # parent chosen from what carries it (_vlan_parent_for).
+    devices = _vlan_devices(intent)
+    if intent.vlans or devices:
         vlans_el = ET.SubElement(root, "vlans")
         parent_default = _vlan_parent_default(intent)
         carriers = _vlan_carriers(intent)
-        for vlan in intent.vlans:
+        written: set[tuple[str, int]] = set()
+        # Each device's parent, to know which carry another VLAN
+        # (whose <proto> must then say 802.1q: blank, OPNsense sends
+        # such a device as 802.1ad).
+        parents = {
+            device.record.vlan_parent for device in devices
+            if device.record.vlan_parent
+        }
+
+        def write_device(device: _VlanDevice) -> None:
+            record = device.record
+            if device.tag is None:
+                vlans_el.append(ET.Comment(_comment_text(
+                    f"review: {record.name} is a VLAN interface whose "
+                    f"tag the tree does not state, so no <vlan> defines it"
+                )))
+                return
+            parent = record.vlan_parent or carriers.get(
+                device.tag, parent_default,
+            )
             vlan_el = ET.SubElement(vlans_el, "vlan")
+            ET.SubElement(vlan_el, "if").text = parent
+            ET.SubElement(vlan_el, "tag").text = str(device.tag)
+            ET.SubElement(vlan_el, "pcp").text = "0"
+            proto_el = ET.SubElement(vlan_el, "proto")
+            if record.name in parents:
+                proto_el.text = "802.1q"
+            descr = _vlan_descr(device.vlan, record.name)
+            if descr:
+                ET.SubElement(vlan_el, "descr").text = descr
+            ET.SubElement(vlan_el, "vlanif").text = record.name
+            if not _opnsense_takes_device_name(record.name, parent, device.tag):
+                vlan_el.append(ET.Comment(_comment_text(
+                    f"review: OPNsense's VLAN form refuses the device "
+                    f"name {record.name} when this VLAN is saved; it takes "
+                    f"{_device_prefix(parent)}0 followed by digits and dots, "
+                    f"or {parent}_vlan{device.tag}"
+                )))
+            written.add((parent, device.tag))
+
+        by_vlan = {id(device.vlan): device for device in devices if device.vlan}
+        for vlan in intent.vlans:
+            device = by_vlan.get(id(vlan))
+            if device is not None:
+                write_device(device)
+                continue
             parent_if = _vlan_parent_for(vlan, carriers, parent_default)
+            if (parent_if, vlan.id) in written:
+                # OPNsense keeps one device for a tag on a parent
+                # (``Vlan.xml``: the tag is unique with <if>).
+                continue
+            vlan_el = ET.SubElement(vlans_el, "vlan")
             ET.SubElement(vlan_el, "if").text = parent_if
             ET.SubElement(vlan_el, "tag").text = str(vlan.id)
             ET.SubElement(vlan_el, "pcp").text = "0"
             ET.SubElement(vlan_el, "proto")
-            if vlan.name:
-                ET.SubElement(vlan_el, "descr").text = vlan.name
-            # OPNsense convention: <vlanif> carries the synthesised
-            # device name "<parent>_vlan<tag>" used by the kernel
-            # to instantiate the 802.1Q child interface.  Real
-            # exports use both this form and the FreeBSD-historical
-            # "vlan0.<tag>" sequential form; the parent_vlan_tag
-            # form is unambiguous when multiple parents carry
-            # different VLANs.
+            descr = _vlan_descr(vlan, "")
+            if descr:
+                ET.SubElement(vlan_el, "descr").text = descr
+            # The legacy device name, which OPNsense's form takes for
+            # any parent and tag (``Vlan.php``) and which no other
+            # parent's VLAN can have.
             ET.SubElement(vlan_el, "vlanif").text = (
                 f"{parent_if}_vlan{vlan.id}"
             )
+            written.add((parent_if, vlan.id))
+        for device in devices:
+            if device.vlan is None:
+                write_device(device)
 
     # DHCP pools (Tier 2).  OPNsense keys DHCP config by interface
     # zone.  A pool's ``interface`` holds a port name -- this
@@ -397,11 +415,21 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         for lag in intent.lags:
             lagg_el = ET.SubElement(laggs_el, "lagg")
             ET.SubElement(lagg_el, "laggif").text = lag.name
-            if lag.members:
-                ET.SubElement(lagg_el, "members").text = ",".join(lag.members)
+            members = [m for m, of in lagg_members.items() if of[0] == lag.name]
+            if members:
+                ET.SubElement(lagg_el, "members").text = ",".join(members)
             ET.SubElement(lagg_el, "proto").text = (
                 _CANONICAL_MODE_TO_OPNSENSE_PROTO.get(lag.mode, "lacp")
             )
+            for member in members:
+                record = lagg_members[member][1]
+                held = _held_by(record) if record is not None else []
+                if held:
+                    lagg_el.append(ET.Comment(
+                        f" review: {_dashes_apart(member)} is a member of this"
+                        " LAGG, and OPNsense assigns no member of a LAGG:"
+                        f" not written: {', '.join(held)} "
+                    ))
 
     # SNMP (Tier 2) — OPNsense snmpd plugin element.
     if intent.snmp is not None and (
@@ -592,6 +620,269 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+def _members_of(
+    intent: CanonicalIntent,
+) -> dict[str, tuple[str, CanonicalInterface | None]]:
+    """Every member of a LAG the output writes, with its LAG and its
+    interface record (``None`` where it has none).
+
+    A member is one the LAG lists or one whose record names the LAG
+    (the tree states it twice); the first LAG that claims a port has
+    it.  Members of a LAG are in ``<members>``, never in
+    ``<interfaces>``.
+
+    A member's record is the one that names a LAG, and only where no
+    record of the name does, the first of the name.  Two source ports
+    a port map put on one name are two records: the one that is no
+    member keeps its zone and what it holds (the job says the names
+    are fused), and nothing it holds is said of the member.
+    """
+    lag_names = {lag.name for lag in intent.lags}
+    first: dict[str, CanonicalInterface] = {}
+    in_a_lag: dict[str, CanonicalInterface] = {}
+    for iface in intent.interfaces:
+        first.setdefault(iface.name, iface)
+        if iface.lag_member_of in lag_names:
+            in_a_lag.setdefault(iface.name, iface)
+    members: dict[str, tuple[str, CanonicalInterface | None]] = {}
+    for lag in intent.lags:
+        for name in lag.members:
+            members.setdefault(
+                name, (lag.name, in_a_lag.get(name) or first.get(name)),
+            )
+    for iface in intent.interfaces:
+        if iface.lag_member_of in lag_names:
+            members.setdefault(iface.name, (iface.lag_member_of, iface))
+    return members
+
+
+def _zone_body(zone_el: ET.Element, iface) -> None:
+    """Write one interface's children into its zone element."""
+    # Always emit ``<if>`` FIRST carrying the canonical name
+    # verbatim — keeps the iface name round-trippable across
+    # the lossy zone-tag sanitisation, and ensures sparse /
+    # disabled-only interfaces are never empty (so the parser
+    # doesn't drop them under the empty-stub rule).
+    ET.SubElement(zone_el, "if").text = iface.name
+    # kind=mgmt cascade marker — when the canonical interface
+    # carries the explicit mgmt role (cisco_iosxe_cli's
+    # Mgmt-vrf promotion, arista's Management<N> classifier,
+    # junos's fxp0), surface a ``<descr>Management</descr>``
+    # so the OPNsense UI labels the zone clearly even when
+    # the source had no human-readable description.  An
+    # operator-supplied description still wins.  Documented
+    # at docs.opnsense.org/manual/interfaces.html — the
+    # ``<descr>`` element is the zone label in the GUI.
+    if iface.description:
+        ET.SubElement(zone_el, "descr").text = iface.description
+    elif iface.kind == "mgmt":
+        ET.SubElement(zone_el, "descr").text = "Management"
+    if iface.enabled:
+        ET.SubElement(zone_el, "enable")
+    if iface.mtu is not None:
+        ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
+    # Sub-finding 9a round-trip: a CanonicalInterface with
+    # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
+    # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
+    # form so parse → render → parse preserves the flag.
+    # Static IPs take precedence — a DHCP-client interface
+    # with a manually-pinned address shouldn't exist in
+    # OPNsense's data model, but if both are set the static
+    # wins (matches the parser's IF/ELIF order).
+    if iface.ipv4_addresses:
+        ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
+        ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+    elif iface.dhcp_client:
+        ET.SubElement(zone_el, "ipaddr").text = "dhcp"
+    # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
+    # Only one v6 address fits the OPNsense schema.
+    #
+    # ``dhcp_client_v6`` (dhcp6 / slaac / track6 / 6rd / 6to4)
+    # is the keyword form on ``<ipaddrv6>`` — no ``<subnetv6>``
+    # accompanies it.  Static address takes precedence (OPNsense
+    # doesn't accept both); the parser's IF/ELIF order matches.
+    if iface.ipv6_addresses:
+        ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
+        ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
+    elif iface.dhcp_client_v6:
+        ET.SubElement(zone_el, "ipaddrv6").text = iface.dhcp_client_v6
+
+
+def _held_by(iface: CanonicalInterface) -> list[str]:
+    """The zone elements *iface* would have been written with, beyond
+    its name and its ``<enable>`` -- what a member of a LAGG, which
+    OPNsense does not assign, cannot carry -- and ``disabled`` for a
+    member that is down.  Element names only: no value of the config
+    goes into the comment that says them."""
+    scratch = ET.Element("zone")
+    _zone_body(scratch, iface)
+    held = [child.tag for child in scratch if child.tag not in ("if", "enable")]
+    if not iface.enabled:
+        held.append("disabled")
+    return held
+
+
+def _dashes_apart(name: str) -> str:
+    """*name* with no two dashes together, which an XML comment may not
+    hold."""
+    return re.sub(r"-(?=-)", "- ", name)
+
+
+class _VlanDevice:
+    """A VLAN interface of the tree, its tag and the VLAN it is for."""
+
+    __slots__ = ("record", "tag", "vlan")
+
+    def __init__(self, record: Any, tag: int | None, vlan: Any) -> None:
+        self.record = record
+        self.tag = tag
+        self.vlan = vlan
+
+
+#: A name that is the SVI of the VLAN its digits say on the switch
+#: platforms (IOS-XE, NX-OS and EOS ``Vlan10``, OS10 ``vlan10``,
+#: AOS-CX ``vlan 10`` -- with the space, as every AOS-CX capture
+#: writes it).  Read only for an interface the tree links to no VLAN.
+_VLAN_N = re.compile(r"vlan ?(\d{1,4})", re.IGNORECASE)
+
+
+def _tag_in_name(name: str) -> int | None:
+    """The VLAN *name* is the interface of, read from the name: this
+    codec's own reading of it (``vlan0.10``), or ``vlan<N>``."""
+    ident = classify_port_name(name)
+    if ident.kind == "svi" and ident.index is not None:
+        return ident.index
+    m = _VLAN_N.fullmatch(name)
+    return int(m.group(1)) if m else None
+
+
+def _vlan_devices(intent: CanonicalIntent) -> list[_VlanDevice]:
+    """Every VLAN interface of *intent*, with its tag and its VLAN.
+
+    A VLAN interface (``ianaift:l3ipvlan``) is linked to the VLAN
+    NAMED after it -- how this codec's parser, and the RouterOS and
+    FortiOS parsers, say which tag a VLAN interface has -- and
+    otherwise to the first VLAN whose id its name says
+    (:func:`_tag_in_name`; an SVI from a switch).  Each VLAN is
+    linked to one interface at most.
+
+    Returns:
+        The VLAN interfaces in the order of ``intent.interfaces``.
+        ``tag`` is ``None`` where neither says one.
+    """
+    by_name: dict[str, list[Any]] = {}
+    by_id: dict[int, list[Any]] = {}
+    for vlan in intent.vlans:
+        by_name.setdefault(vlan.name, []).append(vlan)
+        by_id.setdefault(vlan.id, []).append(vlan)
+    taken: set[int] = set()
+
+    def first_free(found: list[Any]) -> Any:
+        # A list for one name or id is a handful long; each VLAN in
+        # it is taken once.
+        while found and id(found[0]) in taken:
+            found.pop(0)
+        return found[0] if found else None
+
+    records = [
+        iface for iface in intent.interfaces
+        if iface.interface_type == "ianaift:l3ipvlan"
+    ]
+    devices: list[_VlanDevice] = []
+    unnamed: list[_VlanDevice] = []
+    for record in records:
+        vlan = first_free(by_name.get(record.name, []))
+        if vlan is not None:
+            taken.add(id(vlan))
+            devices.append(_VlanDevice(record, vlan.id, vlan))
+        else:
+            device = _VlanDevice(record, _tag_in_name(record.name), None)
+            devices.append(device)
+            unnamed.append(device)
+    for device in unnamed:
+        if device.tag is None:
+            continue
+        vlan = first_free(by_id.get(device.tag, []))
+        if vlan is not None:
+            taken.add(id(vlan))
+            device.vlan = vlan
+    return devices
+
+
+def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
+    """The VLAN interfaces of *intent* that are written with no zone.
+
+    OPNsense makes a VLAN device from its <vlan> alone; a zone
+    assigns it only to give it something -- an address, a
+    description, an MTU, a state.  A VLAN interface that holds none
+    of what a zone of this output holds, and that no DHCP pool is on,
+    is written in <vlans> alone: the parser makes such a record for a
+    device no zone assigns, and written as a zone it would be
+    assigned, and enabled, on the target.  A zone that assigned it
+    with nothing in it is not written either; nothing else in this
+    output names a zone by its tag.
+
+    Returns:
+        The ``id()`` of each such record.
+    """
+    pooled = {pool.interface for pool in intent.dhcp_servers}
+    return {
+        id(iface) for iface in intent.interfaces
+        if iface.interface_type == "ianaift:l3ipvlan"
+        and iface.name not in pooled
+        and iface.enabled
+        and not (
+            iface.description or iface.kind or iface.mtu is not None
+            or iface.ipv4_addresses or iface.ipv6_addresses
+            or iface.dhcp_client or iface.dhcp_client_v6
+            or iface.vrrp_groups
+        )
+    }
+
+
+def _vlan_descr(vlan: Any, device_name: str) -> str:
+    """The <descr> of *vlan*'s device: its description, else its name
+    where that is not the device's own (a switch VLAN's ``name``)."""
+    if vlan is None:
+        return ""
+    if vlan.description:
+        return vlan.description
+    return vlan.name if vlan.name != device_name else ""
+
+
+#: The device names OPNsense's VLAN form takes besides the legacy
+#: ``<parent>_vlan<tag>`` (``Vlan.php``): the prefix, a ``0`` and one to
+#: ten digits and dots.
+_DEVICE_NAME = {
+    "vlan": re.compile(r"vlan0[0-9.]{1,10}"),
+    "qinq": re.compile(r"qinq0[0-9.]{1,10}"),
+}
+
+
+def _device_prefix(parent: str) -> str:
+    """The prefix OPNsense's form requires of a device on *parent*:
+    ``qinq`` on a parent whose name holds ``vlan``, else ``vlan``
+    (``Vlan.php``)."""
+    return "qinq" if "vlan" in parent else "vlan"
+
+
+def _opnsense_takes_device_name(name: str, parent: str, tag: int) -> bool:
+    """Does OPNsense's VLAN form take *name* for a device on *parent*
+    with *tag*?  ``Vlan.php`` takes ``<parent>_vlan<tag>``, and
+    otherwise the prefix of :func:`_device_prefix`, a ``0`` and one
+    to ten digits and dots."""
+    if name == f"{parent}_vlan{tag}":
+        return True
+    return _DEVICE_NAME[_device_prefix(parent)].fullmatch(name) is not None
+
+
+def _comment_text(text: str) -> str:
+    """*text* as the body of an XML comment, a space either side: XML
+    forbids ``--`` in a comment and a ``-`` at its end, and a name from
+    a config can hold either (``_comments.comment_text``)."""
+    return f" {comment_text(text, 'xml')} "
 
 
 def _vlan_parent_default(intent: CanonicalIntent) -> str:

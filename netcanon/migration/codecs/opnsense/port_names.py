@@ -163,8 +163,11 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     the source-side ``opnsense_driver`` meta hint wins when
     present (same-vendor round-trip preserves the actual NIC
     type).  SVIs render as ``<parent>.<vlan_id>``; if no parent
-    is in the meta hint, default to ``lagg0`` (the typical
-    OPNsense LAG parent for VLANs in real deployments).
+    is in the meta hint, as ``vlan0.<vlan_id>``.  The name is the
+    VLAN DEVICE's (``<vlanif>``), not a statement of its parent:
+    OPNsense's VLAN form (``Vlan.php``) takes ``vlan0`` and digits
+    and dots for a device, or ``<parent>_vlan<tag>``, and refuses
+    ``lagg0.10``, the default this used to be.
 
     Returns None for kinds OPNsense can't deterministically emit
     (hw_aggregate, breakout, mgmt) — OPNsense is a BSD appliance
@@ -180,7 +183,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "lag":
         return f"lagg{identity.index or 0}"
     if identity.kind == "svi":
-        parent = identity.meta.get("opnsense_parent") or "lagg0"
+        parent = identity.meta.get("opnsense_parent") or "vlan0"
         return f"{parent}.{identity.index}"
     if identity.kind == "loopback":
         return f"lo{identity.index or 0}"

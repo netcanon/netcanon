@@ -256,17 +256,17 @@ per_field_expectation:
     references: [opnsense-vyos-surface]
 
   "interfaces[].interface_type":
-    disposition: good
-    note: >
-      Nothing to lose: the OPNsense parser populates the IANA type hint on
-      ZERO of the 30 interface records, so the field is empty on both sides
-      of every cell.
-      Recorded as measurement rather than as a pass: vyos DOES declare
-      `/interfaces/interface/config/type` LOSSY on its own side, with the
-      honest reason that VyOS has no IANA ifType and the codec infers it
-      from the name shape (`ethN` -> ethernetCsmacd, `lo`/`dumN` ->
-      softwareLoopback, `bondN` -> ieee8023adLag).  That declaration is
-      real and bites other sources; on this pair it has nothing to bite on.
+    disposition: lossy
+    reason: >
+      The OPNsense parser types its VLAN devices (`ianaift:l3ipvlan`), and
+      VyOS loses the type: the render writes each device as an `ethernet
+      vlan0.<n>` stanza, not as a `vif` of the port it rides on, and the VyOS
+      parser reads that back untyped. Drifts on
+      `user_contrib_supergate_opn25.xml`; on `kitchen_sink.xml` the inventory
+      changes size and the drift is attributed to `interfaces[].name`. That is
+      the path the mesh measures, which translates no port name; a plan
+      endpoint, which does, leaves each VLAN device out instead, as a name
+      VyOS has no form for, and the job is `partial` and lists it.
     references: [opnsense-vyos-surface]
 
   "interfaces[].lag_member_of":
@@ -338,18 +338,22 @@ per_field_expectation:
       VLAN database; 802.1Q VLANs are modelled as `vif <vid>`
       sub-interfaces".  Measured: 10 VLAN records across the 2 populated
       cells become 0, and the rendered config contains no VLAN stanza of
-      any kind.  opnsense declares `/vlans/vlan/id` and `/vlans/vlan/name`
-      SUPPORTED, so the source side is not the problem.
+      any kind.  opnsense declares `/vlans/vlan/id` SUPPORTED, so the
+      source side is not the problem.
       This key carries the record-level loss for the whole `vlans` list.
       Recorded `unsupported` rather than `lossy` because the record
       vanishes rather than degrading (#436).
       What partly rescues this in practice, and is worth checking per
       device: the routed sub-interface that carries the tag is a separate
-      canonical record and DOES survive.  7 of the 10 VLANs have a
-      `vlan0.<vid>` twin in `interfaces[]` that round-trips with its
-      addressing and description intact.  The other 3 (VLANs 10, 100 and
-      200 on `kitchen_sink.xml`) have no sub-interface and leave no trace
-      at all.  Export the id->name table before cutover.
+      canonical record and DOES survive.  Each of the 10 VLANs has a
+      `vlan0.<vid>` twin in `interfaces[]` (the OPNsense parser gives a
+      device no zone assigns a record of its own), written as an
+      `ethernet vlan0.<vid>` stanza with no tag: 7 keep their addressing
+      and description, and the other 3 (VLANs 10, 100 and 200 on
+      `kitchen_sink.xml`) hold nothing but the name.  (A plan endpoint,
+      which translates port names, leaves those devices out, and the job
+      is `partial` and lists them.)  Export the id->label table before
+      cutover.
     references: [opnsense-vyos-surface]
 
   "vlans[].name":
@@ -362,10 +366,11 @@ per_field_expectation:
       at `vlans[].id`, where the loss is measured.  Recording it again here
       would count one drop twice and could never be evidenced separately.
       The operational point still needs saying, and it lives in the
-      reference doc: the VLAN name (`USER VLAN`, `MGMT VLAN`, `IOT VLAN`,
-      …) is the only operator-authored value in these records, and the
-      surviving `vlan0.<vid>` sub-interface carries its own description,
-      not the VLAN's name.
+      reference doc: the VLAN's label (`USER VLAN`, `MGMT VLAN`, `IOT
+      VLAN`, …: its `<descr>`, the canonical description; the name is the
+      device's) is the only operator-authored value in these records, and
+      the surviving `vlan0.<vid>` interface carries its own description,
+      not the VLAN's label.
     references: [opnsense-vyos-surface]
 
   "vlans[].ipv4_addresses":
@@ -405,11 +410,11 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      Empty on all 10 source VLAN records, so there is no value to carry or
-      lose.  opnsense declares `/vlans/vlan/description` LOSSY on its own
-      side and vyos declares nothing for the path — neither declaration
-      bites when the source emits nothing.  The record's disappearance is
-      claimed once at `vlans[].id`.
+      Populated on all 10 source VLAN records — an OPNsense `<vlan>`'s
+      `<descr>` (`USER VLAN`) is its description — and lost with them: no VLAN
+      record survives the round trip. The record's disappearance is claimed
+      once at `vlans[].id`; recording the description again here would count
+      one drop twice and could never be evidenced separately.
     references: [opnsense-vyos-surface]
 
   # -- Routing --------------------------------------------------------------

@@ -122,7 +122,12 @@ CanonicalInterface:
 
 - `name`: **lossy** — Arista `Ethernet1` / `Loopback0` /
   `Port-Channel10` / `Vlan100` does not survive on OPNsense.
-  Port-rename mesh maps each source name to a zone label.
+  Port-rename mesh maps each source name to a zone label.  The
+  round trip can also add records: a VLAN the render links to no
+  VLAN interface of the source is written as a `<parent>_vlan<id>`
+  device (`Ethernet3_vlan10`), which the OPNsense parser reads back
+  as an interface of its own (`ianaift:l3ipvlan`).  No source
+  record is lost.
 - `description`: **good** — Arista `description` (240-char limit
   via underlying CLI) ↔ OPNsense `<descr>` (no length limit).
 - `enabled`: **good** — Arista `no shutdown` / `shutdown` ↔

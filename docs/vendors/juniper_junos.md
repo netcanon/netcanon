@@ -193,6 +193,36 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **An account whose password the source holds as typed is left out**
+  as a target, with a review line in its place.  Junos takes a
+  password into its config only as a hash (`encrypted-password`;
+  `plain-text-password` asks at a prompt), and up to 0.7.7 the typed
+  string was written as `encrypted-password "<typed>"`, which no
+  password matches.
+- **Tagged units and their device.**  A unit's tag is `vlan-id N`,
+  or `vlan-tags outer N inner M` for two (a TPID of `0x8100` is read);
+  the output gives the device the statement its units need --
+  `vlan-tagging` for units of one tag, `stacked-vlan-tagging` for units
+  of two, `flexible-vlan-tagging` for both (Juniper, "Binding VLAN IDs
+  to Logical Interfaces") -- on a port, an `ae` bundle, a channel or a
+  `reth`.  ⚠️ Up to 0.7.7 no such statement was written, from any
+  source, Junos included; translate a config with tagged units again.
+  A routed port's `native-vlan-id` is written with
+  `flexible-vlan-tagging` ("To accept untagged packets, include the
+  native-vlan-id statement and the flexible-vlan-tagging statement").
+  Onto another vendor it is read as a trunk's native VLAN: IOS-XE
+  writes it as `switchport trunk native vlan` on a routed port and
+  EOS drops it, with nothing said -- set the native sub-interface by
+  hand.  `encapsulation flexible-ethernet-services` is not read.  A
+  unit with an address and no tag beside tagged units -- the address
+  on the port of an IOS-XE router-on-a-stick -- is written as it
+  stands with a `# review:` line: Juniper documents untagged frames on
+  such a device through `native-vlan-id` and a unit of that id, and
+  the output cannot choose the id without a guess.  A unit whose tag
+  statement matches more than one tag (`vlan-id-range`, `vlan-id
+  none`, an `inner-range`, a TPID other than `0x8100`, or two tag
+  statements) is left out, with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).
 - **Block-form input is counted in the set commands it becomes.**  A
   block-form config is converted to set commands before it is read,
   and the whole path is written again for every statement under it, so
@@ -329,14 +359,25 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   Between two Junos configs it keeps its name, and follows a
   `port_rename_map` entry for its port (`ge-0/0/7.54`).  Onto another
   vendor it goes where its port goes, with its unit and its tag
-  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit of `lo0`
-  (`lo0.2`, a per-instance loopback) has no counterpart on another
-  platform: it is put on the target's loopback beside `lo0` and the
-  job warns that two names share it — map it by hand.  With no
-  devices declared such a job is `partial` until the unit has a
-  loopback of its own, and lists the pair in `fused_ports`; a mere
-  reference to unit 0 (`lo0.0`) is the loopback itself and is not
-  counted.  Names the port translator does not read — `vme`, the
+  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).
+- **Loopbacks.**  Junos has one loopback interface, `lo0`: unit 0 is
+  the loopback of the global routing table, and each routing
+  instance takes a unit of its own.  A unit of `lo0` is the loopback
+  of that number on another platform (`lo0.2` is `Loopback2` on
+  IOS-XE, `loopback2` on NX-OS), and a reference to unit 0 (`lo0.0`)
+  is the loopback itself.  Onto Junos the translator places the
+  config's loopbacks together: the one loopback of the global table
+  is `lo0` (of several, the one numbered 0), and a routing
+  instance's one loopback numbered N is `lo0.N`, in that routing
+  instance.  A loopback with no place — a second one in the global
+  table, one of several in a routing instance, one numbered 0 in a
+  routing instance, a number two routing instances share — is
+  dropped and listed in `unresolved_ports`, with a warning that says
+  why.  An entry decides it: `lo0` for the loopback of the global
+  table (and `null` for the one that had the place), or another unit
+  (`{"Loopback1": "lo0.1"}`), which Junos takes only in a routing
+  instance — put the unit in one yourself.  Names the port
+  translator does not read — `vme`, the
   units of `st0`, a channelized `xe-0/0/6:2`, and a bare `irb` or
   `st0` that a line configures — are left as they are on the
   target, and such a job lists them in `untranslated_ports` until
@@ -364,15 +405,29 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   where a unit beside it was folded onto its VLAN.  ⚠️ Up to
   0.7.7 a unit was written ONTO its port, also in a translation from
   Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
-  translate such a config again.  `vlan-tagging` on the parent port
-  is not read and not written: add it to an output that has tagged
-  units.
+  translate such a config again.  A unit of any device is written
+  under its device (`set interfaces lo0 unit 10`, `set interfaces
+  st0 unit 100`, `set interfaces ae1 unit 10 vlan-id 10`).  ⚠️ Up to
+  0.7.7 that was so only for a device shaped like a port: a unit of
+  `lo0`, `st0`, `ae`, `reth`, `me0`, `em0`, `fxp0` or `vme` was
+  written `set interfaces lo0.10 unit 0 ...`, which Junos refuses,
+  and a unit of an aggregate lost its `vlan-id`; translate such a
+  config again.  A unit's MTU is written and read per family
+  (`family inet mtu`, `family inet6 mtu`; on `family inet` where the
+  unit has no address).  Where both families state one, inet's is
+  kept, and unit 0's family MTU is not read: its record holds the
+  device's own (media) MTU.  Juniper requires the device's media MTU
+  to hold a family MTU and its encapsulation overhead, so where the
+  device states no MTU (and the unit's is above 1500) or one no
+  larger than the unit's, a `# review:` line says so.  ⚠️ Up to
+  0.7.7 a unit's MTU was not read, and was written only under a name
+  Junos refuses.  `vlan-tagging` on the parent port is not
+  read and not written: add it to an output that has tagged units.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
   (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second
   interface.  A non-zero unit of a management port (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`); map it by hand.  See
+  follows its port (`set interfaces em0 unit 5 ...`).  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor

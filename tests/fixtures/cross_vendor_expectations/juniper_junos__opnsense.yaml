@@ -322,36 +322,74 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Junos's media-prefix form (``ge-0/0/0``, ``xe-0/0/47``, ``ae0``,
-      ``irb``, ``lo0``, ``em0``) does not survive on OPNsense.  The
-      operator-facing label on OPNsense is the zone tag (``<wan>`` /
-      ``<lan>`` / ``<optN>``); the BSD device name lives in ``<if>``.
-      Port-rename mesh handles the conversion via the codec's
-      ``classify_port_name`` / ``format_port_identity`` delegates.
-      Canonical preserves the source string verbatim.
+      ``irb``, ``lo0``, ``em0``) does not survive on OPNsense. The
+      operator-facing label on OPNsense is the zone tag (``<wan>`` / ``<lan>``
+      / ``<optN>``); the BSD device name lives in ``<if>``. Port-rename mesh
+      handles the conversion via the codec's ``classify_port_name`` /
+      ``format_port_identity`` delegates. Canonical preserves the source
+      string verbatim. What the round trip measures on this key is an
+      addition, not a loss: a VLAN the render links to no VLAN interface of
+      the source is written as a `<parent>_vlan<id>` device, which the
+      OPNsense parser reads back as an interface record of its own
+      (`ianaift:l3ipvlan`). No source record is lost.
     references: [junos-iface-naming, opnsense-interfaces]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Junos ``description "X"`` (quoted when whitespace) ↔ OPNsense
-      ``<descr>X</descr>`` (no length limit).  Round-trip preserves
-      text content.
-    references: [junos-iface-fundamentals, opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 15 of the 84 records that carry a
+      description are ``ether-options 802.3ad`` members and lose it.
+      Every other record keeps its text: Junos ``description "X"``
+      (quoted when whitespace) ↔ OPNsense ``<descr>X</descr>`` (no
+      length limit).
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
+    references: [junos-iface-fundamentals, opnsense-interfaces, opnsense-laggs]
 
   interfaces[].enabled:
-    disposition: good
-    note: >
-      Junos ``set interfaces X disable`` (presence = disabled) ↔
-      OPNsense empty ``<enable/>`` element (presence = enabled).
-      Inverted polarity; codec normalises.
-    references: [opnsense-interfaces]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      A member has no ``<enable/>`` of its own, so a disabled member
+      is read back as enabled; the comment says ``disabled``.
+      Measured 2026-10-20: 1 of the 2 disabled records is a LAG member.
+      Every other record keeps its state: Junos ``set interfaces X
+      disable`` (presence = disabled) ↔ OPNsense empty ``<enable/>``
+      element (presence = enabled).  Inverted polarity; codec
+      normalises.
+      No cell's comparison shows the loss: on each cell that holds
+      such a member, the VLAN devices OPNsense reads back from
+      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
+      longer, and the reconciler compares a list whose size changes
+      as a whole and gives the drift to ``interfaces[].name``.  The
+      loss is pinned by
+      ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
+    references: [opnsense-interfaces, opnsense-laggs]
 
   interfaces[].interface_type:
     disposition: lossy
     reason: >
-      Junos infers from media prefix (``ge-`` → ethernetCsmacd,
-      ``lo`` → softwareLoopback).  OPNsense doesn't surface a type
-      field; the cross-pair drops the type hint.
+      Junos infers from media prefix (``ge-`` → ethernetCsmacd, ``lo`` →
+      softwareLoopback). OPNsense doesn't surface a type field; the cross-pair
+      drops the type hint. The OPNsense parser types a `<vlan>` device
+      `ianaift:l3ipvlan`, so a VLAN interface the render writes as one comes
+      back with that type; every other interface comes back untyped.
 
   interfaces[].mtu:
     disposition: good
@@ -480,18 +518,27 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Junos VLAN names allow letters, digits, hyphens, periods only
-      (up to 255 chars).  OPNsense's nearest equivalent is ``<descr>``
-      — which is also where the canonical ``description`` lands.
-      Two canonical fields collapse to one OPNsense XML field; one
-      drops on render.
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`irb.100`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`xe-0/0/0_vlan2021`); and it
+      writes the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So `V2021` comes back as the description of a VLAN
+      named `xe-0/0/0_vlan2021`, and `TENANT_A_DATA` as that of `irb.100`.
+      Drifts on every cell that holds VLANs.
     references: [junos-vlans-statement, opnsense-vlans]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.
+      No Junos source on this corpus gives a VLAN a description; the round
+      trip gives each named VLAN one, its name, which the OPNsense render
+      writes as the device's `<descr>` (see `vlans[].name`). Drifts on every
+      cell that holds VLANs, by gaining the name, never by losing a value. A
+      Junos `description` on a VLAN would be kept and its name lost: the
+      render gives `<descr>` the description first.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:
@@ -629,22 +676,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense keeps every account: 13 of 13 arrive across the 8 cells that
-      populate users, measured by render and re-parse. Of the 12 that carry a
-      secret, the 4 SHA-512 crypt (`$6$`) secrets are carried into `<password>`
-      with the `junos:` envelope stripped (#462: the classifier now reads the
-      crypt id inside that envelope, and OPNsense accepts SHA-512 crypt). The 4
-      MD5 crypt (`$1$`) secrets and the 4 `junos:`-wrapped sanitisation
-      placeholders are refused in place: the `<user>` element is kept with a
-      review comment and no `<password>`, so set those passwords on the target
-      before cutover. Junos SSH public keys (`authentication ssh-rsa`) are not
-      parsed by the Junos codec, so they never reach OPNsense's
-      `<authorizedkeys>`; re-add them on the target. Privilege / role: Junos
-      `class super-user / operator / read-only` named roles collapse to OPNsense
-      binary admin / non-admin via group membership: `super-user` ->
-      `<groupname>admins</groupname>`, `operator` / `read-only` ->
-      `<groupname>users</groupname>`. Custom Junos classes lose named identity.
-      No secret value is quoted here.
+      5 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 5 of them. The 8 accounts that vanish carry 4 MD5 crypt
+      (`$1$`), 4 `junos:`-tagged crypt string. OPNsense can consume bcrypt
+      (`$2y$` / `$2b$`) or SHA-512 crypt (`$6$`) in `<password>`, or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as a `<user>` element with no `<password>`; a refused secret now
+      drops the whole account, as on every other target. The survivors are 4
+      carrying 4 SHA-512 crypt (`$6$`) and 1 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [junos-password-cli, junos-kb-password-format, opnsense-users]
 
   # ── Tier 2 — RADIUS ──

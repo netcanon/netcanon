@@ -29,7 +29,8 @@ reply carries those subtrees, the parser drops them silently.
 `intent.hostname`, `intent.dns_servers`, `intent.snmp`,
 `intent.vlans`, `intent.local_users`, `intent.radius_servers`,
 `intent.lags`, `intent.routing_instances`, `intent.static_routes`
-are all empty / None after parse, regardless of input content.
+are all empty / None after parse, regardless of input content
+(save a VLAN made from an SVI; see `vlan_render_gap.md`).
 
 Add the OPNsense target's own modelling boundaries on top of that:
 no switchport / VLAN-membership concept, no VRF, no VXLAN.  The

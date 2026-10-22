@@ -367,6 +367,17 @@ class MikroTikRouterOSCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec.  A RouterOS "
+                    "`/interface vlan` on another `/interface vlan` is read as "
+                    "a VLAN interface of one tag, which is not this field.  "
+                    "Declared so that it is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "RouterOS renders no VRF / routing-instance (see "
