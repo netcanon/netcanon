@@ -156,6 +156,14 @@ real set-form) capture are welcomed via
 
 ## Common gotchas
 
+- **A user or community whose NAME holds white space is left out as
+  a target.**  `user <name> {` and `community <name> {` are tag
+  nodes, one word, so such a record is left out with a `/* review */`
+  line that names it.  A password or SNMPv3 passphrase that holds a
+  space is written in quotes; one that holds a `"` is left out, since
+  VyOS refuses an embedded quote even escaped (vyos.dev/T1246) and a
+  secret with its quote replaced is another secret.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership

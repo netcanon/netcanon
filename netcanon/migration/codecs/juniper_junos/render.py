@@ -1457,7 +1457,7 @@ def _emit_vrrp_groups_for_address(
             if value:
                 out.append(
                     f"{prefix} vrrp-group {group.group_id} "
-                    f"authentication-key {value}"
+                    f"authentication-key {_quote_if_needed(value)}"
                 )
         if group.description:
             out.append(

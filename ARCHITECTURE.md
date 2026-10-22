@@ -850,6 +850,27 @@ envelope-shaped prefix from an *unvouched* source classifies as
 `unknown` and is refused.  Refusing every value containing a colon
 would be a false-positive blast rather than a fix.
 
+**One value where one value goes** (`netcanon/migration/_one_value.py`).
+A renderer puts a value into its line as it stands, and most CLIs read
+a line a word at a time: a credential that holds white space is two
+words there, and the second is read as whatever that place takes next
+(NX-OS `snmp-server community public rw` is a read-write community
+`public`).  No word-at-a-time CLI documents a quoted form for a
+credential, so a secret -- a local user's password, an SNMP community,
+an SNMPv3 passphrase, a VRRP/HSRP key -- or an account's name that does
+not stand as one word (`splits`) is not written, and is never altered to
+fit.  It is left out with the granularity the credential rules set (a
+local user whole; an SNMPv3 user whole; a community with every trap host
+that would carry it, never an invented `public`; an FHRP key alone, the
+group kept) and said in a `left_out(...)` review line that names the
+place and never the value.  Where the target quotes, the value is
+quoted with the target's own escape (FortiOS, Junos, VyOS leaves);
+where it quotes with no escape (AOS-S), a value holding a `"`
+(`breaks_its_quotes`) is left out the same way.  RADIUS keys are not yet
+under the rule.  Guarded by
+`tests/unit/migration/test_a_secret_is_one_value.py`, which reads the
+output as text.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
 in hostname / domain / VRF-name tokens; renderers call

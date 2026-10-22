@@ -51,6 +51,7 @@ from ..._derived_values import (
     review_comment as derived_review_comment,
 )
 from ..._naming import sanitise_hostname
+from ..._one_value import left_out, splits
 from ..._radius_secrets import (
     IOSXE_ENVELOPE,
     radius_secret_is_migratable,
@@ -221,6 +222,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     u.name, algorithm, comment_syntax="exclamation",
                     target_label="Cisco IOS-XE",
                 )
+            )
+            continue
+        # A name or a typed password that holds white space is not one
+        # word here (`username`: "Spaces and quotation marks are not
+        # allowed"), and is never altered to fit: the account is left
+        # out and said.  Policy: :mod:`netcanon.migration._one_value`.
+        if splits(u.name) or (
+            u.hashed_password
+            and splits(_split_cisco_hash(u.hashed_password)[1])
+        ):
+            out.append(
+                "! " + left_out(f"username {u.name}", "Cisco IOS-XE")
             )
             continue
         parts = [f"username {u.name}"]
@@ -620,7 +633,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 body.append(
                     f" vrrp {gid} description {group.description}"
                 )
-            if group.authentication.startswith("md5:"):
+            if group.authentication.startswith(("md5:", "plain:")) and splits(
+                group.authentication.split(":", 1)[1]
+            ):
+                # The key is one word (`text`: "up to eight alphanumeric
+                # characters"); the group is kept without it.
+                body.append(
+                    " ! " + left_out(
+                        f"vrrp {gid} authentication", "Cisco IOS-XE",
+                    )
+                )
+            elif group.authentication.startswith("md5:"):
                 body.append(
                     f" vrrp {gid} authentication md5 key-string "
                     f"{group.authentication[4:]}"
@@ -633,10 +656,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             elif group.authentication and ":" not in group.authentication:
                 # Untagged blob — emit a review comment rather than
                 # guessing the scheme.
+                # The blob is a secret: the line says where, never what.
                 body.append(
-                    f" ! review: vrrp authentication blob "
-                    f"{group.authentication!r} could not be cleanly "
-                    f"emitted"
+                    f" ! vrrp {gid} authentication -- review: the source's "
+                    f"authentication value names no scheme, so it could "
+                    f"not be cleanly emitted"
                 )
             for tracked in group.track_interfaces:
                 body.append(f" vrrp {gid} track {tracked}")
@@ -832,7 +856,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # --- SNMP block ---
     if tree.snmp is not None:
         s = tree.snmp
-        if s.community:
+        # A community is one word ("Blank spaces are not permitted"):
+        # one that holds white space is left out, with every trap host
+        # that would carry it -- a second word would be read as the
+        # next argument (an ACL), not refused.
+        community_splits = splits(s.community)
+        if community_splits:
+            out.append("! " + left_out("an SNMP community", "Cisco IOS-XE"))
+        elif s.community:
             out.append(f"snmp-server community {s.community} RO")
         if s.location:
             out.append(f"snmp-server location {s.location}")
@@ -843,6 +874,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # silently discarded s.community.  Authentic corpus form:
         # `snmp-server host 10.1.2.3 version 2c dummycommunity`.
         for host in s.trap_hosts:
+            if community_splits:
+                out.append(
+                    "! " + left_out(f"snmp-server host {host}", "Cisco IOS-XE")
+                )
+                continue
             community = s.community or "public"
             out.append(f"snmp-server host {host} version 2c {community}")
             if not s.community:
@@ -872,6 +908,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"! snmpv3 user {u.name} -- review: a {kind} USM key "
                     f"belongs to the source agent, so IOS-XE cannot re-derive "
                     f"it; re-create this user and re-key it on the target"
+                )
+                continue
+            # Name, group and both passphrases are one word each on this
+            # line; a second word is read as the next argument.
+            if any(
+                splits(v) for v in (
+                    u.name, u.group, u.auth_passphrase, u.priv_passphrase,
+                )
+            ):
+                out.append(
+                    "! " + left_out(f"snmpv3 user {u.name}", "Cisco IOS-XE")
                 )
                 continue
             line = [

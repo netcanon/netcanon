@@ -96,6 +96,22 @@ timestamp if your timezone matters for an audit.
   <blob>`, `0 <secret>`, `7` or `0` alone, or an AOS-S blob, and
   re-enter the secret.
 
+- **A credential that held white space was written as two words, and
+  the second was read as a keyword.**  Every line-grammar renderer put
+  a password, an SNMP community, an SNMPv3 user's name, group or
+  passphrase, and a VRRP/HSRP key into its line as it stood.  A
+  community `public rw` from a source that quotes values (FortiOS,
+  RouterOS, Junos, VyOS, AOS-S) or holds them as element text
+  (OPNsense, IOS-XE over NETCONF) came out on NX-OS as `snmp-server
+  community public rw` -- a READ-WRITE community `public` -- and on EOS
+  as a community whose second word is read as an ACL name; a password
+  `secret scrypt` on NX-OS sets the password `secret`.  On AOS-S, which
+  quotes and documents no escape, a `"` in a value ended it there.
+  Such a value is now left out and said (Fixed, below).  No committed
+  input holds one; a config translated with 0.7.7 or earlier from a
+  source whose credentials hold white space or a quote is worth reading
+  for the lines it wrote.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -702,6 +718,37 @@ timestamp if your timezone matters for an audit.
   with 0.7.7 or earlier, look in the output for a name that ends in
   `{ }`, and for a static route, a `vif` or a loopback the source
   has and the output does not.
+
+- **A credential or an account's name is written as one value of the
+  place it goes, or not at all** (Security, above).  None of the
+  word-at-a-time CLIs (IOS-XE CLI, NX-OS, EOS, AOS-CX, OS10, IOS XR)
+  documents a quoted form for a credential, so a value that holds
+  white space or a `"` is not written there and is never altered to
+  fit: a local user is left out whole, an SNMPv3 user whole, an SNMP
+  community with every trap host that would carry it (never an
+  invented `public`), and a VRRP/HSRP key alone, the group kept --
+  each with a `review:` line that names the place and never the value
+  (`netcanon/migration/_one_value.py`).  Where the target quotes, the
+  value is quoted with that platform's escape: FortiOS now escapes an
+  account's name, its access profile, the community, an SNMPv3 user
+  and its keys and a VRRP key; Junos quotes a VRRP
+  `authentication-key`; VyOS quotes a password or passphrase that
+  holds a space, and leaves out a user or community whose NAME holds
+  one (a tag node) or a secret that holds a `"` (VyOS refuses one even
+  escaped).  AOS-S leaves out a credential that holds a `"`.  Three
+  review lines quoted the key they could not write (the EOS and IOS-XE
+  "authentication blob" lines and the AOS-S VRRP line); they name the
+  scheme now.  And a password typed in the source -- AOS-S
+  `plaintext`, AOS-CX `password plaintext`, VyOS `plaintext-password`,
+  an OS10 password that is not a crypt string -- was written onto FortiOS as `set password ENC <the password>`, a
+  claim that it is a blob this FortiGate encrypted (six accounts over
+  the committed inputs; a test pinned it).  It is written `set password
+  "<the password>"`, for FortiOS to encrypt on save.  Guarded by
+  `tests/unit/migration/test_a_secret_is_one_value.py`, which renders
+  every synthetic kitchen sink with each credential set to a value with
+  white space and one with a quote, onto every public line-grammar
+  codec, and reads the output as text.  Not yet under the rule: RADIUS
+  keys, and names that label (host name, VLAN, VRF) and addresses.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner

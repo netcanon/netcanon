@@ -530,6 +530,20 @@ comment instead of a plaintext password.
 target's native CLI (`enable secret`, `set system root-authentication
 plain-text-password`, etc.).
 
+### "review: a value of it holds white space or a quote"
+
+The source holds a credential -- a password, an SNMP community, an
+SNMPv3 user or key, a VRRP/HSRP key -- or an account name with a space
+in it (or a `"`), and the target reads that place one word at a time.
+Written as it stood, the second word would have been read as the next
+keyword (on NX-OS `snmp-server community public rw` is a read-write
+community), so the record is left out rather than altered: a secret
+with its space replaced is another secret.
+
+**Action:** create the account, community or key on the device under a
+value the target takes (no white space, no quote), and update whatever
+uses it.  The line names the record; the value is in the source config.
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG

@@ -260,6 +260,15 @@ loses the layout too.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
+- **A password typed in the source** (AOS-S `plaintext`, AOS-CX
+  `password plaintext`, VyOS `plaintext-password`) is written as
+  FortiOS: `set password "<password>"`, for the FortiGate to encrypt
+  on save.  ⚠️ Up to 0.7.7 it was written `set password ENC
+  <password>` — a claim that it is a blob this FortiGate encrypted —
+  so the account did not hold the password; translate such a config
+  again.  Names and secrets FortiOS takes in quotes (an admin's name
+  and access profile, the SNMP community, an SNMPv3 user and its keys,
+  a VRRP key) are written with FortiOS's escape for a `"` and a `\`.
 - **Declaring a FortiGate as the source device** — with both devices
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still

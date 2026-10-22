@@ -390,6 +390,15 @@ have.
   everywhere.  ⚠️ With 0.7.7 or earlier, the blob came out as the
   secret itself on every target, AOS-S included (`key "<blob>"`).
   Look for such a key in an old output.
+- **A credential that holds a `"` is left out as a target.**  AOS-S
+  writes a password, the SNMP community, an SNMPv3 user and its keys
+  and a VRRP password between double quotes, and HPE documents no
+  escape for a quote there (only `banner motd` takes escape
+  characters): a `"` would end the value and the rest of it would be
+  read as CLI words.  Such a record is left out with a `review:` line
+  that names it and not the value — a local user and an SNMPv3 user
+  whole, the community with its trap hosts, a VRRP password alone.
+  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 - **Renaming or dropping `Vlan<N>` in the rename modal changes
   nothing.**  A translation from AOS-S to AOS-S lists each VLAN's
   routed interface under *Other names in the config*.  AOS-S writes
