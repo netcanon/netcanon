@@ -112,6 +112,29 @@ timestamp if your timezone matters for an audit.
   source whose credentials hold white space or a quote is worth reading
   for the lines it wrote.
 
+- **A name written into an OPNsense or VyOS review comment could end the
+  comment, and what followed it was configuration.**  Where a target
+  cannot take an account's password, the account is left out and a
+  review comment names it, as the source holds the name.  OPNsense
+  writes that comment as `<!-- ... -->` and VyOS as `/* ... */`, and
+  neither renderer kept the name from ending it: a source account
+  named `x--><user>...</user><!--` became, on OPNsense, an account the
+  source never had, holding whatever elements the name spelled out (a
+  password hash among them), and `a*/system{...}/*` left `system{...}` on a
+  VyOS line as nodes.  A name that only held `--`, which XML allows
+  nowhere in a comment (`svc--backup`), failed the OPNsense render
+  with an error that said nothing of the name.  Every review comment
+  is now built by one helper (`netcanon/migration/_comments.py`),
+  which writes `*/` as `* /` and puts a space after a hyphen that
+  another follows; a comment that ends at the end of its line is left
+  as it was.  Guarded by
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  reads the OPNsense output with an XML parser and the VyOS output by
+  its comment grammar, and reads the source for any other place that
+  builds a block comment around a value.  The VyOS SNMPv3 review
+  comment, and the one VyOS writes where it leaves out a credential
+  that is not one value, are built by the same helper.
+
 - **A local user whose password could not be carried was written onto
   FortiOS and RouterOS with no password at all.**  When a target cannot
   take a source's password hash, the account is to be left out with a

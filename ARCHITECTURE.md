@@ -889,6 +889,16 @@ line is written and said, and one between quotes with no escape
 (AOS-S, VyOS, OS10) has each `"` written `'`.  Guarded by
 `tests/unit/migration/test_a_name_is_one_word.py`.
 
+**A value stays in its comment** (`netcanon/migration/_comments.py`).
+A review comment names what was left out as the tree holds it, and a
+comment that ends at a terminator -- VyOS `/* */`, OPNsense
+`<!-- -->` -- is ended by a name that holds the terminator, with what
+follows it read as configuration (an OPNsense account the source
+never had).  `comment(text, syntax)` builds every such comment and
+breaks the terminator where it stands; a comment that ends with its
+line is left as it is.  Both `format_review_comment` helpers build
+their line through it.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Arista EOS and Cisco IOS-XE wrote the host name through
 `sanitise_hostname()` before `one_value_tree` did it for every line

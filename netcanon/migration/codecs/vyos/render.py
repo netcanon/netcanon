@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import re
 
+from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
@@ -195,8 +196,9 @@ def _review(text: str) -> str:
     """*text* as a ``/* */`` comment that no value in it can close.
 
     A name is put into the comment as it stands, and ``*/`` in it would
-    end the comment there: the rest of the line would be configuration."""
-    return "/* " + text.replace("*/", "* /") + " */"
+    end the comment there: the rest of the line would be configuration
+    (:mod:`netcanon.migration._comments` breaks it)."""
+    return comment(text, "slash")
 
 
 def _vyos_type_and_name(name: str) -> tuple[str, str]:
@@ -340,7 +342,7 @@ def _render_login(users: list) -> list[str]:
         if u.hashed_password and not is_migratable(u.hashed_password, "vyos"):
             algorithm, _payload = classify_hash(u.hashed_password)
             out.append("        " + format_review_comment(
-                u.name.replace("*/", "* /"), algorithm,
+                u.name, algorithm,
                 comment_syntax="slash", target_label="VyOS",
             ))
             continue
@@ -425,11 +427,10 @@ def _snmp_v3_review(name: str, source_vendor: str) -> str:
     which would misdescribe an SNMPv3 USM key.  No key material is quoted.
     """
     origin = f"{source_vendor} " if source_vendor else ""
-    return (
-        f'        /* snmpv3 user "{name.replace("*/", "* /")}" -- review: '
-        f"{origin}USM keys are "
+    return "        " + _review(
+        f'snmpv3 user "{name}" -- review: {origin}USM keys are '
         f"localised to the source agent's engine ID, so VyOS cannot re-use "
-        f"them; re-create this user and re-key it on the target */"
+        f"them; re-create this user and re-key it on the target"
     )
 
 

@@ -313,7 +313,16 @@ which is an exact API drop-in that rejects entity-bomb / external-
 entity payloads while preserving full compatibility with normal
 config XML.  Generation-side ET use (`ET.Element`, `ET.SubElement`,
 `tostring`, `register_namespace`) stays on stdlib — those don't
-consume untrusted input.
+parse untrusted input.  They do WRITE it: ElementTree escapes an
+element's text and attributes, but writes an `ET.Comment` as it
+stands, so a value of the config in a comment could end the comment
+and be written as XML.  A source account named
+`x--><user>...</user><!--`, left out of an OPNsense output for its
+password and named in the review comment, was an account the source
+never had.  Every such comment is built by
+`netcanon/migration/_comments.py`, which breaks `--` and a final `-`
+where they stand; the VyOS `/* */` comment the same way for `*/`
+(`tests/unit/migration/test_a_value_stays_in_its_comment.py`).
 
 Each call site wraps the rejection in an explicit `DefusedXmlException`
 clause so malicious-payload rejection produces a clean operator-facing
