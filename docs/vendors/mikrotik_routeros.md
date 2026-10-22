@@ -211,9 +211,20 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   the router that imported the output, and a value with a space or a
   `;` in it was cut there or ran on as another command.  Read an older
   output for `$`, `;`, `[` and `(` before it reaches a router.  The
-  parser reads a string back whole; it reads `\` and the character
-  after it as that character, so a hex escape (`\C3\A9`), `\n` or `\_`
-  in an export reaches the target as the letters.
+  parser reads a string back whole.
+- **A string's escapes are read by MikroTik's table.**  `\_` is a
+  space, `\t` a tab, `\n`, `\r`, `\v` and `\f` line breaks (each
+  written as a space onto any target, and said in the job), and a
+  run of hex escapes (`\C3\A9`) the text its bytes are in UTF-8.  The
+  page gives `\f` as "form feed (0xFF)"; it is read as the form
+  feed.  RouterOS keeps a string as bytes and an export does not say
+  their encoding, so a run that is not UTF-8 -- a comment typed in
+  Windows-1251 -- is kept as written, and so is a control character a
+  terminal acts on (`\a`, `\b`, `\1B`): the target is given the
+  escape's text, and so is RouterOS, where the string then holds a
+  backslash and two digits in place of the byte.  ⚠️ Up to 0.7.7 a
+  backslash took the character after it whatever it was, so
+  `Caf\C3\A9` reached the target as `CafC3A9` and `\n` as `n`.
 - **A user whose password cannot be carried is left out** as a target,
   with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7 the `/user
   add group=... name=...` line stayed without its password, and
