@@ -997,6 +997,28 @@ timestamp if your timezone matters for an audit.
   of its grammar, and with its parser, and is handed the old parse.
   No committed capture has such a unit; the cross-mesh audit is
   unchanged.
+- **A VyOS bond lost its members and its units.**  VyOS prints a
+  bond's members as a leaf of many values -- `member { interface eth1
+  }` in `show configuration`, `member interface 'eth1'` in `show
+  configuration commands` -- and the parser read neither: a bond in
+  the block form had no members, and a bond in the set form had
+  members called `'eth1'`, quotes and all, beside two interfaces of
+  those names.  A `vif` under a bond was not read, and its address
+  was lost on every target, in jobs that said `completed`.  The
+  renderer wrote each member as a node (`interface eth1 { }`), not
+  the grammar of the leaf, and a unit of a LAG from another vendor as
+  `ethernet bond1.10`, an ethernet port of that name.  Members are
+  read in both printed forms (and in the old node form, so that
+  earlier outputs read back) and written one bare line each; a `vif`
+  under a bond is a unit, `bondN.<vid>`, written under its bond.  A
+  bond's unit onto VyOS is `partial` as an ethernet's is, since the
+  codec declares the 802.1Q tag unsupported.  Guarded by
+  `tests/unit/migration/codecs/vyos/test_a_bond_and_its_units.py`,
+  which holds every printed form to one tree typed by hand, reads the
+  renderer's output as text, and finds the unit by its address in
+  every target's output with the target's parser.  No committed
+  capture has a bond; the synthetic kitchen sink now prints its
+  members as VyOS does.
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`

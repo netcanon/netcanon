@@ -1685,6 +1685,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   `tests/unit/migration/codecs/aruba_aoss/test_a_route_the_switch_takes.py`,
   which reads the output with a reader of HPE's grammar typed in the
   test and works out each route's next hop from the source's tree.
+  And a list is read in the form the DEVICE prints, not the form the
+  renderer writes: the VyOS renderer wrote a bond's members as nodes
+  (`interface eth1 { }`), the parser read only that, and a round trip
+  agreed with itself while a bond as VyOS prints it -- one bare
+  `interface eth1` line a member, or `member interface 'eth1'` in the
+  set form -- had no members, and its `vif` units no record.  Guarded
+  by `tests/unit/migration/codecs/vyos/test_a_bond_and_its_units.py`.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

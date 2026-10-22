@@ -488,10 +488,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         typ, arg = stk[1]
         # A ``bonding bondN`` block is an L3-capable interface (it can
         # carry address / description / mtu); its ``mode`` / ``member``
-        # are handled separately in the leaf / block-open dispatch.
+        # are handled separately in the leaf / block-open dispatch.  It
+        # takes a ``vif`` as an ethernet does: a unit of the LAG.
         if typ == "bonding" and arg and len(stk) == 2:
             return _touch_iface(arg, "bonding")
-        if typ not in _IFACE_BLOCK_TYPES or not arg:
+        if (typ not in _IFACE_BLOCK_TYPES and typ != "bonding") or not arg:
             return None
         if len(stk) == 2:
             return _touch_iface(arg, typ)
@@ -561,8 +562,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[1][0] == "login"
             ):
                 _touch_user(node[1])
-            # A bond member declared 1.3+/1.4-style:
-            # ``interfaces / bonding bondN / member / interface ethN``.
+            # A bond member written as a block,
+            # ``interfaces / bonding bondN / member / interface ethN { }``:
+            # the form this renderer wrote before it wrote VyOS's own
+            # (the bare leaf, read below), and the shape the set form
+            # becomes here, where ``interface`` is a tag node -- with the
+            # quotes ``show configuration commands`` puts round a leaf's
+            # value, which are no part of the name.
             elif (
                 node[0] == "interface" and node[1]
                 and len(stack) == 4
@@ -570,7 +576,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[1][0] == "bonding"
                 and stack[2][0] == "member"
             ):
-                _add_lag_member(stack[1][1], node[1])
+                _add_lag_member(stack[1][1], _unquote(node[1]))
             # ── Phase 5: an ``interfaces vxlan vxlanN`` netdev (one VNI
             # per netdev — NOT a generic L3 interface; handled separately
             # from ``_current_iface``).
@@ -699,6 +705,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _touch_lag(stack[1][1])["mode"] = (
                 "active" if value == "802.3ad" else "static"
             )
+            continue
+
+        # ── Phase 2: bond member as VyOS prints it: ``member interface``
+        # is a leaf of many values, one line each
+        # (interfaces / bonding bondN / member / interface ethN) ──
+        if (
+            key == "interface" and value
+            and len(stack) == 3
+            and stack[0][0] == "interfaces"
+            and stack[1][0] == "bonding"
+            and stack[2][0] == "member"
+        ):
+            _add_lag_member(stack[1][1], value)
             continue
 
         # ── Phase 2: bond member, legacy 1.2 form
