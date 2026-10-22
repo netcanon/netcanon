@@ -675,6 +675,34 @@ timestamp if your timezone matters for an audit.
   sends each form through its parser onto all six targets that render
   RADIUS, and reads the output as text and with the target's parser.
 
+- **A VyOS node with nothing under it, printed on one line, was read
+  as a word of the line above it.**  VyOS prints a node that holds
+  nothing as `<name> { }` on one line -- `server time1.vyos.net { }`
+  under `system ntp`, `loopback lo { }` under `interfaces`, `vif 100
+  { }`, `next-hop 192.0.2.254 { }` -- and the parser opened a block
+  only at a line that ends in `{`.  It read such a line as a leaf
+  whose value ran to the end of the line: the NTP server was
+  `time1.vyos.net { }`, written with its braces onto every target
+  that renders NTP (`ntp server time1.vyos.net { }` on EOS and IOS-XE
+  CLI, inside the `servers=` list on RouterOS), in jobs that reported
+  nothing; and an empty `loopback lo`, an empty `vif` and a static
+  route whose `next-hop` holds nothing were not in the tree at all.
+  Such a line now opens a block and closes it, or -- where its one
+  word is a leaf, as in `disable { }` -- is that leaf with no value:
+  the reading the set form gives the same path, which a test holds
+  the parser to, typed by hand in both grammars
+  (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+  One committed capture prints the form
+  (`houdev_vyos_dhcpv6_pd_client.conf`): its NTP servers now cross
+  whole onto every target that renders NTP, and its `lo` is an
+  interface -- written by the targets that write an interface with
+  nothing set, and left out, as every such interface is, on EOS,
+  AOS-S, IOS-XE CLI, FortiOS and Junos.  No job over the committed
+  inputs changes its status.  If you translated a VyOS `config.boot`
+  with 0.7.7 or earlier, look in the output for a name that ends in
+  `{ }`, and for a static route, a `vif` or a loopback the source
+  has and the output does not.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`

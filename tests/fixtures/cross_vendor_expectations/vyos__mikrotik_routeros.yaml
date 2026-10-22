@@ -15,7 +15,7 @@
 # local accounts — and NOT the fabric surface neither device is doing.
 #
 # READ THIS BEFORE READING ANY DISPOSITION BELOW: the two record lists
-# that carry this pair are FULLY PRESERVED. 55 interface records in, 55
+# that carry this pair are FULLY PRESERVED. 56 interface records in, 56
 # out, identical name sets on all 13 cells; 17 local-user records in, 17
 # out, zero accounts vanish. Every interface and local-user loss below is
 # therefore a genuine per-attribute loss that stands on its own
@@ -107,29 +107,18 @@ per_field_expectation:
     references: [vyos-mikrotik-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Round-trips on all 12 cells that populate it, including a
-      five-server cell, and is wrong on one where no round trip can see
-      it: `houdev_vyos_dhcpv6_pd_client.conf`.
-      That fixture writes the empty per-server block INLINE —
-      `server  time1.vyos.net { }` on a single line — where every other
-      fixture uses the multi-line `server <host> {` / `}` form.  The VyOS
-      brace-stack parser handles the multi-line form and leaves a literal
-      ` { }` glued to the server name on the inline form, so the
-      canonical value is `time1.vyos.net { }`.  The RouterOS renderer
-      writes the comma-joined `servers=` value as one string, since it
-      holds white space, and the re-parse reads it back whole: both trees
-      hold the same three names, which resolve to nothing on the router.
-      (Written bare until 2026-10, the value ended at its first white
-      space and the re-parse recovered one server: the 3 -> 1 this field
-      was first measured lossy on.)
-      Recorded `lossy` still, not `unsupported` and not `good`: both
-      matrices declare `/system/ntp-server` supported and the concept
-      plainly crosses, so this is a partial record loss inside a concept
-      the target models; it is the source parser's, every target carries
-      it, and on this one it is below what the round trip compares.  Diff
-      the source server list against the render before cutover.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the RouterOS render
+      wrote it into its comma-joined `servers=` value, which the re-parse cut
+      at the first space (three servers in, one out), and that cell drifted.
+      The parser now reads such a line as the node it is, the reading the set
+      form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-mikrotik-surface]
 
   timezone:
@@ -157,8 +146,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, three attributes affected -------------
   #
-  # The measured record count is the headline: 55 interface records across
-  # the 13 cells, 55 after the round-trip, with identical name sets on
+  # The measured record count is the headline: 56 interface records across
+  # the 13 cells, 56 after the round-trip, with identical name sets on
   # every cell.  VyOS kernel-style names (`eth0`), dummy interfaces
   # (`dum0`), the loopback (`lo`), the LACP bundle (`bond0`) and even the
   # dot-notation sub-interfaces (`eth1.100`) all come back — the last of
@@ -169,7 +158,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, identical name sets.  The RouterOS
       render does not rename VyOS ports to the `etherN` factory shape, does
       not drop the loopback (it emits the documented empty-bridge idiom
@@ -181,7 +170,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: lossy
     reason: >
-      Drifts on 1 of 55 interface records, on one cell
+      Drifts on 1 of 56 interface records, on one cell
       (`kitchen_sink.conf`): `eth1.100`'s `tenant vlan 100` returns empty
       while the other 14 populated descriptions round-trip intact as
       RouterOS `comment="..."`.  Both matrices declare
@@ -210,11 +199,11 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: lossy
     reason: >
-      Drifts on 1 of 55 interface records, on one cell
+      Drifts on 1 of 56 interface records, on one cell
       (`kitchen_sink.conf`) — and the direction is the dangerous one:
       `eth1.200` is `enabled=False` on the VyOS source and comes back
       `True`.  A port that was administratively DOWN on VyOS comes up
-      ENABLED on RouterOS.  The other 52 populated records round-trip
+      ENABLED on RouterOS.  The other 55 records round-trip
       exactly, including a genuinely disabled `eth3` that renders
       `disabled=yes` and re-parses shut.
       Same single mechanism as `interfaces[].description`: the
@@ -235,7 +224,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  MTU is actually populated on only
+      Preserved on 56 of 56 records.  MTU is actually populated on only
       one of them (`eth0`, 1500) and it round-trips unchanged as
       RouterOS `mtu=1500`.  `vyos` declares
       `/interfaces/interface/config/mtu` supported; `mikrotik_routeros`
@@ -247,7 +236,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records; IPv6 is populated on 20 of them and
+      Preserved on 56 of 56 records; IPv6 is populated on 20 of them and
       every address + prefix-length survives via `/ipv6 address add`.
       Both matrices declare `/interfaces/interface/ipv6/address/ip` and
       `.../prefix-length` supported.  One asymmetry that costs nothing
@@ -259,7 +248,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records, the widest-populated interface
+      Preserved on 56 of 56 records, the widest-populated interface
       attribute on the pair (21 records).  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.  This is the field the migration most depends on and it
@@ -270,19 +259,24 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 6 of 13 cells and 7 of 55 records — and the direction is
+      Drifts on 7 of 13 cells and 8 of 56 records — and the direction is
       the OPPOSITE of a loss, which is the point worth recording.  `vyos`
-      populates `interface_type` on ZERO of its 55 records, so there is
+      populates `interface_type` on ZERO of its 56 records, so there is
       nothing for RouterOS to lose; the round-trip INVENTS a type on
-      seven of them.
-      Six are the loopback `lo`, which comes back `ianaift:bridge`.  That
+      eight of them.
+      Seven are the loopback `lo`, which comes back `ianaift:bridge`.  That
       is a mislabel with a good cause: RouterOS has no loopback primitive,
       so the renderer emits the documented empty-bridge idiom
       (`/interface bridge add name=lo`) — without it the loopback name
       drops and its IP binds to a phantom interface — and the re-parse
-      then honestly types a bridge as a bridge.  The seventh is `bond0`,
-      typed `ianaift:ieee8023adLag` off `/interface bonding`, which is
-      simply correct.
+      then honestly types a bridge as a bridge.  One of the seven is the
+      `lo` of `houdev_vyos_dhcpv6_pd_client.conf`, an empty interface
+      record (`loopback lo { }`, nothing set) that the VyOS parser has
+      read since 2026-10; RouterOS keeps it as the same empty bridge and
+      the re-parse invents the same type, which is what makes that cell
+      the seventh.  The eighth record is `bond0`, typed
+      `ianaift:ieee8023adLag` off `/interface bonding`, which is simply
+      correct.
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY, and `mikrotik_routeros` states the mechanism: RouterOS does
       not expose IANA ifType, so the codec infers it from the
@@ -296,7 +290,7 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  Two records carry a membership
+      Preserved on 56 of 56 records.  Two records carry a membership
       pointer (`eth4` and `eth5` -> `bond0`) and both survive: the render
       emits `/interface bonding add slaves=eth4,eth5 ... name=bond0` and
       the re-parse rebuilds the pointer on each member.  This is the
@@ -315,7 +309,7 @@ per_field_expectation:
       `/interfaces/interface/vrrp-groups/group/*` subtree unsupported —
       the group itself plus mode, priority, preempt,
       advertisement-interval, authentication, virtual-IPv6 and description
-      — so nothing reaches the target.  Measured: 0 of 55 records carry a
+      — so nothing reaches the target.  Measured: 0 of 56 records carry a
       group, on all 13 cells.
       `mikrotik_routeros` declares `/interfaces/interface/vrrp-groups/group`
       SUPPORTED (with only `mode` and `description` lossy), so re-authoring

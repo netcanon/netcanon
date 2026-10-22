@@ -441,16 +441,14 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # Juniper's page gives (``DEFAULT_VLAN``) is written as it is -- and no cell's
 # round trip shows it; the YAML's reason says so.
 #
-# And one more, when the RouterOS renderer began writing a value with white
-# space in it as one string: vyos__mikrotik_routeros from 0 to 1.  The one
-# cell that showed the loss showed it because the value was written bare and
-# ended at its first white space: `servers=time1.vyos.net { },...` read back
-# as one server.  It now comes back whole, and is still wrong on the device
-# -- a server name the VyOS parser glued ` { }` to -- below what the round
-# trip compares.  The YAML's reason says so.  (cisco_iosxe_cli__mikrotik_routeros
-# rose from 1 to 2 with it, `secret=7 <blob>` having read back as `7`, and is
-# back at 1: a type-7 key is now refused on RouterOS, the server written with
-# no secret, and the round trip shows the key gone.)
+# When the RouterOS renderer began writing a value with white space in it as
+# one string, two entries rose by one and came back down:
+# cisco_iosxe_cli__mikrotik_routeros (`secret=7 <blob>` had read back as `7`)
+# is at 1 again because a type-7 key is now refused on RouterOS, the server
+# written with no secret and the key gone in the round trip; and
+# vyos__mikrotik_routeros (`servers=time1.vyos.net { },...` had read back as
+# one server) is at 0 again because the VyOS parser reads `server <host> { }`
+# as the node it is, and the YAML declares `ntp_servers` good.
 #
 # And four more, each by one, for ``radius_servers``: aruba_aoss__arista_eos
 # (2 to 3), aruba_aoss__cisco_iosxe_cli (3 to 4), aruba_aoss__fortigate_cli
@@ -522,7 +520,6 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 5,
     "opnsense__mikrotik_routeros": 3,
-    "vyos__mikrotik_routeros": 1,
 }
 
 _EVIDENCED = {"EXPECTED_LOSSY", "EXPECTED_UNSUPPORTED"}
