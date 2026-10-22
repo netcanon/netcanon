@@ -42,6 +42,12 @@ This module defines the **vendor-agnostic bridge**:
    its port onto another vendor.  The translator sends
    such a name after its port, and ``run_plan_with_models`` reads
    back which ones went.
+8. :class:`LoopbackToPlace` — a loopback of the source config, as a
+   target that names its loopbacks as a set is given it
+   (``CodecBase.place_loopbacks``).  Junos has one loopback
+   interface, ``lo0``, and places a unit of it in each routing
+   instance, so its name for a loopback depends on the config's
+   other loopbacks, which no name formatted one at a time can know.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -82,7 +88,7 @@ import logging
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -256,6 +262,20 @@ class PortIdentity(BaseModel):
     meta: dict[str, str] = Field(default_factory=dict)
 
 
+class LoopbackToPlace(NamedTuple):
+    """A loopback of the source config, given to a target that places
+    loopbacks as a set (``CodecBase.place_loopbacks``)."""
+
+    #: The name the source config gives it.
+    name: str
+    #: Its number, as the source codec's classifier reads it
+    #: (``Loopback7`` and a Junos ``lo0.7`` are 7), or ``None`` where
+    #: its name has none.
+    number: int | None
+    #: The routing instance it is in; ``""`` for the global table.
+    instance: str
+
+
 class PortRenameResult(BaseModel):
     """Outcome of :func:`translate_port_names`.
 
@@ -373,6 +393,8 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
         yield iface.name
         if iface.lag_member_of:
             yield iface.lag_member_of
+        if iface.vlan_parent:
+            yield iface.vlan_parent
         # VRRP track-interface references are port names too.
         for grp in iface.vrrp_groups:
             yield from grp.track_interfaces
@@ -397,10 +419,11 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
 def _only_referred_to(intent: CanonicalIntent) -> set[str]:
     """The names *intent* holds only where it REFERS to an interface:
     a static route's or a DHCP pool's interface, a VRRP track entry,
-    a VXLAN source -- and in no other place the sweep visits.
+    a VXLAN source, the parent a VLAN interface rides on -- and in no
+    other place the sweep visits.
 
     Counted, not listed from the other side: a name is one of these
-    when every place :func:`_swept_names` finds it is one of the four
+    when every place :func:`_swept_names` finds it is one of those
     named here.  So a field added to the sweep later counts as a
     place the config CONFIGURES a name, until this function is told
     otherwise -- the reading that reports more, not less."""
@@ -408,6 +431,8 @@ def _only_referred_to(intent: CanonicalIntent) -> set[str]:
     for iface in intent.interfaces:
         for grp in iface.vrrp_groups:
             referred.update(grp.track_interfaces)
+        if iface.vlan_parent:
+            referred[iface.vlan_parent] += 1
     referred.update(r.interface for r in intent.static_routes if r.interface)
     referred.update(p.interface for p in intent.dhcp_servers if p.interface)
     referred.update(v.source_interface for v in intent.vxlan_vnis if v.source_interface)
@@ -448,6 +473,8 @@ def rewrite_port_names(
         iface.name = resolve(iface.name)
         if iface.lag_member_of:
             iface.lag_member_of = resolve(iface.lag_member_of)
+        if iface.vlan_parent:
+            iface.vlan_parent = resolve(iface.vlan_parent)
         # (#3) Rewrite each VRRP group's track-interface list so failover
         # tracking survives a rename (a stale name silently disables it).
         for grp in iface.vrrp_groups:
@@ -910,6 +937,7 @@ def translate_port_names(  # noqa: C901
 
         * ``intent.interfaces[].name``
         * ``intent.interfaces[].lag_member_of``
+        * ``intent.interfaces[].vlan_parent``
         * ``intent.interfaces[].vrrp_groups[].track_interfaces[]``
         * ``intent.vlans[].tagged_ports[]``
         * ``intent.vlans[].untagged_ports[]``
@@ -1338,6 +1366,61 @@ def translate_port_names(  # noqa: C901
             applied[name] = out
         return out
 
+    def place_the_loopbacks() -> None:
+        """Ask the target once for every loopback no entry decides.
+
+        Where a target's name for a loopback depends on the config's
+        other loopbacks (Junos: one ``lo0``, a unit of it in each
+        routing instance), one name at a time cannot place them --
+        ``Loopback0`` and ``Loopback1`` came out as ``lo0`` and
+        ``lo1``, an interface Junos does not have, in a job that said
+        ``completed``.  What the target places is settled here; what
+        it refuses is dropped and said, as a name it has no form for
+        is (a name no entry decided, so the job is ``partial``); what
+        it leaves out of both is formatted one at a time.  A loopback
+        is an interface record the source classifier reads as one
+        (with the parser's own word for its kind, as below), in the
+        routing instance its record names.
+        """
+        loopbacks: dict[str, LoopbackToPlace] = {}
+        for iface in intent.interfaces:
+            name = iface.name
+            if name in loopbacks or name in user_map:
+                continue
+            split = port_and_unit(name)
+            if split is not None and follows_its_port(name, split[0]):
+                continue
+            ident = source_codec.classify_port_name(name)
+            if ident is None or ident.kind == "unknown":
+                continue
+            if (kind_overrides.get(name) or ident.kind) != "loopback":
+                continue
+            loopbacks[name] = LoopbackToPlace(name, ident.index, iface.vrf or "")
+        if not loopbacks:
+            return
+        placement = target_codec.place_loopbacks(
+            list(loopbacks.values()), frozenset(str_map.values()),
+        )
+        if placement is None:
+            return
+        placed, refused = placement
+        for name in loopbacks:
+            if name in placed:
+                out = placed[name]
+                memo[name] = out
+                if out != name:
+                    applied[name] = out
+            elif name in refused:
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} loopback "
+                    f"{name!r} {refused[name]}"
+                )
+                if strip_unmappable:
+                    auto_dropped.add(name)
+                else:
+                    untranslated[name] = None
+                memo[name] = name
+
     # (#49b) Snapshot every port name actually present in the tree BEFORE the
     # rewrite sweep mutates names in place — used to (a) warn on operator map
     # entries that named a port absent from the config, and (b) avoid
@@ -1357,6 +1440,7 @@ def translate_port_names(  # noqa: C901
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
     if user_dropped:
+        warnings.extend(_parents_gone(intent, user_dropped))
         _strip_dropped_ports(intent, user_dropped)
 
     # Resolve every name BEFORE anything is rewritten, in the order the
@@ -1366,9 +1450,12 @@ def translate_port_names(  # noqa: C901
     # string, also deleted a DIFFERENT port that had just been renamed
     # ONTO that string — the failure (#6) describes for operator drops,
     # reachable without one once a device model renames every port.
+    if not same_codec:
+        place_the_loopbacks()
     for name in list(_swept_names(intent)):
         resolve(name)
     if auto_dropped:
+        warnings.extend(_parents_gone(intent, auto_dropped))
         _strip_dropped_ports(intent, auto_dropped)
 
     # Rewrite everywhere a port name might be referenced.  Order doesn't
@@ -1603,6 +1690,21 @@ def translate_port_names(  # noqa: C901
     )
 
 
+def _parents_gone(intent: CanonicalIntent, dropped: set[str]) -> list[str]:
+    """A warning for each VLAN interface that stays while the
+    interface its config says it rides on (``vlan_parent``) is
+    dropped.  :func:`_strip_dropped_ports` clears the reference, and a
+    renderer that has to name a parent then chooses one itself: said
+    here, so that the choice is not made in silence."""
+    return [
+        f"port_rename: {iface.name!r} rides on {iface.vlan_parent!r}, which "
+        f"is not in the output; the target codec chooses the interface it "
+        f"rides on there -- check it"
+        for iface in intent.interfaces
+        if iface.vlan_parent in dropped and iface.name not in dropped
+    ]
+
+
 def _strip_dropped_ports(
     intent: CanonicalIntent, dropped: set[str]
 ) -> None:
@@ -1612,7 +1714,8 @@ def _strip_dropped_ports(
 
         * ``intent.interfaces`` — interfaces whose name is dropped
           are deleted outright.  Surviving interfaces get their
-          ``lag_member_of`` cleared if the referenced LAG is dropped.
+          ``lag_member_of`` cleared if the referenced LAG is dropped,
+          and their ``vlan_parent`` if the interface it names is.
         * ``intent.vlans[].tagged_ports`` / ``untagged_ports`` —
           dropped names filtered out.
         * ``intent.lags`` — LAGs whose name is dropped are deleted;
@@ -1639,6 +1742,8 @@ def _strip_dropped_ports(
     for iface in intent.interfaces:
         if iface.lag_member_of in dropped:
             iface.lag_member_of = None
+        if iface.vlan_parent in dropped:
+            iface.vlan_parent = None
         # (#3) Drop dangling VRRP track-interface references.
         for grp in iface.vrrp_groups:
             grp.track_interfaces = [

@@ -12,7 +12,7 @@ codec that reads an interface MTU.  Retrieved 2026-10-20.
 
 | Platform | Interface `mtu` counts, beyond the payload | Default | Grade | Source |
 |---|---|---|---|---|
-| Junos (media MTU) | the 14-byte Ethernet header, and 4 more for 802.1Q (overhead 18); not the FCS | 1514 | header: vendor sentence; tag: inferred from the vendor's overhead table | J1, J2 |
+| Junos (media MTU) | the 14-byte Ethernet header, and 4 more for each 802.1Q tag the device's tagging statement names (overhead 18 for one); not the FCS | 1514 | header: vendor sentence; a tag: inferred from the vendor's overhead table; 4 more under `flexible-vlan-tagging`: vendor sentence | J1, J2, J3 |
 | Cisco IOS XR | the 14-byte Ethernet header, and 4 bytes per tag; not the FCS | 1514 (1518 with one tag) | vendor sentence | X1, X2, X3 |
 | Dell OS10 (link MTU) | a frame: 22 bytes for a tagged member | 9216 since 10.5.4.4 (1532 before) | "frame size": vendor sentence; 22 bytes: from the vendor's tagged example | D1, D2 |
 | Cisco IOS-XE | nothing: the payload | 1500 | vendor sentence | C1, C2 |
@@ -43,6 +43,14 @@ fragments, "..." joins two fragments of one passage.
   "Default: INET, INET6, and ISO families: 1500 bytes EX Series switch
   interfaces: 1514 bytes"; "MTU for IRB interfaces is calculated by
   removing the Ethernet header overhead (6(DMAC)+6(SMAC)+2(EtherType))".
+- **J3** -- Juniper, *Enabling VLAN Tagging* (retrieved 2026-10-21):
+  <https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/task/interfaces-enabling-vlan-tagging.html>.
+  "If you configure the physical interface MTU for mixed tagging,
+  then you must increase the MTU to 4 bytes more" (than on a
+  VLAN-tagged interface: 1022 where that is "1018 on a VLAN-tagged
+  interface").  "The additional 4 bytes accommodates the future
+  addition of a stacked VLAN tag configuration on the same physical
+  interface."
 - **X1** -- Cisco, *Troubleshoot MTU on IOS XR*:
   <https://www.cisco.com/c/en/us/support/docs/ios-nx-os-software/ios-xr-software/116350-trouble-ios-xr-mtu-00.html>.
   "the mtu command that configures the L2 MTU includes 14 bytes for an
@@ -151,10 +159,13 @@ fragments, "..." joins two fragments of one passage.
 ### Not established from a vendor's page
 
 - **Junos**: a sentence that says the media MTU of a `vlan-tagging`
-  port holds the tag.  It is read from J1's overhead table, which the
-  media MTU must cover.  What a trunk in `family ethernet-switching`
-  needs for its tags is not established either; the codec counts the
-  tag only for a port whose units carry `vlan-id`.
+  port holds the tag, or that of a `stacked-vlan-tagging` port two.
+  Both are read from J1's overhead table, which the media MTU must
+  cover, at 4 bytes a tag; J3 then gives a `flexible-vlan-tagging`
+  port 4 bytes more than a `vlan-tagging` one.  What a trunk in
+  `family ethernet-switching` needs for its tags is not established
+  either; the codec counts tags only for a port that states a
+  tagging statement or whose units carry a tag.
 - **NX-OS**: the Nexus 9000 guide itself does not say whether the
   header is counted; N1 is an APIC guide that names NX-OS.
 - **OS10**: the 18 bytes of the untagged example in D1 against the 22
@@ -178,8 +189,10 @@ fragments, "..." joins two fragments of one passage.
   management port, `port-channel` or `vlan`.  A loopback, a tunnel,
   or a name the codec's own classifier does not read is copied as it
   stands -- what its number counts is not established here.
-- A second tag (QinQ) adds 4 more bytes on IOS XR; the parser reads
-  one tag, so the 4 bytes of a second are counted in the payload.
+- A second tag (QinQ) adds 4 more bytes on IOS XR (`second-dot1q`).
+  On Junos the tags counted are the ones the device's tagging
+  statement names; a device that states none is counted by the tags
+  its units carry (the renderer writes the statement its units need).
 - A jumbo value near a platform's maximum can pass it once converted
   (IOS-XE `mtu 9216` is Junos `mtu 9230`, above the EX range of
   9216).  The device refuses such a line when the config is

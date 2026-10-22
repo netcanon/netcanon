@@ -26,7 +26,7 @@
 # below says which side the gap is on, so a migration report can say it too.
 #
 # The shape of the pair, stated once so no key has to re-argue it: the routed
-# INTERFACE PLANE survives essentially intact — 55 interface records in, 55
+# INTERFACE PLANE survives essentially intact — 56 interface records in, 56
 # out, identical name sets on all 13 cells — while every OTHER plane
 # (`local_users`, `lags`, `static_routes`, `snmp`, `vxlan_vnis`,
 # `routing_instances`, and the four `/system/*` scalars) loses every record on
@@ -162,8 +162,8 @@ per_field_expectation:
 
   # -- Interfaces -- the one plane that survives ------------------------------
   #
-  # The measured record count is the headline: 55 interface records across the
-  # 13 cells, 55 after the round-trip, with identical name sets on EVERY cell.
+  # The measured record count is the headline: 56 interface records across the
+  # 13 cells, 56 after the round-trip, with identical name sets on EVERY cell.
   # VyOS `ethN`, dot1q sub-interfaces (`eth1.100`), `lo`, the dummy `dum0` and
   # `bond0` itself all survive the OpenConfig render verbatim.  Nothing below
   # is a knock-on effect of a vanishing parent record — each key is measured on
@@ -172,7 +172,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, identical name sets on every cell.  The
       OpenConfig render does not collapse VyOS dot1q sub-interfaces
       (`eth1.100`, `eth1.200`), does not drop the loopback or the dummy
@@ -197,7 +197,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 55 of 55 records — zero differing on any cell.
+      Admin state preserved on 56 of 56 records — zero differing on any cell.
       Both matrices declare `/interfaces/interface/config/enabled` supported,
       and the render emits `<enabled>true|false</enabled>`.  A VyOS interface
       carrying `disable` arrives disabled on the target.
@@ -259,7 +259,7 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Source-side gap, measured rather than assumed: after `vyos.parse()` the
-      canonical `interface_type` is the empty string on **all 55 interface
+      canonical `interface_type` is the empty string on **all 56 interface
       records across all 13 cells** — populated on zero of them — so no IANA
       type hint ever enters the tree, let alone reaches the target.
       vyos declares `/interfaces/interface/config/type` LOSSY, and the
@@ -304,7 +304,7 @@ per_field_expectation:
       seven sub-leaves (mode, priority, preempt, advertisement-interval,
       authentication, virtual-IPv6, description), so nothing is parsed;
       cisco_iosxe declares the same anchor unsupported, so nothing would render
-      even if it were.  Measured: 0 of 55 records populate the field on either
+      even if it were.  Measured: 0 of 56 records populate the field on either
       side.
       Declared, not observed — there is no round-trip to point at.  Recorded
       `unsupported` rather than `not_applicable` precisely because the target

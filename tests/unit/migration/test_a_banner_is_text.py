@@ -997,19 +997,25 @@ def _digest(codec: str, path: str) -> str:
 #: was before a banner was read as text (``8210c697``; IOS XR's on
 #: ``efda1659``, before its parser read one).  A value changes
 #: only when a parser's reading of that input is changed on purpose; the
-#: failing assertion prints the new one.  Moved on purpose: every IOS XR
-#: and OS10 input that states an ``mtu``, when the tree's MTU became the
-#: payload (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
+#: failing assertion prints the new one.  Changed since: the carrier
+#: capture, whose ``second-dot1q`` units hold their inner tag; and,
+#: on purpose, every IOS XR and OS10 input that states an ``mtu``,
+#: when the tree's MTU became the payload (``MTU_BEYOND_THE_PAYLOAD``
+#: in ``codecs/_helpers.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
     "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "1438f3eb976a",
     "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "51c85d20a673",
     "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "181fdcc21fb2",
-    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "48321a06dd41",
+    # Its `admin` secret is read by its `ciphertext` keyword, not by its
+    # shape (test_a_typed_password_is_not_a_hash.py): was "48321a06dd41".
+    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "52840754cf06",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "12aa29d82a17",
+    # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
+    # as a contact and a location (test_snmp_contact_and_location.py).
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "a4e275c2c670",
@@ -1027,12 +1033,13 @@ BEFORE: dict[str, str] = {
     # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
     # (``test_a_flat_text_is_refused.py``).
     "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
-    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "3c1760c9d5cd",
+    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
     "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "c2f10d43a64e",
+    # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",

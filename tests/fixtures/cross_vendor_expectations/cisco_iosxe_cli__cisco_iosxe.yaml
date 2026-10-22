@@ -365,6 +365,16 @@ per_field_expectation:
       so cross-pair drops VRF membership entirely today.
     references: [oc-network-instance, iosxe-multivrf]
 
+  "interfaces[].dot1q_inner_vlan":
+    disposition: unsupported
+    reason: >
+      The cisco_iosxe matrix declares `/interfaces/interface/dot1q-inner-vlan`
+      unsupported: the inner tag has no form in the NETCONF codec, whose
+      routed sub-interface tag is itself not wired.  The carrier capture's six
+      Q-in-Q units lose their inner tags; the job is `partial`, the validation
+      report listing the path.
+    references: [oc-interfaces, iosxe-interface-cg]
+
   vlans:
     disposition: unsupported
     reason: >

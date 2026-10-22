@@ -192,6 +192,30 @@ _SOURCES = [
         1504,
         id="junos-tagged-device",
     ),
+    # Two tags a frame: Junos counts what the tagging statement names.
+    pytest.param(
+        "juniper_junos",
+        "set system host-name r1\n"
+        "set interfaces ge-0/0/3 stacked-vlan-tagging\n"
+        "set interfaces ge-0/0/3 mtu 1522\n"
+        "set interfaces ge-0/0/3 unit 10 vlan-tags outer 10 inner 20\n"
+        "set interfaces ge-0/0/3 unit 10 family inet address 198.51.100.1/24\n",
+        1500,
+        id="junos-stacked-device",
+    ),
+    # Mixed tagging: 4 bytes more than a VLAN-tagged port (Juniper,
+    # "Enabling VLAN Tagging"), whatever tags its units carry.
+    pytest.param(
+        "juniper_junos",
+        "set system host-name r1\n"
+        "set interfaces ge-0/0/4 flexible-vlan-tagging\n"
+        "set interfaces ge-0/0/4 mtu 1522\n"
+        "set interfaces ge-0/0/4 unit 10 vlan-id 10\n"
+        "set interfaces ge-0/0/4 unit 10 family inet address 198.51.100.1/24\n"
+        "set interfaces ge-0/0/4 unit 20 vlan-tags outer 20 inner 30\n",
+        1500,
+        id="junos-flexible-device",
+    ),
     pytest.param(
         "juniper_junos",
         "set system host-name r1\n"
@@ -220,6 +244,18 @@ _SOURCES = [
         "!\n",
         1500,
         id="iosxr-tagged-subinterface",
+    ),
+    # "add 4 bytes for each VLAN tag": the second-dot1q is one.
+    pytest.param(
+        "cisco_iosxr",
+        "hostname r1\n"
+        "interface TenGigE0/0/0/3.10\n"
+        " mtu 1522\n"
+        " encapsulation dot1q 10 second-dot1q 20\n"
+        " ipv4 address 198.51.100.1 255.255.255.0\n"
+        "!\n",
+        1500,
+        id="iosxr-qinq-subinterface",
     ),
     pytest.param(
         "dell_os10",

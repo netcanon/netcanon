@@ -334,13 +334,11 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0. Sample drift: {"static_routes[0]
-      {'destination': '0.0.0.0/0'}": {'vrf': {'source': 'management',
-      'target': ''}}, "static_routes[2] {'destination':
-      '10.50.0.0/16'}": {'vrf': {'source': 'TENANT-A', 'target':
-      ''}}}.
+      AOS-S has no VRF: a route in one (`management`, `TENANT-A`) is
+      left out of the output under a ``; review:`` line, rather than
+      written into the switch's one table with its VRF dropped.
+      Measured: drifted on the 3 cells that carry such a route,
+      preserved on the 2 whose routes are all in the default table.
     references: [os10-aoss-surface]
 
   syslog_servers:

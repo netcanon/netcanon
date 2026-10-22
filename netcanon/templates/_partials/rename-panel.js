@@ -186,10 +186,9 @@
     // keeps its own name -- which an override may not also take.
     // That holds for a LAG or a loopback as for a port.  Counted
     // only against an entry of the operator's: where the
-    // translator itself put a name on an unchanged name (a Junos
-    // loopback unit onto ``lo0``, which is the loopback's name on
-    // OPNsense too), that is the job as it came back, and holding
-    // Apply for it would hold every other edit too.
+    // translator itself put a name on an unchanged name, that is
+    // the job as it came back, and holding Apply for it would hold
+    // every other edit too.
     var ownTargets = new Set();
     Object.keys(_renameUserMap).forEach(function(src) {
       if (_renameUserMap[src]) ownTargets.add(_renameUserMap[src]);

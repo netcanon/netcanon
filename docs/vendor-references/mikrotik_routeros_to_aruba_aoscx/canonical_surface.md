@@ -1,5 +1,7 @@
 # MikroTik RouterOS → ArubaOS-CX: measured canonical surface
 
+> **Update 2026-10-20 — the AOS-CX render now writes a VLAN interface for an address held on a VLAN record, and its matrix no longer declares `/vlans/vlan/ipv4/address/ip` lossy.**  Where a VLAN carries an address and the tree has no interface for it in any spelling, the render writes `interface vlan <N>` for it (`synthesize_svis_from_vlan_l3`).  No measurement of this pair moved: no VLAN record of it carries an address.  Sentences below that quote the lossy declaration, or say the render never writes an SVI from the VLAN record, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__aruba_aoscx.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__aruba_aoscx.yaml`.
 

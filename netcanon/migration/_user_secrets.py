@@ -17,6 +17,13 @@ the synthetic round-trip fixtures are:
 * structured but unmodelled (any other ``$id$`` shape)  -> (:data:`_UNKNOWN`, ...)
 * anything else (no separator, no structure)            -> ("plaintext", ...)
 
+``plaintext`` is a password a human TYPED, and a target takes one only
+where its config has a line that means "this is the password, hash it
+yourself".  Junos and OPNsense have none: their config holds a hash
+(`encrypted-password`, `<password>`), and a typed password written there
+was the hash literal of an account no password opens.  So ``plaintext``
+is in an accept set like any algorithm, and absent from those two.
+
 ⚠️ The last line is a FAIL-OPEN default and is deliberately narrow.  It
 used to catch everything unrecognised, including bare crypt strings —
 so ``$6$..`` classified as plaintext, ``is_migratable`` returned True,
@@ -57,11 +64,14 @@ Configuration surface:
   reader is not misled into treating it as policy.
 * ``_TARGET_ACCEPTS`` — per-target accepted-algorithm sets; the
   positive list backing :func:`is_migratable`.
-* ``_COMMENT_PREFIXES`` — per-target ``(open, close)`` comment-syntax
-  tuples used by :func:`format_review_comment`.
+* :func:`format_review_comment` builds its comment through
+  :func:`netcanon.migration._comments.comment`, so a user name cannot
+  end the comment it is named in.
 """
 
 from __future__ import annotations
+
+from ._comments import comment
 
 # ---------------------------------------------------------------------------
 # Algorithm vocabulary
@@ -84,8 +94,10 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
     "md5crypt",  # Synonym for some sources tagged as "md5crypt:..."
 })
 
-#: Per-target accepted algorithms.  ``"plaintext"`` is implicitly
-#: accepted by every target (we just emit the literal password).
+#: Per-target accepted algorithms.  ``"plaintext"`` (a password a human
+#: typed) is accepted where the target has a line that takes one and
+#: hashes it itself; a target missing from this table takes plaintext
+#: only.
 #:
 #: Notes on individual targets:
 #:
@@ -105,11 +117,19 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #:   (tagged ``fortios:`` here); foreign hashes cannot be consumed.
 #: * ``juniper_junos`` accepts crypt-format $1$ (md5) and $6$
 #:   (sha512) — they're recognised by the Junos commit-time hasher.
-#:   Pure ``sha512`` from Arista IS migratable to Junos.
+#:   Pure ``sha512`` from Arista IS migratable to Junos.  NOT plaintext:
+#:   Juniper documents two ways to give an account a password,
+#:   ``encrypted-password`` (a hash) and ``plain-text-password``, which
+#:   takes no value and asks for the password at a prompt.  A typed
+#:   password written as ``encrypted-password "<typed>"`` was the hash
+#:   string itself.  (``plain-text-password-value`` takes one, and is a
+#:   hidden command no Juniper page documents.)
 #: * ``opnsense`` verifies local passwords with PHP ``password_verify()``,
 #:   which consumes any crypt(3) hash.  It accepts bcrypt ($2y$) and SHA-512
 #:   crypt ($6$); the latter is evidenced by real OPNsense HA configs in the
 #:   corpus.  MD5 crypt is not accepted: no OPNsense capture carries it.
+#:   NOT plaintext: ``<password>`` is what ``password_verify()`` checks a
+#:   password AGAINST, so a typed password written there opens nothing.
 #: * ``mikrotik_routeros`` does NOT accept foreign hashes — RouterOS
 #:   re-hashes the supplied password itself.  Plaintext only.
 #: * ``cisco_nxos`` writes every crypt(3) form under ``password 5``:
@@ -214,8 +234,8 @@ _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "arista_eos":        frozenset({"plaintext", "5", "md5crypt", "sha512"}),
     "cisco_iosxe_cli":   frozenset({"plaintext", "5", "7", "8", "9", "md5crypt"}),
     "fortigate_cli":     frozenset({"plaintext", "fortios"}),
-    "juniper_junos":     frozenset({"plaintext", "junos_type1", "junos_type9", "sha512"}),
-    "opnsense":          frozenset({"plaintext", "bcrypt", "sha512"}),
+    "juniper_junos":     frozenset({"junos_type1", "junos_type9", "sha512"}),
+    "opnsense":          frozenset({"bcrypt", "sha512"}),
     "mikrotik_routeros": frozenset({"plaintext"}),
     "cisco_nxos":        frozenset({"plaintext", "5", "md5crypt", "sha256crypt"}),
     # Dell OS10 stores `username ... password <crypt>` with NO type digit.
@@ -308,20 +328,24 @@ def classify_hash(hashed: str) -> tuple[str, str]:
         return _UNKNOWN, hashed
 
     # Genuinely untagged and unstructured — a password a human typed.
-    # The corpus has one: a 5-character alphanumeric secret on an AOS-CX
-    # ``admin`` account.  Refusing everything unrecognised would catch that
+    # The corpus has some (IOS-XE ``password 0``, OS10 template
+    # placeholders).  Refusing everything unrecognised would catch those
     # too, which is why the rule keys on structured-secret SHAPE rather than
-    # on "did I recognise it".
+    # on "did I recognise it".  A parser that KNOWS a value is not typed
+    # says so with a tag: the 5-character word this comment once cited
+    # was an AOS-CX ``password ciphertext`` its publisher had replaced.
     return "plaintext", hashed
 
 
 def is_migratable(hashed: str, target_vendor: str) -> bool:
     """Return True if ``hashed`` can be re-emitted on ``target_vendor``.
 
-    Plaintext is always migratable.  Otherwise the algorithm token
-    extracted by :func:`classify_hash` must appear in the target's
-    accepted set.  Unknown vendors are conservatively treated as
-    accepting only plaintext.
+    The algorithm token extracted by :func:`classify_hash` must appear
+    in the target's accepted set, ``plaintext`` included: a typed
+    password is not migratable to a target whose config holds only a
+    hash (Junos, OPNsense).  An empty secret is migratable everywhere
+    (there is nothing to write).  Unknown vendors are conservatively
+    treated as accepting only plaintext.
 
     A secret whose format is structured but unmodelled (:data:`_UNKNOWN`)
     is refused outright, ahead of the accept-set lookup.  The lookup
@@ -332,22 +356,13 @@ def is_migratable(hashed: str, target_vendor: str) -> bool:
     line; never to fall back to plaintext, which is what made a digest
     the credential in the first place.
     """
-    algorithm, _payload = classify_hash(hashed)
+    algorithm, payload = classify_hash(hashed)
     if algorithm == _UNKNOWN:
         return False
-    if algorithm == "plaintext":
+    if algorithm == "plaintext" and not payload:
         return True
     accepted = _TARGET_ACCEPTS.get(target_vendor, frozenset({"plaintext"}))
     return algorithm in accepted
-
-
-_COMMENT_PREFIXES: dict[str, tuple[str, str]] = {
-    "hash":        ("# ", ""),
-    "semicolon":   ("; ", ""),
-    "slash":       ("/* ", " */"),
-    "xml":         ("<!-- ", " -->"),
-    "exclamation": ("! ", ""),
-}
 
 
 def format_review_comment(
@@ -391,16 +406,29 @@ def format_review_comment(
     ``-`` so the output is embeddable directly into XML without
     post-processing.  All other comment syntaxes keep the ``--``
     separator byte-for-byte (Aruba / FortiGate / Junos rely on it).
+
+    The comment is built by :func:`netcanon.migration._comments.comment`:
+    a user name that holds what ends the comment (``*/``, ``--``) is
+    broken where it stands, so that what follows it is not configuration.
     """
-    prefix, suffix = _COMMENT_PREFIXES.get(comment_syntax, ("# ", ""))
     # XML 1.0 disallows ``--`` inside comment bodies — collapse to a
     # single hyphen for the xml variant only.  Other syntaxes keep the
     # original ``-- review:`` separator byte-identical (existing Aruba
     # / FortiGate / Junos output stays unchanged).
     separator = "-" if comment_syntax == "xml" else "--"
+    if algorithm == "plaintext":
+        # A typed password is not a hash, and saying "plaintext hash"
+        # would send the operator looking for one.  Never the value.
+        body = (
+            f'password manager user-name "{user_name}" {separator} review: '
+            f"the source holds this password as typed, and {target_label} "
+            f"takes a password into its config only as a hash; the account "
+            f"is left out: add it on the device and set its password there"
+        )
+        return comment(body, comment_syntax)
     body = (
         f'password manager user-name "{user_name}" {separator} review: '
         f"{algorithm} hash from source vendor cannot be re-used on "
         f"{target_label}; reset this user password manually"
     )
-    return f"{prefix}{body}{suffix}"
+    return comment(body, comment_syntax)

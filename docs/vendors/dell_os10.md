@@ -341,6 +341,15 @@ translate it again from `show running-configuration` as the switch prints it.
 
 ## Common gotchas
 
+- **A description that holds white space is written in quotes as a
+  target**, as Dell documents for `description` (up to 0.7.7 it was
+  written bare).  Dell documents no escape inside the quotes, so a `"`
+  in a description, a VLAN's name (written as its interface's
+  description) or the SNMP location or contact is written `'`.  A host
+  name or VRF name that holds white space or a `"` is written with `_`
+  and `'`, and a route whose gateway holds either is left out whole;
+  each with a `review:` line.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 ⚠️ **Auto-detection finds about three OS10 configs in four.**
 OS10 and IOS-XE share the `!`-delimited Cisco shape, so a capture that
 spends its opening bytes on a template header, a console login banner or

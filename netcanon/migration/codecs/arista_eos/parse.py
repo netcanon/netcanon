@@ -46,6 +46,7 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
+from ..._radius_secrets import EOS_ENVELOPE
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -67,12 +68,15 @@ from ...limits import charge, ticked
 from .._helpers import (
     VLAN_IDS,
     GrowingIndex,
+    Tags,
     TrunksByName,
     Uniques,
     _mask_to_prefix,
+    a_tag,
     merge_trunk_allowed,
     tags_every_native_vlan,
     tags_its_native_vlan,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import LINE_END_MESSAGE, first_flat_stanza, scan_stanzas
@@ -229,8 +233,31 @@ _RADIUS_SERVER_RE = re.compile(
 )
 _RADIUS_AUTH_PORT_RE = re.compile(r"\bauth-port\s+(\d+)")
 _RADIUS_ACCT_PORT_RE = re.compile(r"\bacct-port\s+(\d+)")
-# Key payload: bare token or quoted string.  EOS accepts both.
-_RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
+# Key payload: ``key [<type>] <secret>``, the secret a bare token or a
+# quoted string.  EOS prints ``key 7 <blob>``; 0, or no type, is the
+# secret as typed, and any other type a form only EOS reads, carried
+# behind EOS_ENVELOPE (see _radius_key).  Until 2026-10 this read
+# ``key 7 <blob>`` as the secret ``7``.
+_RADIUS_KEY_RE = re.compile(
+    r'(?<![\w-])key\s+(?:(\d+[a-z]?)\s+)?(?:"([^"]*)"|(\S+))'
+)
+
+
+def _radius_key(key_type: str, key_val: str) -> str:
+    """The canonical value of ``key [<type>] <secret>``.
+
+    Type 0, or none, is the secret as typed.  Any other type -- EOS
+    prints ``key 7`` -- is carried behind :data:`EOS_ENVELOPE` with its
+    type, so that no other platform takes it for the secret and an EOS
+    output writes it back as it was.  Whether EOS's type 7 is Cisco's
+    is not established, so an IOS-XE ``key 7`` is not written here
+    either.
+    """
+    if not key_val:
+        return ""
+    if not key_type or key_type == "0":
+        return key_val
+    return f"{EOS_ENVELOPE}{key_type} {key_val}"
 
 # Top-level VRF declaration.  Modern EOS (4.23+) uses ``vrf instance <name>``;
 # older EOS (<=4.22) uses ``vrf definition <name>`` for the identical stanza.
@@ -747,6 +774,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         source_vendor="arista_eos",
         source_format="cli-arista",
     )
+    # A sub-interface whose tag statement is not read whole (a range,
+    # a FlexEncap ``encapsulation vlan`` block) is taken out before
+    # any reader sees it, and its row says the statement.  The codec's
+    # ``parse()`` keeps the rows beside the Tier-3 ones.
+    raw, intent.dropped_tier3_sections = without_unread_tags(
+        raw, _is_tag_statement, _tags_of,
+    )
 
     # --- Top-level scalar fields (regex-based, single-pass) ---
     m = _HOSTNAME_RE.search(raw)
@@ -913,7 +947,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 # separation — the colon is our canonical
                 # interior delimiter and doesn't appear in any
                 # real EOS hash (they're base64-ish: alnum + .
-                # + / + $).
+                # + / + $).  Type 0 is the password as typed (EOS
+                # hashes it), which the shared policy calls
+                # ``plaintext``: tagged ``0`` it was an algorithm no
+                # target takes, and EOS refused its own account.
+                if alg == "0":
+                    alg = "plaintext"
                 hashed = f"arista:{alg}:{parts[2]}"
         intent.local_users.append(CanonicalLocalUser(
             name=name,
@@ -947,7 +986,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 pass
         km = _RADIUS_KEY_RE.search(rest)
         if km:
-            key = km.group(1) if km.group(1) is not None else km.group(2)
+            key = _radius_key(
+                km.group(1) or "",
+                km.group(2) if km.group(2) is not None else km.group(3),
+            )
         intent.radius_servers.append(CanonicalRADIUSServer(
             host=host, key=key,
             auth_port=auth_port, acct_port=acct_port,
@@ -1469,6 +1511,47 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
         # CanonicalRoutingInstance.redistribute_*.
 
 
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement:
+    ``encapsulation dot1q ...``, or ``encapsulation vlan``, which opens
+    a FlexEncap block ("Flexible Interface Encapsulation", Arista TOI)
+    whose ``client`` / ``network`` lines the tree has no form for."""
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() in ("dot1q", "vlan")
+    )
+
+
+def _tags_of(statement: str) -> Tags | None:
+    """The tags of an EOS tag statement, read whole, else ``None``.
+
+    ``encapsulation dot1q vlan <outer>`` and ``encapsulation dot1q vlan
+    <outer> inner <inner>`` (the FlexEncap TOI's own example is
+    ``encapsulation dot1q vlan 10 inner 20``), and the bare
+    ``encapsulation dot1q <outer>`` this parser has always tolerated.
+    """
+    words = statement.split()
+    if [w.lower() for w in words[:2]] != ["encapsulation", "dot1q"]:
+        return None
+    if len(words) == 3:
+        outer = a_tag(words[2])
+        return None if outer is None else (outer, None)
+    if len(words) < 4 or words[2].lower() != "vlan":
+        return None
+    outer = a_tag(words[3])
+    if outer is None:
+        return None
+    if len(words) == 4:
+        return (outer, None)
+    if len(words) == 6 and words[4].lower() == "inner":
+        inner = a_tag(words[5])
+        if inner is not None:
+            return (outer, inner)
+    return None
+
+
 def _apply_iface_subcommand(  # noqa: C901
     iface: CanonicalInterface,
     line: str,
@@ -1678,14 +1761,16 @@ def _apply_iface_subcommand(  # noqa: C901
         return
     # GAP 7: routed sub-interface 802.1Q tag.  EOS writes
     # ``encapsulation dot1q vlan N`` (the ``vlan`` keyword is required —
-    # verified vs an independent Batfish parse); ``split()[-1]`` also
-    # tolerates a bare ``encapsulation dot1q N``.  Stored on the dedicated
-    # dot1q_vlan field, NOT access_vlan (a routed sub-iface is L3).
-    if line.startswith("encapsulation dot1q "):
-        try:
-            iface.dot1q_vlan = int(line.split()[-1])
-        except ValueError:
-            pass
+    # verified vs an independent Batfish parse), and ``encapsulation
+    # dot1q vlan N inner M`` for a sub-interface of two tags; a bare
+    # ``encapsulation dot1q N`` is tolerated.  Stored on the dedicated
+    # dot1q_vlan / dot1q_inner_vlan fields, NOT access_vlan (a routed
+    # sub-iface is L3).  Read whole (:func:`_tags_of`): ``split()[-1]``
+    # took the INNER tag of ``vlan 10 inner 20`` for the outer one.
+    if _is_tag_statement(line):
+        tags = _tags_of(line)
+        if tags is not None:
+            iface.dot1q_vlan, iface.dot1q_inner_vlan = tags
         return
     # ``switchport mode access`` / ``switchport access vlan N`` /
     # ``switchport trunk allowed vlan L`` — parse-and-record.

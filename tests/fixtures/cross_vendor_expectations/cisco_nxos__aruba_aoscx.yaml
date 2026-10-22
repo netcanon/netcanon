@@ -284,17 +284,20 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on all 6 cells that populate it: the list is emptied on the VLAN
-      record.  The two signals disagreed here — the total-drop heuristic reads
-      the `vlans` parent as a whole-record vanish, while the target matrix
-      declares `/vlans/vlan/ipv4/address/ip` LOSSY — so this was settled by
-      probe, not by grammar.  Round-tripping `kitchen_sink.cfg`: the source
+      record.  The total-drop heuristic reads the `vlans` parent as a
+      whole-record vanish, so this was settled by probe, not by grammar.
+      Round-tripping `kitchen_sink.cfg`: the source
       carries the SVI address on BOTH canonical mounts; after the trip
       `vlan 10 ipv4=[]` but `Vlan10 ipv4=[('10.10.10.1', 24, '')]` and
       `Vlan20 ipv4=[('10.20.20.1', 24, '10.20.20.1')]`.  The address, its
       prefix length and its anycast virtual-gateway companion all survive on
       the `interfaces[]` mount, and the rendered config is complete — only the
-      VLAN-record copy is dropped, because aruba_aoscx renders SVI L3 from the
-      sibling `interface vlan N` stanza and never re-projects it back.  Lossy,
+      VLAN-record copy is dropped.  This path translates no name, so the
+      AOS-CX render writes the address from the NX-OS `interface Vlan10`
+      under that name (`synthesize_svis_from_vlan_l3` writes no second
+      interface), and the AOS-CX parser does not fold an interface called
+      `Vlan10` onto VLAN 10; with port names translated it is `vlan 10` and
+      the address folds back onto the VLAN.  Lossy,
       not unsupported: no addressing is actually missing from the target
       config.  Practically this matters only to tooling that reads SVI
       addressing off `CanonicalVlan` rather than `CanonicalInterface`.

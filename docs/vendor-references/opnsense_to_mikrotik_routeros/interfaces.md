@@ -100,9 +100,12 @@ OPNsense ``<enable/>`` element (present = enabled) ↔ RouterOS
 
 ### interface_type
 
-OPNsense doesn't surface an ifType field — canonical ``interface_type``
-hint is empty after an OPNsense parse.  RouterOS codec also lossy
-on type (infers from default-name prefix).
+The OPNsense parser types its VLAN devices (``ianaift:l3ipvlan``)
+and leaves every other interface untyped.  The VLAN devices come
+back typed as they were; the drift is ``lo0``, which the RouterOS
+render writes under ``/interface bridge`` and which comes back typed
+as a bridge (``ianaift:bridge``), on
+``user_contrib_supergate_opn25.xml``.
 
 ### mtu
 
@@ -132,8 +135,10 @@ interface=etherN``.  Neither codec currently wires this into
 
 ### lag_member_of
 
-OPNsense ``<laggs>/<lagg>/<members>opt3,opt4</members>`` parsing
-back-links each member to its parent ``<laggif>`` name.  RouterOS
+OPNsense ``<laggs>/<lagg>/<members>igb2,igb3</members>`` parsing
+gives each member -- a device in no zone, since OPNsense adds only an
+unassigned interface to a LAGG -- a record of its own that names its
+parent ``<laggif>``.  RouterOS
 ``/interface bonding name=bond1 slaves=ether3,ether4`` carries the
 back-pointer in a different shape (``slaves=`` parameter on the
 parent rather than ``<members>`` element).  Both codecs round-trip
@@ -155,7 +160,7 @@ either; field structurally absent.
 | `interfaces[].default_name` | lossy (RouterOS-only concept; arrives empty) |
 | `interfaces[].description` | good |
 | `interfaces[].enabled` | good |
-| `interfaces[].interface_type` | lossy (no OPNsense ifType field) |
+| `interfaces[].interface_type` | lossy (`lo0` comes back typed as a bridge) |
 | `interfaces[].mtu` | good |
 | `interfaces[].ipv4_addresses` | good |
 | `interfaces[].ipv6_addresses` | good |

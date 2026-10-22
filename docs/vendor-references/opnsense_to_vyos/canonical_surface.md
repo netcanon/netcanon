@@ -78,6 +78,12 @@ lived only in `intent.lags` on the source comes back as an eighth interface.
 Every one of the 30 source names — `em0`–`em4`, `igc0`, `ixl0`, `lo0`,
 `vlan0.10` … `vlan0.150`, `mismatch0` / `mismatch1` — survives on every cell.
 
+These counts were taken before the VLAN-device change. Since it, the OPNsense
+parser gives each VLAN device that no zone assigns an interface record of its
+own (`ianaift:l3ipvlan`) — `vlan0.10`, `vlan0.100` and `vlan0.200` on
+`kitchen_sink.xml` — so that cell holds more records on both sides; the one it
+gains is still `lagg0`.
+
 Because the interfaces list changes length on that one cell, the reconciler's
 structural collapse routes the whole list's record-level signal to
 `interfaces[].name`, which is why that key is `lossy` while every surviving
@@ -97,10 +103,12 @@ they are separately measured below.
 | `mtu` | 1 | 30 | **0** | — |
 | `interface_type` | **0** | 30 | — | source never emits it |
 
-`interface_type` is worth stating plainly: the OPNsense parser populates the
-IANA type hint on **zero** of the 30 records, so the `/interfaces/interface/config/type`
-LOSSY declaration on the VyOS side — real enough for other sources — has nothing
-to bite on here.
+`interface_type` was measured before the VLAN-device change, when the OPNsense
+parser populated the IANA type hint on **zero** of the 30 records. It now types
+its VLAN devices (`ianaift:l3ipvlan`), and VyOS loses the type: the render
+writes each device as an `ethernet vlan0.<n>` stanza, not as a `vif` of the
+port it rides on, and the VyOS parser reads that back untyped. The pair's
+expectation YAML now records the key `lossy`.
 
 ### The VyOS quote rewrite did not fire on this pair
 
@@ -311,19 +319,26 @@ But the L3 does **not** all vanish with it, and the split is worth knowing:
 | cell | VLAN ids | surviving `vlan0.<vid>` interface twin |
 |---|---|---|
 | `user_contrib_supergate_opn25.xml` | 10, 11, 20, 100, 150 | all 5 |
-| `kitchen_sink.xml` | 10, 20, 30, 100, 200 | only 20 and 30 |
+| `kitchen_sink.xml` | 10, 20, 30, 100, 200 | all 5 (10, 100 and 200 hold nothing but the name) |
 
-So **7 of the 10** VLAN records have a routed sub-interface twin in
-`interfaces[]` that survives with its addressing and description intact, and
-**3** — VLANs 10, 100 and 200 on `kitchen_sink.xml` — leave no trace at all.
+Since the VLAN-device change every one of the 10 VLAN records has a
+`vlan0.<vid>` twin in `interfaces[]` (the OPNsense parser gives a device no
+zone assigns a record of its own), each written as an `ethernet vlan0.<vid>`
+stanza with no tag: **7** survive with their addressing and description
+intact, and the other **3** — VLANs 10, 100 and 200 on `kitchen_sink.xml` —
+hold nothing but the name. (Before the change those 3 left no trace at all. A
+plan endpoint, which translates port names, leaves each such device out
+instead, and the job is `partial` and lists it.)
 
-Every one of the 10 source VLAN records carries only `id` and `name`
-(`USER VLAN`, `MGMT VLAN`, `IOT VLAN`, …); description, addressing and port
-membership are empty on all 10, and opnsense declares `/vlans/vlan/tagged-ports`
-and `/vlans/vlan/untagged-ports` unsupported so those two can never be
-populated. The VLAN **name** is the one operator-authored value that is lost on
-all 10 — the sub-interface twin carries its own description, not the VLAN's
-name. Capture the id→name table before cutover.
+An OPNsense `<vlan>` has no name of its own: every one of the 10 source VLAN
+records carries an `id`, a `name` that is its device (`vlan0.10`) and a
+`description` that is its `<descr>` (`USER VLAN`, `MGMT VLAN`, `IOT VLAN`, …);
+addressing and port membership are empty on all 10, and opnsense declares
+`/vlans/vlan/tagged-ports` and `/vlans/vlan/untagged-ports` unsupported so
+those two can never be populated. The VLAN's **label** — its description — is
+the one operator-authored value that is lost on all 10 — the `vlan0.<vid>`
+twin carries its own description, not the VLAN's label. Capture the id→label
+table before cutover.
 
 ## Credential material
 

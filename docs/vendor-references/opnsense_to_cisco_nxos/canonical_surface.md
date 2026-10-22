@@ -1,5 +1,7 @@
 # OPNsense -> Cisco NX-OS: measured canonical surface
 
+> **Update 2026-10-20 — the NX-OS render now writes a VLAN interface for an address held on a VLAN record, and its matrix no longer declares `/vlans/vlan/ipv4/address/ip` lossy.**  Where a VLAN carries an address and the tree has no interface for it in any spelling, the render writes `interface Vlan<N>` for it (`synthesize_svis_from_vlan_l3`).  No measurement of this pair moved: no VLAN record of it carries an address.  `vlans[].ipv4_addresses` is now declared `not_applicable` rather than lossy on the target's word.  Sentences below that quote the lossy declaration, or say the render never writes an SVI from the VLAN record, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__cisco_nxos.yaml`.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 14** local accounts now arrive across the 7 cells that populate users. 10 are refused for a secret NX-OS cannot consume (10 `bcrypt:`-tagged OPNsense hash): the render emits a `review:` comment naming the account and no user entry. 4 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__cisco_nxos.yaml`.
 
@@ -64,6 +66,14 @@ same parent is preserved on every cell)
 | `dhcp_servers[]` (record) | 4 cells | `all 1 dhcp_servers dropped` |
 | `radius_servers[]` (record) | 1 cell | `all 2 radius_servers dropped` |
 | `hostname` (scalar) | 1 cell | `""` -> `switch` |
+
+Both tables were measured before the VLAN-device change. Since it,
+`vlans[].description` drifts on both cells that hold VLANs (the operator's
+label, `USER VLAN`, is now the VLAN's description, and NX-OS writes none — see
+the `vlans` note below), and the OPNsense parser gives each VLAN device that
+no zone assigns an interface record of its own (`ianaift:l3ipvlan`), so the
+kitchen sink holds more interface records on both sides. The pair's
+expectation YAML holds the current disposition.
 
 ## Notes grounding the dispositions
 
@@ -158,14 +168,18 @@ same parent is preserved on every cell)
   re-keying on the target.
 
 * **`vlans`** — id and name round-trip on both populated cells (5 records
-  each). `description`, `tagged_ports`, `untagged_ports` and
+  each). An OPNsense `<vlan>` has no name of its own: the canonical name is
+  its device (`vlan0.10`), which NX-OS writes as `vlan <id> / name vlan0.10`.
+  The operator's label (`USER VLAN`) is the `<descr>`, read as the VLAN's
+  description, and is lost: the NX-OS render emits the VLAN name but no
+  description line (declared LOSSY on the NX-OS target, and listed for each
+  VLAN in the validation report). `tagged_ports`, `untagged_ports` and
   `ipv4_addresses` carry no data on any VLAN record in the corpus.
   `tagged_ports` / `untagged_ports` are declared unsupported on the OPNsense
-  source (no per-VLAN port concept), so they are structurally absent;
-  `description` and the SVI-on-VLAN `ipv4_addresses` are declared LOSSY on
-  the NX-OS target (its render emits the VLAN name but no description line,
-  and renders SVI L3 only from a sibling interface stanza), so they are
-  declared lossy on the strength of the target's own declaration with the
+  source (no per-VLAN port concept), so they are structurally absent; the
+  SVI-on-VLAN `ipv4_addresses` is declared LOSSY on the NX-OS target (it
+  renders SVI L3 only from a sibling interface stanza), so it is declared
+  lossy on the strength of the target's own declaration with the
   measurement stated plainly.
 
 * **Structurally absent on the source** (`ntp_servers`, `syslog_servers`,

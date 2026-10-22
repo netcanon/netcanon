@@ -100,7 +100,12 @@ Junos -> OPNsense:
 - `name`: **lossy** — Junos `ge-0/0/0` / `xe-0/0/47` / `ae0` / `irb`
   do not survive on OPNsense.  The port-rename mesh maps each source
   name to a zone label (`<wan>` / `<lan>` / `<optN>`); canonical
-  preserves the source string verbatim.
+  preserves the source string verbatim.  The round trip can also
+  add records: a VLAN the render links to no VLAN interface of the
+  source is written as a `<parent>_vlan<id>` device
+  (`xe-0/0/0_vlan2021`), which the OPNsense parser reads back as an
+  interface of its own (`ianaift:l3ipvlan`).  No source record is
+  lost.
 - `description`: **good** — Junos `description` (quoted when
   whitespace) ↔ OPNsense `<descr>`.  Round-trip preserves text content.
 - `enabled`: **good** — Junos `disable` keyword presence ↔ OPNsense

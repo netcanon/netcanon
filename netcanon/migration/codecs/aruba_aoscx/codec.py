@@ -156,6 +156,9 @@ class ArubaAOSCXCodec(CodecBase):
             "/interfaces/interface/lag-member-of",
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
+            # A VLAN record's address: written as ``interface vlan <N>``
+            # (synthesize_svis_from_vlan_l3) where the tree has none.
+            "/vlans/vlan/ipv4/address/ip",
             # ── Phase 2: LAGs (`interface lag N`) ──
             "/lags/lag/name",
             "/lags/lag/members",
@@ -207,46 +210,37 @@ class ArubaAOSCXCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/vlans/vlan/ipv4/address/ip",
-                reason=(
-                    "Renders VLAN SVI / management L3 only from a sibling "
-                    "interface stanza; an L3 address carried on the VLAN record "
-                    "itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto "
-                    "CanonicalVlan.ipv4_addresses) is dropped on render because "
-                    "this codec does not synthesize an SVI from the VLAN record. "
-                    "Declared lossy so validate_against surfaces the loss instead "
-                    "of reporting severity:ok (blind-audit 3ec11f3 T0-2)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): this codec renders no SVI "
-                    "from the VLAN record, so a secondary IP carried there is "
-                    "dropped with it. Declared lossy so validate_against "
-                    "surfaces the loss (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount: this codec renders a VLAN record's L3 by "
+                    "synthesizing a VLAN interface "
+                    "(synthesize_svis_from_vlan_l3), which writes an address "
+                    "after the first `secondary` by its position; the "
+                    "record's own is_secondary flag is not read, and the parse "
+                    "folds only ip+prefix_length back onto the VLAN. Declared "
+                    "lossy (blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
             LossyPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-address",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
-                    "IP carried on the VLAN record drops with the unrendered "
-                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount render gap: the synthesized VLAN interface "
+                    "(synthesize_svis_from_vlan_l3) carries only "
+                    "ip+prefix_length, so an anycast virtual-gateway IP on a "
+                    "VLAN-record address is not written. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
             LossyPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
                 reason=(
-                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
-                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
-                    "MAC carried on the VLAN record drops with the unrendered "
-                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                    "VLAN-SVI mount render gap: the synthesized VLAN interface "
+                    "(synthesize_svis_from_vlan_l3) carries only "
+                    "ip+prefix_length, so an anycast virtual-gateway MAC on a "
+                    "VLAN-record address is not written. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
                 ),
                 severity="warn",
             ),
@@ -467,6 +461,15 @@ class ArubaAOSCXCodec(CodecBase):
                     "7) is architecturally unsupported here, not merely "
                     "un-wired: a cross-vendor source's tag is flagged as a "
                     "drop rather than mis-rendered."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "AOS-CX has no routed sub-interface construct (see "
+                    "`/interfaces/interface/dot1q-vlan`), so the inner tag of "
+                    "a Q-in-Q sub-interface has no form here either: a "
+                    "source's inner tag is reported as a drop."
                 ),
             ),
             UnsupportedPath(

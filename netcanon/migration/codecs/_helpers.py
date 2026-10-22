@@ -1810,3 +1810,140 @@ def keyword_stanza_rows(headers: Iterable[str]) -> list[str]:
         else:
             sections.append(header)
     return [*left_out_rows(held, rest=_HELD_KEYWORD), *sections]
+
+
+#: The tags of a routed sub-interface, as its tag statement states them
+#: when the statement is read whole: the outer 802.1Q tag, and the inner
+#: one or ``None``.
+Tags = tuple[int, int | None]
+
+
+def a_tag(word: str) -> int | None:
+    """*word* as one 802.1Q VLAN id (1 to 4094, in ASCII digits), else
+    ``None``.
+
+    A word that is not one id -- ``any``, a range, a list, a keyword --
+    is not read as the id it begins with.
+    """
+    if not (word.isascii() and word.isdigit()) or len(word) > 4:
+        return None
+    vid = int(word)
+    return vid if 1 <= vid <= 4094 else None
+
+
+def second_dot1q_tags(statement: str) -> Tags | None:
+    """The tags of a Cisco ``encapsulation dot1q`` statement, read whole.
+
+    ``encapsulation dot1Q <outer>`` and ``encapsulation dot1Q <outer>
+    second-dot1q <inner>`` (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag
+    Termination"; IOS XR, "Configuring 802.1Q VLAN Interfaces").  Every
+    other form is ``None``: ``second-dot1q any``, a range or a list of
+    inner tags (an "ambiguous" sub-interface, in Cisco's word), and
+    ``native`` -- each a statement the tree has no form for.  Read for
+    its first value, an ambiguous sub-interface was a sub-interface of
+    the outer tag alone on every target, in jobs that said
+    ``completed``.
+
+    Args:
+        statement: The line, white space at its ends apart.
+    """
+    words = statement.split()
+    if [w.lower() for w in words[:2]] != ["encapsulation", "dot1q"]:
+        return None
+    if len(words) == 3:
+        outer = a_tag(words[2])
+        return None if outer is None else (outer, None)
+    if len(words) == 5 and words[3].lower() == "second-dot1q":
+        outer, inner = a_tag(words[2]), a_tag(words[4])
+        if outer is not None and inner is not None:
+            return (outer, inner)
+    return None
+
+
+def unread_tags_row(where: str, statement: str) -> str:
+    """The row of ``dropped_tier3_sections`` for a sub-interface left
+    out because its tag statement is not read whole.
+
+    The sub-interface is in force on the source and is not in the
+    output, so the row is a section's: where it is, and the statement.
+    A tag statement holds VLAN ids and keywords, nothing secret.
+    """
+    return (
+        f"{' '.join(where.split())}: {' '.join(statement.split())} -- not "
+        f"one 802.1Q tag and at most one inner tag, so the sub-interface "
+        f"is not translated"
+    )
+
+
+def without_unread_tags(
+    raw: str,
+    is_tag_statement: Callable[[str], bool],
+    tags_of: Callable[[str], Tags | None],
+) -> tuple[str, list[str]]:
+    """*raw* without each ``interface`` stanza whose tag statement is
+    not read whole, and a row for each.
+
+    A tag statement is read whole or not at all.  The readers took the
+    first id of one (``encapsulation dot1Q 2234 second-dot1q 15`` was
+    VLAN 2234, and so were the five other units of a committed capture
+    on that outer tag), and an inner tag that is a range, a list or
+    ``any`` has no form in the tree.  So a stanza whose own tag
+    statement *tags_of* cannot read is taken out before any reader sees
+    it -- its addresses and its VRF with it, since a sub-interface
+    written with fewer tags than it matches is another sub-interface --
+    and :func:`unread_tags_row` says which.
+
+    A stanza ends where :func:`without_keyword_stanzas` ends one.  Its
+    own lines are at the indent of its first body line; a line indented
+    deeper is a submode's (an IOS-XE ``service instance`` has an
+    ``encapsulation`` of its own) and is not the stanza's statement.
+
+    Args:
+        raw: The config text.
+        is_tag_statement: Whether a line, white space at its ends apart,
+            is a tag statement of the platform.
+        tags_of: Its tags, read whole, or ``None``.
+
+    Returns:
+        ``(text, rows)``: *raw* itself when no stanza is taken out.
+    """
+    kept: list[str] = []
+    rows: list[str] = []
+    stanza: list[str] = []
+    depth: int | None = None
+    unread = ""
+
+    def close() -> None:
+        if unread:
+            rows.append(unread_tags_row(stanza[0], unread))
+        else:
+            kept.extend(stanza)
+
+    for line in ticked(raw.splitlines(keepends=True)):
+        if stanza and line[:1].isspace():
+            stanza.append(line)
+            statement = line.strip()
+            if unread or not statement:
+                continue
+            width = len(line) - len(line.lstrip())
+            if depth is None:
+                depth = width
+            if (
+                width == depth
+                and is_tag_statement(statement)
+                and tags_of(statement) is None
+            ):
+                unread = statement
+            continue
+        if stanza:
+            close()
+            stanza, depth, unread = [], None, ""
+        if _HEADER_WORD_RE.match(line):
+            stanza = [line]
+        else:
+            kept.append(line)
+    if stanza:
+        close()
+    if not rows:
+        return raw, []
+    return "".join(kept), rows

@@ -28,7 +28,8 @@ That's the full parse implementation.  `intent.hostname`,
 `intent.snmp`, `intent.vlans`, `intent.static_routes`,
 `intent.local_users`, `intent.lags`, `intent.routing_instances`
 are NEVER populated by this codec, regardless of what the device's
-NETCONF reply carries.
+NETCONF reply carries (save a VLAN made from an SVI; see
+`vlan_render_gap.md`).
 
 ## What the matrix declares — the aspirational gap, since closed
 
