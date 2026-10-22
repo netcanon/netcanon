@@ -319,17 +319,15 @@ per_field_expectation:
     references: [aoscx-junos-surface]
 
   "vlans[].description":
-    disposition: lossy
-    reason: >
-      Drifts on all 4 cells that populate it — `Server VLAN`,
-      `Black hole VLAN 2701`, `User access VLAN` and friends all arrive empty.
-      juniper_junos declares `/vlans/vlan/description` lossy at the exact path
-      and explains why: the render emits the VLAN name but no separate
-      description line, so a canonical description distinct from the name
-      drops.  The VLAN record itself survives, which is why this is `lossy`
-      rather than `unsupported`.  Nothing forwards differently — but on a
-      campus switch the description is routinely how a VLAN is tied to a
-      department or a site, so capture it before migrating.
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it (`Server VLAN`, `User
+      access VLAN` and the rest): Junos writes `set vlans <name> description
+      X` beside the VLAN's name and reads it back.  Up to 0.7.7 the Junos
+      parser read no such line and the render wrote none, and every one of
+      them arrived empty.  A VLAN with a description and no name of its own
+      is written with the description AS its name (`_vlan_labels`, see
+      `vlans[].name`), and no second time as a description.
     references: [aoscx-junos-surface]
 
   # -- Routing --------------------------------------------------------------

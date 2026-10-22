@@ -75,6 +75,13 @@ Specifics:
   `CanonicalVlan.description`.  Aruba does not model VLAN-level
   description natively; the codec render emits it as a `;` comment
   immediately after the `vlan <id>` header — informational only.
+
+  > **Update 2026-10-21.**  Neither half held: up to 0.7.7 the Junos
+  > parser read nothing of `set vlans NAME description X`, and the
+  > AOS-S render writes no comment for a VLAN description.  The parser
+  > now reads it; the AOS-S render writes the VLAN's `name` alone, and
+  > the job lists `/vlans/vlan/description` as lossy -- so the
+  > description is **lossy**, not good, in the disposition below.
 * `tagged_ports` / `untagged_ports`: Junos's per-interface vlan
   members transposes back to per-VLAN port lists on parse via the
   codec's projection helper.  Aruba render emits the lists as

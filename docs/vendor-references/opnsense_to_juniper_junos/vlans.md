@@ -92,6 +92,13 @@ OPNsense -> Junos:
   and the Junos render writes a VLAN's name and no `description`, so
   the label is lost.  Junos declares `/vlans/vlan/description`
   lossy, which the validation report lists for each VLAN.
+
+  > **Update 2026-10-21.**  The label is no longer lost.  A VLAN whose
+  > name is only its device's is written with its `<descr>` AS its
+  > name (`set vlans "USER VLAN"`, `_vlan_labels`), and not again as a
+  > description; and Junos now reads and writes `set vlans NAME
+  > description X` (declared supported), for a description beside a
+  > name of the VLAN's own, which an OPNsense source does not produce.
 * `vlans[].tagged_ports` / `untagged_ports`: **not_applicable** —
   OPNsense never populates these (no port-membership model on
   parse).  Junos target accepts per-interface `vlan members`

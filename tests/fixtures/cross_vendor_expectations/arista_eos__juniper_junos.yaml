@@ -196,7 +196,7 @@ per_field_expectation:
 
   vlans[].description:
     disposition: good
-    note: "Junos 'set vlans <name> description X'; Arista has no equivalent (description on VLAN is not a first-class field, lives in interface descriptions). Canonical carries it; Arista render emits as a comment."
+    note: "Arista has no VLAN-level description (only interface descriptions), so the field is empty on every Arista parse. Junos writes 'set vlans <name> description X' where a source holds one."
 
   vlans[].tagged_ports:
     disposition: good

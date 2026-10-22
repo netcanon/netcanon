@@ -347,10 +347,10 @@ per_field_expectation:
       Trivially empty on all 11 cells: no Junos fixture sets a VLAN
       description distinct from the VLAN name, so there is no observation
       and the disposition rests on that absence.  Recorded `not_applicable`
-      rather than `good` because the matrices do not support a `good` claim
-      either — aruba_aoscx declares `/vlans/vlan/description` supported but
-      juniper_junos declares its own path LOSSY, so the pair has never been
-      exercised in this direction.
+      rather than `good` because the pair has never been exercised in this
+      direction.  Both matrices declare `/vlans/vlan/description` supported:
+      the Junos parser reads `set vlans <name> description X` (up to 0.7.7 it
+      read nothing of it), and AOS-CX writes a VLAN's `description`.
     references: [junos-aoscx-surface]
 
   # -- Routing --------------------------------------------------------------

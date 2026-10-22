@@ -321,9 +321,9 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      List-level loss recorded once on `vlans[].id`.  juniper_junos declares
-      `/vlans/vlan/description` lossy on its own side, so the VLAN description
-      is already degraded before the target sees it — an operator-labelling
+      List-level loss recorded once on `vlans[].id`: the VLAN description
+      goes with its VLAN.  No Junos capture gives a VLAN a description (the
+      parser reads `set vlans <name> description X`) — an operator-labelling
       field rather than forwarding state, but on a campus switch it is
       routinely how a VLAN is tied to a department or site.  Capture it before
       migrating.
