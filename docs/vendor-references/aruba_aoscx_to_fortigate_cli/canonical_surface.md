@@ -211,6 +211,15 @@ canonical string grows by exactly the 12 characters of that prefix on every
 one of the 6 populated cells). Nothing is deleted, so `lossy` — but see the
 credential section below for why that is still a broken account.
 
+> **Update 2026-10-21 — this call describes the render before #461.**  No
+> AOS-CX ciphertext is written behind `ENC` any more: such an account is
+> refused whole, and a `review:` comment names it in its place (the
+> updates under "Identity" below give the counts).  The key stays
+> `lossy` for the account that does arrive -- one configured `password
+> plaintext`, written `set password "<password>"` for the FortiGate to
+> encrypt, and read back tagged `fortios:`.  Current dispositions are in
+> `tests/fixtures/cross_vendor_expectations/aruba_aoscx__fortigate_cli.yaml`.
+
 Conversely, four surfaces are **real total drops** and are recorded
 `unsupported`, each with the target's own matrix entry agreeing:
 
