@@ -1009,7 +1009,9 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "52840754cf06",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "12aa29d82a17",
+    # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
+    # as a contact and a location (test_snmp_contact_and_location.py).
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "a4e275c2c670",
@@ -1032,7 +1034,8 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
     "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "c2f10d43a64e",
+    # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",

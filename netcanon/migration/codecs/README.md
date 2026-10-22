@@ -531,6 +531,33 @@ the policy locally:
   `_RENDERING_TARGETS` in
   `tests/unit/migration/test_radius_secret_portability.py`.
 
+* **`netcanon/migration/_one_value.py`** — a credential or an
+  account's name is written as ONE value of the place it goes, or not
+  at all.  Public API: `splits(value)` (not one word of a
+  word-at-a-time CLI: white space or a `"`), `breaks_its_quotes(value)`
+  (cannot stand between quotes on a grammar with no escape, AOS-S),
+  `left_out(what, target_label)` (the review line's text; `what` must
+  not hold a secret).  A renderer writing a password, community,
+  SNMPv3 user or FHRP key asks before it writes, and leaves the record
+  out (never alters it) where the value would not be one value; where
+  its target quotes, it escapes as the platform documents.  A new
+  line-grammar codec is judged by
+  `tests/unit/migration/test_a_secret_is_one_value.py` with no entry
+  of its own (it walks `list_public_codecs()`); a target that quotes
+  goes in that module's `_QUOTES` with the escape it documents.
+  For what is not a secret: `one_value_tree(tree, target_label, names=,
+  addresses=, unread_text=, no_escape=, test=)`, called once at the top
+  of `render_intent`, before the first line, with the fields the
+  renderer writes as one word; it returns the tree to write and the
+  review lines, which the renderer puts at the top of its output in
+  its own comment form.  `one_word(name)` is the one word a name is
+  written as.  A new line-grammar codec is judged by
+  `tests/unit/migration/test_a_name_is_one_word.py` with no entry of its
+  own; a place of its grammar that reads to the end of the line goes in
+  that module's `_REST_OF_LINE`, from a vendor page or a committed
+  capture that prints such a line, and a target that
+  quotes in some places only, in `_QUOTED_PLACES`.
+
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec
   (`iosxe_cli`, `iosxe_xml` [no-op], `fortios`, `junos`, `routeros`,
@@ -560,6 +587,18 @@ the policy locally:
   whitespace runs to `_` so the wire form round-trips.  Source state
   is preserved on the canonical model — sanitisation happens only at
   the wire boundary.
+
+* **`netcanon/migration/_one_line.py`** — a value is written on one
+  line.  Public API: `one_line_each(tree)` (the pipeline's, after the
+  transforms: each run of line breaks as one space, in place, and the
+  places it did so, for the job's warnings), `first_line_break(tree)`
+  (the check `CodecBase.render` makes: a tree that still holds a break
+  is a `RenderError`), `LINE_BREAKS`.  A renderer needs to do nothing:
+  it is never handed a value of more than one line, whatever the field,
+  so it may put any value into its line as it stands.  A parser that
+  reads a value of several lines (FortiOS between its quotes, the XML
+  parsers) keeps it as it is; the layout is lost on the way out, and
+  the job says where.
 
 * **`netcanon/migration/canonical/transforms.py::project_switchport_to_vlan`**
   — projects per-iface switchport state (`switchport_mode`,

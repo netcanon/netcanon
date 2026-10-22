@@ -244,6 +244,14 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **A VLAN's name is written whole as a target; a host name or VRF
+  name is not.**  The switch reads a VLAN's `name` to the end of the
+  line (a committed capture prints `name VLAN 11`), so a name with a
+  space is written as it stands.  A host name or VRF name that holds
+  white space or a `"` is written with `_` and `'`, the VRF at every
+  place it is named, and a route whose gateway holds either is left
+  out whole; each with a `review:` line.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 - **A trunk's allowed list means what it says, and AOS-CX cannot say
   "no VLAN".**  `vlan trunk allowed all` is read as EVERY VLAN, and so
   is `vlan trunk native <N>` with no allowed line: the switch adds

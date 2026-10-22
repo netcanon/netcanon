@@ -529,10 +529,8 @@ per_field_expectation:
       password; a refused secret now drops the whole account, as on
       every other target.  Recorded `lossy` rather than `unsupported`:
       an AOS-CX account configured `password plaintext` is read as typed
-      and arrives, as `set password ENC <password>` and read back tagged
-      `fortios:ENC` -- a claim of FortiOS ciphertext the value is not,
-      so the account does not hold the password it was given (the defect
-      #533 mends); no committed capture has one.  Before cutover, list
+      and arrives, as `set password "<password>"` for the FortiGate to
+      encrypt on save; no committed capture has one.  Before cutover, list
       the source accounts, search the render for `review:` comments, and
       re-create each refused account on the target with a fresh
       password.
@@ -560,10 +558,10 @@ per_field_expectation:
       the audit attributes to `local_users[].name` and reclassifies
       STRUCTURAL_ONLY here.  Recorded `lossy` for an account that
       arrives: an AOS-CX account configured `password plaintext` is
-      written as `set password ENC <password>` and read back tagged
-      `fortios:ENC` -- a claim of FortiOS ciphertext the value is not,
-      so the account does not hold the password it was given (the defect
-      #533 mends).  No secret value is quoted here or in the reference
+      written as `set password "<password>"`, for the FortiGate to
+      encrypt on save, and read back tagged `fortios:` -- the account
+      holds the password it was given, and the tag is the whole of the
+      change.  No secret value is quoted here or in the reference
       doc; only shapes and counts.
     references: [aoscx-fortigate-surface]
 

@@ -112,9 +112,7 @@ _PLACES = {"local user": _a_user_named, "snmpv3 user": _an_snmpv3_user_named}
 #: A place still open on this branch, mended by another change.  Whichever
 #: of the two merges second takes the pin out: the test fails with "take
 #: out its pin" once the place is mended.
-_MENDED_ELSEWHERE: dict[tuple[str, str], str] = {
-    ("vyos", "snmpv3 user"): "#533 breaks `*/` in the name `_snmp_v3_review` writes",
-}
+_MENDED_ELSEWHERE: dict[tuple[str, str], str] = {}
 
 
 def _outside_quotes(line: str, needle: str) -> int:
@@ -232,9 +230,6 @@ _BUILT_ELSEWHERE: dict[tuple[str, str], str] = {
     ("netcanon/migration/codecs/opnsense/render.py", "render_canonical"): (
         "an ET.Comment whose text is format_review_comment(..., 'xml'), "
         "which is built by _comments"
-    ),
-    ("netcanon/migration/codecs/vyos/render.py", "_snmp_v3_review"): (
-        "pinned above: #533 breaks `*/` in the name"
     ),
 }
 

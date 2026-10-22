@@ -14,15 +14,46 @@ Two shapes reach the canonical tree:
 kind          where it comes from
 ============  ==========================================================
 ``plaintext`` The secret as the operator typed it.  ``aruba_aoss``
-              (``radius-server host <ip> key "<secret>"``) and
-              ``opnsense`` (``<radius_secret>``) store it this way, and
-              the canonical value carries no envelope.  Portable: every
-              target's RADIUS grammar accepts a literal secret.
-``encrypted`` FortiGate's ``set secret ENC <blob>``, carried canonically
-              behind the ``fortios:`` envelope the FortiGate parser
-              applies.  The blob is encrypted under the FortiGate's own
-              device key.  **Not portable to anything.**
+              (``radius-server host <ip> key "<secret>"``),
+              ``opnsense`` (``<radius_secret>``), ``mikrotik_routeros``
+              (``secret=``), and IOS-XE and EOS ``key <secret>`` /
+              ``key 0 <secret>`` store it this way, and the canonical
+              value carries no envelope.  Portable: every target's
+              RADIUS grammar accepts a literal secret.
+``encrypted`` A secret the source platform stored in a form of its own,
+              carried canonically behind the envelope of the parser
+              that read it.  **Not portable to anything** but that
+              platform:
+
+              * ``fortios:`` -- FortiGate's ``set secret ENC <blob>``,
+                encrypted under the FortiGate's own device key.
+              * ``iosxe:`` -- an IOS-XE ``key <type> <blob>`` with a
+                type other than 0: ``7`` is Cisco's reversible type 7,
+                ``6`` is AES under the device's own master key.  The
+                value behind the envelope is ``<type> <blob>``.
+              * ``eos:`` -- an EOS ``key <type> <blob>`` with a type
+                other than 0 (EOS prints ``key 7``).  Whether EOS's
+                type 7 is Cisco's is not established, so neither is
+                written into the other's ``key 7``.
+              * ``aoss:`` -- AOS-S ``encrypted-key "<blob>"``: AES-256
+                under the switch's ``encrypt-credentials`` key.
 ============  ==========================================================
+
+Until 2026-10 the IOS-XE CLI parser kept the type digit IN the value
+(``7 <blob>``), the legacy ``radius-server host ... key 7 <blob>`` form
+dropped it, the EOS parser read ``key 7 <blob>`` as the secret ``7``,
+and the AOS-S parser read ``encrypted-key "<blob>"`` as the plaintext
+``<blob>`` (its ``key`` pattern matched inside ``encrypted-key``).  None
+of them carried an envelope, so the classifier below called each of
+them ``plaintext``, and every target wrote the stored form into its
+literal-secret slot -- a config that commits and authenticates nobody,
+in a job that said ``completed``.  An envelope is applied where the
+source grammar says what the value is, which only its parser knows.
+
+A plaintext secret that itself begins with one of these envelopes is
+read as that envelope: refused across vendors (the safe side) and, on
+a re-render to its own platform, written in that platform's stored
+form.  A stated limitation (CHANGELOG, known limitations).
 
 Why this module exists (defect D3, 2026-09-23)
 ----------------------------------------------
@@ -70,6 +101,18 @@ from ._comments import comment
 # FortiGate renderer's round-trip branch key off it.
 FORTIOS_ENVELOPE = "fortios:"
 
+#: The envelope the IOS-XE CLI parser puts on ``key <type> <blob>`` for a
+#: type other than 0.  Behind it: ``<type> <blob>``, as the device wrote it.
+IOSXE_ENVELOPE = "iosxe:"
+
+#: The envelope the EOS parser puts on ``key <type> <blob>`` for a type
+#: other than 0.  Behind it: ``<type> <blob>``, as the device wrote it.
+EOS_ENVELOPE = "eos:"
+
+#: The envelope the AOS-S parser puts on ``encrypted-key "<blob>"``.
+#: Behind it: the blob, without its quotes.
+AOSS_ENVELOPE = "aoss:"
+
 #: Codec names that mean the same physical platform, mirroring
 #: ``_usm_keys._VENDOR_ALIASES``.  A tree parsed by ``fortigate_cli`` may
 #: be stamped with either the family name or the codec name depending on
@@ -104,6 +147,9 @@ _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
 #: fails if a parser starts applying an envelope nobody registered.
 _KNOWN_ENVELOPES: dict[str, str] = {
     FORTIOS_ENVELOPE: "encrypted",
+    IOSXE_ENVELOPE: "encrypted",
+    EOS_ENVELOPE: "encrypted",
+    AOSS_ENVELOPE: "encrypted",
 }
 
 #: An envelope-shaped prefix: a lowercase identifier then a colon.  Used
@@ -205,23 +251,72 @@ def unwrap_native_secret(value: str) -> str:
     return value
 
 
+def stored_form(value: str) -> str:
+    """Name the form a source platform stored *value* in, for a reader.
+
+    ``""`` for a value carrying no envelope, or the ``fortios:`` one,
+    whose sentence (encrypted under the device's own key) is the
+    default of :func:`format_review_comment`.  The type token named is
+    the one the config wrote: digits, and for EOS a letter after them,
+    so the label holds no line break and nothing of the secret.
+    """
+    for envelope, platform in (
+        (IOSXE_ENVELOPE, "Cisco IOS-XE type"),
+        (EOS_ENVELOPE, "Arista EOS type"),
+    ):
+        if value.startswith(envelope):
+            token = value[len(envelope):].split(" ", 1)[0]
+            if not re.fullmatch(r"\d{1,4}[a-z]?", token):
+                return f"{platform} unknown"
+            return f"{platform} {token}"
+    if value.startswith(AOSS_ENVELOPE):
+        return "AOS-S encrypted-key"
+    return ""
+
+
 def format_review_comment(
     host: str,
     comment_syntax: str = "hash",
     target_label: str = "this target",
+    secret: str = "",
 ) -> str:
     """Build a one-line review comment naming a refused shared secret.
 
     Mirrors :func:`netcanon.migration._user_secrets.format_review_comment`
     so cross-vendor diffs read consistently.  The server record is still
     rendered; this line says why it has no key.
+
+    Args:
+        host: The server's address, as the record holds it.
+        comment_syntax: The target's comment delimiters (see below).
+        target_label: The target platform, for the sentence.
+        secret: The refused value.  Where it carries an envelope that
+            names a form (:func:`stored_form`), the sentence names that
+            form instead of saying the secret was encrypted under the
+            device's own key -- which is not what a Cisco type 7 is.
+            An unrecognised envelope is said to be unrecognised.
     """
-    body = (
-        f"radius-server host {host} -- review: the source device stored "
-        f"this shared secret encrypted under its own device key, so it "
-        f"cannot be re-used on {target_label}; re-enter the secret "
-        f"manually"
-    )
+    form = stored_form(secret)
+    if form:
+        body = (
+            f"radius-server host {host} -- review: the source device "
+            f"stored this shared secret in its own encoded form ({form}), "
+            f"which is not carried to {target_label}; re-enter the secret "
+            f"manually"
+        )
+    elif secret and classify_radius_secret(secret) == "unknown":
+        body = (
+            f"radius-server host {host} -- review: this shared secret is "
+            f"in a form Netcanon does not recognise, so it is not carried "
+            f"to {target_label}; re-enter the secret manually"
+        )
+    else:
+        body = (
+            f"radius-server host {host} -- review: the source device "
+            f"stored this shared secret encrypted under its own device "
+            f"key, so it cannot be re-used on {target_label}; re-enter "
+            f"the secret manually"
+        )
     # Built by :mod:`netcanon.migration._comments`, so a host that holds
     # what ends the comment cannot end it.  ``plain`` is the text alone,
     # for the text of an element (OPNsense), which ElementTree escapes.

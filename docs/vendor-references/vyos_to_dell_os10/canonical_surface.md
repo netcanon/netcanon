@@ -17,7 +17,7 @@ The binding constraint on this pair is not the capability matrices, it is `test_
 
 ## Structural finding
 
-Across the 13 cells, 55 source interface records produce 55 re-parsed records — the interface inventory is intact.
+Across the 13 cells, 56 source interface records produce 56 re-parsed records — the interface inventory is intact.
 
 ## Disposition summary
 
