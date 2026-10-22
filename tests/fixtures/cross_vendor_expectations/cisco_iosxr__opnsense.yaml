@@ -144,24 +144,20 @@ per_field_expectation:
   # The interface RECORD count is preserved on every cell (15/15, 17/17,
   # 54/54, ...): 155 source records, 155 survivors.  So unlike most pairs in
   # this mesh, these keys carry independent signal — a `good` here means the
-  # attribute really was measured intact, and the one `lossy` is not
-  # corroborated by its siblings.
+  # attribute really was measured intact.
 
   "interfaces[].name":
-    disposition: lossy
-    reason: >
-      No source record is lost — IOS-XR's 4-segment names
-      (`GigabitEthernet0/0/0/1.35`, `MgmtEth0/RP0/CPU0/0`) come back
-      byte-identical through the OPNsense render — but the inventory grows by
-      one record on each of the 4 cells that hold a VLAN. The IOS-XR parser
-      makes a VLAN from a sub-interface's `encapsulation dot1q` tag; the
-      render links that VLAN to no interface, and so writes it as a `<vlan>`
-      device of its own, `<parent>_vlan<id>` on a port it picks
-      (`MgmtEth0/RP0/CPU0/0_vlan35` for the VLAN 35 of
-      `GigabitEthernet0/0/0/1.35`), which the OPNsense parser reads back as an
-      interface record (`ianaift:l3ipvlan`). The sub-interface keeps its own
-      record. Recorded `lossy` for the shape of the inventory, not its
-      contents.
+    disposition: good
+    note: >
+      No source record is lost and none is added: 155 in, 155 out, and
+      IOS-XR's 4-segment names (`GigabitEthernet0/0/0/1.35`,
+      `MgmtEth0/RP0/CPU0/0`) come back byte-identical through the OPNsense
+      render. The VLAN the IOS-XR parser makes of a sub-interface's
+      `encapsulation dot1q` tag is that sub-interface's own `<vlan>` device
+      (on its port, with its tag), so it adds no record. Up to 0.7.7 the
+      render wrote it as a device of its own on a port it picked
+      (`MgmtEth0/RP0/CPU0/0_vlan35`), one record more on each of the 4
+      cells that hold a VLAN.
     references: [iosxr-opnsense-surface]
 
   "interfaces[].description":
@@ -224,9 +220,11 @@ per_field_expectation:
     reason: >
       Drifts on 155 of 155 interface records, on all 12 cells:
       `ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
-      `ianaift:ieee8023adLag` all arrive as the empty string, because
+      `ianaift:ieee8023adLag` arrive as the empty string, because
       OPNsense's `config.xml` `<interfaces>` block has no element that
-      carries an ianaift type.  Recorded `lossy` rather than `unsupported`
+      carries an ianaift type, and the 4 sub-interfaces as
+      `ianaift:l3ipvlan`, the type the OPNsense parser gives a `<vlan>`
+      device.  Recorded `lossy` rather than `unsupported`
       after checking the round-trip rather than reasoning from the drift
       shape: the interface RECORD survives intact on every one of those 155
       rows with its name, addressing and admin state, so `unsupported` —
@@ -282,12 +280,15 @@ per_field_expectation:
     note: >
       Preserved on all 4 cells that populate VLANs — ids 35, 35, 200 and 100,
       one VLAN per cell, all surviving.  Both matrices declare
-      `/vlans/vlan/id` supported.  Do NOT read this as "the VLAN migrated":
-      on all 4 of those cells the sub-interface tag that GENERATED the record
-      (`interfaces[].dot1q_vlan`) drops to null, because opnsense declares
-      `/interfaces/interface/dot1q-vlan` unsupported.  The id survives as a
-      bare number in a list while the routed sub-interface it belonged to
-      arrives untagged — a reachability change this key cannot show.
+      `/vlans/vlan/id` supported.  The VLAN is the sub-interface's own:
+      the render writes the sub-interface as a `<vlan>` device of its tag
+      on its port, and the OPNsense parser reads that device back as the
+      VLAN and as the interface.  The tag that generated the record
+      (`interfaces[].dot1q_vlan`) still reads back null, because the parser
+      reads a device, not a sub-interface (opnsense declares
+      `/interfaces/interface/dot1q-vlan` lossy for that reading); the tag
+      is on the wire.  Up to 0.7.7 the path was unsupported and the
+      sub-interface arrived untagged.
     references: [iosxr-opnsense-surface]
 
   "vlans[].name":
@@ -296,9 +297,9 @@ per_field_expectation:
       The IOS-XR parser names no VLAN (`CanonicalVlan(id=vid, name="")`:
       IOS-XR has no `vlan N / name X` stanza), and the round trip gives each
       one a name: an OPNsense `<vlan>` has no name of its own, so the OPNsense
-      parser names a VLAN after the device the render wrote for it
-      (`MgmtEth0/RP0/CPU0/0_vlan35`). Drifts on the 4 cells that hold a VLAN,
-      by gaining a name, never by losing one.
+      parser names a VLAN after the device the render wrote for it, which
+      is the sub-interface (`GigabitEthernet0/0/0/1.35`). Drifts on the 4
+      cells that hold a VLAN, by gaining a name, never by losing one.
     references: [iosxr-opnsense-surface]
 
   "vlans[].ipv4_addresses":

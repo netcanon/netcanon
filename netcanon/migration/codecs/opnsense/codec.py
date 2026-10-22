@@ -319,27 +319,34 @@ class OPNsenseCodec(CodecBase):
                 ),
                 severity="warn",
             ),
-        ],
-        unsupported=[
-            UnsupportedPath(
+            LossyPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
+                    "A routed sub-interface (Cisco `encapsulation dot1Q "
+                    "N`, Junos `unit N vlan-id`) is written as an "
+                    "OPNsense VLAN device on its port (`<vlan>` with "
+                    "`<if>igb1</if>`, `<tag>N</tag>` and "
+                    "`<vlanif>igb1.100</vlanif>`), with the "
+                    "sub-interface's own tag, and its zone assigns that "
+                    "device.  The parser reads it back as a VLAN device "
+                    "and a VLAN of its tag, not as a sub-interface of the "
+                    "port, and OPNsense's VLAN form refuses a device name "
+                    "with a dot in it when the VLAN is saved (a review "
+                    "comment says so)."
                 ),
+                severity="warn",
             ),
+        ],
+        unsupported=[
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-inner-vlan",
                 reason=(
                     "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
                     "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
-                    "outer N inner M`) has no form in this codec, whose "
-                    "routed sub-interface tag is itself not wired: declared "
-                    "so that it is reported as a drop."
+                    "outer N inner M`) has no form in this codec: such a "
+                    "sub-interface is written as a VLAN device of its outer "
+                    "tag.  Declared so that the inner tag is reported as a "
+                    "drop."
                 ),
             ),
             UnsupportedPath(

@@ -442,6 +442,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/interfaces/interface/config/description` | Lossy | OPNsense imposes no length limit on description text; other vendors (Cisco 240 chars, Juniper 900) may truncate on render. |
 | `/vlans/vlan/name` | Lossy | An OPNsense `<vlan>` has no name of its own: the parser names a VLAN after its device (`<vlanif>`), and the render writes another vendor's VLAN name as the `<descr>` where the VLAN has no description, and drops it where it has one.  The `<descr>` is the VLAN's description (`/vlans/vlan/description`, supported). |
 | `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (a pool from IOS-XE or RouterOS, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, and a pool whose zone `<interfaces>` does not have is left out and listed. |
+| `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is written as OPNsense's own VLAN device on its port, `<vlan>` with `<if>igb1</if>`, `<tag>200</tag>` and `<vlanif>igb1.100</vlanif>`: the tag is the sub-interface's own, not the number in its name, and its zone assigns the device.  Read back, it is a VLAN device and a VLAN of its tag, not a sub-interface; and OPNsense's VLAN form refuses a device name with a dot in it when the VLAN is saved (a `<!-- review: -->` comment says so).  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a review comment.  OPNsense keeps one VLAN device for a tag on a parent: where the output has a tag twice on one, the second `<vlan>` holds a review comment that names the first.  A sub-interface of two tags is written with its outer tag: its inner tag (`/interfaces/interface/dot1q-inner-vlan`, unsupported) is reported as a drop and the job is `partial`. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
 | `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
@@ -2080,13 +2081,15 @@ nothing, as before.
   vendor none of that is said — and a tag the parser does not read
   (AOS-CX, OS10) is lost there as well, as it is on every path,
   with nothing in the job to report it.
-  **VyOS and FortiOS write the source's own tag**, where the number
-  in the name was once taken for it: IOS `GigabitEthernet0/0/1.54`
-  with `encapsulation dot1Q 300` is `vif 300` onto VyOS, whose vif's
+  **VyOS, FortiOS and OPNsense write the source's own tag**, where
+  the number in the name was once taken for it (or, onto OPNsense,
+  no tag was written): IOS `GigabitEthernet0/0/1.54` with
+  `encapsulation dot1Q 300` is `vif 300` onto VyOS, whose vif's
   number IS its tag (so the unit number 54 is not kept, and two
   units of one port with one tag are one name, listed in
-  `fused_ports`), and `set vlanid 300` onto FortiOS, on the port the
-  name is a unit of.
+  `fused_ports`), `set vlanid 300` onto FortiOS and a `<vlan>`
+  device of tag 300 onto OPNsense, each on the port the name is a
+  unit of.
 
   Not followed across vendors: a unit of a **loopback** or of a
   **management port** (a Junos `lo0.5` is the loopback of a routing

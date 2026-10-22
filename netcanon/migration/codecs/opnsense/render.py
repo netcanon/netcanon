@@ -303,19 +303,31 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     # have, and the committed capture's five VLANs came out on its
     # WAN port.  A VLAN no interface is for is still written on a
     # parent chosen from what carries it (_vlan_parent_for).
+    #
+    # A routed sub-interface of another vendor (IOS-XE
+    # ``encapsulation dot1Q 200``, a Junos ``unit 100 vlan-id 200``)
+    # is a VLAN device too: on the port its name is a unit of, with
+    # its own tag.  Before, its zone was written and no <vlan>: the
+    # zone assigned a device the output did not have, and the tag
+    # was nowhere.
     devices = _vlan_devices(intent)
     if intent.vlans or devices:
         vlans_el = ET.SubElement(root, "vlans")
         parent_default = _vlan_parent_default(intent)
         carriers = _vlan_carriers(intent)
         written: set[tuple[str, int]] = set()
-        # Each device's parent, to know which carry another VLAN
-        # (whose <proto> must then say 802.1q: blank, OPNsense sends
-        # such a device as 802.1ad).
-        parents = {
-            device.record.vlan_parent for device in devices
-            if device.record.vlan_parent
+        # Each device's parent, and what the output says of it.
+        placed = {
+            id(device): _device_parent(device, carriers, parent_default)
+            for device in devices if device.tag is not None
         }
+        # Which devices carry another VLAN (whose <proto> must then
+        # say 802.1q: blank, OPNsense sends such a device as
+        # 802.1ad).
+        parents = {parent for parent, _ in placed.values()}
+        # The first device of a tag on a parent: OPNsense keeps one
+        # (``Vlan.xml``: the tag is unique with <if>).
+        first_on: dict[tuple[str, int], str] = {}
 
         def write_device(device: _VlanDevice) -> None:
             record = device.record
@@ -325,9 +337,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                     f"tag the tree does not state, so no <vlan> defines it"
                 )))
                 return
-            parent = record.vlan_parent or carriers.get(
-                device.tag, parent_default,
-            )
+            parent, said = placed[id(device)]
             vlan_el = ET.SubElement(vlans_el, "vlan")
             ET.SubElement(vlan_el, "if").text = parent
             ET.SubElement(vlan_el, "tag").text = str(device.tag)
@@ -345,6 +355,15 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                     f"name {record.name} when this VLAN is saved; it takes "
                     f"{_device_prefix(parent)}0 followed by digits and dots, "
                     f"or {parent}_vlan{device.tag}"
+                )))
+            if said:
+                vlan_el.append(ET.Comment(_comment_text(said)))
+            first = first_on.setdefault((parent, device.tag), record.name)
+            if first != record.name:
+                vlan_el.append(ET.Comment(_comment_text(
+                    f"review: VLAN {device.tag} is on {parent} already "
+                    f"({first}); OPNsense keeps one VLAN device for a "
+                    f"tag on a parent"
                 )))
             written.add((parent, device.tag))
 
@@ -373,6 +392,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             ET.SubElement(vlan_el, "vlanif").text = (
                 f"{parent_if}_vlan{vlan.id}"
             )
+            first_on.setdefault((parent_if, vlan.id), f"{parent_if}_vlan{vlan.id}")
             written.add((parent_if, vlan.id))
         for device in devices:
             if device.vlan is None:
@@ -768,8 +788,12 @@ def _vlan_devices(intent: CanonicalIntent) -> list[_VlanDevice]:
     NAMED after it -- how this codec's parser, and the RouterOS and
     FortiOS parsers, say which tag a VLAN interface has -- and
     otherwise to the first VLAN whose id its name says
-    (:func:`_tag_in_name`; an SVI from a switch).  Each VLAN is
-    linked to one interface at most.
+    (:func:`_tag_in_name`; an SVI from a switch).  A routed
+    sub-interface (``dot1q_vlan``) states its own tag, whatever its
+    name or its unit number says, and is linked to a VLAN of that
+    id that no VLAN interface has taken (the IOS XR parser makes a
+    VLAN record of each sub-interface's tag).  Each VLAN is linked
+    to one interface at most.
 
     Returns:
         The VLAN interfaces in the order of ``intent.interfaces``.
@@ -792,10 +816,17 @@ def _vlan_devices(intent: CanonicalIntent) -> list[_VlanDevice]:
     records = [
         iface for iface in intent.interfaces
         if iface.interface_type == "ianaift:l3ipvlan"
+        or iface.dot1q_vlan is not None
     ]
     devices: list[_VlanDevice] = []
     unnamed: list[_VlanDevice] = []
+    tagged: list[_VlanDevice] = []
     for record in records:
+        if record.dot1q_vlan is not None:
+            device = _VlanDevice(record, record.dot1q_vlan, None)
+            devices.append(device)
+            tagged.append(device)
+            continue
         vlan = first_free(by_name.get(record.name, []))
         if vlan is not None:
             taken.add(id(vlan))
@@ -811,7 +842,53 @@ def _vlan_devices(intent: CanonicalIntent) -> list[_VlanDevice]:
         if vlan is not None:
             taken.add(id(vlan))
             device.vlan = vlan
+    # After the VLAN interfaces: a switch's VLAN is its SVI's.
+    for device in tagged:
+        vlan = first_free(by_id.get(device.tag, []))
+        if vlan is not None:
+            taken.add(id(vlan))
+            device.vlan = vlan
     return devices
+
+
+def _port_of_unit(name: str) -> str | None:
+    """The port a sub-interface is a unit of, by its name: what is
+    before ``.<unit>`` (the translator sends a unit after its port as
+    ``<port>.<unit>``), or ``None`` for a name with no unit in it."""
+    port, dot, unit = name.rpartition(".")
+    return port if dot and port and unit.isdigit() else None
+
+
+def _device_parent(
+    device: _VlanDevice, carriers: dict[int, str], parent_default: str,
+) -> tuple[str, str]:
+    """The <if> *device* is written on, and a review line where the
+    output does not know it.
+
+    A routed sub-interface rides on the port its name is a unit of,
+    whether or not the output has a zone for that port (a config
+    can state a port only by its units); then on the device its
+    config says it rides on.  One an entry named with no port in it
+    is put where a VLAN interface would be, and the line says so.
+    A VLAN interface rides on the device its config says, else on
+    what carries its VLAN, else on the parent chosen for every VLAN.
+
+    Returns:
+        The parent's name, and the review line (``""`` for none).
+    """
+    record = device.record
+    assert device.tag is not None
+    if record.dot1q_vlan is not None:
+        port = _port_of_unit(record.name) or record.vlan_parent
+        if port:
+            return port, ""
+        parent = carriers.get(device.tag, parent_default)
+        return parent, (
+            f"review: a routed sub-interface (tag {device.tag}) whose "
+            f"name gives no port; it is written on {parent}, move it "
+            f"to its port"
+        )
+    return record.vlan_parent or carriers.get(device.tag, parent_default), ""
 
 
 def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
@@ -833,7 +910,10 @@ def _unassigned_vlan_devices(intent: CanonicalIntent) -> set[int]:
     pooled = {pool.interface for pool in intent.dhcp_servers}
     return {
         id(iface) for iface in intent.interfaces
-        if iface.interface_type == "ianaift:l3ipvlan"
+        if (
+            iface.interface_type == "ianaift:l3ipvlan"
+            or iface.dot1q_vlan is not None
+        )
         and iface.name not in pooled
         and iface.enabled
         and not (
@@ -910,7 +990,7 @@ def _vlan_parent_default(intent: CanonicalIntent) -> str:
         return intent.lags[0].name
     for iface in intent.interfaces:
         lname = iface.name.lower()
-        if lname.startswith("vlan"):
+        if lname.startswith("vlan") or iface.dot1q_vlan is not None:
             continue
         if lname.startswith(("loopback", "lo")):
             continue

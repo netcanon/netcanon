@@ -389,7 +389,8 @@ per_field_expectation:
       softwareLoopback). OPNsense doesn't surface a type field; the cross-pair
       drops the type hint. The OPNsense parser types a `<vlan>` device
       `ianaift:l3ipvlan`, so a VLAN interface the render writes as one comes
-      back with that type; every other interface comes back untyped.
+      back with that type, and so does a unit with a ``vlan-id`` (seven on
+      the corpus); every other interface comes back untyped.
 
   interfaces[].mtu:
     disposition: good
@@ -509,10 +510,18 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: good
-    note: >
-      Junos ``set vlans NAME vlan-id N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``.
-      Both vendors share the 1-4094 range.
+    disposition: lossy
+    reason: >
+      Junos ``set vlans NAME vlan-id N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``;
+      both vendors share the 1-4094 range, and every VLAN of the source
+      comes back.  The list grows: a unit with a ``vlan-id`` is written as
+      a `<vlan>` device of its tag on its port, which the OPNsense parser
+      reads back as a VLAN of that tag too (opnsense declares
+      `/interfaces/interface/dot1q-vlan` lossy for that reading): 6 -> 9 on
+      the QFX10K2 capture (`xe-0/0/6:2.10`, `.30`, `.100`), 0 -> 4 on the
+      EVPN leaf (`ge-0/0/0.54` and the like) and 4 -> 5 on the kitchen
+      sink.  The cells with no such unit keep their list, and stand under
+      this disposition.
     references: [junos-vlans-statement, opnsense-vlans]
 
   vlans[].name:

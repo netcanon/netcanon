@@ -418,9 +418,11 @@ class TestShipBeforeWireUnsupportedDeclarations:
             "/interfaces/interface/dot1q-vlan",
         },
         # Wave B (CARP variant) — see commit feat(opnsense): wire
-        # CARP groups with mode="carp" discriminator.
+        # CARP groups with mode="carp" discriminator.  A routed
+        # sub-interface's dot1q is lossy: a VLAN device on its port.
         "opnsense": {
             "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/dot1q-vlan",
         },
         # The four newest codecs — previously omitted from the frozen
         # roster (Fable review MTX-3), so their graduations were never

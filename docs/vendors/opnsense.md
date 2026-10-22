@@ -152,6 +152,26 @@ XML element mapping:
   interface takes: then the VLAN's `<descr>` is in a `# review:`
   line beside it, and the job lists `/vlans/vlan/description` as a
   loss.
+- **A sub-interface of another vendor is a VLAN device.**  IOS-XE
+  `GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
+  `unit 100 vlan-id 200`: OPNsense has no sub-interface of its own,
+  so the renderer writes a `<vlan>` on the port the name is a unit of
+  (`<if>igb1</if>`), with the sub-interface's own tag
+  (`<tag>200</tag>`) under its name (`<vlanif>igb1.100</vlanif>`),
+  and the zone that holds its address assigns that device; one that
+  holds nothing a zone holds is the device alone.  The parser reads
+  it back as a VLAN device and a VLAN of its tag
+  (`/interfaces/interface/dot1q-vlan` is lossy), and OPNsense's VLAN
+  form refuses the dotted name when the VLAN is saved (the review
+  comment beside it says so: rename it `vlan0.<n>` or
+  `<port>_vlan<tag>`, and the zone's `<if>` with it).  A name an
+  entry gives with no port in it rides on the parent chosen for every
+  VLAN, under a review comment.  OPNsense keeps one VLAN device for a
+  tag on a parent (`Vlan.xml`): where the output has a tag twice on
+  one, the second `<vlan>` holds a review comment that names the
+  first -- merge the two, or move one to another port.  A Q-in-Q
+  sub-interface is a device of its outer tag, and its inner tag is
+  listed as a loss.
 - **Static routes are source-side only.**  The parser harvests
   `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
   #350), so OPNsense-*as-source* routes translate outward — but the

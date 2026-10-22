@@ -186,14 +186,15 @@ per_field_expectation:
     references: [nxos-opnsense-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      Routed sub-interface 802.1Q tags are declared unsupported on the
-      opnsense matrix (ship-before-wire, GAP 7).  The NX-OS source never
-      populates the field on this corpus (0 of 13 cells), so nothing was
-      measured.  A migrated router-on-a-stick sub-interface would lose its tag
-      and need re-creating as an OPNsense VLAN child interface bound to the
-      right parent.
+      Routed sub-interface 802.1Q tags are declared lossy on the opnsense
+      matrix: a sub-interface is written as an OPNsense VLAN device on its
+      port (`<vlan>` with `<if>` the port and `<tag>` its own tag), and
+      the OPNsense parser reads it back as a VLAN device and a VLAN of its
+      tag, not as the interface's tag.  The NX-OS source never populates
+      the field on this corpus (0 of 13 cells), so nothing was measured.
+      Up to 0.7.7 the path was unsupported and no `<vlan>` was written.
     references: [nxos-opnsense-surface]
 
   "interfaces[].vrf":

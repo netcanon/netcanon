@@ -598,6 +598,38 @@ timestamp if your timezone matters for an audit.
   replacement messages; where each value ends is held to a reader of
   the test's own, a character at a time, and no capture's tree moves.
 
+- **A sub-interface of another vendor was written onto OPNsense as a
+  zone of a device the output did not have.**  IOS-XE `interface
+  GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
+  `unit 100 vlan-id 200`: OPNsense was written a zone whose `<if>` was
+  `igb1.100` and no `<vlan>`, so the zone assigned a device nothing
+  made and the tag was nowhere, in a job that was `partial` for
+  `/interfaces/interface/dot1q-vlan` (unsupported).  OPNsense's own
+  form is a VLAN device: the sub-interface is now a `<vlan>` on its
+  port (`<if>igb1</if>`), with its own tag (`<tag>200</tag>`) under
+  its name (`<vlanif>igb1.100</vlanif>`), which the zone assigns --
+  on the port its name is a unit of, whether or not the output has a
+  zone for that port; a sub-interface that holds nothing a zone holds
+  is the device alone.  The path is lossy where it was unsupported:
+  the parser reads the device back as a VLAN device and a VLAN of its
+  tag, not as a sub-interface, and OPNsense's VLAN form refuses a
+  device name with a dot in it when the VLAN is saved, which the
+  `<!-- review: -->` comment beside it already said.  A sub-interface
+  that an entry names with no port in it rides on the parent chosen
+  for every VLAN, under a review comment, and is never itself chosen
+  as a VLAN's parent; a VLAN the IOS XR parser makes of a
+  sub-interface's tag is that sub-interface's device, not a second
+  device of the tag.  OPNsense keeps one VLAN device for a tag on a
+  parent (`Vlan.xml`), so where the output has a tag twice on one
+  parent the second `<vlan>` holds a review comment that names the
+  first.  A Q-in-Q sub-interface is a device of its outer tag, and the
+  job is `partial`, the validation report listing the inner tag
+  (`/interfaces/interface/dot1q-inner-vlan` is unsupported): the
+  IOS-XE carrier capture's job stays `partial` for its six such units,
+  six devices of tag 2234 on one port, five of them with that comment.
+  Over the committed captures no other job onto OPNsense changes its
+  status.
+
 - **A sub-interface of another vendor was written onto VyOS with its
   unit number for its tag.**  On VyOS the number of a `vif` IS the
   802.1Q tag it carries (`ethernet eth1 { vif 200 }` is `eth1.200`,
