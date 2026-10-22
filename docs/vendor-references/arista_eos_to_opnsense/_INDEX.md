@@ -28,7 +28,7 @@ surface is firmly out of scope on the Arista side.
 | `dhcp.md` | Arista named `ip dhcp pool` versus OPNsense interface-keyed `<dhcpd>` blocks; codec wire-up partial on OPNsense side. |
 | `snmp.md` | v1/v2c surface round-trips; SNMPv3 USM lives in OPNsense plugin's snmpd.conf, not config.xml. |
 | `local_users.md` | Arista `$1$` MD5-crypt / `$6$` SHA-512-crypt versus OPNsense `<password>`, which takes bcrypt and (since #462) SHA-512 crypt: `$6$` carries across, `$1$` does not. |
-| `radius.md` | RADIUS server config — round-trips host / port pair / shared key. |
+| `radius.md` | RADIUS server config — round-trips host / port pair and a key written as typed; a `key 7` is refused. |
 | `lags.md` | Arista `Port-Channel<N>` versus OPNsense `lagg(4)` driver naming + LACP-mode collapse. |
 | `switchport_unsupported.md` | OPNsense has no switching fabric — switchport modes, spanning-tree, voice-VLAN are all unsupported. |
 | `vxlan_evpn_unsupported.md` | Arista EVPN-VXLAN fabric (VNI bindings, L3 VNI, VRFs, BGP RD/RT) has no destination on OPNsense. |

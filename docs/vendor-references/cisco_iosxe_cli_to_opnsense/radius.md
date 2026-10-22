@@ -70,12 +70,14 @@ acct_port: int = 1813
 Cisco -> OPNsense:
 
 - ``host``: **good** — direct mapping to ``<host>``.
-- ``key``: **lossy** — Cisco's type-7 obfuscated keys
-  (``key 7 0822455D0A16``) need decryption before the plaintext
-  secret can land in OPNsense's ``<radius_secret>``.  Neither codec
-  decrypts type-7 in v1; the obfuscated form lands unchanged in the
-  OPNsense XML and authentication fails until the operator resets
-  the secret.  A caveat in the validation report.
+- ``key``: **lossy** — a key written as typed (``key <secret>``,
+  ``key 0 <secret>``) lands in ``<radius_secret>``.  A type-7 key
+  (``key 7 0822455D0A16``) or a type-6 key is a form only IOS-XE
+  reads: it is held behind ``iosxe:`` and not decoded, and the
+  OPNsense render writes the server with no secret, beside a review
+  element that names the form; the operator re-enters the secret.
+  (Until 2026-10 the type-7 text was written into
+  ``<radius_secret>`` as the secret.)
 - ``auth_port`` / ``acct_port``: **good** — OPNsense models both
   explicitly.
 
@@ -84,6 +86,6 @@ plumbing has no canonical surface; OPNsense's choice of EAP protocol
 (``MSCHAPv2`` / ``PAP``) defaults to whatever the operator selects
 in the GUI.
 
-Disposition: **good** for the cross-vendor-stable surface
-(host / port pair); **lossy** when the source carries type-7
-obfuscated keys.
+Disposition: **lossy** — host and the port pair round-trip; a
+type-7 or type-6 key is refused (the kitchen sink's ``key 7`` shows
+it).

@@ -147,6 +147,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="plain",
                         target_label="OPNsense",
+                        secret=server.key,
                     )
             ET.SubElement(auth_el, "radius_auth_port").text = (
                 str(server.auth_port)
@@ -170,43 +171,38 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt, sha512}``;
         # PHP's password_verify() also consumes a ``$6$`` crypt string).
         # When the hash is unmigratable, emit a comment-form review
-        # line INSIDE the ``<user>`` element naming the source
-        # algorithm so the operator knows what to reset from, and
-        # skip the ``<password>`` child entirely.  Plaintext is
-        # accepted verbatim (operator-supplied).
+        # line IN PLACE of the ``<user>`` element, naming the source
+        # algorithm so the operator knows what to reset from: a
+        # refused secret drops the whole account, never the password
+        # alone (the element used to stay, with no ``<password>``).
+        # Plaintext is accepted verbatim (operator-supplied).
         for user in intent.local_users:
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "opnsense",
+            ):
+                # The shared helper natively produces an
+                # XML-comment-safe body (single-dash separator for
+                # ``comment_syntax="xml"``).
+                algorithm, _payload = classify_hash(user.hashed_password)
+                review = format_review_comment(
+                    user.name, algorithm, comment_syntax="xml",
+                    target_label="OPNsense",
+                )
+                body = review.removeprefix("<!-- ").removesuffix(" -->")
+                sys_el.append(ET.Comment(body))
+                continue
             user_el = ET.SubElement(sys_el, "user")
             ET.SubElement(user_el, "name").text = user.name
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "opnsense"):
-                    # Strip the ``alg:`` tag so OPNsense's
-                    # <password> element carries the raw value
-                    # (e.g. ``$2y$10$...`` for bcrypt; the literal
-                    # password for plaintext).
-                    algorithm, payload = classify_hash(user.hashed_password)
-                    if algorithm == "plaintext":
-                        hash_out = payload or user.hashed_password
-                    else:
-                        hash_out = payload
-                    ET.SubElement(user_el, "password").text = hash_out
+                # Strip the ``alg:`` tag so OPNsense's <password>
+                # element carries the raw value (e.g. ``$2y$10$...`` for
+                # bcrypt; the literal password for plaintext).
+                algorithm, payload = classify_hash(user.hashed_password)
+                if algorithm == "plaintext":
+                    hash_out = payload or user.hashed_password
                 else:
-                    # Comment-form review line — XML comment syntax
-                    # places a sibling <!-- ... --> node inside the
-                    # <user> element so the operator sees a clear
-                    # "reset this password" reminder rather than a
-                    # broken hash literal masquerading as bcrypt.
-                    #
-                    # The shared helper natively produces an
-                    # XML-comment-safe body (single-dash separator
-                    # for ``comment_syntax="xml"``) so we can embed
-                    # the body directly without local post-processing.
-                    algorithm, _payload = classify_hash(user.hashed_password)
-                    review = format_review_comment(
-                        user.name, algorithm, comment_syntax="xml",
-                        target_label="OPNsense",
-                    )
-                    body = review.removeprefix("<!-- ").removesuffix(" -->")
-                    user_el.append(ET.Comment(body))
+                    hash_out = payload
+                ET.SubElement(user_el, "password").text = hash_out
             # Sub-finding 19 round-trip: emit ``<scope>system</scope>``
             # only for admin-tier users so the parser's new symmetric
             # rule (scope=system OR priv=page-all OR groupname=admins

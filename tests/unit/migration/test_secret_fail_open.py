@@ -353,6 +353,42 @@ def test_every_user_rendering_codec_refuses_an_unmodelled_secret(target) -> None
     )
 
 
+#: The comment markers of every target's grammar, XML's included.
+_COMMENT_MARKERS = ("!", "#", ";", "/*", "//", "<!--")
+
+
+def _outside_comments(text: str) -> list[str]:
+    """The lines of *text* that are not a comment, read as text."""
+    return [
+        line for line in text.splitlines()
+        if not line.lstrip().startswith(_COMMENT_MARKERS)
+    ]
+
+
+@pytest.mark.parametrize("target", _USER_RENDERING_TARGETS)
+def test_a_refused_secret_takes_its_account_with_it(target) -> None:
+    """Refusing a secret drops the whole account, never the secret alone.
+
+    An account written without the password it had is an account with
+    NO password: RouterOS documents that a user added with none has a
+    blank one ("hit [Enter] when logging in"), and a FortiOS admin with
+    no ``set password`` is the same.  FortiOS (``edit`` and an access
+    profile), RouterOS (``add group=full``) and OPNsense (a ``<user>``
+    element) wrote the account and left out only the password.  The
+    review line stays; the account's name is in no line but a comment.
+    """
+    from netcanon.migration.codecs.registry import get_codec
+
+    intent = _intent_with_users(_UNKNOWN_CRYPT)
+    intent.local_users[0].name = "zqrefused"
+    out = get_codec(target).render(intent)
+    assert "review" in out
+    written = [line for line in _outside_comments(out) if "zqrefused" in line]
+    assert written == [], (
+        f"{target} wrote an account whose secret it refused: {written[:3]}"
+    )
+
+
 def test_nxos_type5_is_classified_by_its_payload_not_as_md5crypt() -> None:
     """NX-OS writes EVERY crypt form under ``password 5``, and defaults to $5$.
 

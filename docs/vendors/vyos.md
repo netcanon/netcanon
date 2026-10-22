@@ -186,6 +186,14 @@ real set-form) capture are welcomed via
   (curly-brace) is the native form; `show configuration commands`
   (set-form) is converted up front.  Distinct from the `juniper_junos`
   codec, which owns the Junos set-form.
+- **A node with nothing under it is printed on one line.**  VyOS
+  writes `server time1.vyos.net { }`, `loopback lo { }` or `disable
+  { }` for a node that holds nothing; such a line is read as a block
+  that opens and closes (`disable { }` as the leaf `disable`), the
+  reading the set form gives the same path.  ⚠️ Up to 0.7.7 it was
+  read as a word with ` { }` in it: an NTP server's name came out with
+  its braces, and an empty loopback, `vif` or `next-hop` was lost;
+  translate such a config again.
 - **A set line nested more than 64 levels deep is a parse failure.**
   A real path is a dozen words.  Set-form input is written out as
   nested blocks before it is read, each level indented once more, so

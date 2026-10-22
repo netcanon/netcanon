@@ -62,10 +62,14 @@ acct_port: int = 1813
 
 Aruba -> OPNsense:
 
-- `radius_servers`: **good** — host / key / port pair round-trip
+- `radius_servers`: **lossy** — host / key / port pair round-trip
   cleanly via the canonical `host`, `key`, `auth_port`, `acct_port`
-  tuple.  Aruba's quoted shared secret lands verbatim in
-  `<radius_secret>`; default ports preserved.  Aruba's optional
-  per-server `radius-server retransmit` / `timeout` directives do
+  tuple for a key written as typed: Aruba's quoted shared secret
+  lands verbatim in `<radius_secret>`; default ports preserved.
+  An AOS-S `encrypted-key "<blob>"` (`encrypt-credentials` on) is a
+  form only AOS-S reads: it is held behind `aoss:`, not decoded, and
+  the server is written with no key, beside a review element.
+  Aruba's optional per-server `radius-server retransmit` / `timeout`
+  directives do
   not map to canonical (no canonical retry / timeout fields) and
   drop on render.

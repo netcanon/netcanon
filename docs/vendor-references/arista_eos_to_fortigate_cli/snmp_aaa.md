@@ -169,11 +169,11 @@ radius_servers[].acct_port: int
 ```
 
 - **host / auth_port** — `good`.  Direct scalar mapping.
-- **key (shared secret)** — `lossy`.  Format incompatible: Arista
-  emits plaintext or type-7 reversible (`7 <hex>`); FortiOS uses
-  `ENC <opaque-base64>`.  Cross-vendor migration requires re-keying.
-  Both codecs preserve the source-form verbatim with vendor tags so
-  the loss is visible in the validation report.
+- **key (shared secret)** — `lossy`.  A key written as typed is
+  written `set secret <secret>`.  Arista's `key 7 <hex>` is held
+  behind `eos:`, not decoded, and the FortiOS render writes the
+  server with no secret, beside a review line that names the form;
+  re-key on the target.
 - **acct_port** — `lossy`.  FortiOS has no separate acct-port field
   (derived as auth-port + 1 per RFC default), so non-default Arista
   acct-port values drop.

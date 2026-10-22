@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 11 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'lossy': 13, 'good': 20}
+# Dispositions: {'unsupported': 13, 'lossy': 12, 'good': 21}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/juniper_junos_to_dell_os10/
@@ -191,11 +191,17 @@ per_field_expectation:
     references: [junos-os10-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 11 cells: drifted on 7, preserved on 0, both
-      sides empty on 4.
+    disposition: good
+    note: >
+      Preserved on 1 of 11 cells (the vSRX capture's `st0` units,
+      whose `family inet mtu` the Junos parser reads since it writes a
+      unit's MTU per family). On 7 further cells the whole
+      `interfaces` list drifted at once and the reconciler attributes
+      that structural event to one owner sub-field; on the other 3
+      neither side has an MTU. Checked per interface over every Junos
+      input: each MTU the source parse holds is the MTU the OS10 parse
+      of the output reads back. It was declared lossy from the
+      structural drift alone, before any cell could preserve it.
     references: [junos-os10-surface]
 
   interfaces[].name:

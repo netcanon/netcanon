@@ -17,10 +17,10 @@
 # of the interface block. The FortiGate renderer elides any interface with an
 # empty `interface_type` that carries no address, description, MTU, LAG
 # membership, VRF or DHCP client and is not explicitly shut
-# (`_iface_is_empty_stub`). vyos never populates `interface_type` — 0 of 55
+# (`_iface_is_empty_stub`). vyos never populates `interface_type` — 0 of 56
 # source records — so every content-free VyOS port trips it, and `lo` is not a
-# FortiOS-native name shape. Result: 55 interface records in, 46 out, 9 lost
-# on 5 of 13 cells. `interfaces[].name` carries that record-level signal; the
+# FortiOS-native name shape. Result: 56 interface records in, 46 out, 10 lost
+# on 6 of 13 cells. `interfaces[].name` carries that record-level signal; the
 # surviving sub-fields were each measured on the 46 survivors and are recorded
 # `good` on their own merits, not dragged along by the vanishing parent.
 #
@@ -108,15 +108,13 @@ per_field_expectation:
     references: [vyos-fortigate-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      The VyOS parser reads `server time1.vyos.net { }` (an empty
-      node, as the houdev DHCPv6-PD capture prints it) as the
-      server `time1.vyos.net { }`, an address with white space in
-      it, which the render leaves out with a review line.  #532
-      reads the empty node: whichever of #532 and the change that
-      left such an address out merges second sets this entry back
-      to good.  Every other cell is preserved.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included —
+      the rendered `config system ntp / config ntpserver` blocks re-parse to
+      the same servers.  Both matrices declare `/system/ntp-server`
+      supported.  The one unpopulated cell is
+      `vyos_forum_snmpv3_user_eq13.conf`.
     references: [vyos-fortigate-surface]
 
   timezone:
@@ -147,12 +145,15 @@ per_field_expectation:
 
   # -- Interfaces -- one structural mechanism, then per-attribute detail -----
   #
-  # 55 source interface records across the 13 cells, 46 after
-  # parse -> render -> re-parse.  The 9 losses land on 5 cells and every one
-  # of them is an interface with no canonical content: `lo` on five cells,
+  # 56 source interface records across the 13 cells, 46 after
+  # parse -> render -> re-parse.  The 10 losses land on 6 cells and every one
+  # of them is an interface with no canonical content: `lo` on six cells,
   # plus `eth1` on metasploit-vyos-config.conf and `eth2` / `eth3` / `eth4`
-  # on scottlaird-vyos-parser.conf.  `interfaces[].name` below carries that
-  # record-level signal for the whole list.  The sub-field entries after it
+  # on scottlaird-vyos-parser.conf.  The `lo` of
+  # houdev_vyos_dhcpv6_pd_client.conf has nothing set at all
+  # (`loopback lo { }`); its elision is structural drift, no attribute lost.
+  # `interfaces[].name` below carries that record-level signal for the
+  # whole list.  The sub-field entries after it
   # were measured on the 46 SURVIVING records only, so none of them is a
   # knock-on effect of the vanishing parent and none is cited as evidence for
   # any other.
@@ -161,17 +162,20 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Partial record loss, verified by round-trip and traced to an exact
-      predicate rather than inferred.  55 interface records in, 46 out; 9
-      records disappear on 5 of 13 cells.  The FortiGate renderer's
+      predicate rather than inferred.  56 interface records in, 46 out; 10
+      records disappear on 6 of 13 cells.  The FortiGate renderer's
       `_iface_is_empty_stub()` elides an interface that has an empty
       `interface_type` AND no description, no IPv4, no IPv6, no MTU
       override, no switchport/access-VLAN/trunk state, no `lag_member_of`,
       no VRF binding and no DHCP client, and is not explicitly shut — unless
       its name matches a FortiOS-native port shape (`portN`, `mgmt`, `wan`,
       `lan`, `vlanN`, `loopbackN`, …) or it is a LAG bundle name.  vyos
-      populates `interface_type` on ZERO of its 55 records, so every
+      populates `interface_type` on ZERO of its 56 records, so every
       content-free VyOS port trips the predicate, and `lo` misses the native
       shape list (which accepts `loopbackN`, not `lo`).
+      The sixth cell is `houdev_vyos_dhcpv6_pd_client.conf`, whose `lo` is an
+      empty interface record (`loopback lo { }`, nothing set): its elision is
+      structural drift on that cell, and no attribute is lost.
       `kitchen_sink.conf` confirms the rule from the other side: `eth3`
       survives because it is explicitly shut, `eth4` / `eth5` survive because
       they are `bond0` members.
@@ -198,7 +202,7 @@ per_field_expectation:
       target matrix declares), so a 48-character semicolon-delimited
       patch-panel string comes back as its first 25 characters: an exact
       prefix, with the far-end port and circuit speed cut off.
-      That cell is ALSO one of the five whose interface list shrank, so the
+      That cell is ALSO one of the six whose interface list shrank, so the
       reconciler classifies this key `STRUCTURAL_ONLY` there and never emits
       an evidenced-loss class for it anywhere on the pair.  A `lossy`
       declaration would therefore be an unevidenced claim by construction.
@@ -271,7 +275,7 @@ per_field_expectation:
       direction is the inverse of every other pair in this mesh, and saying
       which way it goes matters more than the count.
       vyos asserts NO IANA ifType: the source value is the empty string on
-      all 55 records.  After the FortiGate round-trip, all 46 surviving
+      all 56 records.  After the FortiGate round-trip, all 46 surviving
       records come back with one — 43 `ianaift:ethernetCsmacd`, 2
       `ianaift:l3ipvlan` and 1 `ianaift:ieee8023adLag` — because the
       FortiGate parser infers the type from the rendered name shape and from
@@ -564,68 +568,49 @@ per_field_expectation:
   # -- Identity -- everyone arrives, renamed and re-encoded -------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      The account inventory is intact: 17 local-user records across all 13
-      cells, 17 after parse -> render -> re-parse, zero dropped, same names.
-      The render emits `config system admin / edit "<name>"` for every one.
-      Both matrices declare `/local-users/user/name` supported.
-      Worth stating because a raw drift-shape reading of this pair reports
-      `local_users` as drifting on all 13 cells and invites the wrong
-      conclusion: no account disappears here.  What changes is the role token
-      and the password encoding, and those are recorded once each below,
-      where they are measured.
+    disposition: lossy
+    reason: >
+      1 of 17 accounts arrive across the 13 cells that populate local users; the
+      list shrinks on 12 of them. The 16 accounts that vanish carry 16 SHA-512
+      crypt (`$6$`). FortiOS can consume its own `ENC` ciphertext or a genuine
+      plaintext password; anything else is refused with a review comment naming
+      the account, in place of the account. Up to 0.7.7 such an account was
+      written as an `edit` with its access profile and no `set password` -- an
+      admin with no password; a refused secret now drops the whole account, as
+      on every other target. The survivors are 1 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [vyos-fortigate-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      The role vocabulary is rewritten on every record: 17 of 17 accounts
-      across all 13 cells go from `admin` to `super_admin`.  That is the
-      FortiOS accprofile namespace and `super_admin` is its full-privilege
-      profile, so this is a translation rather than a privilege escalation —
-      the canonical string no longer matches what the source said, which is
-      what this key measures.  Both matrices declare `/local-users/user/role`
-      supported, and neither declares the mapping.
-      The honest limit of the measurement, stated rather than glossed: EVERY
-      source record on this corpus carries role `admin`.  There is no
-      operator or read-only account in any committed VyOS fixture, so this
-      pair says nothing about whether a lower privilege level maps to a lower
-      accprofile or also flattens to `super_admin`.  Verify that case
-      directly before migrating a device with non-admin accounts — a
-      read-only account arriving as `super_admin` is a privilege escalation,
-      and this corpus cannot tell you whether that happens.
-      Recorded `lossy`, not `unsupported`: the field is populated on the
-      target, the account survives, and the value is transformed rather than
-      dropped.
+      On the 1 account that survives, the role changes: `admin` -> `super_admin`
+      on 1. Mechanism: FortiOS carries an access profile: privilege 15 renders
+      `super_admin`, anything else the canonical role (or `prof_admin`), and the
+      parser reads the profile back as the role. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [vyos-fortigate-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on 16 of 17 records across 12 cells — the 17th does not drift
-      only because its source hash is empty.  The transformation is a
-      constant re-encoding and it was verified record by record, not
-      sampled: the target value equals the literal string `fortios:ENC `
-      followed by the source value, byte for byte, on every drifting record.
-      Source values on this corpus are all in the `$6$` crypt scheme and run
-      10 to 106 characters; target values are exactly 12 characters longer.
-      THE CREDENTIAL IS CARRIED.  This is the benign half of the failure mode
-      that Cisco-sourced pairs hit — no hash body is truncated, replaced, or
-      degraded into a cleartext marker, and a FortiGate reading back its own
-      `set password ENC <hash>` line recovers the same digest.  What differs
-      is the canonical string, which is why the audit sees drift and why this
-      is recorded as a loss at all.
-      Still worth an operator check rather than a shrug: confirm one migrated
-      account can actually authenticate on the target before cutover, because
-      a preserved digest is only useful if the target's password subsystem
-      accepts that crypt scheme.
-      `privilege_level` was measured separately and drifts on no record, even
-      though vyos declares `/local-users/user/privilege-level` lossy on its
-      own side.
-      No hash body is quoted anywhere in this file or its reference doc —
-      only the crypt-scheme marker, the constant prefix and the string
-      lengths are described.
+    disposition: good
+    note: >
+      No secret is written in a form FortiOS cannot consume. 16 accounts are
+      refused for their secret (16 SHA-512 crypt (`$6$`)) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account with a
+      stored secret arrives, so there is no value to compare. Recorded `good`
+      rather than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was written
+      as an `edit` with its access profile and no `set password` -- an admin
+      with no password; a refused secret now drops the whole account, as on
+      every other target. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [vyos-fortigate-surface]
 
   radius_servers:

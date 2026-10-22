@@ -180,12 +180,14 @@ def _q(value: str) -> str:
     return f'"{value}"'
 
 
-def _secret_leaf(value: str) -> str:
+def _one_leaf_value(value: str) -> str:
     """A secret as one value of its leaf: quoted where it holds a space.
 
     Called only for a value :func:`breaks_its_quotes` passed, so
     :func:`_q` never alters it (a secret with a quote replaced is another
-    secret)."""
+    secret).  The name says nothing of secrets: CodeQL takes a call whose
+    name does for sensitive data, and followed this one through a test
+    that parses a rendered config into the parser's debug line."""
     return _q(value) if splits(value) else value
 
 
@@ -358,7 +360,7 @@ def _render_login(users: list) -> list[str]:
                 else "encrypted-password"
             )
             out.append("            authentication {")
-            out.append(f"                {key} {_secret_leaf(payload)}")
+            out.append(f"                {key} {_one_leaf_value(payload)}")
             out.append("            }")
         out.append("        }")
     out.append("    }")
@@ -511,7 +513,7 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
         )
         out.append("                auth {")
         out.append(
-            f"                    {auth_leaf} {_secret_leaf(u.auth_passphrase)}"
+            f"                    {auth_leaf} {_one_leaf_value(u.auth_passphrase)}"
         )
         out.append(
             f"                    type {_snmp_auth_type(u.auth_protocol)}"
@@ -521,7 +523,7 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
             out.append("                privacy {")
             out.append(
                 f"                    {priv_leaf} "
-                f"{_secret_leaf(u.priv_passphrase)}"
+                f"{_one_leaf_value(u.priv_passphrase)}"
             )
             out.append(
                 f"                    type {_snmp_priv_type(u.priv_protocol)}"

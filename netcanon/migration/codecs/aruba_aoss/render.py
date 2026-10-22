@@ -62,11 +62,12 @@ from typing import Any
 
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    AOSS_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
@@ -790,10 +791,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if server.key and radius_secret_is_migratable(
             server.key, tree.source_vendor, "aruba_aoss",
         ):
-            lines.append(
-                f'radius-server host {server.host} '
-                f'key "{unwrap_native_secret(server.key)}"'
-            )
+            if server.key.startswith(AOSS_ENVELOPE):
+                # The switch's own ``encrypted-key``, going back to AOS-S.
+                lines.append(
+                    f'radius-server host {server.host} '
+                    f'encrypted-key "{server.key[len(AOSS_ENVELOPE):]}"'
+                )
+            else:
+                lines.append(
+                    f'radius-server host {server.host} '
+                    f'key "{unwrap_native_secret(server.key)}"'
+                )
         else:
             lines.append(f"radius-server host {server.host}")
             if server.key:
@@ -802,6 +810,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="semicolon",
                         target_label="Aruba AOS-S",
+                        secret=server.key,
                     )
                 )
         if server.auth_port != 1812 or server.acct_port != 1813:
