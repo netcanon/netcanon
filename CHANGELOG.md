@@ -592,6 +592,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS bridge or an IOS-XE `VirtualPortGroup` is no other
+  vendor's loopback.**  The port translator reads both as a
+  `virtual` interface, a kind only its own vendor has, and AOS-CX,
+  NX-OS and OS10 wrote one of another vendor as a loopback ("the
+  closest analogue"), IOS-XE a RouterOS bridge as
+  `VirtualPortGroup0`.  The bridge of a RouterOS router's own
+  default configuration holds the LAN's gateway
+  (`192.168.88.1/24`): onto those four it was on an interface with
+  no port, so the LAN's hosts reached nothing, in jobs that said
+  `completed`.  Each such name now says whose it is, and only its
+  own platform writes it (the IOS-XE CLI and NETCONF codecs keep a
+  `VirtualPortGroup` between them); onto every other platform it is
+  dropped with what was on it and listed in `unresolved_ports`, and
+  the job is `partial`, as the other eight targets already did.
+  Give it an entry of `port_rename_map` -- the target's name for
+  the LAN's interface -- to keep its address.  Guarded by
+  `tests/unit/migration/test_a_virtual_interface_is_its_vendors_own.py`.
+
 - **A RouterOS string is read by MikroTik's table of escapes.**  The
   parser read a backslash and the character after it as that
   character, whatever it was, so a description an export writes

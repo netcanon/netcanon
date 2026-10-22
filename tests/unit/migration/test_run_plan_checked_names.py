@@ -1850,8 +1850,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # left as the source has it and listed; and `ether1` and
     # `sfp-sfpplus1`, which the translator had put on one target
     # port, are not in the config to be put there.  Three jobs that
-    # listed both now list the names alone.
-    "mikrotik_routeros": (0, 0, 0, 0, 24, 4),
+    # listed both now list the names alone.  And from (0, 0, 0, 0,
+    # 24, 4): the capture's `bridge` is RouterOS's own, and no
+    # other vendor has a form for it; onto AOS-CX, IOS-XE CLI, NX-OS
+    # and OS10 it had been a loopback or a `VirtualPortGroup0`, and
+    # is dropped and listed beside the names left (4 jobs, 4 -> 5).
+    "mikrotik_routeros": (0, 0, 0, 0, 20, 8),
     # From (4, 0, 0, 0, 23, 1): a VLAN device on a port is a
     # sub-interface of it, so the supergate capture's five devices on
     # `ixl0` are `TenGigE0/0/0/0.10` and the like onto IOS-XR, and
@@ -1928,7 +1932,7 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 62, 5, 70, 43]
+        assert by_reason == [40, 0, 62, 5, 66, 47]
         assert sum(by_reason) == 220
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 

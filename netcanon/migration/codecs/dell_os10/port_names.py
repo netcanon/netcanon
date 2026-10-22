@@ -190,8 +190,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         return f"vlan{identity.index if identity.index is not None else 1}"
     if identity.kind == "loopback":
         return f"loopback{identity.index if identity.index is not None else 0}"
-    if identity.kind == "virtual":
-        # Closest OS10 analogue for a vendor-specific virtual port.
-        return f"loopback{identity.index or 0}"
-    # breakout / tunnel / vtep / hw_aggregate / unknown — no native form.
+    # breakout / tunnel / vtep / hw_aggregate / unknown — no native form;
+    # nor another vendor's virtual interface: a RouterOS bridge or an
+    # IOS-XE VirtualPortGroup is no loopback, and the LAN address of
+    # one was written on ``loopback0``.
     return None

@@ -249,7 +249,12 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   `untranslated_ports` until an entry of `port_rename_map` gives it
   the target's name — also where the name happens to read as one
   of the target's (`vlan100` onto OS10): a RouterOS name is
-  whatever was typed, and `vlan100` may carry VLAN 20.  See
+  whatever was typed, and `vlan100` may carry VLAN 20.  A bridge
+  it does read (`bridge`, `br-lan`) is RouterOS's own, and no other
+  vendor has a form for it: it is dropped with what is on it -- the
+  LAN address of the default configuration included -- and listed
+  in `unresolved_ports`; an entry that names the target's interface
+  for the LAN keeps it.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **Renaming or dropping a VLAN interface in the rename modal is
   not shown by the output.**  A translation from RouterOS to
