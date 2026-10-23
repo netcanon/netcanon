@@ -295,8 +295,9 @@ BESIDE_THE_LIST = "beside the list"
 #:   the physical interface.  The older grammar -- ``port-mode
 #:   trunk`` and ``native-vlan-id`` under the unit -- states the
 #:   native VLAN beside its members, and a native VLAN that is ALSO
-#:   on the members is sent tagged there; its parser reads the two
-#:   grammars as one today, which the known limitations say.)
+#:   on the members is sent tagged there: the Junos parser reads that
+#:   statement by itself, putting a native VLAN off the members into
+#:   the list, and says one on them in a row.)
 #: * :data:`BESIDE_THE_LIST` -- OS10.  The untagged VLAN is the
 #:   trunk's ``switchport access vlan`` line, and the allowed line
 #:   names tagged VLANs: one VLAN is not on both.  The parser adds

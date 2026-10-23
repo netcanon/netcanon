@@ -113,11 +113,15 @@ def test_populates_every_expected_canonical_field():
     # ssh-rsa public key isn't wired into hashed_password — empty.
     assert readonly.hashed_password == ""
 
-    # --- VLANs (4 named) ---
+    # --- VLANs (5 named) ---
     vlan_ids = {v.id for v in intent.vlans}
-    assert vlan_ids == {10, 20, 100, 200}
+    assert vlan_ids == {1, 10, 20, 100, 200}
     vlan_names = {v.name for v in intent.vlans}
-    assert vlan_names == {"USERS", "VOICE", "TENANT_A_DATA", "TRANSIT"}
+    assert vlan_names == {"default", "USERS", "VOICE", "TENANT_A_DATA", "TRANSIT"}
+    # The trunk's native VLAN, in the grammar before ELS (under the
+    # unit, off the members), is carried untagged.
+    trunk = next(i for i in intent.interfaces if i.name == "ge-0/0/1")
+    assert (trunk.trunk_native_vlan, sorted(trunk.trunk_allowed_vlans)) == (1, [1, 10, 20])
 
     # --- VXLAN VNIs (3 — USERS / VOICE / TENANT_A_DATA) ---
     vni_by_vlan = {x.vlan_id: x.vni for x in intent.vxlan_vnis}

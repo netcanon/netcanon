@@ -358,9 +358,11 @@ per_field_expectation:
   "interfaces[].trunk_native_vlan":
     disposition: unsupported
     reason: >
-      Same render gap.  Junos's `native-vlan-id` lives at the
-      parent-interface hierarchy (NOT under the unit), so the
-      render path needs to handle the cross-stanza correlation.
+      Same `switched-vlan` augment render gap: the render writes no
+      switchport state, so a trunk's native VLAN goes with it.
+      Observed on the synthetic kitchen sink's trunk, whose native
+      VLAN 1 (stated under the unit, in the grammar before ELS) comes
+      back as none.
     references: [oc-vlan]
 
   "interfaces[].voice_vlan":
