@@ -630,7 +630,12 @@ the policy locally:
   so it may put any value into its line as it stands.  A parser that
   reads a value of several lines (FortiOS between its quotes, the XML
   parsers) keeps it as it is; the layout is lost on the way out, and
-  the job says where.
+  the job says where.  The same module keeps every control character
+  out (`CONTROL_CHARACTERS`: Unicode's `Cc` but a tab and the
+  breaks): `text_only_each(tree)` and `first_control_character(tree)`
+  are the same two halves, and a parser that decodes an escape
+  (RouterOS `\1B`) reads it as the character and leaves the rest to
+  the pipeline.
 
 * **`netcanon/migration/_vlan_labels.py`** — a VLAN's label as its
   name.  Public API: `vlan_labels_as_names(tree)`,

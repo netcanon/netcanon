@@ -928,6 +928,19 @@ carry lines, is filled by no parser: one that fills it has to settle
 what its lines become, since the IOS-XE CLI renderer writes each as a
 command.
 
+**Nor with a control character** (the same module).  A parser that
+reads text keeps a control character a value holds -- an escape, a
+backspace, a C1 control -- and a terminal acts on one rather than
+showing it, so an output reviewed there can show less than it holds.
+Every character Unicode calls a control character, but a tab and the
+line breaks (`CONTROL_CHARACTERS`), is mended the same way: each run a
+space, after the transforms, said in the job's warnings
+(`text_only_each`), and refused by `CodecBase.render`
+(`first_control_character`).  A space and not nothing, because a
+secret with a character taken out is another secret, while one that
+holds white space is left out by the renderers that read a line a word
+at a time.
+
 **A VLAN's label as its name** (`netcanon/migration/_vlan_labels.py`).
 OPNsense and RouterOS have no name for a VLAN of its own: the tree
 names it after its interface (`vlan0.10`, `vlan10`) and holds the
