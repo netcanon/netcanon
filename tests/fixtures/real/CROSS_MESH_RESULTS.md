@@ -2529,8 +2529,8 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ip_mtu": null, "ipv4_address... | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:l3ipvlan", "mtu": 1546, "ip_mtu": null, "ipv4_addresses": [... | {"interfaces[0] {'name': 'GigabitEthernet2/0/4.22341020'}": {"dot1q_inner_vlan": {"source": 1020, "target": null}, "dot1q_vlan": {"source": 2234, "target": null}, "interface_type": {"source": "iana... |
-| vlans | DRIFT | [] | [{"id": 2234, "name": "GigabitEthernet2/0/4.223415", "description": "DISTRIBUTION  \| 2048K", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2234, "name": "GigabitEthernet2... | 6 vlans appeared in target (parser bug?) |
+| interfaces | DRIFT | [{"name": "GigabitEthernet2/0/4.22341020", "default_name": "", "description": "BLUE \| 800K", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 1546, "ip_mtu": null, "ipv4_address... | [{"name": "GigabitEthernet2/0/4.2234", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:l3ipvlan", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_address... | count drift: 6 → 1 (interfaces) |
+| vlans | DRIFT | [] | [{"id": 2234, "name": "GigabitEthernet2/0/4.2234", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}] | 1 vlans appeared in target (parser bug?) |
 
 ### cisco_iosxe/ntc_carrier_interfaces.txt → opnsense  (WARN 20/21)
 

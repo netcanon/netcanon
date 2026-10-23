@@ -605,11 +605,27 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # interface the output did not define.  The tag is local to the
     # port, so it is not a VLAN of the switch: the VLANs below are
     # written whether or not a sub-interface has their id.
+    #
+    # A sub-interface of two 802.1Q tags (``dot1q_inner_vlan``) is a
+    # VLAN interface on another: "In RouterOS, Q-in-Q can be
+    # configured by adding one VLAN interface over another"
+    # (MikroTik, "VLAN").  It is written, after every one of one tag,
+    # on the sub-interface of its port with its outer tag, and where
+    # the tree has none, on one made for it, ``<port>.<outer>``, under
+    # a comment that says so.
     if vlan_ifaces or tree.vlans:
         lines.append("/interface vlan")
         rendered_vlan_ids: set[int] = set()
         labels = vlan_labels(tree)
+        # The sub-interface of each port and outer tag, and every name
+        # the output already has.
+        outer_of: dict[tuple[str, int], str] = {}
         for iface in vlan_ifaces:
+            port = iface.vlan_parent or _port_of_unit(iface.name)
+            if port and iface.dot1q_vlan is not None and iface.dot1q_inner_vlan is None:
+                outer_of.setdefault((port, iface.dot1q_vlan), iface.name)
+        taken = {iface.name for iface in tree.interfaces}
+        for iface in sorted(vlan_ifaces, key=lambda i: i.dot1q_inner_vlan is not None):
             if iface.dot1q_vlan is not None:
                 vid = iface.dot1q_vlan
                 port = iface.vlan_parent or _port_of_unit(iface.name)
@@ -620,6 +636,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"(tag {vid}) whose name gives no port; it is "
                         f"written on {parent} -- move it to its port"
                     )
+                if iface.dot1q_inner_vlan is not None:
+                    outer = outer_of.get((parent, vid))
+                    if outer is None:
+                        outer = _a_free_name(f"{parent}.{vid}", taken)
+                        outer_of[(parent, vid)] = outer
+                        lines.append(
+                            f"# {outer}: the outer tag {vid} of "
+                            f"{iface.name}, which has no interface of its "
+                            f"own in the source"
+                        )
+                        lines.append(
+                            f"add interface={_quote_if_needed(parent)} "
+                            f"name={_quote_if_needed(outer)} vlan-id={vid}"
+                        )
+                    parent, vid = outer, iface.dot1q_inner_vlan
             else:
                 vid = _vlan_id_for(iface.name, tree.vlans)
                 parent = iface.vlan_parent or vlan_parent_name
@@ -1332,6 +1363,17 @@ def _routeros_auth_kv(authentication: str) -> list[str]:
             f"password={_quote_if_needed(password)}",
         ]
     return []
+
+
+def _a_free_name(name: str, taken: set[str]) -> str:
+    """*name*, or ``<name>-<n>`` for the first ``n`` from 2 that no
+    name in *taken* has; it is added to *taken*."""
+    found, n = name, 1
+    while found in taken:
+        n += 1
+        found = f"{name}-{n}"
+    taken.add(found)
+    return found
 
 
 def _port_of_unit(name: str) -> str | None:

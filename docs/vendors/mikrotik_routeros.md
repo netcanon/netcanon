@@ -32,16 +32,30 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   with no port in it (`wan10`) rides on the parent chosen for every
   VLAN, under a `# review:` line: move it to its port.  A
   sub-interface of two tags (IOS-XE `second-dot1q`, EOS `inner`,
-  Junos `vlan-tags`) is written with its outer tag, and the job is
-  `partial`, the validation report listing the inner tag.  ⚠️ Up to
+  Junos `vlan-tags`) is a VLAN interface on the VLAN interface of
+  its port with its outer tag -- "In RouterOS, Q-in-Q can be
+  configured by adding one VLAN interface over another" (MikroTik,
+  "VLAN") -- and where the source has none for that tag, one is
+  made, `<port>.<outer>`, under a comment that says so.  ⚠️ Up to
   0.7.7 such a sub-interface got no line, and its address named an
   interface the output did not define.  A VLAN interface read FROM
   RouterOS is a sub-interface where it rides on a port (a port an
   `/interface ethernet` line names, or one whose name says it is a
   port) or on a bond: onto another vendor it goes where its port
   goes, named by its tag whatever you named it (`gn-mgmt` on
-  `ether3`, VLAN 11, is EOS `Ethernet3.11`).  On a bridge it is a
-  VLAN interface and a VLAN.  AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
+  `ether3`, VLAN 11, is EOS `Ethernet3.11`).  A VLAN interface on
+  such a sub-interface is a second tag: a sub-interface of the port
+  with two 802.1Q tags, which reaches IOS-XE, IOS XR, EOS and Junos
+  named by its inner tag.  ⚠️ Up to 0.7.7 it was read as a VLAN
+  interface of one tag, its inner tag, in jobs that said nothing.
+  One that says `use-service-tag=yes` on a port, a bond or a VLAN
+  interface is an 802.1ad tag, and one on a VLAN interface that is
+  not one 802.1Q tag on a port (a bridge's VLAN interface, a third
+  tag) has no form in the tree: each is left out, with its
+  addresses, and a row of the Tier-3 banner names it (a route or a
+  DHCP server that names it keeps the name, which is then defined by
+  nothing in the output).  On a
+  bridge it is a VLAN interface and a VLAN.  AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
   have no form for a sub-interface's tag, and a job onto them is
   `partial` for it.  ⚠️ Up to 0.7.7 every one was a VLAN interface
   and a VLAN, which no port carried on the target.  Another
@@ -232,13 +246,10 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   add group=... name=...` line stayed without its password, and
   RouterOS gives such a user a blank one; read old outputs for an
   `add` after a `review:` line.
-- **A VLAN on a VLAN is one tag on a VLAN interface.**  An
-  `/interface vlan` whose `interface=` is another `/interface vlan`
-  (Q-in-Q on RouterOS) is read as a VLAN interface of one tag on that
-  VLAN interface, not as a sub-interface of two tags.  Onto a target
-  that writes tags the job is `partial`; a source's sub-interface of
-  two tags (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has
-  no form here, and is `partial` too.
+- **A bridge's tag type is not read.**  A VLAN interface on a
+  bridge that says `use-service-tag=yes` -- the VLAN of a bridge
+  whose `ether-type` is 802.1ad -- is read as the bridge's VLAN
+  interface, and its VLAN as an 802.1Q VLAN on every target.
 - **VLAN interfaces, bridges and names of your own, onto another
   vendor** — the port translator reads the names RouterOS gives a
   port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN

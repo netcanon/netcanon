@@ -27,6 +27,19 @@ Some real configs omit `set type vlan`, leaving `vlanid` + `interface`
 as the only VLAN signal — the FortiGate codec accepts both forms
 (see `parse._apply_system_interface` heuristic).
 
+Source: [Fortinet FortiOS 7.0.2 Administration Guide — QinQ](https://docs.fortinet.com/document/fortigate/7.0.2/administration-guide/78126/qinq).
+Retrieved: 2026-10-22
+
+"QinQ (802.1ad) allows multiple VLAN tags to be inserted into a
+single frame"; the FortiGate "double-tags its frames with an outer
+provider-tag (S-Tag) and an inner customer-tag (C-Tag)".  The guide's
+outer VLAN interface says `set vlan-protocol 8021ad`, and the inner
+one is a VLAN interface whose `set interface` is the outer.  It says
+nothing of a VLAN interface on an `8021q` one (the value a verbose
+config prints by default).  The tree's tags are both 802.1Q, so the
+codec leaves out a VLAN interface that says `8021ad` and one on a
+VLAN interface, with a row of the Tier-3 banner.
+
 ## Cisco IOS-XE
 
 Source: Cisco IOS XE LAN Switching Configuration Guide — VLAN

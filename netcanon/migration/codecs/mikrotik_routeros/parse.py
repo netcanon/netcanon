@@ -54,7 +54,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import ticked
-from .._helpers import Uniques
+from .._helpers import Uniques, a_few_named
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .port_names import classify_port_name, is_factory_port_name
@@ -116,6 +116,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # Each VLAN interface's tag and the VLAN records made for it,
     # until the whole config says what its parent is.
     vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]] = {}
+    # The VLAN interfaces whose tag is an 802.1ad service tag.
+    service_tagged: set[str] = set()
     # Every name ``/interface ethernet`` sets something on: a port,
     # whatever its name.
     ethernet_names: set[str] = set()
@@ -164,7 +166,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         elif section == "/interface ethernet":
             _parse_interface_ethernet(lines, iface_by_name, ethernet_names)
         elif section == "/interface vlan":
-            _parse_interface_vlan(lines, iface_by_name, intent, vlan_ifaces)
+            _parse_interface_vlan(
+                lines, iface_by_name, intent, vlan_ifaces, service_tagged,
+            )
         elif section == "/interface bridge":
             _parse_interface_bridge(lines, iface_by_name)
         elif section == "/interface bonding":
@@ -212,6 +216,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     _a_vlan_on_a_port_is_a_sub_interface(
         vlan_ifaces, iface_by_name, ethernet_names, intent,
     )
+    intent.dropped_tier3_sections.extend(_a_vlan_on_a_vlan_is_two_tags(
+        vlan_ifaces, service_tagged, iface_by_name, intent,
+    ))
     _name_the_hardware(iface_by_name.values())
 
     # Order interfaces deterministically: ethernet ports first
@@ -638,14 +645,17 @@ def _parse_interface_vlan(
     iface_by_name: dict[str, CanonicalInterface],
     intent: CanonicalIntent,
     vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
+    service_tagged: set[str],
 ) -> None:
     """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions.
 
     Each is read as a VLAN interface with a VLAN of its tag, and its
     tag and that VLAN are kept in *vlan_ifaces* by its name: one whose
-    parent is a port is a sub-interface instead, which is decided when
-    the whole config has been read
-    (:func:`_a_vlan_on_a_port_is_a_sub_interface`).
+    parent is a port is a sub-interface instead, and one whose parent
+    is a VLAN interface a second tag, which is decided when the whole
+    config has been read (:func:`_a_vlan_on_a_port_is_a_sub_interface`,
+    :func:`_a_vlan_on_a_vlan_is_two_tags`).  One that says
+    ``use-service-tag=yes`` is put in *service_tagged*.
     """
     for line in ticked(lines):
         if not line.startswith("add"):
@@ -672,6 +682,11 @@ def _parse_interface_vlan(
         # parent rather than on one the renderer would have to choose.
         if kv.get("interface"):
             iface.vlan_parent = kv["interface"]
+        # "IEEE 802.1ad compatible Service Tag" (MikroTik, "VLAN"):
+        # not an 802.1Q tag.  An export prints ``use-service-tag=no``
+        # for one that is not.
+        if kv.get("use-service-tag", "").lower() == "yes":
+            service_tagged.add(name)
         # Disabled flag (defaults to enabled if not present).
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
@@ -768,6 +783,95 @@ def _a_vlan_on_a_port_is_a_sub_interface(
         taken_out.update(id(vlan) for vlan in made)
     if taken_out:
         intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in taken_out]
+
+
+def _a_vlan_on_a_vlan_is_two_tags(
+    vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
+    service_tagged: set[str],
+    iface_by_name: dict[str, CanonicalInterface],
+    intent: CanonicalIntent,
+) -> list[str]:
+    """A VLAN interface on a sub-interface of a port is a sub-interface
+    of that port that matches two 802.1Q tags; a tag the tree has no
+    form for is left out, and said.
+
+    "In RouterOS, Q-in-Q can be configured by adding one VLAN
+    interface over another" (MikroTik, "VLAN"): ``add interface=ether1
+    name=vlan1 vlan-id=11`` and ``add interface=vlan1 name=vlan2
+    vlan-id=12`` send two tags, 11 and 12, on ``ether1``.  So the
+    second is typed as its port is, with the tag of the first outside
+    (``dot1q_vlan``) and its own inside (``dot1q_inner_vlan``), and
+    its parent is the PORT, as for one tag: the tree of a sub-interface
+    of two tags from every parser that reads one
+    (``GigabitEthernet0/1.1100``, ``encapsulation dot1Q 100
+    second-dot1q 200``).  The renderer puts it back on the
+    sub-interface of the port with its outer tag.  Read as a VLAN
+    interface of one tag, it was an SVI of its inner tag and a VLAN no
+    port carried, in jobs that said ``completed``.
+
+    Both tags are 802.1Q: a tag that says ``use-service-tag=yes`` is
+    an 802.1ad service tag, which the tree's tags are not, and a VLAN
+    interface on a VLAN interface that is not one 802.1Q tag on a port
+    or a bond (one on a bridge's VLAN interface, a third tag) has no
+    form in the tree.  Each such interface is left out, with its VLAN
+    record and its addresses, and a row says which
+    (:data:`_LEFT_OUT_TAGS`), a few named and the rest counted.  A
+    route or a DHCP server that names it keeps the name, as one that
+    names any interface the tree does not have does.  Read as one
+    tag, it was another interface on every target.
+
+    Decided on what :func:`_a_vlan_on_a_port_is_a_sub_interface`
+    made, so the order of the config's lines decides nothing: a tag on
+    a VLAN interface that this pass gives a second tag is a third.
+
+    Returns:
+        The rows of ``dropped_tier3_sections``, one for each reason
+        that has an interface.
+    """
+    one_tag = {
+        name for name in vlan_ifaces
+        if iface_by_name[name].dot1q_vlan is not None
+    }
+    left_out: dict[str, list[str]] = {reason: [] for reason in _LEFT_OUT_TAGS}
+    two_tags: list[str] = []
+    for name in ticked(vlan_ifaces):
+        parent = iface_by_name[name].vlan_parent
+        if name in service_tagged and (name in one_tag or parent in vlan_ifaces):
+            left_out["service"].append(name)
+        elif parent in vlan_ifaces and parent != name:
+            if parent in one_tag and parent not in service_tagged:
+                two_tags.append(name)
+            else:
+                left_out["stack"].append(name)
+    for name in ticked(two_tags):
+        iface = iface_by_name[name]
+        outer = iface_by_name[iface.vlan_parent]
+        iface.interface_type = outer.interface_type
+        iface.dot1q_vlan, iface.dot1q_inner_vlan = outer.dot1q_vlan, vlan_ifaces[name][0]
+        iface.vlan_parent = outer.vlan_parent
+    gone = {id(vlan) for name in two_tags for vlan in vlan_ifaces[name][1]}
+    for names in left_out.values():
+        for name in names:
+            gone.update(id(vlan) for vlan in vlan_ifaces[name][1])
+            del iface_by_name[name]
+    if gone:
+        intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in gone]
+    return [
+        f"/interface vlan {a_few_named(names)}: {_LEFT_OUT_TAGS[reason]} "
+        f"-- not one 802.1Q tag and at most one inner tag, so the "
+        f"interface is not translated"
+        for reason, names in left_out.items() if names
+    ]
+
+
+#: Why a VLAN interface is left out (:func:`_a_vlan_on_a_vlan_is_two_tags`).
+_LEFT_OUT_TAGS = {
+    "service": "use-service-tag=yes, an 802.1ad service tag",
+    "stack": (
+        "interface= a VLAN interface that is not one 802.1Q tag on a "
+        "port or a bond"
+    ),
+}
 
 
 def _parse_interface_bridge(

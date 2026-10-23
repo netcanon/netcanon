@@ -77,7 +77,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import ticked
-from .._helpers import _mask_to_prefix
+from .._helpers import _mask_to_prefix, a_few_named
 from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
 from .._scanner import Body, without_text_bodies
@@ -828,9 +828,9 @@ def _a_vlan_on_a_port_is_a_sub_interface(
     a hardware or software switch (``set type hard-switch``,
     ``switch``) carries VLANs as a bridge does: a VLAN interface on
     one stays a VLAN interface with its VLAN, and so does one on
-    anything else -- a VLAN interface among them (``set vlanid``:
-    Q-in-Q, one tag on another VLAN interface, whatever its name
-    looks like).  Where the parent's edit states no type, or the
+    anything else.  One on a VLAN interface (``set vlanid``, whatever
+    its name looks like) is a second tag, which
+    :func:`_tags_with_no_form` leaves out.  Where the parent's edit states no type, or the
     config has no edit for it, its name decides
     (:func:`.port_names.classify_port_name`: ``port4``, ``wan1``, but
     not ``internal`` or ``lan``, which are switches, nor
@@ -878,6 +878,77 @@ def _a_vlan_on_a_port_is_a_sub_interface(
         taken_out.add(id(vlan))
     if taken_out:
         intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in taken_out]
+
+
+def _tags_with_no_form(blocks: list[_ConfigBlock], intent: CanonicalIntent) -> list[str]:
+    """Leave out each VLAN interface whose tag the tree has no form
+    for, and say which.
+
+    The tree's tags are 802.1Q tags.  ``set vlan-protocol 8021ad``
+    makes the VLAN interface's tag an 802.1ad service tag (FortiOS
+    prints ``set vlan-protocol 8021q`` for one that is not), and a
+    VLAN interface whose ``set interface`` is another VLAN interface
+    is a second tag: "QinQ (802.1ad) allows multiple VLAN tags to be
+    inserted into a single frame", the outer one a provider tag
+    (Fortinet, FortiOS Administration Guide, "QinQ").  The guide
+    shows the outer VLAN interface with ``set vlan-protocol 8021ad``
+    and says nothing of one with ``8021q``: whether FortiOS sends two
+    802.1Q tags there is not established.  Read as one tag, either
+    was another interface on every target, in jobs that said
+    ``completed``.  So each is left out -- with its VLAN record and
+    its addresses, and a VLAN interface on one of them with it -- and
+    a row for each reason names a few and counts the rest.  A route
+    or a DHCP server that names it keeps the name, as one that names
+    any interface the tree does not have does.
+
+    Returns:
+        The rows of ``dropped_tier3_sections``.
+    """
+    service: set[str] = set()
+    tagged: set[str] = set()
+    for block in blocks:
+        if block.config_path != "system interface":
+            continue
+        for edit in ticked(block.edits):
+            if "vlanid" not in edit.settings:
+                continue
+            tagged.add(edit.edit_id)
+            protocol = edit.settings.get("vlan-protocol")
+            if protocol and protocol[0].lower() == "8021ad":
+                service.add(edit.edit_id)
+    left_out: dict[str, list[str]] = {"service": [], "stack": []}
+    for iface in ticked(intent.interfaces):
+        if iface.name not in tagged or (
+            iface.interface_type != "ianaift:l3ipvlan" and iface.dot1q_vlan is None
+        ):
+            continue
+        if iface.name in service:
+            left_out["service"].append(iface.name)
+        elif iface.vlan_parent in tagged and iface.vlan_parent != iface.name:
+            left_out["stack"].append(iface.name)
+    gone = {name for names in left_out.values() for name in names}
+    if gone:
+        intent.interfaces = [i for i in intent.interfaces if i.name not in gone]
+        intent.vlans = [vlan for vlan in intent.vlans if vlan.name not in gone]
+    return [
+        f"config system interface edit {a_few_named(names)}: "
+        f"{_NO_FORM[reason]}, so the interface is not translated"
+        for reason, names in left_out.items() if names
+    ]
+
+
+#: Why a VLAN interface is left out (:func:`_tags_with_no_form`).
+_NO_FORM = {
+    "service": (
+        "set vlan-protocol 8021ad -- an 802.1ad service tag, not an "
+        "802.1Q tag"
+    ),
+    "stack": (
+        "set interface <a VLAN interface> -- a second tag; FortiOS "
+        "documents Q-in-Q with an 802.1ad outer tag, and two 802.1Q "
+        "tags are not established"
+    ),
+}
 
 
 def _apply_snmp_sysinfo(
@@ -1321,6 +1392,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             ignored_paths.append(block.config_path)
     _link_lag_members(intent)
     _a_vlan_on_a_port_is_a_sub_interface(blocks, intent)
+    intent.dropped_tier3_sections.extend(_tags_with_no_form(blocks, intent))
 
     logger.debug(
         "fortigate_cli parsed: hostname=%r ifaces=%d vlans=%d "

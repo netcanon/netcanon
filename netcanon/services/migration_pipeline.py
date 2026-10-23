@@ -1574,7 +1574,8 @@ def _sub_interface_followers(
         names: Source port to the name it has on the target, as the
             pairing (and any pinned label) decided.
         stated: Each sub-interface whose config states its port,
-            with the port and its tag
+            with the port and its unit -- its tag, or the inner tag of
+            one that matches two
             (:func:`~netcanon.migration.canonical.port_names.stated_sub_interfaces`);
             none if not given.
 
@@ -1637,11 +1638,11 @@ def _units_that_followed(
             the run.
         job: The finished run.
         stated: Each sub-interface whose config states its port apart
-            from its name, with the port and its tag: the translator
-            sends it after its port named by its TAG, not by a unit
-            its name does not have (RouterOS ``gn-mgmt`` on
-            ``ether3``, tag 84, goes to ``Ethernet3.84``).  None if
-            not given.
+            from its name, with the port and its unit: the translator
+            sends it after its port named by its TAG -- the inner tag
+            of one that matches two -- not by a unit its name does not
+            have (RouterOS ``gn-mgmt`` on ``ether3``, tag 84, goes to
+            ``Ethernet3.84``).  None if not given.
 
     Returns:
         Each unit that is where its port is, with the name it has

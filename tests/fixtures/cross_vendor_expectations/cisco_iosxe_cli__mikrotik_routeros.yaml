@@ -186,7 +186,17 @@ per_field_expectation:
       configuration plane on RouterOS.  Loopback as a first-class
       interface family is a Cisco concept; RouterOS emulates via
       empty bridges, which the codec carries via interface_type
-      inference but does not render byte-identically.
+      inference but does not render byte-identically.  The six
+      Q-in-Q units of ``ntc_carrier_interfaces.txt`` are written as
+      RouterOS writes two tags, a VLAN interface on the VLAN
+      interface of their outer tag (made, under a comment, since the
+      source has none), on a port this pipeline gives its Cisco
+      name: read back, that name is no RouterOS port, so the outer is
+      a VLAN interface and a VLAN, and the six on it are
+      left out with a row (a VLAN interface on one that is not one
+      tag on a port), so the cell counts one interface for six.  On
+      the plan path the port is named as RouterOS names one and the
+      six come back with both tags.
     references: [mikrotik_iface_naming, mikrotik_switching_model]
 
   vlans:
@@ -208,9 +218,10 @@ per_field_expectation:
       size: the VLANs of
       ``ciscolive_brkops1104_evpn_leaf_iosxe1715.txt`` are written on its
       one port with an address or a trunk, and all 3 are dropped; the
-      Q-in-Q units of ``ntc_carrier_interfaces.txt`` hang off a port
-      the output gives no line of its own, and are six VLANs of 2234
-      that the source does not have.
+      VLAN interface the render makes for the outer tag of the Q-in-Q
+      units of ``ntc_carrier_interfaces.txt`` hangs off a port the
+      output gives no line of its own, and is one VLAN of 2234 that
+      the source does not have (see ``interfaces``).
     references: [mikrotik_vlan, mikrotik_bridge_vlan]
 
   static_routes:

@@ -58,6 +58,21 @@ add name=vlan30 vlan-id=30 interface=ether1
 add address=10.10.10.1/24 interface=vlan10
 ```
 
+Q-in-Q is a VLAN interface on another (retrieved 2026-10-22): "In
+RouterOS, Q-in-Q can be configured by adding one VLAN interface over
+another", and in the page's example, `add name=vlan1 vlan-id=11
+interface=ether1` and `add name=vlan2 vlan-id=12 interface=vlan1`,
+"If any packet is sent over the 'vlan2' interface, two VLAN tags will
+be added to the Ethernet header - '11' and '12'".  `use-service-tag`
+is the "IEEE 802.1ad compatible Service Tag"; an export prints
+`use-service-tag=no` for a tag that is not one.  The page gives no
+TPID for a tag without it; that it is 802.1Q is read from that
+setting.  The codec reads a VLAN interface on a sub-interface of a
+port as a sub-interface of two 802.1Q tags (`dot1q_vlan` the
+parent's tag, `dot1q_inner_vlan` its own), and leaves one with a
+service tag, or on what is not one 802.1Q tag on a port, out with a
+row.
+
 Each `/interface vlan` line creates a tagged sub-interface bound to
 ONE parent (`interface=ether1`) — equivalent to a Linux `vlan10@eth1`
 802.1Q sub-interface or a Junos `ge-0/0/0.10` unit.  This is how
