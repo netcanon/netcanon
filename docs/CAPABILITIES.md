@@ -2429,7 +2429,9 @@ matter; the matrix is honest about both.
   description as its name (`name USER VLAN`; EOS writes `USER_VLAN`,
   having no white space in a name, and Junos quotes it:
   `set vlans "USER VLAN"`).  A name of the VLAN's own is kept, and a
-  description beside it is listed as a loss.  On `dell_os10` an SVI
+  description beside it is listed as a loss -- save on `juniper_junos`,
+  which writes it beside the name (`set vlans OFFICE description
+  "Second-floor"`).  On `dell_os10` an SVI
   with a description of its own keeps it, and the VLAN's name is in
   a `! review:` line of its stanza (`/vlans/vlan/name`, lossy).
   `aruba_aoscx` and `opnsense` write both.  Onto `fortigate_cli` and

@@ -397,13 +397,14 @@ per_field_expectation:
     references: [junos-nxos-surface]
 
   "vlans[].description":
-    disposition: not_applicable
-    note: >
-      Source-side absence: the Junos parser builds `CanonicalVlan(id, name)`
-      and never sets `description`, so nothing reaches the target to be lost
-      (0 of 11 cells).  Both matrices declare `/vlans/vlan/description` lossy
-      on their own render side, so closing the Junos parse side would move
-      this row to `lossy`, not to `good`.
+    disposition: lossy
+    reason: >
+      The Junos parser reads `set vlans <name> description X` (up to 0.7.7
+      it read nothing of it), and NX-OS has no VLAN-level description apart
+      from the name: the render drops it, and the job lists
+      `/vlans/vlan/description` as lossy.  No Junos capture gives a VLAN a
+      description (0 of 11 cells), so this rests on the NX-OS matrix rather
+      than an observed drop.
     references: [junos-nxos-surface]
 
   "vlans[].tagged_ports":

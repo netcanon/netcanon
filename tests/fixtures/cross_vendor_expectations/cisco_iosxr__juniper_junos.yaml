@@ -279,10 +279,8 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Empty on all 12 cells — the IOS-XR codec harvests no VLAN description
-      distinct from the name.  Recorded as a source-side gap rather than a
-      Junos limitation, though juniper_junos does declare
-      `/vlans/vlan/description` lossy, so a source that populated it would lose
-      it on render as well.
+      distinct from the name.  Recorded as a source-side gap; Junos writes
+      `set vlans <name> description X` for a source that holds one.
     references: [iosxr-junos-surface]
 
   # -- Routing ---------------------------------------------------------------

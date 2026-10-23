@@ -442,10 +442,8 @@ per_field_expectation:
     note: >
       Same bookkeeping as `vlans[].name`, and unexercised: 0 of the 126
       source VLAN records carry a description distinct from the name.
-      juniper_junos declares `/vlans/vlan/description` LOSSY on its own
-      render side, which would matter only for a pair where Junos is the
-      TARGET.  Here the field is empty on every record before the parent
-      list vanishes.
+      Here the field is empty on every record before the parent list
+      vanishes.
     references: [junos-vyos-surface]
 
   # -- Routing --------------------------------------------------------------

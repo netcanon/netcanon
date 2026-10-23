@@ -4,9 +4,11 @@ OPNsense and RouterOS have no name for a VLAN of its own: the tree
 names it after its interface (an OPNsense ``<vlanif>``, a RouterOS
 ``/interface vlan``), and the label an operator typed -- an OPNsense
 ``<descr>``, a RouterOS ``comment=`` -- is its description.  IOS-XE,
-NX-OS, EOS, AOS-S and Junos write one label for a VLAN, its name, and
-no description, and OS10 one, its SVI's description: the label was
-not in their output at all, and the
+NX-OS, EOS and AOS-S write one label for a VLAN, its name, and no
+description, OS10 one, its SVI's description, and a Junos VLAN is
+called by its name, which every ``vlan members`` line refers to: the
+label was not in their output at all (Junos wrote no description
+either, until it read and wrote one), and the
 name they wrote was a device name (``vlan0.10``) or, once the port
 translator had renamed that interface, a name nothing else held.
 
@@ -16,7 +18,8 @@ says its VLAN has only a name (``CodecBase.vlans_have_only_a_name``),
 by one shared rule (``netcanon/migration/_vlan_labels.py``) applied in
 ``run_plan`` before the port translator and at the render boundary.
 A name of the VLAN's own (an AOS-CX ``name``) is kept, and its
-description stays the loss the matrix declares.  On OS10 an SVI of
+description stays the loss the matrix declares, save on Junos, which
+writes it beside the name.  On OS10 an SVI of
 the output with a description of its own keeps it, and the label
 is said in a review line of its stanza.
 
@@ -45,7 +48,8 @@ pytestmark = pytest.mark.unit
 
 _REPO = Path(__file__).resolve().parents[3]
 
-#: The targets whose VLAN has only a name.
+#: The targets whose VLAN is called by its name
+#: (``vlans_have_only_a_name``).
 TARGETS = (
     "arista_eos", "aruba_aoss", "cisco_iosxe_cli", "cisco_nxos", "dell_os10",
     "juniper_junos",
@@ -463,8 +467,10 @@ def test_the_render_leaves_the_tree_as_it_was(target: str) -> None:
 @pytest.mark.parametrize("target", TARGETS)
 def test_the_job_says_what_is_lost_and_not_what_moved(target: str) -> None:
     """A label written as the name is in the output; a description beside
-    a name of the VLAN's own is not, and the job says so."""
-    for source_key, listed in (("opnsense", False), ("routeros", False), ("aoscx", True)):
+    a name of the VLAN's own is not, and the job says so -- save on
+    Junos, which writes it (``codecs/juniper_junos/test_a_vlan_description.py``)."""
+    beside = target != "juniper_junos"
+    for source_key, listed in (("opnsense", False), ("routeros", False), ("aoscx", beside)):
         source, text, _ = HAND[source_key]
         job = run_plan_with_checked_names(get_codec(source), get_codec(target), text, port_rename_map={})
         lossy = {issue.path for issue in job.validation.lossy_paths}

@@ -10,7 +10,7 @@ none, the name says nothing an operator chose for the VLAN: OPNsense
 and RouterOS name the VLAN after the interface the tag is defined on,
 so that their renderers (and FortiOS's) find the tag by it.
 
-A target whose VLAN has a name and nothing else
+A target whose VLAN is called by its name
 (``CodecBase.vlans_have_only_a_name``: ``vlan 10`` / ``name X`` on
 IOS-XE, NX-OS, EOS and AOS-S, ``set vlans X`` on Junos, the one
 ``description`` of an OS10 ``interface vlan``) wrote that interface
@@ -19,7 +19,8 @@ its device, ``USER VLAN`` came out as ``name vlan0.10`` on IOS-XE.
 So on such a target the label is the name, where the name is only an
 interface name or empty.  A name the config chose for the VLAN itself
 is kept (an AOS-CX ``name``), and its label is lost there, as each
-matrix declares.
+matrix declares -- save on Junos, which writes it beside the name
+(``set vlans X description``).
 
 Applied twice, to the same effect: by ``run_plan`` right after the
 parse, before the port translator renames the interface the name

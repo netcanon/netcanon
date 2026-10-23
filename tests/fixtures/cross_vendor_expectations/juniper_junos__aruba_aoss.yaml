@@ -451,10 +451,10 @@ per_field_expectation:
     reason: >
       Junos supports ``set vlans <name> description X``; Aruba does
       not model a VLAN-level description natively (only interface
-      descriptions).  Aruba render emits the description as a
-      ``;`` comment immediately after the ``vlan <id>`` header —
-      informational only, not interpreted by the AOS-S parser on
-      reload.
+      descriptions).  The AOS-S render writes the VLAN's name and
+      nothing of its description, and the job lists
+      ``/vlans/vlan/description`` as lossy.  No Junos capture gives a
+      VLAN a description.
     references: [junos-vlans-statement, aruba-vlans]
 
   vlans[].tagged_ports:

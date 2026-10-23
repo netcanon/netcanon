@@ -71,6 +71,12 @@ linked from the VLAN definition.
   first-class field; Arista has no VLAN-level description (only
   per-interface descriptions).  Canonical carries the description;
   Arista render emits as a `!` comment after the `vlan <id>` header.
+
+  > **Update 2026-10-21.**  Neither half held: up to 0.7.7 the Junos
+  > parser read nothing of `set vlans NAME description X`, and the
+  > Arista render writes no comment for a VLAN description.  The parser
+  > now reads it; the Arista render writes the VLAN's `name` alone,
+  > and the job lists `/vlans/vlan/description` as lossy.
 - **Port membership transposition.** Both vendors model port
   membership per-interface; the canonical model also carries
   per-VLAN port lists (`tagged_ports` / `untagged_ports`) which the

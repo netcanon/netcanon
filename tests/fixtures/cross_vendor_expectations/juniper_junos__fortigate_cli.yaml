@@ -514,7 +514,7 @@ per_field_expectation:
   vlans[].description:
     disposition: lossy
     reason: >
-      The Junos parser reads no `set vlans <name> description`, so the source
+      No Junos capture has a `set vlans <name> description`, so the source
       holds no VLAN description.  FortiOS has one label for a VLAN, the alias
       of its interface, which the render writes from the VLAN's name and the
       FortiGate parser reads back as the VLAN's description: each named VLAN

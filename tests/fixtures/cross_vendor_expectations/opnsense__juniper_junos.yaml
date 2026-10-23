@@ -431,11 +431,12 @@ per_field_expectation:
   vlans[].description:
     disposition: lossy
     reason: >
-      Comes back empty on every VLAN that carries one: the Junos render writes a VLAN's name
-      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
-      `vlans[].name`), so the label is in the output and this field is
-      not. A description beside a name of the VLAN's own is lost, and
-      Junos declares `/vlans/vlan/description` lossy for it.
+      Comes back empty on every VLAN that carries one: the source names each
+      VLAN after its interface, so the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`) and not again as a description; the label is in the
+      output and this field is not. Junos writes `set vlans <name>
+      description X` only for a description beside a name of the VLAN's
+      own, which this source does not produce.
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].tagged_ports:

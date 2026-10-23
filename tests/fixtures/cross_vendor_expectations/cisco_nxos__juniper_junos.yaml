@@ -296,15 +296,12 @@ per_field_expectation:
     references: [nxos-junos-surface]
 
   "vlans[].description":
-    disposition: lossy
-    reason: >
-      Junos renders the VLAN name but not a separate `description` line, so a
-      canonical VLAN description (distinct from the name) drops -- its matrix
-      declares `/vlans/vlan/description` lossy, and the NX-OS matrix declares
-      the same path lossy on its side.  No fixture on this pair populates a
-      VLAN description, so this rests on the two matrices rather than an
-      observed drop.  Re-add per-VLAN descriptions on the target if you rely
-      on them for documentation.
+    disposition: not_applicable
+    note: >
+      NX-OS has no VLAN-level description apart from the name (its matrix
+      declares `/vlans/vlan/description` lossy on its own side), and no
+      fixture on this pair populates one.  Junos writes `set vlans <name>
+      description X` for a source that holds one.
     references: [nxos-junos-surface]
 
   "vlans[].tagged_ports":

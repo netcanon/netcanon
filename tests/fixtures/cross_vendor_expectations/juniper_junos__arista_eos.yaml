@@ -343,7 +343,7 @@ per_field_expectation:
 
   vlans[].description:
     disposition: lossy
-    reason: "Junos 'set vlans <name> description X' is a first-class VLAN-level field; Arista has no VLAN-level description (only per-interface descriptions). Canonical carries it; Arista render emits as a '!' comment after the vlan header — informational only, not interpreted by EOS on reload."
+    reason: "Junos 'set vlans <name> description X' is a first-class VLAN-level field, which the Junos parser reads; Arista has no VLAN-level description (only per-interface descriptions). The Arista render writes the VLAN's name and nothing of its description, and the job lists /vlans/vlan/description as lossy. No Junos capture gives a VLAN a description."
     references: [junos-vlans-statement, arista-vlan-cg]
 
   vlans[].tagged_ports:

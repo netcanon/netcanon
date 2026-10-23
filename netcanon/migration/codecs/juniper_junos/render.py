@@ -939,6 +939,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(
             f"set vlans {_quote_if_needed(vlan_key)} vlan-id {vlan.id}"
         )
+        # A label moved into the name (``_vlan_labels``) has left an
+        # empty description, so nothing is written twice.
+        if vlan.description:
+            out.append(
+                f"set vlans {_quote_if_needed(vlan_key)} description "
+                f"{_quote_always(vlan.description)}"
+            )
         if vlan.id in vni_by_vlan:
             out.append(
                 f"set vlans {_quote_if_needed(vlan_key)} vxlan vni "
