@@ -999,7 +999,8 @@ the output, and so a command on the target.  The job's status is not
 changed: the value's words are all there.  What is lost is the layout,
 on the targets that could have held it too (an XML target, FortiOS
 between its quotes).  A caller that renders a tree without the
-pipeline is refused (`RenderError`), naming the field.
+pipeline is refused (`RenderError`), naming the field.  A secret is
+not mended (C3).
 
 ### C2. A control character in a value (a job warning)
 
@@ -1014,12 +1015,31 @@ written as one space, and the job says where:
     each run of them is written as a space, because no target is given
     a character a terminal acts on rather than shows
 
-The job's status is not changed.  A secret that held one holds a
-space in its place: the targets whose lines are read a word at a time
-leave it out, and a target that writes it between quotes (AOS-S,
-FortiOS, Junos, RouterOS, OPNsense) writes another secret than the
-source held -- a known limitation.  A format character (a zero-width
-space, a bidirectional override) is written as it stands.
+The job's status is not changed.  A secret is not mended (C3).  A
+format character (a zero-width space, a bidirectional override) is
+written as it stands.
+
+### C3. A secret that held a line break or a control character (`partial`)
+
+A secret is mended neither way: with a space in its place, or with
+the character taken out, it is another secret -- and a target that
+writes a secret with white space between quotes (an SNMP community on
+AOS-S, FortiOS, Junos, RouterOS and OPNsense) would write it.  So an
+SNMP community, an SNMPv3 passphrase, a local user's password, a
+RADIUS key or an FHRP authentication that holds a line break or a
+control character is left out with what it composes:
+
+* a community with every trap host that would carry it;
+* a local user or an SNMPv3 user whole;
+* a RADIUS key or an FHRP authentication alone -- the server and the
+  group are kept.
+
+The job says each place, never the value, and is `partial`:
+
+    snmp.community held a line break or a control character: with a
+    space in its place it would be another secret, so it is left out,
+    with every trap host that would carry it; re-create them on the
+    device
 
 ### D. Validation severity (`ok` / `warn` / `block`)
 

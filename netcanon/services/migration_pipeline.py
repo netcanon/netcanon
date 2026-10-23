@@ -148,6 +148,7 @@ from ..migration._one_line import (
     one_line_each,
     said,
     said_of_a_control_character,
+    secrets_left_out,
     text_only_each,
 )
 from ..migration._tier3_detection import is_left_out_row
@@ -334,6 +335,9 @@ def run_plan(
     if scope_advisory is not None:
         job.scope_advisories.extend(scope_advisory.reasons)
 
+    # The secrets left out for holding a line break or a control
+    # character (Stage 3), which hold the job `partial`.
+    secrets: list[str] = []
     try:
         # Stage 2 — parse
         job.status = MigrationJobStatus.parsing
@@ -366,6 +370,10 @@ def run_plan(
         # into its line as it stands, so the text after a line break
         # is a command of its own.  After the transforms, which put an
         # operator's values into the tree (`netcanon.migration._one_line`).
+        # A secret first: with a space in it, it is another secret, so
+        # one that holds a break or a control character is left out.
+        secrets = secrets_left_out(tree)
+        job.warnings.extend(secrets)
         job.warnings.extend(said(where) for where in one_line_each(tree))
         # And with no control character, which a terminal acts on.
         job.warnings.extend(
@@ -471,6 +479,18 @@ def run_plan(
                 )
         else:
             job.status = MigrationJobStatus.completed
+        if secrets:
+            # A secret left out is a loss the output does not show.
+            message = (
+                f"{len(secrets)} secret(s) held a line break or a control "
+                "character and were left out with what they compose; the "
+                "job's warnings name each place."
+            )
+            if job.status == MigrationJobStatus.completed:
+                job.status = MigrationJobStatus.partial
+                job.error = message
+            else:
+                job.error = f"{job.error} {message}" if job.error else message
 
     job.completed_at = datetime.now(UTC)
     logger.debug(
