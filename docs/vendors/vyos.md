@@ -197,10 +197,12 @@ real set-form) capture are welcomed via
   sub-interfaces are not translated`).  ⚠️ Up to 0.7.7 it went with
   nothing said.  A source's sub-interface of two 802.1Q tags (IOS-XE
   `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has no form here
-  either: the job is `partial`.  A `vif 0` is read as a sub-interface
-  of tag 0, which no 802.1Q VLAN has; the IOS-XE, IOS XR and EOS
-  parsers leave such a stanza out of another vendor's output when it
-  is read back.
+  either: the job is `partial`.  A `vif 0` is left out with its
+  addresses, and a row names it (`interfaces ethernet eth0: vif 0 --
+  not one 802.1Q tag and at most one inner tag, so the sub-interface
+  is not translated`): VID 0 is a priority tag and no VLAN (IEEE
+  802.1Q).  ⚠️ Up to 0.7.7 it was a sub-interface of tag 0 on
+  every target that writes a tag.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership

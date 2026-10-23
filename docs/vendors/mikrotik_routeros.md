@@ -55,7 +55,10 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   addresses, and a row of the Tier-3 banner names it (a route or a
   DHCP server that names it keeps the name, which is then defined by
   nothing in the output).  On a
-  bridge it is a VLAN interface and a VLAN.  AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
+  bridge it is a VLAN interface and a VLAN.  A VLAN interface whose
+  `vlan-id=` is no VLAN id (0, 4095) is left out the same way, with
+  a VLAN interface on it: ⚠️ up to 0.7.7 such a `vlan-id=` refused
+  the whole config.  AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
   have no form for a sub-interface's tag, and a job onto them is
   `partial` for it.  ⚠️ Up to 0.7.7 every one was a VLAN interface
   and a VLAN, which no port carried on the target.  Another

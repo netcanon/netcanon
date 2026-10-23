@@ -77,7 +77,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import ticked
-from .._helpers import _mask_to_prefix, a_few_named
+from .._helpers import _mask_to_prefix, a_few_named, a_tag
 from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
 from .._scanner import Body, without_text_bodies
@@ -895,7 +895,9 @@ def _tags_with_no_form(blocks: list[_ConfigBlock], intent: CanonicalIntent) -> l
     and says nothing of one with ``8021q``: whether FortiOS sends two
     802.1Q tags there is not established.  Read as one tag, either
     was another interface on every target, in jobs that said
-    ``completed``.  So each is left out -- with its VLAN record and
+    ``completed``.  A ``set vlanid`` that is no VLAN id (0, 4095)
+    made no VLAN, and its interface was one of no tag.  So each is
+    left out -- with its VLAN record and
     its addresses, and a VLAN interface on one of them with it -- and
     a row for each reason names a few and counts the rest.  A route
     or a DHCP server that names it keeps the name, as one that names
@@ -906,6 +908,7 @@ def _tags_with_no_form(blocks: list[_ConfigBlock], intent: CanonicalIntent) -> l
     """
     service: set[str] = set()
     tagged: set[str] = set()
+    no_id: set[str] = set()
     for block in blocks:
         if block.config_path != "system interface":
             continue
@@ -913,16 +916,21 @@ def _tags_with_no_form(blocks: list[_ConfigBlock], intent: CanonicalIntent) -> l
             if "vlanid" not in edit.settings:
                 continue
             tagged.add(edit.edit_id)
+            vlanid = edit.settings["vlanid"]
+            if a_tag(vlanid[0] if vlanid else "") is None:
+                no_id.add(edit.edit_id)
             protocol = edit.settings.get("vlan-protocol")
             if protocol and protocol[0].lower() == "8021ad":
                 service.add(edit.edit_id)
-    left_out: dict[str, list[str]] = {"service": [], "stack": []}
+    left_out: dict[str, list[str]] = {reason: [] for reason in _NO_FORM}
     for iface in ticked(intent.interfaces):
         if iface.name not in tagged or (
             iface.interface_type != "ianaift:l3ipvlan" and iface.dot1q_vlan is None
         ):
             continue
-        if iface.name in service:
+        if iface.name in no_id:
+            left_out["id"].append(iface.name)
+        elif iface.name in service:
             left_out["service"].append(iface.name)
         elif iface.vlan_parent in tagged and iface.vlan_parent != iface.name:
             left_out["stack"].append(iface.name)
@@ -939,6 +947,7 @@ def _tags_with_no_form(blocks: list[_ConfigBlock], intent: CanonicalIntent) -> l
 
 #: Why a VLAN interface is left out (:func:`_tags_with_no_form`).
 _NO_FORM = {
+    "id": "set vlanid -- a number that is no VLAN id, 1 to 4094",
     "service": (
         "set vlan-protocol 8021ad -- an 802.1ad service tag, not an "
         "802.1Q tag"
