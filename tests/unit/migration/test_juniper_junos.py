@@ -1406,21 +1406,22 @@ class TestPerUnitVlanTagging:
         assert sub1_first.dot1q_vlan == sub1_second.dot1q_vlan == 100
         assert sub2_second.dot1q_vlan == 200
 
-    def test_unit_0_vlan_id_collapses_into_parent(self):
-        """``unit 0 vlan-id N`` is uncommon but legal Junos — stores
-        on the parent interface's dot1q_vlan (unit 0 collapses into
-        parent per the v1 convention)."""
+    def test_unit_0_vlan_id_is_a_unit_of_its_own(self):
+        """``unit 0 vlan-id N`` is uncommon but legal Junos on a
+        router -- a sub-interface of the device, as a unit above 0
+        is: ``ge-0/0/0.0`` with the tag, beside the device's own
+        record, which holds none (see
+        ``codecs/juniper_junos/test_a_tagged_unit_0.py``)."""
         raw = (
+            "set interfaces ge-0/0/0 vlan-tagging\n"
             "set interfaces ge-0/0/0 unit 0 vlan-id 42\n"
         )
         intent = JunosCodec().parse(raw)
-        parent = next(
-            (i for i in intent.interfaces if i.name == "ge-0/0/0"),
-            None,
-        )
-        assert parent is not None
-        assert parent.dot1q_vlan == 42
-        assert parent.access_vlan is None
+        by_name = {i.name: i for i in intent.interfaces}
+        assert sorted(by_name) == ["ge-0/0/0", "ge-0/0/0.0"]
+        assert by_name["ge-0/0/0.0"].dot1q_vlan == 42
+        assert by_name["ge-0/0/0"].dot1q_vlan is None
+        assert by_name["ge-0/0/0"].access_vlan is None
 
     def test_render_channelized_subiface_splits_correctly(self):
         """Regression: channelized port names contain ``:<N>`` (the

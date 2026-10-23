@@ -1094,17 +1094,21 @@ _EOS_MGMT_BY_NAME = "\n".join([
 
 class TestUnitsLeftToTheClassifier:
     @pytest.mark.parametrize("zeros", ["0", "00", "000"])
-    def test_a_unit_numbered_0_across_vendors(self, zeros: str) -> None:
+    def test_a_unit_numbered_0_with_no_tag_across_vendors(self, zeros: str) -> None:
         """Unit 0 is the interface itself wherever there is one.  Sent
         after its port, ``Gi0/0/1.0`` was written as unit 0 of
         ``ge-0/0/1`` on Junos: the port's own address and the unit's
-        on one interface, in a job that said nothing.  It is left to
-        the classifier, which does not know it and says so.  However
-        many zeros it is written with: ``.00`` is unit 0 as well,
-        and Junos would write it ``unit 00`` of the same port."""
+        on one interface, in a job that said nothing.  With no tag to
+        name it by, it is left to the classifier, which does not know
+        it and says so.  However many zeros it is written with:
+        ``.00`` is unit 0 as well, and Junos would write it ``unit
+        00`` of the same port."""
         ios, junos = get_codec("cisco_iosxe_cli"), get_codec("juniper_junos")
         name = f"GigabitEthernet0/0/1.{zeros}"
-        text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
+        text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name).replace(
+            " encapsulation dot1Q 5\n", "",
+        )
+        assert "dot1Q" not in text
         job = run_plan_with_overrides(ios, junos, text, port_rename_map={})
         assert name not in job.port_renames
         assert (
@@ -1114,6 +1118,28 @@ class TestUnitsLeftToTheClassifier:
         (port,) = _holders(out, "10.1.0.1")
         (unit,) = _holders(out, "10.54.0.1")
         assert port.name == "ge-0/0/1" and unit.name != port.name
+
+    @pytest.mark.parametrize("zeros", ["0", "00", "000"])
+    @pytest.mark.parametrize("target_name", ["juniper_junos", "arista_eos", "vyos"])
+    def test_a_unit_numbered_0_with_a_tag_goes_by_its_tag(
+        self, zeros: str, target_name: str,
+    ) -> None:
+        """A unit numbered 0 that carries a tag is no port's own:
+        it goes after its port, named by its tag, which is a
+        sub-interface on every target -- Junos ``unit 5 vlan-id 5``
+        beside the port's own unit 0.  Its tag goes with it."""
+        ios, target = get_codec("cisco_iosxe_cli"), get_codec(target_name)
+        name = f"GigabitEthernet0/0/1.{zeros}"
+        text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
+        job = run_plan_with_overrides(ios, target, text, port_rename_map={})
+        where = job.port_renames["GigabitEthernet0/0/1"] + ".5"
+        assert job.port_renames[name] == where
+        assert not [w for w in job.warnings if name in w]
+        out = target.parse(job.rendered)
+        (port,) = _holders(out, "10.1.0.1")
+        (unit,) = _holders(out, "10.54.0.1")
+        assert port.name == job.port_renames["GigabitEthernet0/0/1"]
+        assert (unit.name, unit.dot1q_vlan) == (where, 5)
 
     def test_one_codec_on_both_sides_0_is_a_unit(self) -> None:
         """There it means on both sides what it meant on one."""

@@ -735,6 +735,8 @@ def test_a_device_is_told_once() -> None:
 
 
 def test_junos_reads_its_own_tags_back() -> None:
+    """A device that carries a tag is written ``unit 0 vlan-id``,
+    which Junos reads as a unit 0 of its own beside the device."""
     interfaces = [
         _unit("ge-0/0/1", 5, ip="192.0.2.1"), _unit("ge-0/0/1.10", 10),
         _unit("ge-0/0/1.20", 20, 200),
@@ -750,7 +752,8 @@ def test_junos_reads_its_own_tags_back() -> None:
         for i in back.interfaces
     }
     assert tags == {
-        "ge-0/0/1": (5, None, False), "ge-0/0/1.10": (10, None, False),
+        "ge-0/0/1": (None, None, False), "ge-0/0/1.0": (5, None, False),
+        "ge-0/0/1.10": (10, None, False),
         "ge-0/0/1.20": (20, 200, False), "ge-0/0/2": (None, None, False),
         "ge-0/0/2.7": (7, None, True),
     }
