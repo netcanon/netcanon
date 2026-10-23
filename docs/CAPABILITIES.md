@@ -1084,8 +1084,9 @@ capability matrix has no path for:
   for one, a breakout lane, a port whose shape the target's names
   cannot take — and a logical name just the same: a loopback or a
   tunnel the target has no form for, a FortiGate hardware switch
-  (`internal`) that holds the LAN address.  What was configured on
-  it is not in the output.  A sub-interface that went with its port
+  (`internal`) that holds the LAN address, a RouterOS bridge or an
+  IOS-XE `VirtualPortGroup` (an interface only its own platform
+  has).  What was configured on it is not in the output.  A sub-interface that went with its port
   is listed with it.
 * **A name is left as the source config has it**, because the
   translator could not read it as any kind of port (`could not

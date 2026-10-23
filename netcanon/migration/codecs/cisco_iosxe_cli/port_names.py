@@ -211,7 +211,9 @@ def classify_port_name(name: str) -> PortIdentity:
             meta=cisco_meta,
         )
 
-    # Logical port kinds.
+    # Logical port kinds.  A VirtualPortGroup is IOS-XE's own (an
+    # app-hosting interface), and says so: only a formatter that
+    # reads the mark writes one.
     for pattern, kind in _LOGICAL_RES:
         m = pattern.match(name)
         if m:
@@ -219,6 +221,10 @@ def classify_port_name(name: str) -> PortIdentity:
                 kind=kind,  # type: ignore[arg-type]
                 index=int(m.group(1)),
                 original=name,
+                meta=(
+                    {"cisco_virtual_port_group": "1"}
+                    if kind == "virtual" else {}
+                ),
             )
 
     return PortIdentity(kind="unknown", original=name)
@@ -239,7 +245,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     4x25G under 100G, etc.).
 
     Returns None for kinds Cisco IOS-XE can't natively represent
-    (``hw_aggregate``, ``mgmt``, ``unknown``).
+    (``hw_aggregate``, ``mgmt``, ``unknown``), and for a ``virtual``
+    interface of another vendor.
     """
     if identity.kind == "physical":
         # Cisco-specific meta: app-hosting bridge uses a distinct
@@ -314,7 +321,11 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         return f"Loopback{identity.index or 0}"
     if identity.kind == "tunnel":
         return f"Tunnel{identity.index or 0}"
-    if identity.kind == "virtual":
+    if identity.kind == "virtual" and identity.meta.get("cisco_virtual_port_group"):
+        # IOS-XE's own.  Another vendor's virtual interface (a
+        # RouterOS bridge) is not an app-hosting interface: written
+        # as one, the LAN address of a bridge was on
+        # ``VirtualPortGroup0`` in a job that said ``completed``.
         return f"VirtualPortGroup{identity.index or 0}"
     # hw_aggregate, mgmt, unknown — no native Cisco representation.
     return None

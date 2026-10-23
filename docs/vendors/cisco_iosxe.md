@@ -33,8 +33,9 @@ Two codecs ship for the IOS-XE family:
   > warnings, not silent, and in its status: with no devices declared
   > the job is `partial` and lists each in `unresolved_ports` until a
   > `port_rename_map` entry gives the port a name or confirms the drop.
-  > So is a tunnel or a `VirtualPortGroup` onto a target with no form
-  > for one.  And a port whose name the codec does not read — the
+  > So is a tunnel onto a target with no form for one, and a
+  > `VirtualPortGroup` onto every other platform: no other vendor has
+  > one.  And a port whose name the codec does not read — the
   > one-number ports of a virtual router, `GigabitEthernet1` — is left
   > under that name on every target and listed in `untranslated_ports`:
   > give it the name it is to have.  (Not between the CLI codec and

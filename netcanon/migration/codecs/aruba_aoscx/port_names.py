@@ -129,8 +129,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "mgmt":
         # AOS-CX has exactly one OOBM port, named ``mgmt`` (no index).
         return "mgmt"
-    if identity.kind == "virtual":
-        # Closest AOS-CX analogue for a vendor-specific virtual port.
-        return f"loopback {identity.index or 0}"
-    # breakout / tunnel / hw_aggregate / unknown — no native AOS-CX form.
+    # breakout / tunnel / hw_aggregate / unknown — no native AOS-CX form;
+    # nor another vendor's virtual interface: a RouterOS bridge or an
+    # IOS-XE VirtualPortGroup is no loopback, and the LAN address of
+    # one was written on ``loopback 0``.
     return None

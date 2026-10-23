@@ -118,7 +118,11 @@ PortKind = Literal[
                     # codecs have no native equivalent and return None
                     # from format_port_identity (verbatim + warning)
     "mgmt",         # out-of-band management port
-    "virtual",      # vendor-specific virtual (VirtualPortGroup, etc.)
+    "virtual",      # an interface only its own vendor has (IOS-XE
+                    # VirtualPortGroup, a RouterOS bridge): the
+                    # identity carries its vendor's mark in meta, and
+                    # only that vendor's formatter gives it a name --
+                    # no other vendor has a form for it
     "unknown",      # codec couldn't classify — leave verbatim
 ]
 
