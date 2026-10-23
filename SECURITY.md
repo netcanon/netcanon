@@ -1069,6 +1069,18 @@ configuration, not run; a value with white space in it written bare
 into a line a device reads a word at a time is a known limitation
 (below).
 
+The parser reads a string by the same page's table of escapes.  A
+line break it reads (`\n`, `\r`, `\v`, `\f`, or its byte) is a line
+break of the tree, which no target is given ("Config Text (what
+reaches the output)", above); a control character a terminal acts
+on rather than shows (`\a`, `\b`, `\1B`) and a run of bytes that is
+not UTF-8 are kept as the export wrote them, as text, so no escape
+of an export puts such a character into another vendor's output.
+Guarded by
+`tests/unit/migration/codecs/mikrotik_routeros/test_an_escape_is_read.py`.
+A control character a value holds as it stands, from any parser, is
+a known limitation (below).
+
 ---
 
 ## Data Directory Isolation
@@ -1450,6 +1462,7 @@ constrains the *application* (the container).
 | Translation requests in flight are limited only under `small` | Every config limit is for one request.  Under `small` (the public demo) one request that reads config text works at a time and 2 may wait; under `standard`, `large` and `unlimited` several large ones at once multiply the memory, and nothing counts them.  Under `small` a request is also counted before its body is read and an answer nobody reads is let go at the request's deadline; under the other sets every body is read and every answer kept.  Under every set nothing limits how many connections are opened and kept | Accepted | A deployment that takes text from people it does not trust puts a limit on connections, a memory limit that stops the worker and -- unless it runs `small` -- a limit on requests in flight, in front of the application.  See "Input Validation — Config Text" |
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
 | The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
+| A control character in a value reaches the output | A parser that reads its config as text keeps a control character a value holds (an IOS-XE description holding `ESC [2K`, which a terminal reads as "erase this line"), and every renderer writes it as it stands, so an output reviewed on a terminal can show less than it holds | Documented (not mended) | Only a line break is mended on the way ("Config Text (what reaches the output)"); the RouterOS parser keeps a control character an export writes as an escape as written.  Read an output with `cat -v` or an editor that shows control characters |
 | A value with white space written bare into a line read a word at a time | A target whose line a device reads a word at a time (IOS-XE CLI, NX-OS, EOS, AOS-CX, AOS-S, OS10, IOS XR) may read a value from another vendor with white space in it -- an SNMP community, a RADIUS key -- as more words on its line | Documented (not audited) | The RouterOS renderer writes such a value as a string; the other renderers have not been read for it.  See "Input Validation — Config Text (a value is not script)" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
 | A set-form Junos or VyOS text is read a line at a time | A line after a quote that no later quote on its line ends is read as a statement of its own, so a quoted value of several lines -- if either device prints one so, which is not established -- would be read as configuration of the source | Documented | No value of the tree is written on more than one line, so such a value cannot add a line to the output; what it can do is make the source's tree hold a statement the source does not.  FortiOS reads a quoted value of several lines whole.  See "Input Validation — Config Text (what reaches the output)" |
