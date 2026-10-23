@@ -433,10 +433,10 @@ per_field_expectation:
     note: >
       Every VLAN record that comes back keeps its id.  Records are dropped
       where the render writes the VLAN interface on an aggregate, which the
-      FortiGate parser reads back as a routed sub-interface of it (13 -> 12 on
-      the two azsupport TORs, all 3 on `canu_sw-leaf-bmc-001.cfg`, 15 -> 5 and
-      19 -> 9 on the dellgeos TORs, 4 -> 3 on the kitchen sink); that change
-      of size is attributed to `vlans[].description`, which declares it.
+      FortiGate parser reads back as a routed sub-interface of it (13 -> 11 on the two azsupport TORs, all 3
+      on `canu_sw-leaf-bmc-001.cfg`, 15 -> 4 and 19 -> 8 on the dellgeos
+      TORs, all 4 on the kitchen sink); that change of size is attributed to
+      `vlans[].description`, which declares it.
     references: [os10-fortigate-surface]
 
   vlans[].ipv4_addresses:

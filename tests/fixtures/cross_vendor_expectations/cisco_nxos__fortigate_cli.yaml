@@ -184,14 +184,18 @@ per_field_expectation:
       every VLAN interface the render writes (an SVI's VLAN, or a routed
       sub-interface) is FortiOS's VLAN interface on a parent, and the
       FortiGate parser reads one on an aggregate, or on a port it knows by its
-      name, back as a routed sub-interface of it, its tag the VLAN's id: the
-      SVIs of `busterswt_spine_leaf_xk32_1_nxos9312.txt`, written on
-      `port-channel10`, come back tagged, and so do the VLANs with no SVI of
-      `kitchen_sink.cfg`, written on `port-channel1`. No cell compares the tag
-      record by record: on each that carries a VLAN the output's interface
-      list changes size, and the reconciler gives that drift to the list's
-      first field. Up to 0.7.7 every VLAN interface was read back as a VLAN
-      interface and a VLAN, with no tag.
+      name, back as a routed sub-interface of it, its tag the VLAN's id.
+      Where the output's interface list keeps its size the tag is compared
+      record by record: the 7 SVIs of
+      `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt` and the 2 of each
+      `batfish_nxos_hsrp_nxos*.txt`, written on `port-channel1` (the LAG that
+      carries their VLAN), come back tagged with their VLAN's id where the
+      source has none (11 records).  Where the list changes size -- the SVIs
+      of `busterswt_spine_leaf_xk32_1_nxos9312.txt` on `port-channel10`, the
+      VLANs with no SVI of `kitchen_sink.cfg` on `port-channel1` -- the
+      reconciler gives that drift to the list's first field. Up to 0.7.7
+      every VLAN interface was read back as a VLAN interface and a VLAN, with
+      no tag.
     references: [nxos-fortigate-surface]
 
   "interfaces[].vrf":
@@ -247,16 +251,26 @@ per_field_expectation:
     references: [nxos-fortigate-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Preserved on every cell that populates it.  FortiOS caps `set alias` at
       25 characters, so a longer NX-OS description would truncate — no fixture
-      in this corpus exceeds the cap.  An SVI that states no description comes
-      back with its VLAN's name: FortiOS has one label for a VLAN, the alias
-      of its interface, and the render writes the VLAN's name there.  The
-      reconciler reads that as preserved for that record alone
-      (`_vlan_label_on_its_interface`), so a description lost on any other
-      interface still surfaces.
+      in this corpus exceeds the cap.  What drifts is a description GAINED: an
+      SVI that states no description comes back with its VLAN's name, since
+      FortiOS has one label for a VLAN, the alias of its interface, and the
+      render writes the VLAN's name there.  The reconciler reads that as
+      preserved for the record where the VLAN comes back to say whose label
+      it is (`_vlan_label_on_its_interface`; the 3 SVIs of
+      `networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`).  It cannot
+      where the VLAN does not come back: a VLAN interface written on an
+      aggregate is read back as a routed sub-interface of it, with no VLAN
+      record, and the 6 named SVIs of
+      `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`, on `port-channel1`,
+      the LAG that carries their VLANs, come back described with their VLAN's
+      name cut to 25 characters (`''` -> `user_svi_1_vrf_service_cu`).  No
+      description of an interface's own is lost on any cell.  Declared for the
+      pair, this row would hide one that were: re-measure it when a fixture
+      of the pair changes.
     references: [nxos-fortigate-surface]
 
   "interfaces[].enabled":
@@ -269,12 +283,23 @@ per_field_expectation:
     references: [nxos-fortigate-surface]
 
   "interfaces[].interface_type":
-    disposition: good
-    note: >
-      Preserved on every cell despite the fortigate_cli matrix declaring
-      `/interfaces/interface/config/type` lossy — the codec re-infers the
-      IANA ifType from the `type vlan` sub-setting or the name shape, and on
-      this corpus it always lands on the same value.
+    disposition: lossy
+    reason: >
+      An SVI written on an aggregate comes back typed as its parent:
+      `ianaift:l3ipvlan` -> `ianaift:ieee8023adLag` on the 7 SVIs of
+      `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt` and the 2 of each
+      `batfish_nxos_hsrp_nxos*.txt` (11 records), each written on
+      `port-channel1`, the LAG that carries its VLAN.  The FortiGate parser
+      reads a VLAN interface on an aggregate, or on a port it knows by its
+      name, back as a routed sub-interface of it: its address, its parent and
+      its VLAN's id (as its tag, see `interfaces[].dot1q_vlan`) come back, and
+      that it was a VLAN's interface does not.  The fortigate_cli matrix
+      declares `/interfaces/interface/config/type` lossy.  Elsewhere the codec
+      re-infers the IANA ifType from the `type vlan` sub-setting or the name
+      shape, and lands on the same value.  Declared for the pair, this row
+      would hide another interface's type lost on these cells: the 11 records
+      are all SVIs and all go one way.  Up to 0.7.7 every VLAN interface was
+      read back as one.
     references: [nxos-fortigate-surface]
 
   "interfaces[].ipv6_addresses":
@@ -305,21 +330,25 @@ per_field_expectation:
       not `good`, if the NX-OS parse side were closed.
     references: [nxos-fortigate-surface]
 
-  # -- VLANs.  Sub-field keys only; the VLAN records themselves all survive. --
+  # -- VLANs.  Sub-field keys only; a VLAN written on an aggregate leaves
+  # the list (see `vlans[].id`). --
 
   "vlans[].id":
     disposition: lossy
     reason: >
       VLAN records are dropped where the render writes the VLAN interface on
-      an aggregate: all 5 on `busterswt_spine_leaf_xk32_1_nxos9312.txt` (on
-      `port-channel10`) and 2 of 4 on the kitchen sink (on `port-channel1`),
-      each read back as a routed sub-interface of it, the id its tag.  On a
-      port the parent keeps its NX-OS name (`Ethernet1/4`), which the bare
-      pipeline translates no further and the FortiGate parser does not read as
-      a port, so the VLAN comes back with its id, as it does on the other 11
-      cells.  FortiOS has no VLAN apart from a VLAN interface on a parent: the
-      render writes each VLAN as one on the port or aggregate it chooses for
-      every VLAN interface, and the FortiGate parser reads a VLAN interface on
+      an aggregate: all 7 on
+      `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`, 2 of 3 on each
+      `batfish_nxos_hsrp_nxos*.txt` and 3 of 4 on the kitchen sink (on
+      `port-channel1`), and all 5 on `busterswt_spine_leaf_xk32_1_nxos9312.txt`
+      (on `port-channel10`), each read back as a routed sub-interface of it,
+      the id its tag.  On a port the parent keeps its NX-OS name
+      (`Ethernet1/4`), which the bare pipeline translates no further and the
+      FortiGate parser does not read as a port, so the VLAN comes back with
+      its id, as it does on the other 8 cells.  FortiOS has no VLAN apart from
+      a VLAN interface on a parent: the render writes each VLAN as one on the
+      aggregate or port that carries it in the source (one it chooses where
+      none does), and the FortiGate parser reads a VLAN interface on
       an aggregate, or on a port it knows by its name, back as a routed
       sub-interface of it, its tag the VLAN's id, with no VLAN record
       (fortigate_cli declares `/vlans/vlan/id` lossy).  Up to 0.7.7 every VLAN
@@ -361,11 +390,13 @@ per_field_expectation:
       `["Ethernet1/1", "Ethernet1/2", "port-channel1"]` -> `[]`).  FortiOS
       binds a VLAN to exactly ONE parent (`set interface "<parent>"`), so
       multi-port tagged membership cannot be represented and the fortigate_cli
-      matrix declares `/vlans/vlan/tagged-ports` unsupported.  Worse, the
-      parent the render picks is inferred and is not always a real trunk —
-      on `batfish_nxos_hsrp_nxos1` both VLAN child interfaces are bound to
-      `loopback123`.  Re-point every VLAN child interface at the correct
-      uplink and re-create the remaining members by hand.
+      matrix declares `/vlans/vlan/tagged-ports` unsupported.  The render
+      binds each VLAN to the port-channel or port that carries it in the
+      source (VLANs 10 and 2000 of `batfish_nxos_hsrp_nxos1` to
+      `port-channel1`), and a VLAN nothing carries to a port it chooses
+      (VLAN 1 there, to `Ethernet1/4`), which need not be the uplink you
+      want.  Check the parent of every VLAN child interface and re-create the
+      remaining members by hand.
     references: [nxos-fortigate-surface]
 
   "vlans[].untagged_ports":

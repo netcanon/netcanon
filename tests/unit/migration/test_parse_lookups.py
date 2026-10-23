@@ -35,7 +35,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalVlan,
 )
 from netcanon.migration.canonical.transforms import _PortList, project_switchport_to_vlan
-from netcanon.migration.codecs._helpers import GrowingIndex, Uniques, address_key
+from netcanon.migration.codecs._helpers import GrowingIndex, Uniques, address_key, vlan_carriers
 from netcanon.migration.codecs.cisco_nxos import render as nxos_render
 from netcanon.migration.codecs.opnsense import render as opnsense_render
 from netcanon.migration.codecs.registry import get_codec
@@ -1117,7 +1117,7 @@ class TestAnIndexBuiltOnce:
                 ],
                 vlans=[CanonicalVlan(id=vid) for vid in rng.sample([5, 10, 20, 30, 40, 50], rng.randrange(1, 6))],
             )
-            carriers = opnsense_render._vlan_carriers(tree)
+            carriers = vlan_carriers(tree)
             for vlan in tree.vlans:
                 assert opnsense_render._vlan_parent_for(vlan, carriers, "lan") == _parent_by_walking(vlan, tree, "lan")
 

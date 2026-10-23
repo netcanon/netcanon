@@ -81,7 +81,7 @@ from ...canonical.intent import (
     CanonicalVlan,
 )
 from ...canonical.transforms import is_every_vlan
-from .._helpers import one_mtu_written
+from .._helpers import one_mtu_written, vlan_carriers
 from ..base import RenderError
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
@@ -341,10 +341,25 @@ def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
     return top[6]
 
 
+def _carriers_here(
+    tree: CanonicalIntent,
+    vlan_parents: list[CanonicalInterface],
+) -> dict[int, str]:
+    """For each VLAN of *tree* that a port of this output carries, that
+    port (:func:`.._helpers.vlan_carriers`): the parent of the VLAN's
+    interface.  Only a port :func:`_vlan_parents` lists is one -- a
+    LAG's block is written whether or not the tree has an interface
+    for it, and a trunk has content, so neither is elided.
+    """
+    may = {i.name for i in vlan_parents}
+    return {vid: name for vid, name in vlan_carriers(tree).items() if name in may}
+
+
 def _parent_for_vlan_iface(
     name: str,
     deduped_ifaces: list[CanonicalInterface],
     scored: Any = _NOT_SCORED,
+    carrier: str | None = None,
 ) -> str | None:
     """Resolve the parent physical interface for a VLAN sub-interface
     with a deterministic LAN-preference scorer.
@@ -369,12 +384,20 @@ def _parent_for_vlan_iface(
     delegated to the fallback helper so a single source of truth
     handles dotted-form parents.
 
+    Where a port of the output carries the VLAN (*carrier*, from
+    :func:`_carriers_here`), that port is the parent and the scorer is
+    not asked: nothing in the score looks at the VLAN, and the port it
+    picked could be a routed port, or a trunk the source does not list
+    the VLAN on.
+
     Args:
         name: The VLAN sub-interface.
         deduped_ifaces: The interfaces of the output.
         scored: What :func:`_scored_parent` gave for *deduped_ifaces*.
             A renderer asks it once and hands it to every call; left
             out, it is asked here.
+        carrier: The port of the output that carries the VLAN, or
+            ``None`` where none does.
 
     Returns:
         The parent's name, or ``None`` when no parent candidate
@@ -383,6 +406,8 @@ def _parent_for_vlan_iface(
     # Dotted-form fast path delegates to the legacy helper.
     if "." in name:
         return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
+    if carrier is not None:
+        return carrier
     if scored is _NOT_SCORED:
         scored = _scored_parent(deduped_ifaces)
     if scored is None:
@@ -394,6 +419,7 @@ def _build_vlan_children(
     tree: CanonicalIntent,
     deduped_ifaces: list[CanonicalInterface],
     scored: Any = _NOT_SCORED,
+    carriers: dict[int, str] | None = None,
 ) -> list[dict]:
     """Build the VLAN-on-parent child interface list (Issue #6).
 
@@ -404,7 +430,9 @@ def _build_vlan_children(
 
     Resolution rules:
 
-    * **Parent** -- first :class:`CanonicalLAG` on the tree (operators
+    * **Parent** -- the LAG or the port that carries the VLAN
+      (*carriers*, from :func:`_carriers_here`), where one does.
+      Otherwise the first :class:`CanonicalLAG` on the tree (operators
       almost always trunk VLANs over a LAG); fall back to the first
       non-VLAN-shaped, non-empty-stub interface in *deduped_ifaces*
       if no LAG exists; ``None`` when neither candidate is available.
@@ -435,7 +463,8 @@ def _build_vlan_children(
               translation through :func:`format_port_identity`.
 
     *scored* is what :func:`_scored_parent` gave for *deduped_ifaces*,
-    from a caller that has asked it; left out, it is asked here.
+    and *carriers* what :func:`_carriers_here` gave, from a caller
+    that has asked them; left out, each is asked here.
 
     Returns a list of dicts with keys ``name``, ``vlanid``,
     ``parent``, ``ip``, ``mask`` -- empty list when *tree.vlans* is
@@ -445,6 +474,8 @@ def _build_vlan_children(
     if not tree.vlans:
         return []
 
+    if carriers is None:
+        carriers = _carriers_here(tree, _vlan_parents(deduped_ifaces))
     parent_name = None
     if tree.lags:
         parent_name = tree.lags[0].name
@@ -501,7 +532,7 @@ def _build_vlan_children(
         children.append({
             "name": f"vlan{vlan.id}",
             "vlanid": vlan.id,
-            "parent": parent_name,
+            "parent": carriers.get(vlan.id, parent_name),
             "ip": ip,
             "mask": mask,
         })
@@ -742,9 +773,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # routed sub-interface, whatever its name, no loopback and no
     # tunnel, and a management port last.  Made once, here.
     vlan_parents = _vlan_parents(deduped_ifaces)
+    # The port that carries each VLAN, where one does: the parent of
+    # its interface.  Made once, here.
+    carriers = _carriers_here(tree, vlan_parents)
 
     # VLAN child interface synthesis (Issue #6).
-    vlan_children = _build_vlan_children(tree, deduped_ifaces, scored_parent)
+    vlan_children = _build_vlan_children(
+        tree, deduped_ifaces, scored_parent, carriers,
+    )
     existing_vlan_ids = set()
     for cand in deduped_ifaces:
         vid = _tag_of(cand, tree.vlans)
@@ -841,6 +877,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 else:
                     parent = _parent_for_vlan_iface(
                         iface.name, vlan_parents, scored_parent,
+                        carriers.get(vid) if vid is not None else None,
                     )
                 if vid is not None:
                     out.append("        set type vlan")

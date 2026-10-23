@@ -59,14 +59,20 @@ firewall translation is your primary need, see
   not carried, and nothing reports it.  Where the output has no interface of that name, a
   parent is chosen and a `# review:` line in the VLAN's block names
   the one the source stated.  A VLAN that states no parent, or one
-  from another vendor, is on the parent the renderer chooses: a
-  port with a private address before a trunk, never a loopback or
-  a tunnel, and a management port only where the output has no
-  other; where it has none, the block says so in a `# review:`
-  line.  ⚠️ Up to 0.7.7 a loopback with a private address was
-  chosen before every trunk, and a switch's management port
-  before its trunks, so every VLAN of a fabric switch was written
-  `set interface "loopback0"` or `set interface "mgmt1"`.
+  from another vendor, is on the port that carries it in the
+  source: a LAG one of whose ports carries it, then a port whose
+  trunk names it, then a trunk of every VLAN (the rule OPNsense
+  uses).  A VLAN nothing carries is on the parent the renderer
+  chooses: a port with a private address before a trunk, never a
+  loopback or a tunnel, and a management port only where the
+  output has no other; where it has none, the block says so in a
+  `# review:` line.  ⚠️ Up to 0.7.7 a loopback with a private
+  address was chosen before every trunk, and a switch's management
+  port before its trunks, so every VLAN of a fabric switch was
+  written `set interface "loopback0"` or `set interface "mgmt1"`;
+  and one parent was chosen for every VLAN interface of an output,
+  so a switch's VLANs were written on a routed port, or on a trunk
+  that does not carry them.
 - **A VLAN interface on a port or an aggregate is a sub-interface
   of it.**  FortiOS writes a VLAN interface on a port and on a
   switch with the same lines, so the parser reads the parent: one
@@ -92,9 +98,10 @@ firewall translation is your primary need, see
 - **Another platform's VLAN is a VLAN interface, and comes back as a
   VLAN where it rides on a switch interface.**  FortiOS has no VLAN
   apart from a VLAN interface on one parent, so the renderer writes a
-  switch's VLAN (`vlan 10` with tagged ports) on the port it chooses
-  for every VLAN interface (one with a private address or a trunk
-  first, a management port last).  Where that parent is a port the
+  switch's VLAN (`vlan 10` with tagged ports) on the LAG or the port
+  that carries it, and a VLAN nothing carries on the port it chooses
+  (one with a private address or a trunk first, a management port
+  last).  Where that parent is a port the
   parser knows (`port1`) or an aggregate, it reads the interface back as a
   sub-interface of it (above): its tag is the VLAN's id, and there
   is no VLAN record (`/vlans/vlan/id` is lossy).  ⚠️ Up to 0.7.7
@@ -112,8 +119,8 @@ firewall translation is your primary need, see
   `port-0-1-2`, the name made for NX-OS `Ethernet1/2` -- it is read
   back as a VLAN interface and a VLAN.  A sub-interface you name with
   no port in it (`wan10`) rides on
-  the parent chosen for every VLAN, under a `# review:` line: move it
-  to its port.  A FortiGate takes a VLAN id once on an interface
+  the port chosen for a VLAN nothing carries, under a `# review:`
+  line: move it to its port.  A FortiGate takes a VLAN id once on an interface
   (Fortinet's "Rules about VLAN configuration and VDOM interface
   assignment"): where the output has one twice on a parent, the
   second block is under a `# review:` line that names the first.  A
