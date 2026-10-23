@@ -1734,8 +1734,10 @@ class TestAnAnswerNobodyReads:
     #: socket buffer of a loopback connection takes whole.
     LARGE = json.dumps({"source": "cisco_nxos", "target": "opnsense", "raw_text": trunk_all(100, 480)}).encode()
     #: (9,296,754 since each OPNsense VLAN's name is a lossy path of the
-    #: validation report: the rendered config did not change.)
-    LENGTH = 9_296_754
+    #: validation report: the rendered config did not change.  9,296,702
+    #: since the job's sentence offers no devices for NX-OS, of which
+    #: none is described.)
+    LENGTH = 9_296_702
 
     @staticmethod
     def _client_that_does_not_read(port: int) -> socket.socket:
@@ -1781,7 +1783,7 @@ class TestAnAnswerNobodyReads:
         assert len(lines) == 1, lines
         said = re.fullmatch(
             r"an answer from /api/v1/migration/plan had not gone out when its request's 4 seconds \(small "
-            r"limits\) were up, and was abandoned: (\d+) of 9,296,754 bytes had been handed to the client; the "
+            r"limits\) were up, and was abandoned: (\d+) of 9,296,702 bytes had been handed to the client; the "
             r"rest was let go and the connection closed", lines[0],
         )
         assert said, lines[0]

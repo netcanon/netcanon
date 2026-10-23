@@ -1366,6 +1366,34 @@ class TestWhatTheJobSays:
         said = migration_pipeline._names_message({}, dropped, left, ["p", "t", "v"])
         assert said.endswith(_OR_DEVICES) and _DEVICES_FOR_SOME not in said
 
+    @pytest.mark.parametrize("hardware", [["x", "p", "g"], []], ids=["ports", "no ports"])
+    def test_no_device_is_offered_where_none_can_be_declared(
+        self, hardware: list[str],
+    ) -> None:
+        """An offer needs something to choose: for a vendor nobody
+        has described a device of, the sentence ends with the
+        entries."""
+        said = migration_pipeline._names_message(
+            {"a": ["x", "y"]}, ["p", "t"], ["g"], hardware, devices_known=False,
+        )
+        assert said.endswith(
+            "An entry in port_rename_map settles each: "
+            + "; ".join(_SETTLED_BY[kind] for kind in ("fused", "dropped", "left")) + "."
+        )
+        assert "devices" not in said
+
+    def test_the_job_offers_none_where_none_can_be_declared(self) -> None:
+        offered = _checked("juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH)
+        job = migration_pipeline.run_plan_with_checked_names(
+            get_codec("juniper_junos"), get_codec("cisco_iosxe_cli"), _JUNOS_BOTH,
+            port_rename_map={}, devices_known=False,
+        )
+        assert (job.status, job.fused_ports, job.unresolved_ports) == (
+            offered.status, offered.fused_ports, offered.unresolved_ports,
+        )
+        assert offered.error.endswith(_DEVICES_FOR_SOME)
+        assert job.error == offered.error[: -len(_DEVICES_FOR_SOME)]
+
     def test_nothing_unsettled_says_nothing(self) -> None:
         assert migration_pipeline._names_message({}, [], [], ["x"]) == ""
 
@@ -1475,9 +1503,14 @@ class TestWhatTheJobSays:
 
     def test_it_takes_what_the_frozen_one_takes(self) -> None:
         """Every handler's arguments fit both: the helper that
-        dispatches them passes the same keywords to either."""
-        ours = inspect.signature(run_plan_with_checked_names).parameters
+        dispatches them passes the same keywords to either.  One is
+        this function's own, which only its sentence reads and which
+        the helper passes itself: whether a device can be declared
+        of either side's vendor."""
+        ours = dict(inspect.signature(run_plan_with_checked_names).parameters)
         theirs = inspect.signature(run_plan_with_overrides).parameters
+        own = ours.pop("devices_known")
+        assert (own.kind, own.default) == (inspect.Parameter.KEYWORD_ONLY, True)
         assert [(p.name, p.kind, p.default) for p in ours.values()] == [
             (p.name, p.kind, p.default) for p in theirs.values()
         ]
