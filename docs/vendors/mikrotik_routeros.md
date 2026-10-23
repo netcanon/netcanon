@@ -27,18 +27,31 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   report says so).  A sub-interface of another vendor (IOS-XE
   `GigabitEthernet1/0/2.10` with `encapsulation dot1Q 10`, Junos
   `unit 10 vlan-id 10`) is a VLAN interface on its port: `/interface
-  vlan add interface=ether2 name=ether2.10 vlan-id=10`.  Read back,
-  it is a VLAN interface and a VLAN of its tag, not a sub-interface
-  of the port; the job's report says so.  A sub-interface you name
+  vlan add interface=ether2 name=ether2.10 vlan-id=10`, and is read
+  back as a sub-interface of the port.  A sub-interface you name
   with no port in it (`wan10`) rides on the parent chosen for every
   VLAN, under a `# review:` line: move it to its port.  A
   sub-interface of two tags (IOS-XE `second-dot1q`, EOS `inner`,
   Junos `vlan-tags`) is written with its outer tag, and the job is
   `partial`, the validation report listing the inner tag.  ⚠️ Up to
   0.7.7 such a sub-interface got no line, and its address named an
-  interface the output did not define.  A VLAN interface on a port,
-  read FROM RouterOS, is not yet a sub-interface onto another
-  vendor (see the CHANGELOG's known limitations).
+  interface the output did not define.  A VLAN interface read FROM
+  RouterOS is a sub-interface where it rides on a port (a port an
+  `/interface ethernet` line names, or one whose name says it is a
+  port) or on a bond: onto another vendor it goes where its port
+  goes, named by its tag whatever you named it (`gn-mgmt` on
+  `ether3`, VLAN 11, is EOS `Ethernet3.11`).  On a bridge it is a
+  VLAN interface and a VLAN.  AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
+  have no form for a sub-interface's tag, and a job onto them is
+  `partial` for it.  ⚠️ Up to 0.7.7 every one was a VLAN interface
+  and a VLAN, which no port carried on the target.  Another
+  platform's VLAN (`vlan 10` with tagged ports) is an `/interface
+  vlan` too: on the one port or bond with an address or a trunk,
+  where the config has exactly one, and otherwise on a bridge
+  (`bridge1` where the config has none).  It is read back as a VLAN
+  only on a bridge: on a port or a bond it is a
+  sub-interface of it, its tag the VLAN's id, with no VLAN record
+  (`/vlans/vlan/id` is lossy).
 - Tunnels — `/interface gre`, `/interface eoip`, `/interface ipip`:
   name, comment and `mtu`.  The endpoints are not translated: they
   come out as `remote-address=0.0.0.0`, for you to fill in.

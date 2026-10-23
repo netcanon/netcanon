@@ -242,12 +242,13 @@ class TestParse:
         port3 = next(i for i in tree.interfaces if i.name == "port3")
         assert port3.enabled is False
 
-        # VLAN subinterface registered as both an interface AND a VLAN
+        # A VLAN interface on a port is a sub-interface of it: its tag
+        # is its own, and it makes no VLAN.
         vlan_iface = next(i for i in tree.interfaces if i.name == "port2.10")
-        assert vlan_iface.interface_type == "ianaift:l3ipvlan"
+        assert vlan_iface.interface_type == "ianaift:ethernetCsmacd"
+        assert (vlan_iface.dot1q_vlan, vlan_iface.vlan_parent) == (10, "port2")
         assert vlan_iface.ipv4_addresses[0].ip == "192.168.11.1"
-        assert len(tree.vlans) == 1
-        assert tree.vlans[0].id == 10
+        assert tree.vlans == []
 
         # Static routes with device field preserved
         default = next(r for r in tree.static_routes if r.destination == "0.0.0.0/0")
@@ -412,7 +413,8 @@ class TestRealConfigVlanInference:
     semantics.  Surfaced by KevinGuenay/fortinet-resources FGT-70G-BRANCH
     during real-capture validation."""
 
-    def test_vlanid_plus_parent_without_type_recognised_as_vlan(self):
+    def test_vlanid_plus_parent_without_type_recognised_as_a_tag(self):
+        """On an aggregate, a sub-interface of it."""
         raw = """\
 config system interface
     edit "LAG_INTERNAL"
@@ -429,20 +431,20 @@ end
 """
         intent = FortiGateCLICodec().parse(raw)
         vl100 = next(i for i in intent.interfaces if i.name == "VL_100")
-        assert vl100.interface_type == "ianaift:l3ipvlan"
-        assert any(v.id == 100 for v in intent.vlans), (
-            f"expected a CanonicalVlan with id=100, got {[v.id for v in intent.vlans]}"
-        )
+        assert vl100.interface_type == "ianaift:ieee8023adLag"
+        assert (vl100.dot1q_vlan, vl100.vlan_parent) == (100, "LAG_INTERNAL")
+        assert intent.vlans == []
 
     def test_canonical_vlan_name_matches_iface_name(self):
         """For the render path to map iface -> vlan id without help,
         the CanonicalVlan.name must equal the iface name (not the
-        alias).  Otherwise round-trip drops VLANs."""
+        alias).  Otherwise round-trip drops VLANs.  (A VLAN interface
+        on a switch: on a port it makes no VLAN.)"""
         raw = """\
 config system interface
     edit "VL_100"
         set alias "TEST100"
-        set interface "port1"
+        set interface "internal"
         set vlanid 100
     next
 end

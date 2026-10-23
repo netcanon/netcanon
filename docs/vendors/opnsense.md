@@ -28,7 +28,7 @@ Netcanon translates the shared-network-function subset.
 - VLANs — `<vlans><vlan>` block: each `<vlan>` is a VLAN device,
   kept on the parent (`<if>`) and tag it states, under its own name
   (`<vlanif>`), which the zone that assigns it names (see "VLAN
-  devices" below)
+  devices" below); one on a port or a LAGG is a sub-interface of it
 - DHCP server pools — `<dhcpd>` with per-zone configuration; a
   pool is on the device its zone is assigned to
 
@@ -141,8 +141,7 @@ XML element mapping:
   of its own: the parser names a VLAN after its device (`<vlanif>`),
   and the renderer writes another vendor's VLAN name as the `<descr>`
   where the VLAN has no description, and drops it where it has one
-  (`/vlans/vlan/name` is lossy; `/vlans/vlan/description` is
-  supported).  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10,
+  (`/vlans/vlan/name` is lossy).  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10,
   which write one label for a VLAN, the `<descr>` is written as the
   VLAN's name (`name USER VLAN`; `USER_VLAN` on EOS, quoted on
   Junos, the SVI's `description` on OS10); onto AOS-CX it is the
@@ -152,6 +151,42 @@ XML element mapping:
   interface takes: then the VLAN's `<descr>` is in a `# review:`
   line beside it, and the job lists `/vlans/vlan/description` as a
   loss.
+- **A VLAN device on a port or a LAGG is a sub-interface of it.**
+  It tags the frames of that one parent, and OPNsense takes the same
+  tag on another parent as another device, so the parser reads the
+  parent: a bridge (one `<bridges>` names, or one named `bridge` and
+  digits), another VLAN device, a zone's key (`lan`, `opt3`: never a
+  device's name, and what Netcanon writes for the parent of a VLAN in
+  a config with no port), or a name that says it is a VLAN
+  interface, a loopback or a tunnel keeps the device a VLAN
+  interface and a VLAN of its tag; any other parent is a port, or a
+  LAGG where `<laggs>` names it, whatever its name -- zones are not
+  typed, and no classifier reads every driver's name (`igc0`).  The
+  device is then typed as its parent, its tag its own, and makes no
+  VLAN; its description is its zone's, or its `<descr>` where the
+  zone has none, and a `<descr>` beside a zone's own is said in a
+  row.  Onto another vendor it goes where its parent goes, named by
+  its tag (`vlan01` on `igb2` with tag 20 onto EOS is `interface
+  Ethernet2.20` with `encapsulation dot1q vlan 20`); between two
+  OPNsense configs it keeps its name.  A parent no classifier reads
+  (`igc0`) is listed, with the device on it, until an entry in the
+  port map names it, and the device goes with that entry.  Onto
+  AOS-S, AOS-CX, OS10 and IOS-XE over NETCONF, which have no form
+  for a sub-interface's tag, the job is `partial`, the validation
+  report listing the tag.  ⚠️ Up to 0.7.7 every device was a VLAN
+  interface and a VLAN: onto IOS-XE, NX-OS, EOS or Junos one on a
+  port came out as `interface Vlan10` or `irb.10`, which nothing on
+  the port carries.
+- **Another platform's VLAN is a VLAN device, and comes back as one
+  where it rides on a bridge.**  OPNsense has no VLAN apart from a
+  VLAN device on one parent, so the renderer writes a switch's VLAN
+  (`vlan 10` with tagged ports) on a LAGG or a port that carries it,
+  else on the first LAGG, the first interface that looks like a
+  port, or `lan`.  On a port or a LAGG the parser reads that device
+  back as a sub-interface of it (above): its tag is the VLAN's id,
+  its `<descr>` the sub-interface's description, and there is no
+  VLAN record (`/vlans/vlan/id` and `/vlans/vlan/description` are
+  lossy).  ⚠️ Up to 0.7.7 every device was read back as a VLAN.
 - **A sub-interface of another vendor is a VLAN device.**  IOS-XE
   `GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
   `unit 100 vlan-id 200`: OPNsense has no sub-interface of its own,
@@ -159,9 +194,9 @@ XML element mapping:
   (`<if>igb1</if>`), with the sub-interface's own tag
   (`<tag>200</tag>`) under its name (`<vlanif>igb1.100</vlanif>`),
   and the zone that holds its address assigns that device; one that
-  holds nothing a zone holds is the device alone.  The parser reads
-  it back as a VLAN device and a VLAN of its tag
-  (`/interfaces/interface/dot1q-vlan` is lossy), and OPNsense's VLAN
+  holds nothing a zone holds is the device alone, its `<descr>` the
+  sub-interface's description.  The parser reads it back as a
+  sub-interface of the port again, and OPNsense's VLAN
   form refuses the dotted name when the VLAN is saved (the review
   comment beside it says so: rename it `vlan0.<n>` or
   `<port>_vlan<tag>`, and the zone's `<if>` with it).  A name an
@@ -334,9 +369,12 @@ Provenance in
   configs `<parent>_vlan<tag>`), or takes a typed `vlan0` and digits
   and dots, so the digits of the name are NOT the tag.  The parser
   gives each device the record of the zone that assigns it (or a
-  record of its own, typed `ianaift:l3ipvlan`, where none does), with
-  its parent from `<if>`, and names the VLAN after the device; the
-  `<descr>` is the VLAN's description.  The renderer writes each VLAN
+  record of its own where none does), with its parent from `<if>`:
+  on a port or a LAGG it is a sub-interface of it (above); on a
+  bridge, another VLAN device or a zone's key it is typed
+  `ianaift:l3ipvlan`, and
+  the VLAN is named after the device, its `<descr>` the VLAN's
+  description.  The renderer writes each VLAN
   interface as the device of that name on its parent, and no zone for
   a device that holds nothing a zone holds.  A name OPNsense's VLAN
   form would refuse (`Vlan.php`: `vlan0` and digits and dots, `qinq0`
@@ -347,8 +385,11 @@ Provenance in
   `<proto>` on a device another VLAN rides on, which OPNsense sends as
   802.1ad; a tag outside 1-4094), with what rides on it, its zone and
   a DHCP pool on it; and a `<pcp>` other than 0, whose VLAN is kept.
-  Known limitation: onto another vendor, a device `vlan0.<n>` is the
-  SVI of VLAN `n` whatever its tag (CHANGELOG, known limitations).
+  Known limitation: onto another vendor, a device `vlan0.<n>` on a
+  bridge, another VLAN device or a zone's key is the SVI of VLAN `n`
+  whatever its
+  tag (CHANGELOG, known limitations); on a port it is a sub-interface
+  named by its tag.
   Guarded by
   `tests/unit/migration/codecs/opnsense/test_a_vlan_device_is_defined.py`.
 - **Backup-side**: requires `paramiko_shell` collector strategy

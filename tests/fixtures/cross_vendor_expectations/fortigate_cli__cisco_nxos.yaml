@@ -220,13 +220,15 @@ per_field_expectation:
     references: [fg-nxos-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: not_applicable
+    disposition: good
     note: >
-      Never populated by the FortiGate parser (the matrix declares the path
-      lossy, for its render of another vendor's sub-interface).
-      FortiOS models a tagged routed sub-interface as a child interface with
-      `set type vlan / set vlanid <N>`, which the codec projects onto the
-      `vlans` list rather than onto this field.
+      Preserved on the 3 cells that hold one
+      (`kevinguenay_fgt_70g_branch.conf`, `user_contrib_fg100e_fos7213.conf`
+      and the kitchen sink).  A FortiOS VLAN interface on a port or an
+      aggregate is a routed sub-interface of it, its `set vlanid` the tag;
+      NX-OS writes it as a sub-interface with `encapsulation dot1q <tag>`, and
+      its parser reads the tag back.  Up to 0.7.7 the FortiGate parser read
+      every VLAN interface as a VLAN and never filled this field.
     references: [fg-nxos-surface]
 
   "interfaces[].trunk_allowed_vlans":

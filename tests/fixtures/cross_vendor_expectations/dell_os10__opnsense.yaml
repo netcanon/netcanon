@@ -433,14 +433,24 @@ per_field_expectation:
       OS10 (its one label is the name) states no VLAN description; the round
       trip gives each named VLAN one, its name, which the OPNsense render
       writes as the device's `<descr>` (see `vlans[].name`). Drifts on every
-      cell, by gaining the name, never by losing a value.
+      cell, by gaining the name, never by losing a value.  This field also
+      owns the change of the list's size: every VLAN is written as a `<vlan>`
+      device on a LAGG or a port and read back as a routed sub-interface of
+      it, with no VLAN record (see `vlans[].id`).
     references: [os10-opnsense-surface]
 
   vlans[].id:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      Every VLAN record is dropped on all 10 cells (13, 13, 13, 13, 3, 15, 19,
+      15, 19 and 4 records), and its id with it.  OPNsense has no VLAN apart
+      from a VLAN device on one parent: the render writes each VLAN as a
+      `<vlan>` device on a LAGG or a port that carries it, else on the first
+      LAGG or port, and the OPNsense parser reads a device on a port or a LAGG
+      back as a routed sub-interface of it, its tag the VLAN's id, with no
+      VLAN record (opnsense declares `/vlans/vlan/id` lossy).  Up to 0.7.7
+      every device was read back as a VLAN.  The change of size is attributed
+      to `vlans[].description`, the first field of the list here.
     references: [os10-opnsense-surface]
 
   vlans[].ipv4_addresses:

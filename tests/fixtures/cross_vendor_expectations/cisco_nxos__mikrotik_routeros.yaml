@@ -224,12 +224,14 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Routed sub-interface 802.1Q tags (`encapsulation dot1Q N`) are not
-      populated by any fixture on this pair, so this follows the target
-      matrix, which declares `/interfaces/interface/dot1q-vlan` lossy: a
-      routed sub-interface is written as a VLAN interface on its port
-      (`/interface vlan add interface=<port> name=<port>.10 vlan-id=10`)
-      and read back as a VLAN interface and a VLAN of its tag, not as a
-      sub-interface of the port.
+      populated by any fixture on this pair. What the round trip adds: every
+      VLAN interface the render writes is an `/interface vlan` on a parent,
+      and the RouterOS parser reads one on a port or a bond back as a routed
+      sub-interface of it, its tag the VLAN's id, and one on a bridge as a
+      VLAN interface and a VLAN. No cell compares the tag record by record: on
+      all 13 the output's interface list changes size, and the reconciler
+      gives that drift to the list's first field. Up to 0.7.7 every VLAN
+      interface was read back as a VLAN interface and a VLAN, with no tag.
     references: [nxos-routeros-surface]
 
   "interfaces[].vrf":

@@ -147,18 +147,25 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # opt5 zone (<if>em4</if>) — disabled (no <enable/> element).
     assert by_name["em4"].enabled is False
 
-    # ── Tier 1 — VLANs (id, device, description) ──
-    vlan_ids = sorted(v.id for v in intent.vlans)
-    assert vlan_ids == [10, 20, 30, 100, 200]
-    vlan_by_id = {v.id: v for v in intent.vlans}
-    assert vlan_by_id[10].name == "vlan0.10"
-    assert vlan_by_id[10].description == "USER VLAN"
-    assert vlan_by_id[20].description == "VOICE VLAN"
-    assert vlan_by_id[200].description == "MGMT VLAN"
-    # Each device rides on the <if> its <vlan> states.
-    for device in ("vlan0.10", "vlan0.20", "vlan0.30", "vlan0.100", "vlan0.200"):
-        assert by_name[device].interface_type == "ianaift:l3ipvlan"
-        assert by_name[device].vlan_parent == "em1"
+    # ── Tier 1 — VLAN devices on a port (tag, parent, description) ──
+    # Each <vlan> rides on em1, a port: each device is a routed
+    # sub-interface of it, typed as the port, its tag its own, and no
+    # VLAN.
+    assert intent.vlans == []
+    for device, tag in (
+        ("vlan0.10", 10), ("vlan0.20", 20), ("vlan0.30", 30),
+        ("vlan0.100", 100), ("vlan0.200", 200),
+    ):
+        assert by_name[device].interface_type == "ianaift:ethernetCsmacd"
+        assert (by_name[device].dot1q_vlan, by_name[device].vlan_parent) == (tag, "em1")
+    # Its description is the device's <descr> where no zone gives one;
+    # beside a zone's own, the device's is said in a row.
+    assert by_name["vlan0.10"].description == "USER VLAN"
+    assert by_name["vlan0.200"].description == "MGMT VLAN"
+    assert sorted(
+        row.split(":")[0] for row in intent.dropped_tier3_sections
+        if "<descr> of its own" in row
+    ) == ["<vlans><vlan> vlan0.20", "<vlans><vlan> vlan0.30"]
 
     # ── Tier 2 — local users (>= 3) ──
     user_names = [u.name for u in intent.local_users]

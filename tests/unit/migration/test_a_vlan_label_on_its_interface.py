@@ -100,7 +100,7 @@ interface 1/1/1
 #: its own, VLAN 40 a device and no assignment, VLAN 50 no device, VLAN
 #: 60 a device and no label: its name ``vlan0.60`` is no label, on
 #: either path.
-OPNSENSE = """<?xml version="1.0"?>
+OPNSENSE_ON_A_PORT = """<?xml version="1.0"?>
 <opnsense>
   <system><hostname>fw</hostname></system>
   <interfaces>
@@ -119,6 +119,14 @@ OPNSENSE = """<?xml version="1.0"?>
   </vlans>
 </opnsense>
 """
+
+#: The same VLAN devices on a bridge, where each is a VLAN interface
+#: and a VLAN; on the port above each is a sub-interface of it.
+OPNSENSE = OPNSENSE_ON_A_PORT.replace("<if>igb1</if><tag>", "<if>bridge0</if><tag>").replace(
+    "  <vlans ",
+    "  <bridges>\n    <bridged><members>lan</members><bridgeif>bridge0</bridgeif></bridged>\n"
+    "  </bridges>\n  <vlans ",
+)
 
 ROUTEROS = """/interface vlan
 add comment=Cameras interface=ether2 name=vlan30 vlan-id=30
@@ -151,6 +159,12 @@ config system interface
 end
 """
 
+#: The same VLAN interfaces on a hardware switch, where FortiOS makes
+#: a VLAN of each; on the port above each is a sub-interface of it.
+FORTIOS_ON_A_SWITCH = FORTIOS.replace('"port1"', '"internal"').replace(
+    "set type physical", "set type hard-switch",
+)
+
 #: ``(source codec, text, {VLAN id: (the label written, the label in a
 #: review line)})``.  ``None`` is none written.
 SOURCES = {
@@ -167,12 +181,23 @@ SOURCES = {
         50: ("Printers", None),
         60: (None, None),
     }),
+    # On a port, VLAN 20's device is a sub-interface labelled by its
+    # zone, and the device's own label is in a row of the job.
+    "opnsense_port": ("opnsense", OPNSENSE_ON_A_PORT, {
+        20: ("GUEST", None),
+        40: ("Spare", None),
+        50: ("Printers", None),
+        60: (None, None),
+    }),
     "routeros": ("mikrotik_routeros", ROUTEROS, {
         30: ("Cameras", None),
         31: ("Door Locks", None),
         32: (None, None),
     }),
     "fortios": ("fortigate_cli", FORTIOS, {100: ("Users", None), 200: (None, None)}),
+    "fortios_switch": (
+        "fortigate_cli", FORTIOS_ON_A_SWITCH, {100: ("Users", None), 200: (None, None)},
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -268,12 +293,18 @@ def _render(source_key: str, target: str, path: str) -> str:
 def _misses(source_key: str, target: str, path: str) -> list[str]:
     """Every way the output departs from what is wanted, read three
     ways: the label by text, the review line by text, the label by the
-    target's parser (the VLAN's description)."""
+    target's parser (the VLAN's description, or, for a VLAN interface
+    on a port, which is read back as a sub-interface of it and no
+    VLAN, the sub-interface's)."""
     out = _render(source_key, target, path)
     labels, reviews = READERS[target](out)
+    tree = get_codec(target).parse(out)
     parsed = {}
-    for vlan in get_codec(target).parse(out).vlans:
+    for vlan in tree.vlans:
         parsed.setdefault(vlan.id, vlan.description)
+    for iface in tree.interfaces:
+        if iface.dot1q_vlan is not None and iface.interface_type != "ianaift:l3ipvlan":
+            parsed.setdefault(iface.dot1q_vlan, iface.description)
     misses = []
     for vid, (label, review) in SOURCES[source_key][2].items():
         if labels.get(vid) != label:
@@ -326,13 +357,17 @@ def test_the_check_sees_a_name_read_from_the_tree_alone(
 
 
 def test_the_platforms_that_name_a_vlan_after_its_interface() -> None:
-    """The set is the parsers that do so on the committed captures, and
-    each of them does so for every VLAN it names: on such a tree no
-    name is a label the rule throws away."""
+    """The set is the parsers that do so on the committed captures and
+    on the sources typed here, and each of them does so for every VLAN
+    it names: on such a tree no name is a label the rule throws away.
+    The sources are read as well because no FortiOS capture has a
+    VLAN interface on a switch, the one place FortiOS makes a VLAN."""
     after: set[str] = set()
     chosen: set[str] = set()
-    for codec, _rel, path in _captures():
-        tree = get_codec(codec).parse(path.read_text(encoding="utf-8"))
+    texts = [(codec, path.read_text(encoding="utf-8")) for codec, _rel, path in _captures()]
+    texts += [(codec, text) for codec, text, _ in SOURCES.values()]
+    for codec, text in texts:
+        tree = get_codec(codec).parse(text)
         names = {iface.name for iface in tree.interfaces}
         for vlan in tree.vlans:
             if not vlan.name.strip():
@@ -351,8 +386,20 @@ def test_the_platforms_that_name_a_vlan_after_its_interface() -> None:
 def test_a_fortios_alias_is_the_vlans_name_onto_iosxe(path: str) -> None:
     """The parser reads the alias as the VLAN's label, so a target whose
     VLAN has only a name writes it as the name."""
-    out = _render("fortios", "cisco_iosxe_cli", path)
+    out = _render("fortios_switch", "cisco_iosxe_cli", path)
     assert _names_in_stanzas(out, quoted=False).get(100) == "Users"
+
+
+def test_on_a_port_the_alias_is_the_sub_interfaces_description() -> None:
+    """On a port the VLAN interface is a sub-interface of it, and no
+    VLAN: its alias is the sub-interface's description, after its port
+    (the plan path; the bare path translates no name)."""
+    out = _render("fortios", "cisco_iosxe_cli", "plan")
+    assert _names_in_stanzas(out, quoted=False) == {}
+    assert re.search(
+        r"^interface GigabitEthernet0/1\.100\n description Users\n encapsulation dot1Q 100\n",
+        out, re.M,
+    ), out
 
 
 @pytest.mark.parametrize(

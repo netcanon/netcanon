@@ -740,6 +740,28 @@ def split_unit(name: str) -> tuple[str, str] | None:
     return None
 
 
+def stated_sub_interfaces(intent: CanonicalIntent) -> dict[str, tuple[str, int]]:
+    """Sub-interfaces whose config states the port they ride on apart
+    from their name: ``{name: (port, tag)}``.
+
+    RouterOS ``/interface vlan add interface=ether3 name=gn-mgmt
+    vlan-id=11`` is one: an operator's own name, which says nothing of
+    a unit, on the port its line names.  A parser states a port so,
+    with a tag, only for a VLAN interface whose parent is a port or a
+    LAG; one on a bridge or a switch interface stays a VLAN interface,
+    typed as one, and is not here.  The translator sends each after
+    its port, named by its tag (:func:`translate_port_names`), and the
+    model path reads which went so from the same rule
+    (``_units_that_followed``)."""
+    return {
+        iface.name: (iface.vlan_parent, iface.dot1q_vlan)
+        for iface in intent.interfaces
+        if iface.dot1q_vlan is not None and iface.vlan_parent
+        and iface.vlan_parent != iface.name
+        and iface.interface_type not in ("ianaift:l3ipvlan", "ianaift:l2vlan")
+    }
+
+
 def _is_drawn(char: str) -> bool:
     """*char* is neither white space nor a control or format
     character (Unicode ``Cc`` and ``Cf``: a NUL, a zero-width space,
@@ -1120,6 +1142,11 @@ def translate_port_names(  # noqa: C901
         for iface in intent.interfaces if iface.dot1q_vlan is not None
     }
     named_by_tag = target_codec.units_are_named_by_their_tag
+    # Sub-interfaces whose config states the port they ride on apart
+    # from their name, and that port (:func:`stated_sub_interfaces`).
+    stated_ports: dict[str, str] = {
+        name: port for name, (port, _tag) in stated_sub_interfaces(intent).items()
+    }
 
     def kind_of(name: str) -> str:
         try:
@@ -1205,6 +1232,39 @@ def translate_port_names(  # noqa: C901
             f"{tags[name]} — name it '<port>.{tags[name]}' to keep its tag"
         )
 
+    def after_its_stated_port(name: str, port: str) -> str:
+        """*name* is a sub-interface of *port*, which its config
+        states apart from its name.  Such a name is the operator's
+        own (``gn-mgmt``, ``vlan0.10``) and says nothing another
+        platform can read, so across vendors it goes where its port
+        goes, named by its tag (``<port>.<tag>``), as a unit is; its
+        port is swept apart, as a reference.  Between two configs of
+        one codec the name stands, as every name nobody mapped does.
+        Its port dropped, it is dropped with it."""
+        where = resolve(port)
+        unit_parents.add(port)
+        if port not in present_names:
+            # The port is named nowhere but as the parent, so no
+            # rename of it "happened".
+            applied.pop(port, None)
+        if port in user_dropped or port in auto_dropped:
+            warnings.append(
+                f"port_rename: {name!r} is a sub-interface of {port!r}, "
+                f"which is not in the output; dropped with it"
+            )
+            auto_dropped.add(name)
+            memo[name] = name
+            return name
+        out = name if same_codec else f"{where}.{tags[name]}"
+        memo[name] = out
+        if out != name:
+            applied[name] = out
+        if port in untranslated:
+            # Its port was left as the source config has it, and the
+            # sub-interface went where its port went: nowhere.
+            untranslated[name] = None
+        return out
+
     def resolve(name: str) -> str:
         # Idempotent + cached: resolving the same input twice returns
         # the same output without re-classifying.
@@ -1224,6 +1284,8 @@ def translate_port_names(  # noqa: C901
                 applied[name] = out
             say_if_an_entry_moves_the_tag(name, out)
             return out
+        if name in stated_ports:
+            return after_its_stated_port(name, stated_ports[name])
         # A sub-interface goes where its port goes.  No classifier
         # keeps a unit: asked, it either folds the name onto the port
         # itself (two interfaces on one name) or does not know it (the
@@ -1473,7 +1535,7 @@ def translate_port_names(  # noqa: C901
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
     if user_dropped:
-        warnings.extend(_parents_gone(intent, user_dropped))
+        warnings.extend(_parents_gone(intent, user_dropped, stated_ports))
         _strip_dropped_ports(intent, user_dropped)
 
     # Resolve every name BEFORE anything is rewritten, in the order the
@@ -1488,7 +1550,7 @@ def translate_port_names(  # noqa: C901
     for name in list(_swept_names(intent)):
         resolve(name)
     if auto_dropped:
-        warnings.extend(_parents_gone(intent, auto_dropped))
+        warnings.extend(_parents_gone(intent, auto_dropped, stated_ports))
         _strip_dropped_ports(intent, auto_dropped)
 
     # Rewrite everywhere a port name might be referenced.  Order doesn't
@@ -1723,18 +1785,23 @@ def translate_port_names(  # noqa: C901
     )
 
 
-def _parents_gone(intent: CanonicalIntent, dropped: set[str]) -> list[str]:
+def _parents_gone(
+    intent: CanonicalIntent, dropped: set[str], sub_interfaces: dict[str, str],
+) -> list[str]:
     """A warning for each VLAN interface that stays while the
     interface its config says it rides on (``vlan_parent``) is
     dropped.  :func:`_strip_dropped_ports` clears the reference, and a
     renderer that has to name a parent then chooses one itself: said
-    here, so that the choice is not made in silence."""
+    here, so that the choice is not made in silence.  A sub-interface
+    of a stated port (*sub_interfaces*) does not stay: it is dropped
+    with its port, and said where that is decided."""
     return [
         f"port_rename: {iface.name!r} rides on {iface.vlan_parent!r}, which "
         f"is not in the output; the target codec chooses the interface it "
         f"rides on there -- check it"
         for iface in intent.interfaces
         if iface.vlan_parent in dropped and iface.name not in dropped
+        and iface.name not in sub_interfaces
     ]
 
 

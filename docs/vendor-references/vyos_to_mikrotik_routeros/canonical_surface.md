@@ -124,9 +124,7 @@ never emits them and there is nothing for RouterOS to lose:
 `/radius-servers/server/key` ·
 `/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
 
-These are recorded `not_applicable`, not `unsupported` (except `vlans[].id`,
-recorded `lossy`: the target reads each dot-notation sub-interface back as a
-VLAN of its tag, finding 2), and the distinction is operational: for several of them **mikrotik_routeros declares the field
+These are recorded `not_applicable`, not `unsupported`, and the distinction is operational: for several of them **mikrotik_routeros declares the field
 supported or lossy** — `/vlans/vlan/id` supported, the whole
 `/interfaces/interface/vrrp-groups/group` subtree supported,
 `/dhcp-servers/pool/lease-time` lossy (i.e. RouterOS renders pools, losing only
@@ -218,10 +216,10 @@ the rendered config as containing recoverable credential text.
 (`/interface vlan add interface=eth1 name=eth1.100 vlan-id=100
 comment="tenant vlan 100"`, and `disabled=yes` on `eth1.200`), so both
 records below round-trip and `interfaces[].description` and
-`interfaces[].enabled` are `good`.  The re-parse reads each such line as a
-VLAN interface and a VLAN of its tag (the target declares
-`/interfaces/interface/dot1q-vlan` lossy for that), which is why
-`vlans[].id` drifts on this one cell (0 → 2) and is recorded `lossy`.  What
+`interfaces[].enabled` are `good`.  The re-parse reads each such line back as
+the sub-interface it is, its tag kept, with no VLAN record (up to 0.7.7 it
+read each as a VLAN interface and a VLAN of its tag, and `vlans[].id` drifted
+on this one cell, 0 → 2).  What
 follows is the record of how it was up to 0.7.7.
 
 **One mechanism, two keys.** `interfaces[].description` and
@@ -355,17 +353,17 @@ substitution this corpus exercises is the `aes` → `aes128` normalisation.
 
 ## Related drift the audited key set does not cover
 
-Three interface sub-fields drift that are not among the audited canonical
-keys, recorded here so the next reader does not re-hunt them:
+Two interface sub-fields drift that are not among the audited canonical
+keys (and a third did up to 0.7.7), recorded here so the next reader does not re-hunt them:
 
 - `interfaces[].vrf` — `eth0`'s `BLUE` binding empties on `kitchen_sink.conf`.
   This is the same mechanism as the `routing_instances` drop
   (`/routing-instances/instance` unsupported: "Render emits no
   VRF/routing-instance construct"), not an independent loss.
-- `interfaces[].dot1q_vlan` — `100` → null on the sub-interface records: the
-  tag is written (`vlan-id=100` on the VLAN interface on its port) and read
-  back as a VLAN interface and a VLAN of the tag, not as a sub-interface; the
-  target declares `/interfaces/interface/dot1q-vlan` lossy for that.
+- `interfaces[].dot1q_vlan` — kept on the sub-interface records: the tag is
+  written (`vlan-id=100` on the VLAN interface on its port) and read back as
+  the sub-interface's own.  Up to 0.7.7 it went `100` → null, read back as a
+  VLAN interface and a VLAN of the tag.
 - `interfaces[].dhcp_client` — **3 records** across 3 cells (`houdev` `eth0`,
   `scottlaird` `eth5`, `kitchen_sink` `eth2`) go `True` → `False`: a port that
   took its address by DHCP arrives with no client configured. `vyos` declares

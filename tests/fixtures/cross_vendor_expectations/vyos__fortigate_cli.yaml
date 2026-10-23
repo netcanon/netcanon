@@ -351,14 +351,13 @@ per_field_expectation:
       `edit "eth1.100" / set type vlan / set vlanid 100 / set interface
       "eth1"`, and the re-parse rebuilds it as a `vlans[]` entry while
       `dot1q_vlan` on those two interface records drops to null.
-      fortigate_cli declares `/interfaces/interface/dot1q-vlan` LOSSY for
-      that reading (the tag is written as `set vlanid` and read back as a
-      VLAN of the interface's name), which is the other half of the same
-      single mechanism.  Up to 0.7.7 it was unsupported, and the tag
-      written was the number in the sub-interface's name; on this corpus
-      the two agree.
-      Recorded `lossy` rather than `unsupported` deliberately: fortigate_cli
-      declares `/vlans/vlan/id` and `/vlans/vlan/name` supported and the
+      The mesh leaves the port its VyOS name (`eth1`), which the
+      FortiGate parser does not read as a port; on a port it does read
+      (`port1`) or an aggregate, a VLAN interface is read back as a
+      sub-interface of it, its tag kept and no VLAN record made.  Up to
+      0.7.7 the tag written was the number in the sub-interface's name;
+      on this corpus the two agree.
+      Recorded `lossy` rather than `unsupported` deliberately: the
       records arrive rather than vanish, so the #436 rule that forces
       `unsupported` for a disappearing record does not apply — the loss is
       the tag's binding to its parent port and the operator-chosen VLAN name,

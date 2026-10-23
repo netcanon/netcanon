@@ -227,6 +227,19 @@ _UNITS: dict[str, tuple[str, str]] = {
         "system {", "    host-name r1", "}",
         '// vyos-config-version: "system@27:interfaces@29"', "",
     ])),
+    # A VLAN interface on a port, which states the port on a line of
+    # its own: its name is free text.
+    "mikrotik_routeros": ("ether1", "\n".join([
+        "/system identity", "set name=r1",
+        "/interface ethernet", 'set [ find default-name=ether1 ] comment="PARENT"',
+        "/interface vlan",
+        "add interface=ether1 name=ether1.54 vlan-id=300",
+        "add interface=ether1 name=ether1.55 vlan-id=55",
+        "/ip address",
+        "add address=10.54.0.1/24 interface=ether1.54",
+        "add address=10.55.0.1/24 interface=ether1.55",
+        "add address=10.2.0.1/24 interface=ether2", "",
+    ])),
 }
 #: The two units of each config above, by the address each carries.
 _UNIT_ADDRESSES = (("54", "10.54.0.1"), ("55", "10.55.0.1"))
@@ -254,28 +267,17 @@ def _tag_of(source_name: str, unit: str) -> int:
     return 300 if unit == "54" and source_name != "vyos" else int(unit)
 
 
-def _routeros_line_says(text: str, name: str, tag: int) -> bool:
-    """An ``add`` line of ``/interface vlan`` names *name* and states
-    *tag*."""
-    names = {f"name={name}", f'name="{name}"'}
-    section = ""
-    for line in text.splitlines():
-        words = line.split()
-        if line.startswith("/"):
-            section = line.strip()
-        elif (
-            section == "/interface vlan" and words[:1] == ["add"]
-            and names & set(words) and f"vlan-id={tag}" in words
-        ):
-            return True
-    return False
-
-
 #: Targets whose sub-interface is NAMED by its tag: VyOS, where
 #: ``eth1.300`` is ``vif 300`` and carries VLAN 300.  Onto these a
 #: unit goes with its tag after its port, not its number.  Typed
 #: here, not read from the codec.
 _NAMED_BY_TAG = {"vyos"}
+
+#: Sources whose sub-interface states its port on a line of its own,
+#: and whose name is the operator's free text: across vendors it is
+#: named by its tag after its port, whatever its name looks like.
+#: Typed here, not read from the codec.
+_FREE_NAMES = {"mikrotik_routeros"}
 
 
 def _fortios_block_says(text: str, name: str, tag: int) -> bool:
@@ -308,19 +310,19 @@ def _opnsense_device_says(text: str, name: str, tag: int) -> bool:
 
 
 #: Targets whose parser reads a sub-interface's tag otherwise than as
-#: ``dot1q_vlan``, with a reader of the text that states it.  RouterOS
-#: writes a sub-interface as a VLAN interface on its port (``/interface
-#: vlan add interface=ether1 name=ether1.54 vlan-id=300``) and FortiOS
-#: as one too (``edit "port1.54"`` / ``set vlanid 300`` / ``set
-#: interface "port1"``); each writes a VLAN interface on a port and on
-#: a bridge or a switch interface alike, so its parser reads it as a
-#: VLAN interface and a VLAN of the tag under the interface's name.
-#: OPNsense writes it as a VLAN device on its port (``<vlan>`` with
-#: ``<if>``, ``<tag>`` and ``<vlanif>``), which its parser reads the
-#: same way.  The tag is taken where the parser reads it so AND the
-#: text states it.
+#: ``dot1q_vlan``, with a reader of the text that states it.  FortiOS
+#: writes a sub-interface as a VLAN interface on its port (``edit
+#: "port1.54"`` / ``set vlanid 300`` / ``set interface "port1"``), and
+#: its parser reads a VLAN interface on a port and on a switch
+#: interface alike, as a VLAN interface and a VLAN of the tag under
+#: the interface's name.  OPNsense writes it as a VLAN device on its
+#: port (``<vlan>`` with ``<if>``, ``<tag>`` and ``<vlanif>``), which
+#: its parser reads the same way.  The tag is taken where the parser
+#: reads it so AND the text states it.  RouterOS writes one as a VLAN
+#: interface on its port too (``/interface vlan add interface=ether1
+#: name=ether1.54 vlan-id=300``), and its parser reads that as a
+#: sub-interface of the port, with its tag.
 _TAG_AS_A_VLAN_OF_ITS_NAME = {
-    "mikrotik_routeros": _routeros_line_says,
     "fortigate_cli": _fortios_block_says,
     "opnsense": _opnsense_device_says,
 }
@@ -371,7 +373,8 @@ class TestASubInterfaceOnEveryPair:
             assert not others, f"{name} shares {iface.name!r} with {sorted(others)}"
             after = (
                 str(_tag_of(source_name, unit))
-                if target_name in _NAMED_BY_TAG and source_name != target_name
+                if (target_name in _NAMED_BY_TAG or source_name in _FREE_NAMES)
+                and source_name != target_name
                 else unit
             )
             assert job.port_renames.get(name, name) == f"{where}.{after}"
@@ -465,8 +468,11 @@ class TestASubInterfaceOnEveryPair:
             and _tag_of(source_name, unit)
             not in _tags("fortigate_cli", out, _holders(out, ip)[0], job.rendered)
         ]
+        # A free name is sent named by its tag, so the number in the
+        # name the target is given IS the tag: nothing to lose.
         expected = [
-            ip for unit, ip in _UNIT_ADDRESSES if _tag_of(source_name, unit) != int(unit)
+            ip for unit, ip in _UNIT_ADDRESSES
+            if _tag_of(source_name, unit) != int(unit) and source_name not in _FREE_NAMES
         ]
         assert lost == expected
         if expected:
@@ -738,26 +744,34 @@ class TestWhatIsAUnit:
     def test_a_vlan_interface_named_like_a_unit(self) -> None:
         """FortiOS names VLAN interfaces freely.  ``port1.55`` there is
         what an operator typed, bound to its port by a line of its own,
-        and it is left as it was: across vendors under its name, and
-        between two FortiOS configs when its port is renamed."""
+        which the parser reads as a sub-interface of that port: across
+        vendors it goes where the port goes, named by its tag, and
+        between two FortiOS configs it stands when its port is
+        renamed."""
         forti, eos = get_codec("fortigate_cli"), get_codec("arista_eos")
         job = run_plan_with_overrides(forti, eos, _FORTIOS_NAMED_LIKE_A_UNIT, port_rename_map={})
-        assert job.port_renames == {"port1": "Ethernet1", "port2": "Ethernet2"}
-        assert "interface port1.55" in job.rendered
+        assert job.port_renames == {
+            "port1": "Ethernet1", "port2": "Ethernet2", "port1.55": "Ethernet1.55",
+        }
+        assert "interface Ethernet1.55\n   encapsulation dot1q vlan 55\n" in job.rendered
         job = run_plan_with_overrides(
             forti, forti, _FORTIOS_NAMED_LIKE_A_UNIT, port_rename_map={"port1": "port9"},
         )
         assert job.port_renames == {"port1": "port9"}
         assert 'edit "port1.55"' in job.rendered and 'set interface "port9"' in job.rendered
 
-    def test_a_name_read_as_another_thing(self) -> None:
-        """RouterOS reads ``ether1.55`` as a VLAN interface: a thing of
-        its own, with a form of its own on every target."""
+    def test_a_vlan_interface_on_a_port_is_its_sub_interface(self) -> None:
+        """RouterOS's classifier reads ``ether1.55`` as a VLAN interface,
+        but its line puts it on the port ``ether1``, and the parser reads
+        it as a sub-interface of that port: across vendors it goes where
+        the port goes, named by its tag, and between two RouterOS
+        configs it stands."""
         mikrotik, eos = get_codec("mikrotik_routeros"), get_codec("arista_eos")
         assert mikrotik.classify_port_name("ether1.55").kind == "svi"
         job = run_plan_with_overrides(mikrotik, eos, _ROUTEROS_NAMED_AFTER_A_PORT, port_rename_map={})
         assert job.port_renames["ether1"] == "Ethernet1"
-        assert job.port_renames["ether1.55"] == "Vlan55"
+        assert job.port_renames["ether1.55"] == "Ethernet1.55"
+        assert "interface Ethernet1.55\n   encapsulation dot1q vlan 55\n" in job.rendered
         job = run_plan_with_overrides(
             mikrotik, mikrotik, _ROUTEROS_NAMED_AFTER_A_PORT, port_rename_map={"ether1": "wan"},
         )

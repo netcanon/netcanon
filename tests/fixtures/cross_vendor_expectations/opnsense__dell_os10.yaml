@@ -123,13 +123,12 @@ per_field_expectation:
     references: [opnsense-os10-surface]
 
   interfaces[].description:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. OPNsense imposes no length limit on description text;
-      other vendors (Cisco 240 chars, Juniper 900) may truncate on
-      render. Measured over 8 cells: drifted on 2, preserved on 3,
-      both sides empty on 3.
+    disposition: good
+    note: >
+      Preserved on the 5 cells that hold one.  A VLAN device on a port is a
+      routed sub-interface, written onto OS10 as an interface with its
+      description.  Up to 0.7.7 such a device was a VLAN, written onto OS10 as
+      an SVI whose one label is the VLAN's name, and its description drifted.
     references: [opnsense-os10-surface]
 
   interfaces[].enabled:
@@ -171,11 +170,12 @@ per_field_expectation:
     references: [opnsense-os10-surface]
 
   interfaces[].ipv6_addresses:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 8 cells: drifted on 2, preserved on 0, both
-      sides empty on 6.
+    disposition: good
+    note: >
+      Preserved on the 2 cells that hold one
+      (`user_contrib_supergate_opn25.xml` and `kitchen_sink.xml`).  Up to
+      0.7.7 a VLAN device on a port was a VLAN, written onto OS10 as an SVI,
+      and its address drifted.
     references: [opnsense-os10-surface]
 
   interfaces[].lag_member_of:
@@ -187,11 +187,11 @@ per_field_expectation:
     references: [opnsense-os10-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 8 cells: drifted on 2, preserved on 0, both
-      sides empty on 6.
+    disposition: good
+    note: >
+      Preserved on the kitchen sink, the one cell that holds one.  Up to 0.7.7
+      a VLAN device on a port was a VLAN, written onto OS10 as an SVI, and its
+      MTU drifted.
     references: [opnsense-os10-surface]
 
   interfaces[].name:

@@ -56,7 +56,7 @@ from ...limits import ticked
 from .._helpers import Uniques
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .port_names import is_factory_port_name
+from .port_names import classify_port_name, is_factory_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +112,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # (ethernet sets properties, vlan adds a new interface, ip
     # address attaches addresses) so we carry an accumulator.
     iface_by_name: dict[str, CanonicalInterface] = {}
+    # Each VLAN interface's tag and the VLAN records made for it,
+    # until the whole config says what its parent is.
+    vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]] = {}
+    # Every name ``/interface ethernet`` sets something on: a port,
+    # whatever its name.
+    ethernet_names: set[str] = set()
 
     # Some sections must run AFTER others regardless of file order.
     # /ip pool carries DHCP-range data that needs to merge into pool
@@ -155,9 +161,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         elif section == "/system ntp client servers":
             _parse_system_ntp_client_servers(lines, intent, ntp_once)
         elif section == "/interface ethernet":
-            _parse_interface_ethernet(lines, iface_by_name)
+            _parse_interface_ethernet(lines, iface_by_name, ethernet_names)
         elif section == "/interface vlan":
-            _parse_interface_vlan(lines, iface_by_name, intent)
+            _parse_interface_vlan(lines, iface_by_name, intent, vlan_ifaces)
         elif section == "/interface bridge":
             _parse_interface_bridge(lines, iface_by_name)
         elif section == "/interface bonding":
@@ -202,6 +208,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # appeared in the source ``/interface vrrp`` section, keeping
     # render output deterministic.
     _materialise_vrrp_groups(vrrp_scratch, iface_by_name)
+    _a_vlan_on_a_port_is_a_sub_interface(
+        vlan_ifaces, iface_by_name, ethernet_names, intent,
+    )
     _name_the_hardware(iface_by_name.values())
 
     # Order interfaces deterministically: ethernet ports first
@@ -502,6 +511,7 @@ def _parse_system_ntp_client_servers(
 def _parse_interface_ethernet(
     lines: list[str],
     iface_by_name: dict[str, CanonicalInterface],
+    ethernet_names: set[str],
 ) -> None:
     """Parse ``set [ find default-name=etherN ] ...`` tweaks.
 
@@ -539,6 +549,7 @@ def _parse_interface_ethernet(
             canonical_default = _found(nm)
         kv = _parse_kv(line)
         canonical_name = kv.get("name", canonical_default)
+        ethernet_names.add(canonical_name)
         iface = iface_by_name.get(canonical_name)
         if iface is None:
             # Only the ``default-name=`` form implies the iface is a
@@ -579,8 +590,16 @@ def _parse_interface_vlan(
     lines: list[str],
     iface_by_name: dict[str, CanonicalInterface],
     intent: CanonicalIntent,
+    vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
 ) -> None:
-    """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions."""
+    """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions.
+
+    Each is read as a VLAN interface with a VLAN of its tag, and its
+    tag and that VLAN are kept in *vlan_ifaces* by its name: one whose
+    parent is a port is a sub-interface instead, which is decided when
+    the whole config has been read
+    (:func:`_a_vlan_on_a_port_is_a_sub_interface`).
+    """
     for line in ticked(lines):
         if not line.startswith("add"):
             continue
@@ -623,11 +642,85 @@ def _parse_interface_vlan(
         # essential for round-trip stability.  The comment (a human-
         # readable label like "Management" or "Cluster") goes onto the
         # VLAN's description field instead.
-        intent.vlans.append(CanonicalVlan(
+        vlan = CanonicalVlan(
             id=vlan_id,
             name=name,
             description=kv.get("comment", ""),
-        ))
+        )
+        intent.vlans.append(vlan)
+        made = vlan_ifaces.setdefault(name, (vlan_id, []))[1]
+        made.append(vlan)
+        vlan_ifaces[name] = (vlan_id, made)
+
+
+#: What a parent read as a port is typed, by its kind.
+_TYPE_OF_A_PORT = {
+    "physical": "ianaift:ethernetCsmacd",
+    "lag": "ianaift:ieee8023adLag",
+}
+
+
+def _a_vlan_on_a_port_is_a_sub_interface(
+    vlan_ifaces: dict[str, tuple[int, list[CanonicalVlan]]],
+    iface_by_name: dict[str, CanonicalInterface],
+    ethernet_names: set[str],
+    intent: CanonicalIntent,
+) -> None:
+    """A VLAN interface whose ``interface=`` is a port or a bond is a
+    routed sub-interface of it.
+
+    ``add interface=ether3 name=gn-mgmt vlan-id=11`` tags the frames
+    of one interface on ``ether3``, and only there: a VLAN interface
+    with the same id on ``ether4`` is another interface, not the same
+    VLAN.  So its tag is its own (``dot1q_vlan``), it is typed as its
+    port is, and it makes no VLAN record -- the form a sub-interface
+    has in the tree, from every parser that reads one
+    (``GigabitEthernet0/1.10``, ``ge-0/0/1 unit 10``).  Read as a
+    VLAN interface, it was an SVI and a VLAN no port carried on every
+    target that has the two: ``interface Vlan11`` on IOS-XE, ``irb.11``
+    on Junos, and nothing on the port.
+
+    One on a bridge stays a VLAN interface with its VLAN: the bridge
+    carries VLANs, and the VLAN interface is the bridge's own address
+    in one.  So does one on what is neither (a wireless interface, a
+    tunnel, another VLAN interface, a name the config does not
+    define and that is no port's): the tree has nothing better for
+    it.  A parent is a port by its record where the config has one
+    that gives its kind; by ``/interface ethernet``, which sets
+    things on ports alone, where that section names it (a port an
+    operator renamed, or one another vendor's config named); and
+    otherwise by its name (a compact ``export`` prints no line for a
+    port it left at its defaults).  Decided here, after every
+    section: the one that says what the parent is may come after
+    ``/interface vlan``.
+    """
+    taken_out: set[int] = set()
+    for name, (tag, made) in ticked(vlan_ifaces.items()):
+        iface = iface_by_name[name]
+        parent = iface.vlan_parent
+        if not parent or parent == name:
+            continue
+        record = iface_by_name.get(parent)
+        # A record another section made for a name it only refers to
+        # (``/ip address``) may say nothing of its kind.
+        if record is not None and record.interface_type:
+            port_type = (
+                record.interface_type
+                if record.interface_type in _TYPE_OF_A_PORT.values()
+                and record.dot1q_vlan is None
+                else None
+            )
+        elif parent in ethernet_names:
+            port_type = _TYPE_OF_A_PORT["physical"]
+        else:
+            port_type = _TYPE_OF_A_PORT.get(classify_port_name(parent).kind)
+        if port_type is None:
+            continue
+        iface.interface_type = port_type
+        iface.dot1q_vlan = tag
+        taken_out.update(id(vlan) for vlan in made)
+    if taken_out:
+        intent.vlans = [vlan for vlan in intent.vlans if id(vlan) not in taken_out]
 
 
 def _parse_interface_bridge(
@@ -1431,7 +1524,9 @@ def _name_the_hardware(ifaces: Iterable[CanonicalInterface]) -> None:
 
     Only a factory name (:func:`.port_names.is_factory_port_name`), and
     only on a record of a port, not a VLAN, bridge, bond or tunnel some
-    line named so.  A line that still uses a port's factory name after
+    line named so -- nor a sub-interface, which is typed as its port
+    is (``add interface=ether1 name=ether5 vlan-id=5``).  A line that
+    still uses a port's factory name after
     ``set [ find default-name=ether5 ] name=lan5`` -- what a
     hand-merged file has -- is given it too, as ``ether<N>`` always
     was: two records then look one port up, and the mapping onto a
@@ -1442,6 +1537,7 @@ def _name_the_hardware(ifaces: Iterable[CanonicalInterface]) -> None:
         if (
             not iface.default_name
             and iface.interface_type in _PORT_TYPES
+            and iface.dot1q_vlan is None
             and is_factory_port_name(iface.name)
         ):
             iface.default_name = iface.name

@@ -17,16 +17,22 @@
 # mtu / ipv4 / ipv6 drift on zero of them.  That is measured, not assumed.
 #
 # What is lost is what makes a FortiGate a firewall rather than a router:
-# DHCP service, SNMP, RADIUS, VLAN tags and most LAG membership.  And the
+# DHCP service, SNMP, RADIUS and most LAG membership.  And the
 # target's own strength — VRFs — receives nothing, because fortigate_cli
 # models no routing instances at all (VDOMs are not mapped).
 #
-# The dominant structural loss is the VLAN record vanishing whole (2 -> 0,
-# 5 -> 0, 3 -> 0).  Under the reconciler's structural-collapse rule the
-# first `vlans[].*` key in FILE ORDER carries that record-level signal, so
-# `vlans[].id` records it and the remaining `vlans[].*` keys are `good`:
-# their VALUES never degrade, and a loss declared on them could not be
-# evidenced by any cell.
+# The VLAN surface changes shape on this pair rather than vanishing.  The
+# FortiGate parser reads a VLAN interface on a port or an aggregate (every
+# one in the corpus) as a routed sub-interface of it, its tag on the
+# interface, and makes no VLAN record of it; IOS-XR writes the tag as
+# `encapsulation dot1q`, and its parser makes a VLAN record of each tag, so
+# VLAN records APPEAR (0 -> 2, 0 -> 5, 0 -> 3).  Under the reconciler's
+# structural-collapse rule the first `vlans[].*` key in FILE ORDER carries
+# that record-level signal, so `vlans[].id` records it and the remaining
+# `vlans[].*` keys are `good`: their VALUES never degrade, and a loss
+# declared on them could not be evidenced by any cell.  Up to 0.7.7 the
+# parser read each VLAN interface as a VLAN, which IOS-XR has no construct
+# for, and every record vanished (2 -> 0, 5 -> 0, 3 -> 0).
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations,
 # the committed `run_full_mesh.py` pass over the corpus (4 fixture cells,
@@ -49,8 +55,8 @@ meta:
     descriptions, admin state and MTU, static routes with gateway /
     outgoing interface / metric, and local-user names and roles all
     survive.  What does not is the firewall-side service surface — DHCP
-    pools, SNMP, RADIUS — plus every 802.1Q VLAN tag, LAG membership whose
-    FortiGate name is not digit-suffixed, and the admin password material.
+    pools, SNMP, RADIUS — plus LAG membership whose FortiGate name is not
+    digit-suffixed, and the admin password material.
   certainty: medium
   references:
     - id: fortigate-iosxr-surface
@@ -195,16 +201,18 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on 84 of the 85 records that survive by name, uniformly and in
-      one direction: 68 `ianaift:ethernetCsmacd`, 10 `ianaift:l3ipvlan` and 6
-      `ianaift:ieee8023adLag` all collapse to `ianaift:other`.  Only
-      `loopback0` keeps `softwareLoopback`.  Both matrices declare
-      `/interfaces/interface/config/type` LOSSY, and the target's own reason
-      explains the shape: the XR CLI parser infers type from the name prefix
-      (GigabitEthernet / Loopback / Bundle-Ether / MgmtEth / tunnel-*), and
-      FortiGate names (`port1`, `dmz`, `wan1`, `agg1`, `VL_200`) match none
-      of them.  Type is metadata rather than forwarding state, so nothing
+      one direction: 69 `ianaift:ethernetCsmacd` and 15
+      `ianaift:ieee8023adLag` all collapse to `ianaift:other` -- the ten VLAN
+      interfaces among them, each typed like the port or aggregate it is a
+      unit of. Only `loopback0` keeps `softwareLoopback`. Both matrices
+      declare `/interfaces/interface/config/type` LOSSY, and the target's own
+      reason explains the shape: the XR CLI parser infers type from the name
+      prefix (GigabitEthernet / Loopback / Bundle-Ether / MgmtEth / tunnel-*),
+      and FortiGate names (`port1`, `dmz`, `wan1`, `agg1`, `VL_200`) match
+      none of them. Type is metadata rather than forwarding state, so nothing
       breaks on the box — but any tooling keyed off interface_type sees
-      `other` for the whole inventory.
+      `other` for the whole inventory. Up to 0.7.7 the ten were typed
+      `ianaift:l3ipvlan`.
     references: [fortigate-iosxr-surface]
 
   "interfaces[].lag_member_of":
@@ -238,45 +246,43 @@ per_field_expectation:
       Re-author first-hop redundancy on the XR side by hand.
     references: [fortigate-iosxr-surface]
 
-  # -- VLANs -- the structural loss on this pair -----------------------------
+  # -- VLANs -- made by the target from the tags -----------------------------
 
   "vlans[].id":
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      The whole VLAN record vanishes: 2 -> 0, 5 -> 0 and 3 -> 0 on the three
-      cells that carry VLANs (the fourth carries none).  Verified by
-      round-tripping rather than inferred from the drift shape — the rendered
-      IOS-XR config contains no `vlan` construct of any kind.  The mechanism
-      is a two-sided declaration mismatch in which both matrices are
-      individually truthful: cisco_iosxr declares `/vlans/vlan/id` and
-      `/vlans/vlan/name` supported but scopes that, in its own supported-path
-      comment, to VLANs SYNTHESISED from `encapsulation dot1q <tag>` on a
-      routed sub-interface; fortigate_cli sets `dot1q_vlan` on none of the
-      86 source interface records (it declares
-      `/interfaces/interface/dot1q-vlan` lossy, for its render of another
-      vendor's sub-interface).  FortiOS carries the tag on
-      the VLAN record itself (`set type vlan` + `set vlanid <N>`), so the
-      only path by which XR could re-emit a VLAN is the one the source never
-      populates.  Recorded `unsupported` rather than `lossy` because a
-      vanished record is not lossy (#436) — `lossy` warns and stays
-      compatible, which would understate a total drop.  This key also carries
-      the record-level loss for the whole `vlans` list: the reconciler's
-      structural collapse attributes that signal to the first `vlans[].*` key
-      in file order, which is this one.  Re-author the 802.1Q tags on XR as
-      `encapsulation dot1q` on the routed sub-interfaces.
+      FortiOS carries a VLAN as a VLAN interface on a parent (`set type vlan`
+      / `set vlanid <N>` / `set interface <parent>`), and the FortiGate parser
+      reads one on a port or an aggregate -- every one in the corpus: 2, 5 and
+      3 on the three cells that carry any (the fourth carries none) -- as a
+      routed sub-interface of it, its tag on the interface
+      (`interfaces[].dot1q_vlan`), with no VLAN record. The IOS-XR render
+      writes each tag as `encapsulation dot1q <N>` under the sub-interface,
+      and every one comes back. The IOS-XR parser makes a VLAN record of each
+      sub-interface's tag (`CanonicalVlan(id=vid, name="")`; its own
+      supported-path comment: "no port membership; name always empty"), so
+      VLAN records APPEAR: 0 -> 2, 0 -> 5 and 0 -> 3 (`kitchen_sink.conf`:
+      100, 200 and 300). The tag is carried; the records are IOS-XR's reading
+      of it, with no name and no ports. This key also carries the record-level
+      change for the whole `vlans` list: the reconciler's structural collapse
+      attributes that signal to the first `vlans[].*` key in file order, which
+      is this one. Up to 0.7.7 the FortiGate parser read each VLAN interface
+      as a VLAN and kept its tag there, not on the interface, so the render
+      wrote no `encapsulation dot1q` line and every record vanished (2 -> 0, 5
+      -> 0 and 3 -> 0; recorded `unsupported` then).
     references: [fortigate-iosxr-surface]
 
   "vlans[].name":
     disposition: good
     note: >
-      Deliberately `good`, and worth reading twice.  The VLAN name is not
-      what is lost on this pair: a VLAN record either survives with its name
-      intact or vanishes whole, and the vanishing belongs to `vlans[].id`
-      above.  Every VLAN in the corpus carries a name mirroring its FortiOS
-      interface (`VL_100`, `user-vlan`, `agg1.100`), and nothing in the
-      round-trip renames or normalises it.  A loss declared here could never
-      be evidenced by a cell — the only drift this key ever shows is its
-      parent list changing length, which an earlier sibling already claims.
+      Deliberately `good`. The source holds no VLAN record on this corpus:
+      every FortiOS VLAN interface in it rides on a port or an aggregate and
+      is read as a routed sub-interface (see `vlans[].id`), whose name --
+      `VL_100`, `user-vlan`, `agg1.100` -- is the interface's and survives
+      with it (`interfaces[].name`). The records that appear are IOS-XR's,
+      made from the tags and named nothing; that change of the list is claimed
+      once, under `vlans[].id`. A loss declared here could never be evidenced
+      by a cell.
     references: [fortigate-iosxr-surface]
 
   "vlans[].ipv4_addresses":
@@ -287,7 +293,7 @@ per_field_expectation:
       `/vlans/vlan/ipv4/address/*` children (secondary-ip,
       virtual-gateway-address, virtual-gateway-mac) unsupported and mounts
       SVI addressing on the interface record instead, which is where it
-      survives — see `interfaces[].ipv4_addresses`.  The record-level loss
+      survives — see `interfaces[].ipv4_addresses`.  The record-level change
       belongs to `vlans[].id`.
     references: [fortigate-iosxr-surface]
 
@@ -298,7 +304,7 @@ per_field_expectation:
       sides: fortigate_cli declares `/vlans/vlan/untagged-ports` unsupported,
       and cisco_iosxr's synthesised VLANs carry no port membership by
       construction (its own supported-path comment says "no port
-      membership").  Nothing to lose; the record-level loss belongs to
+      membership").  Nothing to lose; the record-level change belongs to
       `vlans[].id`.
     references: [fortigate-iosxr-surface]
 
@@ -307,17 +313,19 @@ per_field_expectation:
     note: >
       Same shape as `vlans[].untagged_ports` — fortigate_cli declares
       `/vlans/vlan/tagged-ports` unsupported, no cell populates it, and the
-      target models no VLAN port membership at all.  The record-level loss
+      target models no VLAN port membership at all.  The record-level change
       belongs to `vlans[].id`.
     references: [fortigate-iosxr-surface]
 
   "vlans[].description":
     disposition: good
     note: >
-      The FortiGate parser reads a VLAN interface's alias as the VLAN's
-      description and as the interface's; the interface's survives intact (see
-      `interfaces[].description`).  The VLAN records themselves drop on this
-      pair, a loss claimed once under `vlans[].id`.
+      The FortiGate parser reads a VLAN interface's alias as the interface's
+      description, which survives intact (see `interfaces[].description`); it
+      makes no VLAN record of a VLAN interface on a port or an aggregate,
+      which is every one in the corpus. The records IOS-XR makes of the tags
+      carry no description; that change of the list is claimed once, under
+      `vlans[].id`.
     references: [fortigate-iosxr-surface]
 
   # -- Routing --------------------------------------------------------------

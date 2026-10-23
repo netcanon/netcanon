@@ -475,20 +475,15 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: lossy
-    reason: >
-      Junos ``set vlans <name> vlan-id N`` -> RouterOS
-      ``/interface vlan add name=<name> vlan-id=N``: a direct integer
-      mapping, and no source id is lost.  The list GROWS on the cells
-      with a routed sub-interface (``unit N vlan-id M``): it is a VLAN
-      interface on its port (``/interface vlan add interface=ge-0/0/1
-      name=ge-0/0/1.100 vlan-id=100``), and the RouterOS parser reads
-      every VLAN interface as a VLAN of its tag, so each sub-interface
-      comes back as a VLAN record no Junos ``vlans`` stanza declared
-      (``ksator_labmgmt_qfx10k2`` 6 -> 9, ``tsg8139_evpn_leaf`` 0 -> 4,
-      ``kitchen_sink`` 4 -> 5).  The target declares
-      ``/interfaces/interface/dot1q-vlan`` lossy for exactly this
-      read-back.
+    disposition: good
+    note: >
+      Junos `set vlans <name> vlan-id N` -> RouterOS `/interface vlan add
+      name=<name> vlan-id=N` on a bridge: a direct integer mapping, preserved
+      on all 7 cells that hold VLANs.  A routed unit with a `vlan-id` is a
+      VLAN interface on its port (`/interface vlan add interface=ge-0/0/1
+      name=ge-0/0/1.100 vlan-id=100`), which the RouterOS parser reads back as
+      a sub-interface, not as a VLAN.  Up to 0.7.7 it read back as a VLAN of
+      its tag too, and the list grew.
     references: [junos-vlans-statement, mikrotik-vlan]
 
   vlans[].name:

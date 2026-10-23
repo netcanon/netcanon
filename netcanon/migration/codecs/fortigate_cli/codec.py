@@ -142,7 +142,11 @@ class FortiGateCLICodec(CodecBase):
             # arista_eos / juniper_junos, which carry mtu implicitly).
             "/interfaces/interface/config/mtu",
             "/interfaces/interface/dhcp-client-v6",          # set ip6-mode dhcp
-            "/vlans/vlan/id",
+            # A routed sub-interface is a VLAN interface on its port
+            # (`edit "port1.100"` / `set vlanid 200` / `set interface
+            # "port1"`), which the parser reads back as a
+            # sub-interface of the port.
+            "/interfaces/interface/dot1q-vlan",
             "/routing/static-route",
             "/routing/static-route/gateway",     # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/interface",   # run3 — `set device <iface>`
@@ -210,6 +214,19 @@ class FortiGateCLICodec(CodecBase):
                 reason=(
                     "FortiOS `config vrrp` carries no per-group description; "
                     "the group renders but the operator description is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/id",
+                reason=(
+                    "FortiOS has no VLAN apart from a VLAN interface on a "
+                    "parent (`set vlanid` / `set interface`).  A VLAN on a "
+                    "switch interface (`set type switch`) is read back as a "
+                    "VLAN; one another platform carries on a port or a LAG "
+                    "is written as a VLAN interface on it, which the parser "
+                    "reads back as a routed sub-interface of the port (its "
+                    "tag the VLAN's id), with no VLAN record."
                 ),
                 severity="warn",
             ),
@@ -361,22 +378,6 @@ class FortiGateCLICodec(CodecBase):
                     "The decrement value is also lossy — FortiOS "
                     "vrdst is a binary up/down trigger, not a "
                     "priority-decrement scheme."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "A routed sub-interface (Cisco `encapsulation dot1Q "
-                    "N`, Junos `unit N vlan-id`) is written as FortiOS's "
-                    "own VLAN interface on its port (`edit \"port1.100\"` "
-                    "/ `set type vlan` / `set vlanid N` / `set interface "
-                    "\"port1\"`), with the sub-interface's own tag, "
-                    "which the device runs as the sub-interface.  FortiOS "
-                    "writes a VLAN interface on a port and on a switch "
-                    "interface alike, so the parser reads it back as a "
-                    "VLAN interface and a VLAN of its tag, not as a "
-                    "sub-interface of the port."
                 ),
                 severity="warn",
             ),

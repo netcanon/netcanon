@@ -281,19 +281,16 @@ per_field_expectation:
   # below safe rather than lazy.
 
   "vlans[].id":
-    disposition: lossy
-    reason: >
-      No id is lost, and the list grows by one record on each of the 4 cells
-      that populate it (1 -> 2: 35, 35, 200, 100).  The IOS-XR codec makes a
-      VLAN record of each sub-interface tag, which the render writes as
-      `vlan<id>` on the synthesised `bridge1`; the sub-interface itself is a
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate VLANs (ids 35, 35, 200 and 100).
+      The IOS-XR codec makes a VLAN record of each sub-interface tag, which
+      the render writes as `vlan<id>` on the synthesised `bridge1` and the
+      RouterOS parser reads back as that VLAN; the sub-interface itself is a
       VLAN interface on its port (`/interface vlan add
       interface=GigabitEthernet0/0/0/1 name=GigabitEthernet0/0/0/1.35
-      vlan-id=35`), and the RouterOS parser reads every VLAN interface as a
-      VLAN of its tag, so the re-parse holds two records of one id.  The
-      target declares `/interfaces/interface/dot1q-vlan` lossy for exactly
-      this read-back: a VLAN interface on a port and one on a bridge are one
-      line shape to its parser.
+      vlan-id=35`), read back as the sub-interface it is.  Up to 0.7.7 that
+      line read back as a second VLAN of the same id.
     references: [iosxr-routeros-surface]
 
   "vlans[].name":

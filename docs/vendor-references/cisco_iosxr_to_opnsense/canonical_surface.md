@@ -72,8 +72,10 @@ membership — zero drift on every one of those, on every cell.
 > picked (`MgmtEth0/RP0/CPU0/0_vlan35` on `batfish_ebgp_border01`). The
 > sub-interface is that VLAN's device now — `GigabitEthernet0/0/0/1.35` is a
 > `<vlan>` of tag 35 on `GigabitEthernet0/0/0/1` — so no record is added,
-> and `interfaces[].name` is `good`. The 4 sub-interfaces come back typed
-> `ianaift:l3ipvlan` (below).
+> and `interfaces[].name` is `good`. Since a VLAN device on a port is a
+> sub-interface of it (0.7.8), the OPNsense parser reads that device back as
+> the sub-interface it is, tagged and typed as its port, with no VLAN record
+> (below).
 
 So the losses on this pair are **real per-attribute and per-record losses**,
 each independently caused, not one structural signal reflected in a dozen
@@ -118,7 +120,7 @@ from the interface side, not an independent finding.
 | interfaces[].ipv6_addresses | 3 | 0 | 9 |
 | interfaces[].lag_member_of | 4 | 0 | 8 |
 | interfaces[].interface_type | 0 | 12 | 0 |
-| vlans[].id | 4 | 0 | 8 |
+| vlans[].id | 0 | 4 | 8 |
 | static_routes | 0 | 6 | 6 |
 | routing_instances | 0 | 8 | 4 |
 | ntp_servers | 0 | 1 | 11 |
@@ -127,9 +129,9 @@ from the interface side, not an independent finding.
 | local_users[].role | 0 | 9 | 3 |
 | local_users[].hashed_password | 0 | 9 | 3 |
 
-The `interfaces[].name` row, and `vlans[].name` among the empty fields below,
-were measured before the VLAN-device change; the pair's expectation YAML holds
-the current disposition (both lossy — see the VLAN section).
+The `vlans[].id` row was measured again when a VLAN device on a port became a
+sub-interface of it; the pair's expectation YAML holds the current
+dispositions (see the VLAN section).
 
 Fields trivially empty on all 12 cells: `dns_servers`, `timezone`,
 `syslog_servers`, `interfaces[].vrrp_groups`, every `vlans[]` sub-field except
@@ -173,8 +175,9 @@ round-trip.
 
 ## The VLAN surface exists but is one field wide
 
-`vlans[].id` is `good` — 4 cells populate exactly one VLAN each (35, 35, 200,
-100) and every one survives. That is the whole story, because
+`vlans[].id` is `lossy` — 4 cells populate exactly one VLAN each (35, 35, 200,
+100), and none comes back as a VLAN (below). Every other VLAN field is empty,
+because
 `cisco_iosxr/parse.py::_parse_dot1q_vlans` synthesises VLAN records from
 `encapsulation dot1q <vid>` and returns `CanonicalVlan(id=vid, name="")` —
 `name` is hard-coded empty and there is no port membership, no address and no
@@ -185,27 +188,29 @@ and `vlans[].untagged_ports` are **source-side gaps**, recorded
 `not_applicable`. `opnsense` declares `/vlans/vlan/description` supported (it
 is the `<vlan>`'s `<descr>`), so a source that supplied one would keep it.
 
-`vlans[].name` is the exception since the VLAN-device change, recorded `lossy`:
-the round trip gives each VLAN a name it did not have. An OPNsense `<vlan>` has
-no name of its own, so the OPNsense parser names a VLAN after the device the
-render wrote for it, which is the sub-interface (`GigabitEthernet0/0/0/1.35`).
-It drifts by gaining a name, never by losing one.
+`vlans[].name` stays `lossy`, though no cell can show it now: the record does
+not come back. An OPNsense `<vlan>` has no name of its own, and where the
+parser reads one back as a VLAN (on a bridge) it names the VLAN after the
+device. Between the VLAN-device change and the sub-interface change it drifted
+on the 4 cells by gaining a name (`GigabitEthernet0/0/0/1.35`).
 
-**`vlans[].id: good` is the sub-interface's own tag.** The render writes each
-sub-interface as a `<vlan>` device of its tag on its port, and the OPNsense
-parser reads that device back as the VLAN and as the interface. The tag
-that *generated* the VLAN record — `interfaces[].dot1q_vlan` — still reads
-back null (4 records, 4 cells), because the parser reads a device, not a
-sub-interface: `opnsense` declares `/interfaces/interface/dot1q-vlan` lossy
-for that reading. The tag is on the wire. Up to 0.7.7 the path was
-unsupported, and the routed sub-interface arrived untagged.
+**`vlans[].id` is lossy: the record does not come back, and the tag does.**
+The render writes each sub-interface as a `<vlan>` device of its tag on its
+port, and the OPNsense parser reads a device on a port back as the
+sub-interface it is: its tag on the interface (`interfaces[].dot1q_vlan`, 4
+records on 4 cells), typed as its port, with no VLAN record. So the VLAN
+record the IOS-XR parser made of the tag is dropped on all 4. The tag is on
+the wire. Up to 0.7.7 the device was read back as a VLAN and as the
+interface, the VLAN record kept and the sub-interface's tag lost.
 
 ## `interfaces[].interface_type` — a dropped attribute, not a dropped record
 
-`interface_type` drifts on **155 of 155** interface records, on all 12 cells:
-`ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
-`ianaift:ieee8023adLag` arrive as the empty string, and the 4 sub-interfaces
-as `ianaift:l3ipvlan`, the type the OPNsense parser gives a `<vlan>` device.
+`interface_type` drifts on **151 of 155** interface records, on all 12 cells:
+`ianaift:ethernetCsmacd`, `ianaift:softwareLoopback`,
+`ianaift:ieee8023adLag` and the one `ianaift:other` arrive as the empty
+string. The 4 sub-interfaces keep `ianaift:ethernetCsmacd`: the OPNsense
+parser types a `<vlan>` device on a port as the port it is a unit of (up to
+0.7.7, `ianaift:l3ipvlan`).
 OPNsense's `config.xml` `<interfaces>` block has no element that carries an
 ianaift type.
 

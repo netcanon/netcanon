@@ -10,10 +10,10 @@ name=ether2.10 vlan-id=10``.
 
 What each source holds is typed by hand.  The output is read two ways:
 as text, by a reader of RouterOS's grammar typed here, and with the
-RouterOS parser, which reads such a line back as a VLAN interface and a
-VLAN of its tag (the matrix says so: RouterOS writes a VLAN interface on
-a port and on a bridge alike).  Each check is handed the defect it is
-for.
+RouterOS parser, which reads such a line back as a sub-interface of the
+port: typed as the port, with the tag its own, and no VLAN (one on a
+bridge is the VLAN interface it reads as a VLAN interface and a VLAN of
+its tag).  Each check is handed the defect it is for.
 """
 
 from __future__ import annotations
@@ -204,8 +204,9 @@ def _text_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
 
 def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
     """What the RouterOS parser reads back: an interface ``<port>.<unit>``
-    with the address, a VLAN interface, and a VLAN of the tag under that
-    name -- its reading of a VLAN interface on a port."""
+    with the address, a sub-interface of *port* with the tag its own, and
+    no VLAN under that name -- its reading of a VLAN interface on a
+    port."""
     tree = get_codec(_ROS).parse(text)
     by_name = {i.name: i for i in tree.interfaces}
     problems: list[str] = []
@@ -217,12 +218,14 @@ def _parsed_problems(text: str, port: str, subs: tuple[Sub, ...]) -> list[str]:
             continue
         if [a.ip for a in iface.ipv4_addresses] != [sub.address]:
             problems.append(f"{name} holds {[a.ip for a in iface.ipv4_addresses]}")
-        if iface.interface_type != "ianaift:l3ipvlan":
+        if iface.interface_type != "ianaift:ethernetCsmacd":
             problems.append(f"{name} is read as {iface.interface_type}")
+        if (iface.dot1q_vlan, iface.vlan_parent) != (sub.tag, port):
+            problems.append(f"{name} is read with tag {iface.dot1q_vlan} on {iface.vlan_parent}")
         if iface.enabled != sub.enabled:
             problems.append(f"{name} is read enabled={iface.enabled}")
-        if (sub.tag, name) not in {(v.id, v.name) for v in tree.vlans}:
-            problems.append(f"no VLAN {sub.tag} named {name}")
+        if name in {v.name for v in tree.vlans}:
+            problems.append(f"a VLAN is named {name}")
     return problems
 
 
@@ -266,12 +269,12 @@ def test_a_sub_interface_is_a_vlan_interface_on_its_port(key: str, path: str) ->
 
 
 @pytest.mark.parametrize("key", sorted(SOURCES))
-def test_the_job_says_how_it_is_read_back(key: str) -> None:
-    """The output is what the device runs as the sub-interface; the
-    report says it is read back otherwise, and nothing holds the job."""
+def test_the_job_says_it_is_supported(key: str) -> None:
+    """The output is what the device runs as the sub-interface, and is
+    read back as one: the report lists no loss of it."""
     job = _job(key, "plan")
     assert job.status.value == "completed", job.error
-    assert _DOT1Q in {p.path for p in job.validation.lossy_paths}
+    assert _DOT1Q not in {p.path for p in job.validation.lossy_paths}
     assert _DOT1Q not in {p.path for p in job.validation.unsupported_paths}
 
 
@@ -376,3 +379,16 @@ def test_the_reader_sees_each_defect(broken: str, said: str) -> None:
     sub = (Sub("198.51.100.1", "10", 10, "users"),)
     assert _text_problems(_GOOD, "ether2", sub) == []
     assert any(said in p for p in _text_problems(broken, "ether2", sub)), _text_problems(broken, "ether2", sub)
+
+
+@pytest.mark.parametrize(("broken", "said"), [
+    (_GOOD.replace("/interface vlan\n", "/interface bridge\nadd name=bridge1\n/interface vlan\n")
+     .replace("interface=ether2 name", "interface=bridge1 name"), "is read as ianaift:l3ipvlan"),
+    (_GOOD.replace("vlan-id=10", "vlan-id=100"), "is read with tag 100 on ether2"),
+    (_GOOD.replace("vlan-id=10", "vlan-id=10 disabled=yes"), "is read enabled=False"),
+])
+def test_the_parser_reading_sees_each_defect(broken: str, said: str) -> None:
+    sub = (Sub("198.51.100.1", "10", 10, "users"),)
+    assert _parsed_problems(_GOOD, "ether2", sub) == []
+    problems = _parsed_problems(broken, "ether2", sub)
+    assert any(said in p for p in problems), problems

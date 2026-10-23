@@ -152,10 +152,11 @@ its port (`/interface vlan add interface=GigabitEthernet0/0/0/1
 name=GigabitEthernet0/0/0/1.35 vlan-id=35 comment=…`).  Up to 0.7.7 the render
 emitted a sub-interface only as the target of an `/ip address` row, with no row
 on which to hang a `comment=`, and the three lost it.  The re-parse reads each
-such line as a VLAN interface and a VLAN of its tag (the target declares
-`/interfaces/interface/dot1q-vlan` lossy for that), so on the 4 VLAN-bearing
-cells `vlans[]` holds two records of one id: `vlan<id>` from the IOS-XR VLAN
-record and the sub-interface's own.  `vlans[].id` is recorded `lossy`.
+such line back as the sub-interface it is, its tag kept, with no VLAN record,
+so on the 4 VLAN-bearing cells `vlans[]` holds the one record the IOS-XR VLAN
+record is written as (`vlan<id>`, on the synthesised `bridge1`).  `vlans[].id`
+is recorded `good`.  Up to 0.7.7 each sub-interface was read back as a VLAN of
+its tag as well, and `vlans[]` held two records of one id.
 
 Two attributes were checked and found clean, which is worth recording so nobody
 re-hunts them: **`enabled`** — 74 administratively-down source interfaces across
@@ -253,8 +254,7 @@ re-parses that back as the VLAN name, so `('' → 'vlan35')`, `('' → 'vlan200'
 `('' → 'vlan100')` on the 4 VLAN-bearing cells. The target declares
 `/vlans/vlan/name` lossy for exactly this: *"MikroTik stores a VLAN's name as
 the L3 interface name (e.g. vlan10), NOT a separate descriptive name field."*
-No VLAN **id** is lost on the 4 cells, though each comes back twice (the
-sub-interface is read back as a VLAN of its tag too). Read the drift as a fabricated
+No VLAN **id** is lost on the 4 cells. Read the drift as a fabricated
 value rather than a destroyed one — the practical consequence is that any
 config-diff or inventory reconciliation after the migration reports VLAN names
 that no operator ever authored.

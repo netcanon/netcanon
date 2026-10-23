@@ -252,7 +252,7 @@ per_field_expectation:
       `ianaift:ieee8023adLag` off `/interface bonding`, which is simply
       correct, and so are the last two, the dot-notation sub-interfaces
       `eth1.100` and `eth1.200` on the same cell, typed
-      `ianaift:l3ipvlan` off the VLAN interface each is written as.
+      `ianaift:ethernetCsmacd` like the port each is a unit of.
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY, and `mikrotik_routeros` states the mechanism: RouterOS does
       not expose IANA ifType, so the codec infers it from the
@@ -301,22 +301,23 @@ per_field_expectation:
   # therefore source-side gaps, and each says which side the re-authoring
   # belongs on.  VyOS expresses tagging as a dot-notation sub-interface,
   # which lands in `interfaces[]`, not as a VLAN database -- and which the
-  # target writes as a VLAN interface on its port and reads back as a
-  # VLAN of its tag, so the re-parse is not empty everywhere (`vlans[].id`).
+  # target writes as a VLAN interface on its port and reads back as the
+  # sub-interface it is, so the re-parse holds no VLAN either.
 
   "vlans[].id":
-    disposition: lossy
-    reason: >
-      `vyos` declares `/vlans/vlan/id` unsupported and produces no VLAN
-      record on any of the 13 cells, but the re-parse is not empty on the
-      cell with sub-interfaces (`kitchen_sink.conf`, 0 -> 2): each is a
-      VLAN interface on its port (`/interface vlan add interface=eth1
-      name=eth1.100 vlan-id=100`), and the RouterOS parser reads every
-      VLAN interface as a VLAN of its tag.  The target declares
-      `/interfaces/interface/dot1q-vlan` lossy for exactly this
-      read-back.  `mikrotik_routeros` declares `/vlans/vlan/id`
-      SUPPORTED and renders `/interface vlan`, so a VLAN database
-      re-authored on the target will stick.
+    disposition: not_applicable
+    note: >
+      Source-side gap, declared and measured: `vyos` declares `/vlans/vlan/id`
+      unsupported and emits no VLAN record on any of the 13 cells, and none
+      appears. The sub-interfaces of the kitchen sink (`eth1.100`, `eth1.200`)
+      are written as VLAN interfaces on their port (`/interface vlan add
+      interface=eth1 name=eth1.100 vlan-id=100`), and the RouterOS parser
+      reads a VLAN interface on a port back as a sub-interface of it, its tag
+      kept, with no VLAN record. `mikrotik_routeros` renders a VLAN as an
+      `/interface vlan`, so a VLAN database re-authored on the target will
+      stick (on a bridge, where it is read back as a VLAN). Up to 0.7.7 every
+      VLAN interface was read back as a VLAN as well (0 -> 2 on the kitchen
+      sink).
     references: [vyos-mikrotik-surface]
 
   "vlans[].name":

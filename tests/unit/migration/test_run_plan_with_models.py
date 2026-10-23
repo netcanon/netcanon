@@ -312,7 +312,10 @@ def _ports_nobody_reported(source, target, raw_text: str, job: MigrationJob) -> 
     The other half of the same tie, for a port that carries no
     address (on AOS-S none does): every port the output names must be
     one the job reports a source name on.  A port left under its
-    source name while the job reports it moved is here.
+    source name while the job reports it moved is here.  An interface
+    the output reads back as a sub-interface of a port it names (a
+    RouterOS VLAN interface on a port) stands for that port, not for
+    a port of its own.
     """
     dropped = set(job.port_drops)
     said = {
@@ -331,7 +334,15 @@ def _ports_nobody_reported(source, target, raw_text: str, job: MigrationJob) -> 
         if name.rpartition(".")[2].isdigit() and name.rpartition(".")[0]
     )
     tree = target.parse(job.rendered)
-    found = set(collect_hardware_port_names(tree, classify=target.classify_port_name))
+    on_a_port = {
+        iface.name: iface.vlan_parent for iface in tree.interfaces
+        if iface.dot1q_vlan is not None and iface.vlan_parent
+        and iface.interface_type not in ("ianaift:l3ipvlan", "ianaift:l2vlan")
+    }
+    found = {
+        on_a_port.get(name, name)
+        for name in collect_hardware_port_names(tree, classify=target.classify_port_name)
+    }
     found.update(iface.default_name for iface in tree.interfaces if iface.default_name)
     return sorted(name for name in found if _same(target, name) not in said)
 
@@ -3049,6 +3060,76 @@ class TestSubInterfaces:
         job = SimpleNamespace(port_renames=renames, port_drops=drops)
         assert migration_pipeline._units_that_followed(plan, operator, names, job) == expected
 
+    @pytest.mark.parametrize(
+        ("names", "renames", "drops", "expected"),
+        [
+            # Where its port went, named by its tag.
+            ({"p1": "q7"}, {"p1": "q7", "gn": "q7.84"}, [], {"gn": "q7.84"}),
+            # Gone with a port that is gone.
+            ({"p1": None}, {}, ["p1", "gn"], {"gn": None}),
+            # Left where it was: it did not follow anything.
+            ({"p1": "q7"}, {"p1": "q7"}, [], {}),
+            # On a port nobody decided.
+            ({"p2": "q2"}, {"p1": "q7", "gn": "q7.84"}, [], {}),
+        ],
+    )
+    def test_a_sub_interface_whose_config_states_its_port(
+        self, names, renames, drops, expected,
+    ) -> None:
+        """RouterOS ``gn`` on ``p1``, tag 84: its name has no unit in
+        it, and what followed is read by its tag."""
+        plan = SimpleNamespace(off_inventory=["gn"])
+        job = SimpleNamespace(port_renames=renames, port_drops=drops)
+        assert migration_pipeline._units_that_followed(
+            plan, {}, names, job, {"gn": ("p1", 84)},
+        ) == expected
+
+    @pytest.mark.parametrize(
+        ("target", "profile", "where"),
+        [
+            ("arista_eos", "arista_eos/DCS-7050SX-64", "Ethernet3.84"),
+            ("mikrotik_routeros", "mikrotik_routeros/CCR2004-1G-12S+2XS", "gn-mgmt"),
+        ],
+    )
+    def test_a_routeros_vlan_interface_on_a_port_goes_with_it(
+        self, target: str, profile: str, where: str,
+    ) -> None:
+        """``gn-mgmt`` rides on ``ether3``: a sub-interface of it,
+        whose name says nothing of a unit.  It went with its port --
+        named by its tag across vendors, under its own name between
+        two RouterOS configs -- and holds no job.  It was listed as a
+        name nobody decided, in a job that was ``partial`` for it."""
+        job = run_plan_with_models(
+            get_codec("mikrotik_routeros"), get_codec(target), _ROUTEROS_SUB_INTERFACES,
+            _profile("mikrotik_routeros/CRS310-8G+2S+"), _profile(profile),
+        )
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.completed, job.error
+        assert plan.off_inventory == [] and plan.unresolved_ports == []
+        assert plan.sub_interfaces == {"gn-mgmt": where}
+        assert job.port_renames.get("gn-mgmt", "gn-mgmt") == where
+
+    @pytest.mark.parametrize(
+        ("target", "profile"),
+        [
+            ("arista_eos", "arista_eos/DCS-7050SX-64"),
+            ("mikrotik_routeros", "mikrotik_routeros/CCR2004-1G-12S+2XS"),
+        ],
+    )
+    def test_a_routeros_vlan_interface_on_a_dropped_port_goes(
+        self, target: str, profile: str,
+    ) -> None:
+        job = run_plan_with_models(
+            get_codec("mikrotik_routeros"), get_codec(target), _ROUTEROS_SUB_INTERFACES,
+            _profile("mikrotik_routeros/CRS310-8G+2S+"), _profile(profile),
+            port_rename_map={"ether3": None},
+        )
+        plan = job.port_mapping_plan
+        assert plan.off_inventory == [] and plan.unresolved_ports == []
+        assert plan.sub_interfaces == {"gn-mgmt": None}
+        assert "gn-mgmt" in job.port_drops
+        assert "10.99.99.1" not in job.rendered
+
 
 # ---------------------------------------------------------------------------
 # An override as it is typed
@@ -3610,7 +3691,7 @@ _FORTIGATE_CASE = """config system interface
     next
     edit "DMZ"
         set ip 10.20.20.1 255.255.255.0
-        set interface "port1"
+        set interface "internal"
         set vlanid 20
     next
 end
@@ -4065,6 +4146,16 @@ class TestSmallerRules:
             "ge-0/0/0.54": "ge-0/0/5.54",
         }
 
+    def test_a_sub_interface_whose_config_states_its_port_keeps_its_name(self) -> None:
+        """Between two configs of one codec it stands, and goes where
+        its port goes by the reference to it; dropped with it."""
+        plan = SimpleNamespace(off_inventory=["gn-mgmt"])
+        stated = {"gn-mgmt": ("ether3", 84)}
+        follow = migration_pipeline._sub_interface_followers
+        assert follow(plan, {}, {"ether3": "sfp-sfpplus3"}, stated) == {"gn-mgmt": "gn-mgmt"}
+        assert follow(plan, {"ether3": None}, {"ether3": "sfp-sfpplus3"}, stated) == {"gn-mgmt": None}
+        assert follow(plan, {}, {}, stated) == {}
+
     def test_a_unit_of_a_port_that_keeps_its_name_keeps_its_own(self) -> None:
         """The parent's NAME on the target is what a unit follows.  A
         port an operator named keeps that name while its hardware
@@ -4109,7 +4200,11 @@ class TestALogicalNameOnAPortTheTargetLacks:
     port is formatted as one for the target.  Where the target has that
     port the name is displaced.  Where it has not, nothing collides --
     and the interface's address is on a port the declared device does
-    not have, which used to be ``completed`` with nothing said."""
+    not have, which used to be ``completed`` with nothing said.
+
+    The VLAN is on the hardware switch ``internal``, so it is a VLAN
+    interface; on a port it is a unit of that port, whose name is not
+    put to the classifier (the last test)."""
 
     def test_it_is_listed_and_asks_for_a_decision(self) -> None:
         job = run_plan_with_models(
@@ -4121,8 +4216,9 @@ class TestALogicalNameOnAPortTheTargetLacks:
         assert " name DMZ" in job.rendered.splitlines()
         assert plan.landed_off_target == {"DMZ": "GigabitEthernet0/1"}
         assert "GigabitEthernet0/1" not in _profile("cisco_iosxe/C9300-24P").names()
-        # Nothing shares the name, so it is not dropped.
-        assert plan.displaced == [] and job.port_drops == []
+        # Nothing shares the name, so it is not dropped.  (The
+        # switch ``internal`` has no form on a Catalyst, and is.)
+        assert plan.displaced == [] and job.port_drops == ["internal"]
         assert plan.unresolved_ports == ["DMZ"]
         assert job.status == MigrationJobStatus.partial
         assert any(
@@ -4172,6 +4268,26 @@ class TestALogicalNameOnAPortTheTargetLacks:
         plan = job.port_mapping_plan
         assert plan.landed_off_target == {} and plan.unresolved_ports == []
         assert job.status == MigrationJobStatus.completed
+
+    def test_on_a_port_it_is_a_unit_that_follows_the_port(self) -> None:
+        """``DMZ`` on ``port1`` tags the frames of ``port1`` alone: it
+        is a sub-interface, and goes where ``port1`` goes with its tag.
+        Its name is not read as the port ``dmz``, so nothing lands off
+        the target."""
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec("cisco_iosxe_cli"),
+            _FORTIGATE_CASE.replace('"internal"', '"port1"'),
+            _profile("fortigate/100E"), _profile("cisco_iosxe/C9300-24P"),
+        )
+        plan = job.port_mapping_plan
+        port = job.port_renames["port1"]
+        assert job.port_renames["DMZ"] == f"{port}.20"
+        lines = job.rendered.splitlines()
+        unit = lines.index(f"interface {port}.20")
+        assert lines[unit + 1:unit + 3] == [
+            " encapsulation dot1Q 20", " ip address 10.20.20.1 255.255.255.0",
+        ]
+        assert plan.landed_off_target == {} and plan.unresolved_ports == []
 
     def test_a_logical_name_given_the_targets_own_form_is_where_it_belongs(self) -> None:
         """A LAG that becomes the target's LAG name is not a landing
@@ -4889,7 +5005,7 @@ _FORTIGATE_MGMT_VLAN = """config system interface
     next
     edit "MGMT"
         set ip 10.90.0.1 255.255.255.0
-        set interface "port1"
+        set interface "internal"
         set vlanid 90
     next
 end
@@ -5504,6 +5620,20 @@ set [ find default-name=ether2 ] comment="lan"
 /ip address
 add address=192.0.2.2/30 interface=ether1
 add address=10.0.0.1/24 interface=ether2
+"""
+
+#: Two VLAN interfaces on ports: ``gn-mgmt``, a name of the
+#: operator's, and ``ether1.55``, named after its port.
+_ROUTEROS_SUB_INTERFACES = """/interface ethernet
+set [ find default-name=ether1 ] comment="up"
+set [ find default-name=ether3 ] comment="mgmt port"
+/interface vlan
+add interface=ether3 name=gn-mgmt vlan-id=84
+add interface=ether1 name=ether1.55 vlan-id=55
+/ip address
+add address=10.1.0.1/24 interface=ether1
+add address=10.99.99.1/24 interface=gn-mgmt
+add address=10.55.0.1/24 interface=ether1.55
 """
 
 _EOS_TWO_PORTS_AND_AN_SVI = """hostname sw

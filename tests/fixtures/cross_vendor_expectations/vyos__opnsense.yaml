@@ -223,8 +223,9 @@ per_field_expectation:
       `/interfaces/interface/config/type` LOSSY on its own side), so there
       is no type to lose.  The round trip gives two records one: the
       kitchen sink's `eth1.100` and `eth1.200` are written as `<vlan>`
-      devices of their tags on `eth1`, which the OPNsense parser types
-      `ianaift:l3ipvlan`.  Every other record comes back untyped, as it went.
+      devices of their tags on `eth1`, which the OPNsense parser reads
+      back as sub-interfaces of it, typed like it
+      (`ianaift:ethernetCsmacd`).  Every other record comes back untyped, as it went.
     references: [vyos-opnsense-surface]
 
   "interfaces[].lag_member_of":
@@ -256,37 +257,35 @@ per_field_expectation:
       not carry it.
     references: [vyos-opnsense-surface]
 
-  # -- VLANs -- absent on the source side, made by the target ----------------
+  # -- VLANs -- absent on both sides -----------------------------------------
   #
   # vyos declares `/vlans/vlan/id` UNSUPPORTED, and the measurement agrees:
   # the parser produced ZERO VLAN records on all 13 cells.  VyOS expresses
   # tagging as a dot1q sub-interface (`eth1.100`), which lands in
   # `interfaces[]`, not as a VLAN database.  The OPNsense render writes such
   # a sub-interface as a `<vlan>` device of its tag on its port, and the
-  # OPNsense parser reads that device back as a VLAN as well: two VLAN
-  # records (100, 200) APPEAR on the kitchen sink.  `vlans[].id` carries
-  # that; the other five keys are source-side gaps, and each says which side
-  # re-authoring belongs on.
+  # OPNsense parser reads that device back as the sub-interface it is, so
+  # no VLAN record appears either.  The keys below are source-side gaps,
+  # and each says which side re-authoring belongs on.
 
   "vlans[].id":
-    disposition: lossy
-    reason: >
-      vyos declares `/vlans/vlan/id` unsupported and emitted no VLAN record
-      on any of the 13 cells; the tagging this corpus carries lives on the
-      interface record as `eth1.100` / `eth1.200` (kitchen sink).  The
-      render writes each as a `<vlan>` device of its tag on `eth1`, and the
-      OPNsense parser reads it back as a VLAN of that tag, named after the
-      device, as well as an interface: VLANs 100 and 200 appear (opnsense
-      declares `/interfaces/interface/dot1q-vlan` lossy for that reading).
-      The other 12 cells have no VLAN on either side.
+    disposition: not_applicable
+    note: >
+      Source-side gap, declared and measured: vyos declares `/vlans/vlan/id`
+      unsupported and emits no VLAN record on any of the 13 cells, and none
+      appears. The tagging this corpus carries lives on the interface record
+      as `eth1.100` / `eth1.200` (kitchen sink), which the render writes as
+      `<vlan>` devices of their tags on `eth1` and the OPNsense parser reads
+      back as the sub-interfaces they are, tag kept, with no VLAN record. Up
+      to 0.7.7 it read each device back as a VLAN as well, and VLANs 100 and
+      200 appeared.
     references: [vyos-opnsense-surface]
 
   "vlans[].name":
     disposition: not_applicable
     note: >
-      Same source-side gap: the source produces no VLAN record, so there is
-      no name to carry (the two the round trip makes are named after their
-      devices, `eth1.100` and `eth1.200`). An OPNsense `<vlan>` has no name of its own (opnsense
+      Same source-side gap: the source produces no VLAN record, so there is no
+      name to carry. An OPNsense `<vlan>` has no name of its own (opnsense
       declares `/vlans/vlan/name` lossy: a VLAN is named after its device),
       which would matter for a source that emits a VLAN database.
     references: [vyos-opnsense-surface]

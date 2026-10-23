@@ -482,20 +482,26 @@ per_field_expectation:
   vlans[].id:
     disposition: lossy
     reason: >
-      Junos's ``set vlans <name> vlan-id N`` -> FortiGate's
-      ``edit "<name>" / set type vlan / set vlanid N``, and every
-      VLAN of the source comes back with its id.  The list GROWS
-      where the source has a routed unit with a ``vlan-id``: it is
-      written as FortiOS's VLAN interface on its port, and the
-      FortiGate parser reads every VLAN interface back as a VLAN of
-      its tag as well -- 6 -> 9 on
-      ``ksator_labmgmt_qfx10k2_junos173.set`` (units 10, 30 and 100
-      of ``xe-0/0/6:2``), 0 -> 4 on
-      ``tsg8139_evpn_leaf_dhcpv6_junos232.set`` (units 54 and 55 of
-      two ports, one VLAN record for each).  The tag is the unit's
-      own; up to 0.7.7 it was the number in its name and the dot1q
-      path was unsupported.  fortigate_cli declares
-      ``/interfaces/interface/dot1q-vlan`` lossy for this reading.
+      A Junos VLAN is written as a VLAN interface on the port or aggregate the
+      render chooses, and dropped where that parent is one the FortiGate
+      parser reads as an aggregate or a port: all 16 on
+      `ksator_labmgmt_qfx5100_junos173.set`, all 3 on
+      `ksator_labmgmt_qfx5110_junos173.set`, all 87 on
+      `saidvandeklundert_snmpv3_junos172.set`, 6 -> 3 on
+      `ksator_labmgmt_qfx10k2_junos173.set` and 4 -> 1 on the kitchen sink,
+      each read back as a routed sub-interface, the id its tag.  A parent with
+      a Junos name (`xe-0/0/6:2`, `ge-0/0/0`), which the bare pipeline
+      translates no further, is not read as a port, so a VLAN on it, or a
+      routed unit with a `vlan-id` written as a VLAN interface on its port,
+      comes back as a VLAN: 0 -> 4 on `tsg8139_evpn_leaf_dhcpv6_junos232.set`
+      (units 54 and 55 of two ports).  The two cells that keep their list
+      stand under this disposition.  FortiOS has no VLAN apart from a VLAN
+      interface on a parent: the render writes each VLAN as one on the port or
+      aggregate it chooses for every VLAN interface, and the FortiGate parser
+      reads a VLAN interface on an aggregate, or on a port it knows by its
+      name, back as a routed sub-interface of it, its tag the VLAN's id, with
+      no VLAN record (fortigate_cli declares `/vlans/vlan/id` lossy).  Up to
+      0.7.7 every VLAN interface was read back as a VLAN.
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].name:
