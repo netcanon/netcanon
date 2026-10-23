@@ -2617,6 +2617,19 @@ _IOS_UNIT_IN_ANOTHER_CASE = "\n".join([
     "interface GigabitEthernet1/0/2", " description OTHER", "!", "end", "",
 ])
 
+#: A Junos unit 0 that carries a tag, beside a unit 10, on one port.
+_JUNOS_TAGGED_UNIT_0 = "\n".join([
+    "set system host-name sw",
+    "set interfaces ge-0/0/1 description PARENT",
+    "set interfaces ge-0/0/1 vlan-tagging",
+    "set interfaces ge-0/0/1 unit 0 vlan-id 54",
+    "set interfaces ge-0/0/1 unit 0 family inet address 10.54.0.1/24",
+    "set interfaces ge-0/0/1 unit 10 vlan-id 10",
+    "set interfaces ge-0/0/1 unit 10 family inet address 10.1.0.1/24",
+    "set interfaces ge-0/0/2 description OTHER",
+    "",
+])
+
 #: A unit of a unit: a name no running-config prints.
 _JUNOS_UNIT_OF_A_UNIT = "\n".join([
     "set system host-name r1",
@@ -3083,6 +3096,54 @@ class TestSubInterfaces:
         assert migration_pipeline._units_that_followed(
             plan, {}, names, job, {"gn": ("p1", 84)},
         ) == expected
+
+    @pytest.mark.parametrize(
+        ("off_inventory", "renames", "tags", "named_by_tag", "expected"),
+        [
+            # A unit 0 with a tag went named by it.
+            (["p1.0"], {"p1": "q7", "p1.0": "q7.54"}, {"p1.0": 54}, False, {"p1.0": "q7.54"}),
+            # ... and not as ``.0``, which is the port itself there.
+            (["p1.0"], {"p1": "q7", "p1.0": "q7.0"}, {"p1.0": 54}, False, {}),
+            # A unit above 0 goes with its unit number ...
+            (["p1.5"], {"p1": "q7", "p1.5": "q7.5"}, {"p1.5": 300}, False, {"p1.5": "q7.5"}),
+            # ... and by its tag onto a target that names a unit so.
+            (["p1.5"], {"p1": "q7", "p1.5": "q7.300"}, {"p1.5": 300}, True, {"p1.5": "q7.300"}),
+            (["p1.5"], {"p1": "q7", "p1.5": "q7.5"}, {"p1.5": 300}, True, {}),
+        ],
+    )
+    def test_a_unit_named_by_its_tag(
+        self, off_inventory, renames, tags, named_by_tag, expected,
+    ) -> None:
+        """Where the translator names a unit by its tag, what
+        followed is read by its tag.  Read by its number, a Junos
+        ``unit 0 vlan-id 54`` that went to ``Ethernet2.54`` was a
+        name nobody decided."""
+        plan = SimpleNamespace(off_inventory=off_inventory)
+        job = SimpleNamespace(port_renames=renames, port_drops=[])
+        assert migration_pipeline._units_that_followed(
+            plan, {}, {"p1": "q7"}, job, {}, tags=tags, named_by_tag=named_by_tag,
+        ) == expected
+
+    @pytest.mark.parametrize(
+        ("target", "profile"),
+        [("arista_eos", "arista_eos/DCS-7050SX-64"), ("juniper_junos", "juniper_junos/EX4300-48T")],
+    )
+    def test_a_junos_unit_0_with_a_tag_goes_with_its_port(self, target: str, profile: str) -> None:
+        """A Junos unit 0 that carries a tag is a sub-interface of
+        its port: across vendors it goes named by its tag, between
+        two Junos configs as unit 0, and holds no job either way."""
+        junos = get_codec("juniper_junos")
+        job = run_plan_with_models(
+            junos, get_codec(target), _JUNOS_TAGGED_UNIT_0,
+            _profile("juniper_junos/EX4300-48T"), _profile(profile),
+        )
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.completed, job.error
+        assert plan.off_inventory == [] and plan.unresolved_ports == []
+        where = job.port_renames.get("ge-0/0/1", "ge-0/0/1")
+        unit_0 = "ge-0/0/1.0" if target == "juniper_junos" else f"{where}.54"
+        assert plan.sub_interfaces == {"ge-0/0/1.0": unit_0, "ge-0/0/1.10": f"{where}.10"}
+        assert plan.untagged_units == {}
 
     @pytest.mark.parametrize(
         ("target", "profile", "where"),

@@ -592,6 +592,43 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos unit 0 that carries a tag is a sub-interface.**  Under
+  `vlan-tagging` a unit 0 can be given a `vlan-id` like any other
+  unit (Juniper's router examples tag unit 0; the EX and QFX
+  references say a tag "cannot be configured on logical interface
+  unit 0").  The parser read unit 0's lines onto the device, as it
+  does where unit 0 carries no tag and is the interface itself: the
+  unit's tag and addresses were the port's own on every target --
+  `encapsulation dot1Q 54` and the unit's address on the main
+  interface -- its description took the device's place, and a
+  routing instance that named `ge-0/0/1.0` bound the port, in jobs
+  that said `completed`.  The unit is now a record of its own,
+  `ge-0/0/1.0`, beside the device, which keeps what its own lines
+  state (description, media MTU, `disable`) -- on a device where
+  Juniper puts `vlan-tagging` (a port, a channel of one, an `ae` or
+  `reth`).  A tagged unit 0 of any other name is read onto its
+  device, as before: that is how another vendor's VLAN interface (a
+  FortiGate `VL_100`) is written to Junos, and is read back.  Across
+  vendors it goes
+  after its port named by its TAG (`Ethernet1.54`), as `.0` is the
+  port itself on every other platform; between two Junos configs it
+  stays unit 0, and an `ae` or `reth` unit 0 is written under its
+  device (`set interfaces ae2 unit 0 vlan-id 54`), where it had been
+  a name Junos refuses.  A routing instance and a route that name
+  `ge-0/0/1.0` name the unit and follow it.  A unit 0 tagged 54
+  beside a unit 54 of the same port is one name on another vendor,
+  and the job is `partial` and lists both.  With devices declared,
+  such a unit is read as having followed its port by its tag, and
+  so is any unit onto a target that names a sub-interface by its tag
+  (VyOS), where it had been a name nobody decided.  A tagged unit 0
+  with `family ethernet-switching` has no form in the tree: it is
+  left out, its device kept, and a row of the Tier-3 banner says so
+  -- between two Junos configs too, where it had been written back
+  with an `interface-mode access` the source did not state.  A
+  hand-written sub-interface numbered 0 from another platform
+  (`interface Gi0/0/1.0` with `encapsulation dot1Q 5`) goes by its
+  tag the same way; one with no tag is left to the classifier, as
+  before.
 - **A sub-interface's tag is a VLAN id.**  A frame of VID 0 carries
   a priority and no VLAN, and VID 4095 is reserved (IEEE 802.1Q):
   the tree's tag is a VLAN id, 1 to 4094.  The IOS-XE, IOS XR, EOS
@@ -4587,7 +4624,11 @@ timestamp if your timezone matters for an audit.
   IOS-XE renderer writes it as `switchport trunk native vlan 100` on
   a routed port and EOS drops it, with nothing said.
   `encapsulation flexible-ethernet-services` on a Junos port is not
-  read, and is not written, with nothing said either.
+  read, and is not written, with nothing said either.  Nor is the
+  `family ethernet-switching` of a tagged unit above 0 (an L2
+  sub-unit): the unit is written as a sub-interface with its tag and
+  no VLAN, with nothing said.  A tagged unit 0 that switches is left
+  out and said.
 
 - **A RADIUS key stored in a platform's own form is not decoded, and
   goes only to its own platform.**  Cisco type 7 is a reversible

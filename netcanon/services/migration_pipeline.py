@@ -1620,6 +1620,8 @@ def _units_that_followed(
     names: dict[str, str | None],
     job: MigrationJob,
     stated: dict[str, tuple[str, int]] | None = None,
+    tags: dict[str, int] | None = None,
+    named_by_tag: bool = False,
 ) -> dict[str, str | None]:
     """Sub-interfaces the translator sent after their port, across
     vendors, read from the finished run.
@@ -1644,6 +1646,14 @@ def _units_that_followed(
             of one that matches two -- not by a unit its name does not
             have (RouterOS ``gn-mgmt`` on ``ether3``, tag 84, goes to
             ``Ethernet3.84``).  None if not given.
+        tags: Each interface's 802.1Q tag, from the tree.  A unit
+            numbered 0 that carries one goes named by it (``.0`` is
+            the port itself everywhere but on Junos), and so does
+            every unit with one onto a target that names a
+            sub-interface by its tag (*named_by_tag*), as the
+            translator sends them.  None if not given.
+        named_by_tag: Whether the target names a sub-interface by its
+            tag (``CodecBase.units_are_named_by_their_tag``).
 
     Returns:
         Each unit that is where its port is, with the name it has
@@ -1657,6 +1667,7 @@ def _units_that_followed(
     gone = set(job.port_drops)
     followed: dict[str, str | None] = {}
     stated = stated or {}
+    tags = tags or {}
     for name in plan.off_inventory:
         if name in stated:
             port, tag = stated[name]
@@ -1672,6 +1683,8 @@ def _units_that_followed(
             if port in gone:
                 followed[name] = None
             continue
+        if name in tags and name not in stated and (named_by_tag or not unit.strip("0")):
+            unit = str(tags[name])
         where = f"{job.port_renames.get(port, port)}.{unit}"
         if job.port_renames.get(name, name) == where:
             followed[name] = where
@@ -2799,6 +2812,11 @@ def run_plan_with_models(
         }
         for name, where in _units_that_followed(
             plan, operator_map, merged, job, stated_sub_interfaces(tree),
+            tags={
+                iface.name: iface.dot1q_vlan
+                for iface in tree.interfaces if iface.dot1q_vlan is not None
+            },
+            named_by_tag=getattr(target, "units_are_named_by_their_tag", False),
         ).items():
             if where is None or name in tagged:
                 followers[name] = where

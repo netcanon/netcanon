@@ -889,10 +889,16 @@ def translate_port_names(  # noqa: C901
                ``ge-0/0/1.0``) is left to the classifier, which
                folds it onto its port -- right for a unit 0, which
                is the interface itself everywhere else.  So is an
-               INTERFACE numbered 0 (a hand-written ``interface
-               Gi0/0/1.0``, or ``.00``; no running-config prints
-               one): sent after its port it would be written as that
-               port's own unit 0 on Junos, two interfaces in one.
+               INTERFACE numbered 0 (``.0``, or ``.00``) that
+               carries no tag: sent after its port it would be
+               written as that port's own unit 0 on Junos, two
+               interfaces in one.  An interface numbered 0 that
+               carries a tag is no port's own -- a Junos unit 0
+               with a ``vlan-id`` under ``vlan-tagging``, or a
+               hand-written ``interface Gi0/0/1.0`` -- and goes
+               after its port NAMED BY ITS TAG on every target:
+               ``ge-0/0/1.0`` tagged 54 is ``Ethernet1.54``, as
+               nowhere else is ``.0`` a sub-interface.
 
            Across vendors a unit is a number of at most ten
            digits (:data:`UNIT_MAX_DIGITS`).  A name that ends in a
@@ -1180,17 +1186,18 @@ def translate_port_names(  # noqa: C901
             # only when its port was moved or dropped by an entry.
             return port in str_map or port in user_dropped
         unit = name.rpartition(".")[2]
-        if not unit.strip("0"):
+        if not unit.strip("0") and name not in tags:
             # Unit 0 is the interface itself on every platform that
             # has one.  An interface NUMBERED 0 beside its port (a
             # hand-written ``Gi0/0/1.0``) sent after the port would
             # be written as the port's own unit 0 on Junos: two
-            # interfaces in one.  Left to the classifier.  The unit
-            # is read as text -- 0 is what is left of ``0`` or ``00``
-            # once its zeros are taken off -- and never made a
-            # number: a pasted config can write more digits after
-            # the dot than an integer is converted from, and the
-            # conversion failed the whole job.
+            # interfaces in one.  Left to the classifier -- unless
+            # it carries a tag, and is then named by it (below).
+            # The unit is read as text -- 0 is what is left of ``0``
+            # or ``00`` once its zeros are taken off -- and never
+            # made a number: a pasted config can write more digits
+            # after the dot than an integer is converted from, and
+            # the conversion failed the whole job.
             return False
         if len(unit) > UNIT_MAX_DIGITS:
             # No sub-interface of any platform, and a name two of
@@ -1319,8 +1326,14 @@ def translate_port_names(  # noqa: C901
                 return name
             # The target's number after the dot may be the VLAN it
             # carries (VyOS ``vif``): sent with its unit number, a
-            # Junos ``unit 100 vlan-id 200`` was ``vif 100``.
-            out = f"{where}.{tags[name] if named_by_tag and name in tags else unit}"
+            # Junos ``unit 100 vlan-id 200`` was ``vif 100``.  And a
+            # unit 0 that is sent at all carries a tag (above), which
+            # names it across vendors: ``.0`` is the port itself
+            # everywhere but on Junos.
+            by_tag = name in tags and (
+                named_by_tag or (not same_codec and not unit.strip("0"))
+            )
+            out = f"{where}.{tags[name] if by_tag else unit}"
             memo[name] = out
             if out != name:
                 applied[name] = out

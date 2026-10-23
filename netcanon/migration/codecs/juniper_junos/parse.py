@@ -110,6 +110,7 @@ from .port_names import (
     classify_port_name,
     media_mtu_counts_a_header,
     media_mtu_counts_a_tag,
+    takes_vlan_tagging,
 )
 
 logger = logging.getLogger(__name__)
@@ -493,6 +494,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if gname in group_lines
     }
 
+    # A unit 0 that carries a tag, made a record of its own.
+    tagged_units_0 = _tagged_units_0(iface_state, found.stated)
+
     # Structural collapse: before materialising, fold each
     # interface-range's shared attrs onto every member that was
     # declared via `... interface-range X member <iface>`.  Each
@@ -606,7 +610,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # said (:func:`_tags_of_unit`); a routing instance that names it
     # makes no record of it either.
     unread_tags: list[str] = []
-    left_out_units: set[str] = set()
+    # A unit 0 left out for switching under a tag is a unit that names
+    # nothing in the tree as well: no instance binds its port instead.
+    left_out_units: set[str] = {f"{name}.0" for name in tagged_units_0}
     # How many 802.1Q tags each device's frames carry, which its media
     # MTU counts as well as the Ethernet header.
     device_tags = _tags_of_devices(iface_state, found.tagging)
@@ -782,7 +788,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 continue
             iface = iface_by_name.get(iface_name)
             # Phase 4 rank-5: routing-instances reference UNITs
-            # (``Loopback0.0``); canonical stores parent (``Loopback0``).
+            # (``Loopback0.0``); canonical stores parent (``Loopback0``)
+            # -- unless the unit carries a tag, and is a record of its
+            # own (``_tagged_units_0``), found by its name above.
             # See PHASE4_RECONCILIATION.md rank 5 (~18 cells).
             if iface is None and iface_name.endswith(".0"):
                 iface = iface_by_name.get(iface_name[:-2])
@@ -790,14 +798,17 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 # Interface referenced under routing-instance but
                 # never declared via ``set interfaces`` — create a
                 # stub so the VRF membership doesn't silently
-                # disappear on round-trip.
+                # disappear on round-trip.  Unit 0 of a port is the
+                # port, as the interface materialiser has it.
+                m = _PORT_UNIT_0_RE.match(iface_name)
+                stub = m.group(1) if m else iface_name
                 iface = CanonicalInterface(
-                    name=iface_name,
-                    interface_type=_infer_iface_type(iface_name),
+                    name=stub,
+                    interface_type=_infer_iface_type(stub),
                     vrf=ri.name,
                 )
                 intent.interfaces.append(iface)
-                iface_by_name[iface_name] = iface
+                iface_by_name[stub] = iface
             else:
                 iface.vrf = ri.name
         # Clean up the side-attribute so it doesn't leak into
@@ -1214,6 +1225,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             for path in sorted(inactive_met, key=inactive_met.__getitem__)
         ),
         *unread_tags,
+        *_switching_units_0_row(tagged_units_0),
         *_in_several_vlans_row(in_several),
         *_no_native_unit_row(no_native_unit),
         *_older_native_rows(older_native),
@@ -1262,7 +1274,9 @@ def _tags_of_devices(
 
     Args:
         iface_state: The parser's state, by interface name; a unit
-            above 0 is ``<device>.<unit>``, unit 0 is the device.
+            above 0 is ``<device>.<unit>``, and so is a unit 0 that
+            carries a tag (``<device>.0``); any other unit 0 is the
+            device.
         statements: The tagging statement each device states.
     """
     tags = {device: TAGGING_STATEMENT_TAGS[word] for device, word in statements.items()}
@@ -2212,6 +2226,8 @@ def _apply_interfaces(  # noqa: C901
     lag_state: dict[str, dict[str, Any]] | None = None,
     irb_state: dict[int, dict[str, Any]] | None = None,
     found: _Found | None = None,
+    *,
+    unit_0_only: bool = False,
 ) -> None:
     """Parse ``interfaces <name> ...`` variants.
 
@@ -2241,6 +2257,13 @@ def _apply_interfaces(  # noqa: C901
     on its unit 0, ``<name>.<N>`` for a line under unit N -- whether
     or not anything below reads the line.  A caller that has none
     may leave it out.
+
+    A line under unit 0 configures the device's own record, and is
+    read a second time, with *unit_0_only*, into a bucket of the
+    unit's own (``_UNIT_0`` in the device's state); a line on the
+    device itself puts its description, and that it is disabled,
+    apart as well (``_OWN``).  A unit 0 that carries a tag is made a
+    record of its own from them (:func:`_tagged_units_0`).
     """
     if not tokens:
         return
@@ -2272,11 +2295,13 @@ def _apply_interfaces(  # noqa: C901
     # ``interfaces <name> disable``
     if second == "disable":
         state["enabled"] = False
+        state.setdefault(_OWN, {})["enabled"] = False
         return
 
     # ``interfaces <name> description "<desc>"``
     if second == "description" and len(tokens) >= 3:
         state["description"] = tokens[2]
+        state.setdefault(_OWN, {})["description"] = tokens[2]
         return
 
     # ``interfaces <name> vlan-tagging`` (``stacked-vlan-tagging``,
@@ -2371,6 +2396,8 @@ def _apply_interfaces(  # noqa: C901
                 # is empty / spurious — drop it so it doesn't leak
                 # an empty ``ge-0/0/0.0`` interface into materialisation.
                 iface_state.pop(name, None)
+                # A line of unit 0, kept apart as every other is (below).
+                target_state.setdefault(_UNIT_0, {})["dhcp_client"] = True
             else:
                 target_state = state
             target_state["dhcp_client"] = True
@@ -2398,6 +2425,15 @@ def _apply_interfaces(  # noqa: C901
         if unit_num == 0:
             target_state = state
             stated.add(name)
+            if not unit_0_only:
+                # The same line again, into the unit's own bucket: a
+                # unit 0 that carries a tag is a record of its own,
+                # which nothing is known of until every line is read
+                # (:func:`_tagged_units_0`).
+                _apply_interfaces(
+                    tokens, {name: state.setdefault(_UNIT_0, {})},
+                    found=found, unit_0_only=True,
+                )
         else:
             sub_name = f"{name}.{unit_num}"
             target_state = iface_state.setdefault(sub_name, {})
@@ -2416,7 +2452,7 @@ def _apply_interfaces(  # noqa: C901
             and tokens[4] in ("inet", "inet6")
             and tokens[5] == "mtu"
         ):
-            if tokens[4] == "inet" or unit_num != 0:
+            if tokens[4] == "inet" or unit_num != 0 or unit_0_only:
                 try:
                     target_state[f"{tokens[4]}_mtu"] = int(tokens[6])
                 except ValueError:
@@ -2901,6 +2937,105 @@ def _apply_vlans(
 #: How many port names the row for access ports in several VLANs
 #: shows; it counts the rest.
 IN_SEVERAL_SHOWN = 3
+
+
+#: Unit 0 of a port, which a routing instance names for the port itself
+#: when the unit is no record of its own.
+_PORT_UNIT_0_RE = re.compile(r"^([A-Za-z]+-\d+/\d+/\d+)\.0$")
+
+#: Where a device's state keeps the lines of its unit 0, read a second
+#: time (:func:`_apply_interfaces`), and the description and the
+#: ``disable`` of its own lines.
+_UNIT_0 = "unit 0"
+_OWN = "own"
+
+#: What only a line on a device itself puts in its state: kept on the
+#: device's record when its unit 0 is a record of its own.  (Its
+#: description and ``disable`` are kept apart, in ``_OWN``: a unit's
+#: lines state those too.)
+_DEVICE_KEYS = ("mtu", "lag_member_of", "trunk_native_vlan")
+
+#: What a unit's ``family ethernet-switching`` lines put in its state.
+_SWITCHING_KEYS = ("switchport_mode", "l2_vlan_member_names", "unit_native_vlan")
+
+
+def _tagged_units_0(
+    iface_state: dict[str, dict[str, Any]], stated: set[str],
+) -> list[str]:
+    """Make each unit 0 that carries a tag a record of its own
+    (``<device>.0``), and return the devices whose unit 0 is left out.
+
+    Junos names a unit of every device, and on a device whose frames
+    carry no tag unit 0 is what every other platform calls the
+    interface: its lines make the device's record.  With
+    ``vlan-tagging`` on the device a unit 0 can be given a ``vlan-id``
+    like any other unit (Juniper's router examples tag unit 0; the EX
+    and QFX references say a tag "cannot be configured on logical
+    interface unit 0"), and then it is a sub-interface of the device:
+    it takes the frames of its tag, and its addresses are on them.
+    Read onto the device's record, the tag and the addresses were the
+    port's own on every target -- ``encapsulation dot1q`` on a main
+    interface, a port made a VLAN of itself -- in jobs that said
+    ``completed``.
+
+    So the unit's lines (``_UNIT_0``) make a record of the unit, and
+    the device keeps what its own lines state (``_DEVICE_KEYS``, and
+    ``_OWN``).  A unit 0 that carries no tag is the device, as it was,
+    and so is a tagged unit 0 of a device that takes no tagging
+    statement (:func:`.port_names.takes_vlan_tagging`): the renderer
+    writes a record of another vendor's VLAN interface (a FortiGate
+    ``VL_100``, a RouterOS ``gn-mgmt``, tagged) as unit 0 of a device
+    of that name, and so reads it back.
+    The translator names the record by its tag across vendors (the
+    port translator's rule for a unit 0 with a tag): ``.0`` is the
+    port itself to every other platform, and no unit 0 is tagged on
+    the EX and QFX.  A unit 0 with a tag and ``family
+    ethernet-switching`` has no form in the tree: it is left out,
+    with its device's record kept, and said.
+
+    Every device's state loses the two buckets here, whatever its unit
+    0: nothing after this pass reads them.
+
+    Args:
+        iface_state: The parser's state, by interface name; changed in
+            place.
+        stated: The names a line configures; given each record made.
+
+    Returns:
+        The devices whose unit 0 is left out, in the order read.
+    """
+    left_out: list[str] = []
+    for name, state in ticked(list(iface_state.items())):
+        unit = state.pop(_UNIT_0, None)
+        own = state.pop(_OWN, {})
+        if not unit or not unit.get("tag_statements") or not takes_vlan_tagging(name):
+            continue
+        device = {key: state[key] for key in _DEVICE_KEYS if key in state}
+        device.update(own)
+        iface_state[name] = device
+        if any(key in unit for key in _SWITCHING_KEYS):
+            left_out.append(name)
+            continue
+        iface_state[f"{name}.0"] = unit
+        stated.add(f"{name}.0")
+    return left_out
+
+
+def _switching_units_0_row(names: list[str]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for the devices whose
+    unit 0 carries a tag and ``family ethernet-switching``
+    (:func:`_tagged_units_0`), a few named and the rest counted."""
+    if not names:
+        return []
+    shown = ", ".join(names[:IN_SEVERAL_SHOWN])
+    rest = len(names) - IN_SEVERAL_SHOWN
+    if rest > 0:
+        shown += f" and {rest} more"
+    return [
+        f"interfaces {shown}: unit 0 with a tag and family "
+        f"ethernet-switching -- a tagged unit that switches has no form "
+        f"in the tree, so the unit is not translated"
+    ]
 
 
 def _in_several_vlans_row(names: list[str]) -> list[str]:
@@ -3439,11 +3574,11 @@ def _apply_routing_instances(
         # resolve later in a post-pass.  For now, stash on a
         # sentinel key so the parse loop can resolve later.
         iface_name = rest[1]
-        # Resolve unit-0 compound to parent name the same way the
-        # interface materialiser does — ``ge-0/0/1.0`` collapses to
-        # ``ge-0/0/1``.
-        m = re.match(r"^([A-Za-z]+-\d+/\d+/\d+)\.0$", iface_name)
-        canonical_iface_name = m.group(1) if m else iface_name
+        # Kept as written: whether ``ge-0/0/1.0`` is the port itself
+        # or a unit 0 that carries a tag, a record of its own, is
+        # known only once every line is read (the post-pass in
+        # :func:`parse` resolves it).
+        canonical_iface_name = iface_name
         # Stash on the routing-instance record temporarily so the
         # parse() main loop's materialisation pass can apply the
         # vrf field after interfaces materialise.  We use a private

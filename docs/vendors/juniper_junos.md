@@ -390,7 +390,32 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   Between two Junos configs it keeps its name, and follows a
   `port_rename_map` entry for its port (`ge-0/0/7.54`).  Onto another
   vendor it goes where its port goes, with its unit and its tag
-  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).
+  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit 0 that
+  carries a tag (`unit 0 vlan-id 54` under `vlan-tagging`) is such
+  an interface too, `ge-0/0/1.0`, beside its device: the device
+  keeps what its own lines state (its description, its media MTU,
+  `disable`) and the unit what unit 0's lines state.  That is so on
+  a device where Juniper puts `vlan-tagging` -- a port, a channel of
+  one, an `ae` or `reth`; a tagged unit 0 of any other name is read
+  onto its device, which is how another vendor's VLAN interface (a
+  FortiGate `VL_100`) is written here and read back.  Juniper's
+  router examples tag unit 0; the EX and QFX references say a tag
+  "cannot be configured on logical interface unit 0".  Onto another
+  vendor it goes named by its TAG (`Ethernet1.54`): `.0` is the
+  port itself everywhere else.  Between two Junos configs it stays
+  unit 0, an `ae` or `reth` unit 0 included (`set interfaces ae2
+  unit 0 vlan-id 54`).  A routing instance or a route that names
+  `ge-0/0/1.0` names the unit, and follows it.  A unit 0 with no
+  tag is the device, as before.  A unit 0 tagged 54 beside a unit 54
+  of the same port is one name on another vendor: the job is
+  `partial` and lists both (`fused_ports`).  A tagged unit 0 with
+  `family ethernet-switching` has no form in the tree: it is left
+  out, its device kept, and a row of the Tier-3 banner says so.
+  ⚠️ Up to 0.7.7 a tagged unit 0 was read onto its device: its tag
+  and its addresses were the port's own on every target
+  (`encapsulation dot1Q 54` and the unit's address on the main
+  interface), its description took the device's place, and a
+  routing instance bound the port; translate such a config again.
 - **Loopbacks.**  Junos has one loopback interface, `lo0`: unit 0 is
   the loopback of the global routing table, and each routing
   instance takes a unit of its own.  A unit of `lo0` is the loopback
