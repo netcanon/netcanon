@@ -2254,7 +2254,7 @@ a job too, since there is no job to make of a request nobody read:
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
 | `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
-| `words` | words of set commands written out from block-form Junos | 250,000 | 4,000,000 | 16,000,000 |
+| `words` | words of set commands written out from block-form Junos, or from a Junos set line's bracket list | 250,000 | 4,000,000 | 16,000,000 |
 | `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
 | `seconds` | the time one request may take | 20 | 120 | 600 |
 
@@ -2303,7 +2303,9 @@ the `small` limits.
   `large`, or `unlimited` for a config you know.
 * Block-form Junos is counted in the words of the set commands it is
   converted to.  The same config pasted as `show configuration |
-  display set` is not converted, and is not counted in words.
+  display set` is not converted, and is not counted in words.  A set
+  line's bracket list (`vlan members [ A B ]`) is one statement a
+  value, each with the line's path, and is counted in words too.
 * Under `small` (the demo): a switch with more than 256 ports that each
   state `all`, or more than 50,000 memberships.
 * **A trunk with no allowed line counts as one that states `all`** on

@@ -399,17 +399,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         inactive_met.setdefault(under, len(lines))
         return True
 
-    for number, raw_line in enumerate(ticked(lines)):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        # Junos set-form begins with `set ` (`delete ` is skipped;
-        # `deactivate ` was read above).
-        if not line.startswith("set "):
-            continue
-        tokens = _tokenise_set(line[4:])
-        if not tokens:
-            continue
+    for number, tokens in _set_statements(lines):
         head = tokens[0]
         in_group = head == "groups" and len(tokens) >= 3
         if inactive:
@@ -439,7 +429,8 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             group_lines.setdefault(gname, []).append(tokens[2:])
             continue
         if head == "apply-groups" and len(tokens) >= 2:
-            # ``set apply-groups <gname>`` or bracketed list.
+            # ``set apply-groups <gname>`` (a bracketed list is one
+            # statement a group by now; an empty one is skipped).
             for gname in tokens[1:]:
                 if gname in ("[", "]"):
                     continue
@@ -1365,6 +1356,78 @@ def _split_words(payload: str) -> list[str]:
     return words
 
 
+#: What a refusal calls the words a set line's bracket list is
+#: written out to (the kind is ``words``, as for block form).
+_FROM_A_LIST = "words of set commands written out from a bracket list"
+
+
+def _set_statements(lines: list[str]) -> Iterator[tuple[int, list[str]]]:
+    """Each ``set`` statement of *lines*, as its words, with the
+    number of its line.
+
+    A line whose leaf holds a bracket list -- ``vlan members [ DATA
+    VOICE ]``, as the CLI takes it -- is one statement a value, as
+    ``display set`` prints it and as the block form's list is
+    (:func:`_leaf_lines`).  Read as it stood, ``[`` was the value
+    and the list was lost: a port in no VLAN, a name server ``[``.
+    The statements a list makes are counted in words before they
+    are made: each is the line's whole path again.
+
+    Args:
+        lines: The config, a line each.
+
+    Yields:
+        ``(line number, words)`` for each statement, in order.
+
+    Raises:
+        LimitExceeded: A bracket list makes more words than the
+            limits allow.
+    """
+    for number, raw_line in enumerate(ticked(lines)):
+        line = raw_line.strip()
+        # Junos set-form begins with `set ` (`delete ` is skipped;
+        # `deactivate ` was read above).
+        if not line.startswith("set "):
+            continue
+        tokens = _tokenise_set(line[4:])
+        if not tokens:
+            continue
+        listed = _bracket_list(tokens)
+        if listed is None:
+            yield number, tokens
+            continue
+        prefix, values, trailing = listed
+        charge(
+            "words",
+            len(values) * (len(prefix) + 1 + len(trailing)),
+            _quoted(prefix),
+            what=_FROM_A_LIST,
+        )
+        for value in ticked(values):
+            yield number, [*prefix, value, *trailing]
+
+
+def _bracket_list(
+    words: list[str],
+) -> tuple[list[str], list[str], list[str]] | None:
+    """The words before the bracket list of *words*, the values in
+    it and the words after its ``]`` (rare; kept as they are), or
+    ``None`` where there is no list to write out: no ``[``, nothing
+    before it, or nothing in it.  A list with no ``]`` runs to the
+    end of the statement."""
+    if "[" not in words:
+        return None
+    lb = words.index("[")
+    try:
+        rb = words.index("]", lb + 1)
+    except ValueError:
+        rb = len(words)
+    prefix, values = words[:lb], words[lb + 1:rb]
+    if not prefix or not values:
+        return None
+    return prefix, values, words[rb + 1:]
+
+
 def _tokenise_set(payload: str) -> list[str]:
     """Split a Junos set-line payload into tokens, honouring quoted
     string values that contain spaces (e.g. ``description "WAN uplink"``).
@@ -1675,26 +1738,21 @@ def _leaf_lines(path: list[str], words: list[str]) -> list[str]:
     # the set-form equivalent is one ``set <path> key <vi>`` per value.
     # Without this the literal ``[`` / values are ingested as data
     # (``name-server [ 8.8.8.8 1.1.1.1 ]`` → dns_servers == ['[']).
-    if "[" in words:
-        lb = words.index("[")
-        prefix = words[:lb]
-        try:
-            rb = words.index("]", lb + 1)
-        except ValueError:
-            rb = len(words)
-        values = words[lb + 1:rb]
-        trailing = words[rb + 1:]  # tokens after ] (rare); kept verbatim
-        if prefix and values:
-            # One set command for each value, each with the whole
-            # path in front of it.
-            charge(
-                "words",
-                len(values) * (len(path) + len(prefix) + 1 + len(trailing)),
-                _quoted(path + prefix[:1]),
-            )
-            return ["set " + " ".join(path + prefix + [v] + trailing) for v in values]
-        # Empty list or bracket-first (no leaf key) — fall through to
-        # verbatim emission rather than silently dropping the line.
+    # A set line's own list is written out the same way
+    # (:func:`_set_statements`).
+    listed = _bracket_list(words)
+    if listed is not None:
+        prefix, values, trailing = listed
+        # One set command for each value, each with the whole
+        # path in front of it.
+        charge(
+            "words",
+            len(values) * (len(path) + len(prefix) + 1 + len(trailing)),
+            _quoted(path + prefix[:1]),
+        )
+        return ["set " + " ".join(path + prefix + [v] + trailing) for v in values]
+    # Empty list or bracket-first (no leaf key) — fall through to
+    # verbatim emission rather than silently dropping the line.
     charge("words", len(path) + len(words), _quoted(path + words[:1]))
     return ["set " + " ".join(path + words)]
 

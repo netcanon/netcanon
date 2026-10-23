@@ -206,6 +206,7 @@ class TestTheWords:
         for kind, noun in L._HELD.items():
             assert noun.split(" (")[0] in page, f"the page has no line for a finished tree's `{kind}`: {noun}"
         assert "characters of nested blocks written out from set lines" in page
+        assert "words of set commands written out from a bracket list" in page
 
     def test_the_quoted_example_is_what_the_code_says(self) -> None:
         """One AOS-S line of 800 ranges of 1,001 ports, as the page

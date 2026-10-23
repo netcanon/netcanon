@@ -555,6 +555,22 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Junos: a set line's bracket list is read, a statement a value.**
+  The CLI takes `set ... vlan members [ DATA VOICE ]` (and `display
+  set` prints it one value a line); the block form's list was
+  written out so, and a set line's was read as it stood, with `[`
+  for its value.  A port given its VLANs that way was in none -- a
+  trunk carrying nothing, on every target -- a name server was `[`,
+  and so on for every leaf that takes a list, in jobs that said
+  nothing.  Several of the repository's own Junos reference pages
+  write the form.  The values are counted in words before the
+  statements are made, each being the line's path again, as the
+  block form's are; a refusal names "words of set commands written
+  out from a bracket list".  No committed capture writes a set line
+  with a list.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_set_line_bracket_list.py`,
+  which holds each list to the same config written one value a line,
+  tree for tree.
 - **Junos: a port that states no mode is an access port.**  A port
   whose `family ethernet-switching` has `vlan members` and no
   `interface-mode` (or `port-mode`) line was read as a trunk, on the
@@ -567,11 +583,7 @@ timestamp if your timezone matters for an audit.
   `all`) -- stated or not, which was left to its first VLAN in
   silence before -- is said in one row of `dropped_tier3_sections`
   for all such ports, which names a few and counts the rest.  No
-  committed capture has such a port.  Still open: the set form's
-  bracket list (`set ... vlan members [ DATA VOICE ]`) names no VLAN
-  the parser can find, so the port is in none (before, a trunk of
-  none), with nothing said; the block form's bracket list is read.
-  Guarded by
+  committed capture has such a port.  Guarded by
   `tests/unit/migration/codecs/juniper_junos/test_a_port_with_no_mode_is_access.py`.
 - **Junos: a VLAN's description is read and written.**  The parser
   read nothing of `set vlans <name> description <text>` and the
