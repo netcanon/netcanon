@@ -72,11 +72,13 @@ from ...canonical.intent import (
 )
 from ...limits import ticked
 from .._helpers import (
+    Tags,
     TrunksByName,
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
+    a_tag,
     address_key,
     ip_mtu_read,
     keyword_stanza_rows,
@@ -243,12 +245,10 @@ def _is_tag_statement(statement: str) -> bool:
     ``encapsulation dot1Q ...`` (IOS-XE writes a capital Q; any letter
     case is read).
 
-    Its tags are read whole by
-    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags`, and a
-    stanza whose statement is not read whole is taken out before any
-    reader sees it (``without_unread_tags``): ``second-dot1q any``, a
-    range or a list of inner tags, and ``native``, which the tree has
-    no form for.
+    Its tags are read whole by :func:`_tags_read`, and a stanza whose
+    statement is not read whole is taken out before any reader sees it
+    (``without_unread_tags``): ``second-dot1q any``, a range or a list
+    of inner tags.
     """
     words = statement.split(None, 2)
     return (
@@ -256,6 +256,62 @@ def _is_tag_statement(statement: str) -> bool:
         and words[0].lower() == "encapsulation"
         and words[1].lower() == "dot1q"
     )
+
+
+def _native_tag(statement: str) -> int | None:
+    """The tag of ``encapsulation dot1Q <tag> native``, else ``None``.
+
+    Cisco: "native: To make a subinterface the default handler of
+    untagged packets coming to the port, use this keyword" (Catalyst
+    9400 VLAN Configuration Guide, "Configuring Layer 3
+    Subinterfaces"), the tree's ``dot1q_native``.
+    """
+    words = statement.split()
+    if (
+        len(words) == 4
+        and [w.lower() for w in words[:2]] == ["encapsulation", "dot1q"]
+        and words[3].lower() == "native"
+    ):
+        return a_tag(words[2])
+    return None
+
+
+def _tags_read(statement: str) -> Tags | None:
+    """The tags of an ``encapsulation dot1Q`` statement, read whole:
+    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags`, and
+    the one tag of the ``native`` form (:func:`_native_tag`)."""
+    tags = second_dot1q_tags(statement)
+    if tags is not None:
+        return tags
+    native = _native_tag(statement)
+    return None if native is None else (native, None)
+
+
+def _one_native_per_port(interfaces: list[CanonicalInterface]) -> list[str]:
+    """Keep ``dot1q_native`` on the first sub-interface of a port that
+    says ``native``, and return a row for each other.
+
+    "For a given physical interface, only one subinterface can have
+    the encapsulation as native" (Cisco, the same page): a device
+    prints no second, and the tree holds one.  A pasted text can hold
+    two; the second is translated as a sub-interface of its tag, and
+    its ``native`` is said.
+    """
+    ports: set[str] = set()
+    rows: list[str] = []
+    for iface in ticked(interfaces):
+        if not iface.dot1q_native:
+            continue
+        port = iface.name.rpartition(".")[0] or iface.name
+        if port in ports:
+            iface.dot1q_native = False
+            rows.append(
+                f"interface {iface.name}: encapsulation dot1Q "
+                f"{iface.dot1q_vlan} native -- a second native "
+                f"sub-interface of {port}; written without native"
+            )
+        ports.add(port)
+    return rows
 
 
 def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
@@ -270,13 +326,13 @@ def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
       every primary IPv4 address gets ``virtual_gateway_address = ip`` to
       mirror the NX-OS / IOS-XE SD-Access shape (the primary IP IS the
       anycast IP).
-    * ``encapsulation dot1Q <vlan> [second-dot1q <inner>]`` (GAP 7) — the
-      802.1Q tags of a routed sub-interface (e.g.
+    * ``encapsulation dot1Q <vlan> [second-dot1q <inner> | native]``
+      (GAP 7) — the 802.1Q tags of a routed sub-interface (e.g.
       ``GigabitEthernet0/1.100``).  Stored on the dedicated
       ``dot1q_vlan`` and ``dot1q_inner_vlan`` fields, NOT access_vlan
-      (an L2 concept).  Only the interface's own line is its
-      statement: a ``service instance`` under it has an
-      ``encapsulation`` of its own, indented deeper.
+      (an L2 concept); ``native`` is ``dot1q_native``.  Only the
+      interface's own line is its statement: a ``service instance``
+      under it has an ``encapsulation`` of its own, indented deeper.
     """
     if _FABRIC_AG_MODE_RE.match(line):
         current["fabric_forwarding_anycast"] = True
@@ -284,9 +340,10 @@ def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
     statement = line.strip()
     if _is_tag_statement(statement):
         if len(line) - len(line.lstrip()) == current["body_indent"]:
-            tags = second_dot1q_tags(statement)
+            tags = _tags_read(statement)
             if tags is not None:
                 current["dot1q_vlan"], current["dot1q_inner_vlan"] = tags
+                current["dot1q_native"] = _native_tag(statement) is not None
         return True
     return False
 
@@ -842,12 +899,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # ``dropped_tier3_sections``.
     raw, headers = without_keyword_stanzas(raw)
     # So is a sub-interface whose tag statement is not read whole
-    # (``second-dot1q any``, a range or a list, ``native``): written
-    # with its first tag alone it was another sub-interface on every
-    # target.  Its row says the statement.
-    raw, unread = without_unread_tags(
-        raw, _is_tag_statement, second_dot1q_tags,
-    )
+    # (``second-dot1q any``, a range or a list): written with its first
+    # tag alone it was another sub-interface on every target.  Its row
+    # says the statement.
+    raw, unread = without_unread_tags(raw, _is_tag_statement, _tags_read)
     intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *unread]
 
     # System-level fields
@@ -878,6 +933,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # Interfaces
     intent.interfaces = _parse_interfaces(raw)
+    intent.dropped_tier3_sections.extend(_one_native_per_port(intent.interfaces))
 
     # VLANs (top-level `vlan N / name X` stanzas)
     intent.vlans = _parse_vlans(raw)
@@ -1708,6 +1764,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         access_vlan=raw.get("access_vlan"),
         dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
         dot1q_inner_vlan=raw.get("dot1q_inner_vlan"),  # ``second-dot1q``
+        dot1q_native=raw.get("dot1q_native", False),  # ``native``
         voice_vlan=raw.get("voice_vlan"),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),

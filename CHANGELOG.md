@@ -592,6 +592,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A routed port's untagged frames go to the sub-interface that
+  says so.**  Junos `native-vlan-id <tag>` on a device whose units
+  carry tags names the unit of that `vlan-id` as the one that takes
+  the frames that arrive with no tag ("The logical interface on which
+  untagged packets are to be received must be configured with the
+  same native VLAN ID"), and IOS-XE says the same on the
+  sub-interface, `encapsulation dot1Q <tag> native` ("the default
+  handler of untagged packets coming to the port").  The tree held
+  the Junos statement as the device's `trunk_native_vlan`, a
+  switchport's field, and IOS-XE took its own out of the text with a
+  row.  So a Junos router's native sub-interface was written onto
+  IOS-XE as `switchport trunk native vlan` on a routed port, and was
+  left out by EOS and NX-OS, in jobs that said `completed`.  The tree
+  now states it on the sub-interface (`dot1q_native`); both parsers
+  read it and both renderers write it, each in its own form (Junos
+  with `flexible-vlan-tagging`).  Every other target reports
+  `/interfaces/interface/dot1q-native` unsupported and the job is
+  `partial`.  A Junos `native-vlan-id` that names no unit of one tag,
+  and a second IOS-XE native sub-interface on one port, are said in a
+  row.  A VLAN map that renumbers the tag keeps the sub-interface
+  native; one that drops the tag drops the native with it.  Known
+  limitation: what such a sub-interface SENDS without a tag is not
+  established on either platform (the vendor reference says so).
+  Guarded by `tests/unit/migration/test_a_native_sub_interface.py`,
+  which reads each output as text, by a reader per grammar written in
+  the test, and finds the sub-interface by its address.
+
 - **Onto FortiOS, a VLAN rides on the port that carries it.**  The
   renderer chose one parent for every VLAN interface of an output --
   the first LAG for a VLAN, and for an interface of a VLAN (an SVI)

@@ -429,11 +429,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # so the tag precedes the routed address (IOS-XE convention).
         # Capital Q matches Cisco's canonical style.  A Q-in-Q
         # sub-interface's inner tag is ``second-dot1q`` on the same line
-        # (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag Termination").
+        # (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag Termination").  The
+        # sub-interface that takes the port's untagged frames says
+        # ``native`` (``dot1q_native``; Cisco, "Configuring Layer 3
+        # Subinterfaces").
         if iface.dot1q_vlan is not None:
             second = (
                 f" second-dot1q {iface.dot1q_inner_vlan}"
-                if iface.dot1q_inner_vlan is not None else ""
+                if iface.dot1q_inner_vlan is not None
+                else " native" if iface.dot1q_native else ""
             )
             body.append(f" encapsulation dot1Q {iface.dot1q_vlan}{second}")
         for idx, addr in enumerate(iface.ipv4_addresses):

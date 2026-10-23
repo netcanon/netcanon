@@ -1788,9 +1788,9 @@ class _DeviceTags(NamedTuple):
     Attributes:
         statements: The device's tagging statement (:data:`_TAGGING`).
         native: The ``native-vlan-id`` of a routed device (Junos
-            ``set interfaces <device> native-vlan-id <id>``, which the
-            parser keeps in the device's ``trunk_native_vlan``): its
-            untagged frames go to the unit of that ``vlan-id``.
+            ``set interfaces <device> native-vlan-id <id>``): the tag
+            of its unit that takes its untagged frames, the one the
+            tree marks ``dot1q_native``.
         untagged: The units with an address and no tag
             (:func:`_untagged_units`).
         written: The devices already told.
@@ -1822,15 +1822,11 @@ def _device_tags(interfaces: list[CanonicalInterface]) -> _DeviceTags:
     routed_native: dict[str, int] = {}
     for iface in interfaces:
         parent, _unit = _split_subiface_name(iface.name)
-        if (
-            parent is None
-            and iface.switchport_mode is None
-            and iface.trunk_native_vlan is not None
-        ):
-            routed_native[iface.name] = iface.trunk_native_vlan
         if iface.dot1q_vlan is None:
             continue
         device = iface.name if parent is None else parent
+        if iface.dot1q_native and iface.dot1q_inner_vlan is None:
+            routed_native.setdefault(device, iface.dot1q_vlan)
         if _takes_vlan_tagging(device):
             kinds.setdefault(device, set()).add(
                 iface.dot1q_inner_vlan is not None,

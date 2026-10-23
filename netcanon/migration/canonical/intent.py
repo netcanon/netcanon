@@ -244,6 +244,25 @@ class CanonicalInterface(BaseModel):
             sub-interface out, with a row of
             ``dropped_tier3_sections``, rather than keep its first
             value.
+        dot1q_native: ``True`` on the routed sub-interface that also
+            takes the UNTAGGED frames that arrive on its port.  Cisco
+            IOS-XE ``encapsulation dot1Q <tag> native`` ("To make a
+            subinterface the default handler of untagged packets
+            coming to the port, use this keyword", Cisco, Catalyst
+            9400 VLAN Configuration Guide, "Configuring Layer 3
+            Subinterfaces"); Junos ``native-vlan-id <tag>`` on a
+            device whose units carry tags, with the unit of ``vlan-id
+            <tag>`` ("The logical interface on which untagged packets
+            are to be received must be configured with the same
+            native VLAN ID", Juniper, "Configuring Tagged Interface
+            with multiple tagged vlans and native vlan").  What such
+            a sub-interface SENDS untagged is not established.  Only
+            with ``dot1q_vlan`` and without ``dot1q_inner_vlan``, on
+            one sub-interface of a port at most.  It is not
+            ``trunk_native_vlan``, which is a switchport's: held
+            there, a routed port's native VLAN was written onto
+            IOS-XE as ``switchport trunk native vlan`` and dropped by
+            other targets with nothing said.
         trunk_allowed_vlans: VLAN IDs allowed on trunk.  On a trunk
             the list means what it says: ``[]`` is NO VLAN, every id
             (1-4094) is EVERY VLAN, and any other list is the list.
@@ -274,7 +293,8 @@ class CanonicalInterface(BaseModel):
             stated".  A native VLAN is carried only where the list
             holds it, so a trunk's untagged VLAN is read with
             ``trunk_untagged_vlan`` (``canonical/transforms.py``),
-            never from this field alone.
+            never from this field alone.  A routed port's untagged
+            frames are not this field: see ``dot1q_native``.
         voice_vlan: Voice VLAN ID for IP phone traffic.
         lag_member_of: LAG / port-channel name if this interface is
             bundled, otherwise ``None``.
@@ -367,6 +387,7 @@ class CanonicalInterface(BaseModel):
     access_vlan: int | None = None
     dot1q_vlan: int | None = None
     dot1q_inner_vlan: int | None = None
+    dot1q_native: bool = False
     trunk_allowed_vlans: list[int] = Field(default_factory=list)
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None
