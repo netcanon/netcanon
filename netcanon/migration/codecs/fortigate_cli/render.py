@@ -887,10 +887,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # only) address was VARP-only rendered the broken empty-IP line
             # (HEAD-review L1-6); apply the same predicate as the secondary
             # rows below and pick the first real address as the primary.
-            real_addrs = [
-                a for a in iface.ipv4_addresses
-                if a.ip and not a.virtual_gateway_address
-            ]
+            # A row that has an address of its own AND a virtual gateway
+            # beside it (Junos ``address X virtual-gateway-address Y``,
+            # AOS-CX ``active-gateway``, NX-OS anycast) is the interface's
+            # address: only the gateway has no FortiOS form, and the
+            # validation report lists it.  Asked "has a gateway" as well,
+            # every such interface came out with no address at all.
+            real_addrs = [a for a in iface.ipv4_addresses if a.ip]
             if real_addrs:
                 addr = real_addrs[0]
                 mask = _prefix_to_mask(addr.prefix_length)

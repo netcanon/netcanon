@@ -622,6 +622,19 @@ timestamp if your timezone matters for an audit.
   same misreading: none of the sixteen is shut.  A VLAN interface
   that IS shut still arrives up on AOS-S (Known limitations).
 
+- **FortiOS wrote no address for an interface that has a virtual
+  gateway.**  Junos `address X/M virtual-gateway-address Y`, AOS-CX
+  `active-gateway ip Y` and an NX-OS anycast SVI hold one address
+  record: the interface's own address, and the gateway beside it.
+  FortiOS has no form for the gateway, and its renderer, asked to
+  leave out an EOS VARP row (a gateway and no address of its own),
+  left out every row that had a gateway -- the interface's own
+  address with it.  All fifty such addresses of the committed
+  captures (AOS-CX, NX-OS, Junos) were in no line of the FortiOS
+  output, in jobs that were `partial` for the gateway and said
+  nothing of the address.  The address is now written; the gateway
+  is still dropped, and the validation report still lists it.
+
 - **FortiOS wrote a switch's VLANs on its loopback or its
   management port.**  A VLAN that states no parent is written on
   the port the renderer chooses, and its scorer ranked a private

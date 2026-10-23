@@ -44,8 +44,8 @@ _CAPTURES = sorted((_REPO / "tests/fixtures/real/aruba_aoscx").glob("*.cfg"))
 #: The targets that write no interface for an AOS-CX VLAN interface's
 #: address, and how many of the captures' VLAN interfaces each leaves so.
 #: IOS XR and VyOS say "no native representation for svi" and the job is
-#: `partial`; FortiOS writes no address that has a virtual gateway.
-_NOT_ON_AN_INTERFACE = {"cisco_iosxr": 16, "vyos": 16, "fortigate_cli": 14}
+#: `partial`.
+_NOT_ON_AN_INTERFACE = {"cisco_iosxr": 16, "vyos": 16}
 
 #: The targets whose output states a shut interface in a line of its own,
 #: and how the reader below finds it.

@@ -20,6 +20,27 @@ and the ratchet agree by construction.
 > declarations and the measured mesh run. Where a disposition rests on a
 > declaration rather than an observed round-trip, the YAML says so explicitly.
 
+> **Update 2026-10-21 — the address beside a virtual gateway, and the two
+> paths.**  Every round-trip on this page is the pipeline WITHOUT port-name
+> translation, which is what the mesh runs; every API endpoint and the demo
+> translate port names first, and there the AOS-CX VLAN interface
+> `vlan <id>` and the VLAN's synthesised child are one FortiOS interface
+> `vlan<id>`.  Up to 0.7.7 the FortiOS render left out every address that
+> had a virtual gateway beside it (AOS-CX `active-gateway`).  On the
+> translated path that address was in no line of the output -- 15 of the
+> 15 such addresses across the 7 cells -- so "relocation, not loss" below
+> held only on the untranslated path, where the child carried the VLAN's
+> copy.  The address is now written and the gateway is still dropped, the
+> job `partial` for it.  Measured after the change: with port names
+> translated, every address of the 7 cells is in the output and none is on
+> two interfaces, and each VLAN child is set on a port or LAG, never on a
+> loopback or the management port.  On the untranslated path every address
+> is in the output too, and the duplicate-address hazard below now covers
+> **five** of the seven cells (it covered three): the passthrough
+> `vlan <id>` record keeps an address that has a gateway beside it as well.
+> Current dispositions are in
+> `tests/fixtures/cross_vendor_expectations/aruba_aoscx__fortigate_cli.yaml`.
+
 ## Device-class framing
 
 `aruba_aoscx` in this corpus is a **campus / small-DC access-aggregation
@@ -189,6 +210,15 @@ value is the source ciphertext behind a `fortios:ENC ` marker (measured: the
 canonical string grows by exactly the 12 characters of that prefix on every
 one of the 6 populated cells). Nothing is deleted, so `lossy` — but see the
 credential section below for why that is still a broken account.
+
+> **Update 2026-10-21 — this call describes the render before #461.**  No
+> AOS-CX ciphertext is written behind `ENC` any more: such an account is
+> refused whole, and a `review:` comment names it in its place (the
+> updates under "Identity" below give the counts).  The key stays
+> `lossy` for the account that does arrive -- one configured `password
+> plaintext`, written `set password "<password>"` for the FortiGate to
+> encrypt, and read back tagged `fortios:`.  Current dispositions are in
+> `tests/fixtures/cross_vendor_expectations/aruba_aoscx__fortigate_cli.yaml`.
 
 Conversely, four surfaces are **real total drops** and are recorded
 `unsupported`, each with the target's own matrix entry agreeing:
