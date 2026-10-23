@@ -88,6 +88,7 @@ from .parse import (
     _prefix_to_mask,
     _split_cidr,
 )
+from .port_names import classify_port_name
 from .vlan_heuristics import (
     looks_like_vlan_iface as _looks_like_vlan_iface,
 )
@@ -198,6 +199,63 @@ def _port_of_unit(name: str) -> str | None:
     return port if dot and port and unit.isdigit() else None
 
 
+#: What a VLAN interface with no parent is written with: a FortiOS VLAN
+#: interface takes one, and no interface of the output can be it.
+_NO_PARENT_REVIEW = (
+    "        # review: VLAN {vid} has no parent -- no interface of "
+    "this output can carry it (a loopback or a tunnel cannot); set "
+    "the port it rides on"
+)
+
+#: The interface types that carry no frames, so no VLAN rides on them.
+_CARRIES_NO_FRAMES = frozenset({"ianaift:softwareLoopback", "ianaift:tunnel"})
+
+
+def _may_carry_a_vlan(iface: CanonicalInterface) -> bool:
+    """Whether a VLAN interface may be written on *iface*: not a
+    routed sub-interface, whatever its name (an entry can give it one
+    with no unit in it), and not a loopback or a tunnel, by its type
+    or by the name this output writes it under.
+
+    A loopback carries no frames and a tunnel carries no 802.1Q tag,
+    so neither is a VLAN's parent.  Before this was asked, a loopback
+    with a private address out-scored every trunk, and every VLAN of
+    a fabric switch -- AOS-CX, EOS, NX-OS, IOS-XE, IOS XR, OS10 and
+    Junos captures alike -- was written ``set interface "loopback0"``.
+    """
+    if iface.dot1q_vlan is not None:
+        return False
+    if iface.interface_type in _CARRIES_NO_FRAMES:
+        return False
+    return classify_port_name(iface.name).kind not in ("loopback", "tunnel")
+
+
+def _is_management_port(iface: CanonicalInterface) -> bool:
+    """Whether *iface* is written as a management port (``mgmt``,
+    ``mgmt1``): the port a source's out-of-band ``mgmt0`` or
+    ``mgmt1/1/1`` becomes."""
+    return classify_port_name(iface.name).kind == "mgmt"
+
+
+def _vlan_parents(deduped_ifaces: list[CanonicalInterface]) -> list[CanonicalInterface]:
+    """What a VLAN interface may be written on when its parent is
+    chosen, in the order the choice walks them: each interface
+    :func:`_may_carry_a_vlan`, the management ports last.
+
+    A management port is a VLAN's parent only where nothing else
+    can be.  It has an address of its own on every switch, and the
+    scorer ranked an address above a trunk, so before it was put last
+    the data VLANs of NX-OS, OS10, IOS-XE, IOS XR and Junos switches
+    were written on the port their out-of-band management came in
+    on.
+    """
+    carriers = [i for i in deduped_ifaces if _may_carry_a_vlan(i)]
+    return (
+        [i for i in carriers if not _is_management_port(i)]
+        + [i for i in carriers if _is_management_port(i)]
+    )
+
+
 def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
     """The port the LAN-preference scorer makes the parent of a VLAN
     sub-interface, or ``None`` where no port has LAN evidence.
@@ -240,15 +298,14 @@ def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
         score <= 0 on every iface).
     """
     candidates = [
-        i for i in deduped_ifaces
+        i for i in _vlan_parents(deduped_ifaces)
         if not _looks_like_vlan_iface(i.name)
         and i.interface_type != "ianaift:l3ipvlan"
-        and i.dot1q_vlan is None
     ]
     if not candidates:
         return None
 
-    scored: list[tuple[int, int, int, int, int, str]] = []
+    scored: list[tuple[int, int, int, int, int, int, str]] = []
     for idx, cand in enumerate(candidates):
         signal = 0
         if _has_private_ipv4(cand):
@@ -260,24 +317,28 @@ def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
         of_every_vlan = int(is_every_vlan(cand.trunk_allowed_vlans))
         port_idx = _port_index_for(cand.name)
         # Sort key (lowest first wins because we negate signal):
-        #   1. -signal       (highest signal first)
-        #   2. of_every_vlan (a trunk that names its VLANs before a
+        #   1. management    (any other port before a management
+        #                     port, whatever their signal)
+        #   2. -signal       (highest signal first)
+        #   3. of_every_vlan (a trunk that names its VLANs before a
         #                     trunk of every VLAN)
-        #   3. -port_idx     (highest port-index first as tiebreaker)
-        #   4. idx           (enumeration order — final deterministic
+        #   4. -port_idx     (highest port-index first as tiebreaker)
+        #   5. idx           (enumeration order — final deterministic
         #                     tiebreaker for byte-identity)
         scored.append(
-            (-signal, of_every_vlan, -port_idx, idx, signal, cand.name)
+            (int(_is_management_port(cand)), -signal, of_every_vlan,
+             -port_idx, idx, signal, cand.name)
         )
 
     scored.sort()
     top = scored[0]
     # If the top candidate has zero or negative signal, no candidate
-    # has positive LAN evidence: the caller keeps the legacy
-    # first-non-VLAN fallback.
-    if top[4] <= 0:
+    # that is not a management port has positive LAN evidence: the
+    # caller keeps the legacy first-non-VLAN fallback, over the same
+    # order.
+    if top[5] <= 0:
         return None
-    return top[5]
+    return top[6]
 
 
 def _parent_for_vlan_iface(
@@ -395,10 +456,9 @@ def _build_vlan_children(
         # child names are ``vlan<id>`` (no dot) so the scorer's
         # signal-based ranking applies — dotted-form fast path is
         # not relevant here.
-        # A routed sub-interface is no VLAN's parent, whatever its
-        # name (an entry can give it one with no unit in it).
+        # Nor is a routed sub-interface, a loopback or a tunnel.
         parent_name = _parent_for_vlan_iface(
-            "vlan", [i for i in deduped_ifaces if i.dot1q_vlan is None], scored,
+            "vlan", _vlan_parents(deduped_ifaces), scored,
         )
 
     iface_by_name = {i.name: i for i in deduped_ifaces}
@@ -679,8 +739,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # every one of them, so it is asked for once, here.
     scored_parent = _scored_parent(deduped_ifaces)
     # What a VLAN interface may ride on when the parent is chosen: no
-    # routed sub-interface, whatever its name.  Made once, here.
-    vlan_parents = [i for i in deduped_ifaces if i.dot1q_vlan is None]
+    # routed sub-interface, whatever its name, no loopback and no
+    # tunnel, and a management port last.  Made once, here.
+    vlan_parents = _vlan_parents(deduped_ifaces)
 
     # VLAN child interface synthesis (Issue #6).
     vlan_children = _build_vlan_children(tree, deduped_ifaces, scored_parent)
@@ -816,6 +877,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         out.append(
                             f'        set interface "{_esc(parent)}"'
                         )
+                    elif not no_port and not stated:
+                        out.append(_NO_PARENT_REVIEW.format(vid=vid))
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
             # virtual_gateway_address, and emitting ``set ip  <mask>`` is
@@ -1008,6 +1071,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f'        set interface "{_esc(child["parent"])}"'
                 )
+            else:
+                out.append(_NO_PARENT_REVIEW.format(vid=child["vlanid"]))
             if child.get("ip") and child.get("mask"):
                 out.append(f'        set ip {child["ip"]} {child["mask"]}')
                 out.append("        set mode static")
