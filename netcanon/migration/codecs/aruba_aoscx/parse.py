@@ -45,9 +45,10 @@ see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
   slot / port triple), ``interface vlan 11``, ``interface lag 1``,
   ``interface loopback 0``, ``interface mgmt``.  The canonical ``name``
   carries the space; :mod:`.port_names` splits it back.
-* **Default admin-state is DOWN** for physical / SVI / mgmt / LAG ports
-  (active ports carry an explicit ``no shutdown``); loopbacks are up by
-  default.  The scratch default is therefore type-aware.
+* **Default admin-state is DOWN** for physical / mgmt / LAG / VXLAN
+  interfaces (an enabled one carries an explicit ``no shutdown``); a
+  loopback and a VLAN interface (``interface vlan N``) are up unless
+  they say ``shutdown``.  The scratch default is therefore type-aware.
 * **L2 is opt-in**: AOS-CX ports default to routed (L3); ``no routing``
   marks a port L2, with ``vlan access`` / ``vlan trunk`` carrying the
   membership — the INVERSE of NX-OS (which defaults L2 and uses ``no
@@ -328,12 +329,23 @@ def _infer_type(iface_name: str) -> str:
 def _default_enabled(iface_name: str) -> bool:
     """Return the AOS-CX default admin-state for an interface by name.
 
-    Loopbacks come up without an explicit ``no shutdown``; every other
-    port type (physical / SVI / mgmt / LAG) is admin-down by default and
-    needs an explicit ``no shutdown`` to enable.  An explicit
-    ``shutdown`` / ``no shutdown`` line in the stanza overrides this.
+    Loopbacks and VLAN interfaces come up without a ``no shutdown``;
+    every other kind (physical / mgmt / LAG / VXLAN) is admin-down
+    until a ``no shutdown`` says otherwise.  An explicit ``shutdown`` /
+    ``no shutdown`` line in the stanza overrides this.
+
+    What says so is the device's printout and HPE's own templates.
+    Every port, LAG and ``interface mgmt`` of the committed captures
+    prints ``no shutdown`` or ``shutdown``; no ``interface vlan``
+    stanza prints either, though each carries the addresses and the
+    routing of a working fabric (HPE's published DCN configs among
+    them).  HPE's ``aoscx-ansible-dcn-workflows`` templates write ``no
+    shutdown`` under every port, LAG, ``interface mgmt`` and
+    ``interface vxlan``, and under no ``interface vlan``.  Read as down,
+    every VLAN interface of an AOS-CX config was written ``shutdown``
+    onto every target.
     """
-    return _port_names.classify_port_name(iface_name).kind == "loopback"
+    return _port_names.classify_port_name(iface_name).kind in ("loopback", "svi")
 
 
 def _lag_sort_key(name: str) -> tuple[int, int]:
@@ -649,8 +661,8 @@ def _new_iface_scratch(name: str) -> dict:
 
     Single source of truth for the field set so the two stanza-open sites
     in :func:`_parse_interfaces` can't drift apart.  ``enabled`` defaults
-    type-aware (loopbacks up, everything else down — see
-    :func:`_default_enabled`).
+    type-aware (loopbacks and VLAN interfaces up, everything else down
+    — see :func:`_default_enabled`).
     """
     return {
         "name": name,

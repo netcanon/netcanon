@@ -598,6 +598,30 @@ timestamp if your timezone matters for an audit.
   replacement messages; where each value ends is held to a reader of
   the test's own, a character at a time, and no capture's tree moves.
 
+- **Every AOS-CX VLAN interface was written shut.**  The AOS-CX
+  parser read every interface but a loopback as down until a `no
+  shutdown` said otherwise, and AOS-CX prints no admin line under a
+  VLAN interface that is up: each `interface vlan N` stanza of the
+  committed captures -- sixteen, with the addresses, active gateways
+  and OSPF of a working fabric under them -- came out shut (`shutdown`,
+  Junos `disable`, RouterOS `disabled=yes`, FortiOS `set status
+  down`) onto AOS-CX itself and every other target that writes an
+  interface for it but AOS-S, in jobs that said nothing of it.  A
+  VLAN interface is now up unless it says `shutdown`, as a loopback
+  was; a port, a LAG, `interface mgmt` and `interface vxlan` keep
+  the default down, and AOS-CX prints the state of each of those
+  whichever it is (every such stanza of the captures has its line).
+  The default is inferred from the device's printout and from HPE's
+  own templates (`aruba/aoscx-ansible-dcn-workflows`), which write
+  `no shutdown` under every port, LAG, `interface mgmt` and
+  `interface vxlan` and under no VLAN interface or loopback; no HPE
+  command page read for it states the default of a VLAN interface.
+  The mesh does not move: it compares the source's tree with each
+  output parsed again, and the two were wrong together.  The
+  AOS-CX -> AOS-S expectation's "a shut SVI comes back up" was the
+  same misreading: none of the sixteen is shut.  A VLAN interface
+  that IS shut still arrives up on AOS-S (Known limitations).
+
 - **A sub-interface of another vendor was written onto OPNsense as a
   zone of a device the output did not have.**  IOS-XE `interface
   GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
@@ -4092,6 +4116,12 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A shut VLAN interface arrives up on AOS-S.**  AOS-S states a
+  VLAN's address on the VLAN and holds no admin state for it, so an
+  AOS-CX `interface vlan N` that says `shutdown` (or another
+  vendor's shut SVI) is written as the VLAN's address, live, in a
+  job that says `completed`.  Read the source for shut VLAN
+  interfaces before you load the output.
 - **What goes with a name the translator drops is not said.**  A
   static route out of the name, a DHCP pool on it, a VRRP group's
   track of it and a VXLAN source interface (VTEP) that is the name

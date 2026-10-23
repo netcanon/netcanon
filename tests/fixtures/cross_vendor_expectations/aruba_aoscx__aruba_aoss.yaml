@@ -156,13 +156,14 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: lossy
     reason: >
-      This is the most dangerous change on the pair and it is NOT the
-      record-count effect.  Of the 108 surviving records, 16 disagree on admin
-      state and every one of them moves the same way — `False` -> `True`.  All 16
-      are SVI records: an SVI deliberately left `shutdown` on AOS-CX arrives
+      Every SVI of the committed captures is up, and arrives up.  An SVI
+      that IS shut on AOS-CX (`shutdown` under `interface vlan N`) arrives
       administratively UP on AOS-S, because the re-mounted SVI is synthesised
-      from the VLAN record and carries no admin state with it.  A fail-open.
+      from the VLAN record and AOS-S holds no admin state for it -- in a job
+      that says `completed` (measured on a config made for it).  A fail-open.
       Diff admin state on every SVI before committing the target config.
+      (This note once counted 16 SVIs that moved `False` -> `True`: the
+      AOS-CX parser read every VLAN interface as shut, and none of them was.)
     references: [aoscx-aoss-surface]
 
   "interfaces[].mtu":
