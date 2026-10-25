@@ -744,6 +744,77 @@ def split_unit(name: str) -> tuple[str, str] | None:
     return None
 
 
+def unit_tags(intent: CanonicalIntent, *, named_by_tag: bool) -> dict[str, int]:
+    """The tag each tagged interface of *intent* is named by where it
+    goes after its port by its tag (:func:`goes_by_its_tag`):
+    ``{name: tag}``.
+
+    Onto a target that names a sub-interface by its tag
+    (``CodecBase.units_are_named_by_their_tag``: VyOS) the tag is its
+    802.1Q tag, the outer of two.  Elsewhere the tag of a unit that
+    matches two is its INNER tag, as for a sub-interface whose config
+    states its port (:func:`stated_sub_interfaces`): the outer tag can
+    be every unit's of a port -- the IOS-XE
+    ``GigabitEthernet2/0/4.223415`` of a committed capture is
+    ``encapsulation dot1Q 2234 second-dot1q 15`` beside five more units
+    of outer tag 2234, which the outer tag put on one Junos unit.
+    Two units with one inner tag are then one name, and the job lists
+    them."""
+    return {
+        iface.name: (
+            iface.dot1q_vlan if named_by_tag or iface.dot1q_inner_vlan is None
+            else iface.dot1q_inner_vlan
+        )
+        for iface in intent.interfaces if iface.dot1q_vlan is not None
+    }
+
+
+def above_the_largest_unit(unit: str, largest_unit: int | None) -> bool:
+    """Whether *unit* -- digits, as a name writes them -- is numbered
+    above *largest_unit* (``CodecBase.largest_unit``; ``None``: no
+    bound).  Compared as text and never made a number: a pasted config
+    can write more digits after a dot than an integer is converted
+    from."""
+    if largest_unit is None:
+        return False
+    digits, bound = unit.lstrip("0"), str(largest_unit)
+    return len(digits) > len(bound) or (len(digits) == len(bound) and digits > bound)
+
+
+def goes_by_its_tag(
+    unit: str, *, same_codec: bool, named_by_tag: bool, largest_unit: int | None,
+) -> bool:
+    """Whether a unit that carries an 802.1Q tag goes where its port
+    goes named by the TAG (``<port>.<tag>``, the tag :func:`unit_tags`
+    gives), not by its own number.
+
+    Onto a target that names a sub-interface by its tag
+    (``CodecBase.units_are_named_by_their_tag``: VyOS) always.  Else
+    across vendors only, for a unit its own number cannot name there:
+    a unit numbered 0, as ``.0`` is the port itself on every platform
+    but Junos, and a unit numbered above what the target numbers
+    (``CodecBase.largest_unit``: Junos to 16,384) -- a tag is at most
+    4094.  Between two configs of one codec a unit keeps its number.
+    The translator and the model path's reading of the run
+    (``_units_that_followed``) ask this one question.
+
+    Args:
+        unit: The unit as its name writes it (digits).
+        same_codec: Whether the source and the target are one codec.
+        named_by_tag: ``CodecBase.units_are_named_by_their_tag`` of
+            the target.
+        largest_unit: ``CodecBase.largest_unit`` of the target.
+
+    Returns:
+        ``True`` where the unit goes by its tag.
+    """
+    if named_by_tag:
+        return True
+    if same_codec:
+        return False
+    return not unit.strip("0") or above_the_largest_unit(unit, largest_unit)
+
+
 def stated_sub_interfaces(intent: CanonicalIntent) -> dict[str, tuple[str, int]]:
     """Sub-interfaces whose config states the port they ride on apart
     from their name: ``{name: (port, unit)}``.
@@ -937,7 +1008,11 @@ def translate_port_names(  # noqa: C901
            with its unit number it carried that number as its VLAN.
            Two units of one port with one tag are then one name,
            which is what the device allows, and the plan path
-           reports them as two ports on one name.  The tree has none
+           reports them as two ports on one name.  Across vendors a
+           unit numbered above what the target numbers
+           (``CodecBase.largest_unit``: Junos to 16,384) goes by its
+           tag the same way, and one with no tag is not sent after
+           its port (:func:`goes_by_its_tag`).  The tree has none
            where the platform's parser reads none for a
            sub-interface (AOS-CX, OS10) and where the config states
            none.
@@ -1158,6 +1233,10 @@ def translate_port_names(  # noqa: C901
         for iface in intent.interfaces if iface.dot1q_vlan is not None
     }
     named_by_tag = target_codec.units_are_named_by_their_tag
+    largest_unit = target_codec.largest_unit
+    # The tag a unit is named by where it goes by its tag: for two
+    # tags off VyOS, its inner tag (:func:`unit_tags`).
+    naming_tags = unit_tags(intent, named_by_tag=named_by_tag)
     # Sub-interfaces whose config states the port they ride on apart
     # from their name, and that port (:func:`stated_sub_interfaces`).
     stated = stated_sub_interfaces(intent)
@@ -1203,6 +1282,12 @@ def translate_port_names(  # noqa: C901
             # No sub-interface of any platform, and a name two of
             # the target renderers would make a number of.  Left to
             # the classifier, as it was.
+            return False
+        if name not in tags and above_the_largest_unit(unit, largest_unit):
+            # The target gives no unit so high a number (Junos: to
+            # 16,384), and a unit with no tag has nothing else to be
+            # named by there.  Left to the classifier, and so held as
+            # a name the translator did not place.
             return False
         # What the port IS decides whether it carries sub-interfaces,
         # and a parser that read a port's role from context (the
@@ -1329,11 +1414,14 @@ def translate_port_names(  # noqa: C901
             # Junos ``unit 100 vlan-id 200`` was ``vif 100``.  And a
             # unit 0 that is sent at all carries a tag (above), which
             # names it across vendors: ``.0`` is the port itself
-            # everywhere but on Junos.
-            by_tag = name in tags and (
-                named_by_tag or (not same_codec and not unit.strip("0"))
+            # everywhere but on Junos.  So does a unit numbered above
+            # what the target numbers: an IOS-XE ``Gi0/0/1.20000`` was
+            # a Junos ``unit 20000``.
+            by_tag = name in tags and goes_by_its_tag(
+                unit, same_codec=same_codec, named_by_tag=named_by_tag,
+                largest_unit=largest_unit,
             )
-            out = f"{where}.{tags[name] if by_tag else unit}"
+            out = f"{where}.{naming_tags[name] if by_tag else unit}"
             memo[name] = out
             if out != name:
                 applied[name] = out

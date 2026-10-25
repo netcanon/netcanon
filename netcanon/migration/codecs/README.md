@@ -130,7 +130,13 @@ know, and an interface numbered 0: none of those is sent after its
 port across vendors.  Nor is a name that ends in more than ten
 digits: a renderer that makes a number of the unit in a name
 (FortiOS, VyOS) is not handed one longer than that from another
-vendor's config by the orchestrator.  A parser that knows a port's
+vendor's config by the orchestrator.  A codec whose vendor states the
+highest number a sub-interface takes says so in its class body
+(`largest_unit`; Junos, 16,384): across vendors a unit numbered above
+it goes after its port named by its 802.1Q tag, and one with no tag
+is not sent after its port.  A codec that leaves it `None` is handed
+every number (`tests/unit/migration/test_a_unit_the_target_cannot_number.py`
+holds the codecs that state one to a table typed by hand).  A parser that knows a port's
 role from
 context sets `CanonicalInterface.kind` (the IOS-XE `Mgmt-vrf` port
 is `mgmt`), and the orchestrator reads that ahead of the name.  A

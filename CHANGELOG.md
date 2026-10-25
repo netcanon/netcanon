@@ -592,6 +592,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface Junos cannot number goes by its tag.**  Juniper's
+  `unit` statement gives "Range: 0 through 16,384".  A sub-interface
+  of another vendor went to Junos after its port with its own number:
+  IOS-XE `GigabitEthernet0/0/1.20000` with `encapsulation dot1Q 200`
+  was `set interfaces ge-0/0/1 unit 20000 vlan-id 200`, a unit Junos
+  does not number, in a job that said `completed` with nothing to
+  report.  A unit numbered above the target's bound
+  (`CodecBase.largest_unit`, stated for Junos alone) now goes where
+  its port goes named by its 802.1Q tag -- `unit 200 vlan-id 200` --
+  as a tagged unit 0 does; one with no tag is not sent after its port,
+  and the job is `partial` and lists it (`untranslated_ports`, or with
+  devices declared `unresolved_ports`).  A unit of two tags is named
+  by its INNER tag, as a sub-interface whose config states its port
+  already was: the outer tag can be every unit's of a port, as on the
+  IOS-XE carrier capture, which numbers six such units
+  outer-then-inner (`GigabitEthernet2/0/4.223415`, `encapsulation
+  dot1Q 2234 second-dot1q 15`) -- they had been `unit 223415` and the
+  like, and are `unit 15` to `unit 1020` now.  A Junos tagged unit 0
+  of two tags goes onto another vendor by its inner tag the same way
+  (`ge-0/0/1.0` of `outer 100 inner 10` is `Ethernet1.10`); VyOS,
+  whose `vif` is its tag, keeps the outer.  A tag that is another
+  unit's number of the same port is one name, listed in
+  `fused_ports`.  Between two configs of one codec a unit keeps its
+  number, and an entry in `port_rename_map` decides as before.  The
+  translator and the model path's reading of the run ask one question
+  (`port_names.goes_by_its_tag`, `port_names.unit_tags`).
+  Guarded by `tests/unit/migration/test_a_unit_the_target_cannot_number.py`.
 - **A Junos unit 0 that carries a tag is a sub-interface.**  Under
   `vlan-tagging` a unit 0 can be given a `vlan-id` like any other
   unit (Juniper's router examples tag unit 0; the EX and QFX
@@ -4570,6 +4597,12 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A sub-interface's number is bounded onto Junos alone.**  On the
+  other targets that write a unit's number in its name (IOS-XE, IOS
+  XR, NX-OS, EOS and the like) a sub-interface keeps its number from
+  any source: what range each numbers is not established here, so a
+  number the target does not take is written as it stands.  Read the
+  target's own reference for its range before you load such a unit.
 - **A shut VLAN interface arrives up on AOS-S.**  AOS-S states a
   VLAN's address on the VLAN and holds no admin state for it, so an
   AOS-CX `interface vlan N` that says `shutdown` (or another

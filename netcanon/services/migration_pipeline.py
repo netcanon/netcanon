@@ -1622,6 +1622,7 @@ def _units_that_followed(
     stated: dict[str, tuple[str, int]] | None = None,
     tags: dict[str, int] | None = None,
     named_by_tag: bool = False,
+    largest_unit: int | None = None,
 ) -> dict[str, str | None]:
     """Sub-interfaces the translator sent after their port, across
     vendors, read from the finished run.
@@ -1646,14 +1647,18 @@ def _units_that_followed(
             of one that matches two -- not by a unit its name does not
             have (RouterOS ``gn-mgmt`` on ``ether3``, tag 84, goes to
             ``Ethernet3.84``).  None if not given.
-        tags: Each interface's 802.1Q tag, from the tree.  A unit
+        tags: The tag each tagged interface is named by where it
+            goes by its tag (``unit_tags``).  A unit
             numbered 0 that carries one goes named by it (``.0`` is
-            the port itself everywhere but on Junos), and so does
-            every unit with one onto a target that names a
-            sub-interface by its tag (*named_by_tag*), as the
-            translator sends them.  None if not given.
+            the port itself everywhere but on Junos), and so does a
+            unit numbered above *largest_unit*, and every unit with
+            one onto a target that names a sub-interface by its tag
+            (*named_by_tag*), as the translator sends them
+            (``goes_by_its_tag``).  None if not given.
         named_by_tag: Whether the target names a sub-interface by its
             tag (``CodecBase.units_are_named_by_their_tag``).
+        largest_unit: The highest unit the target numbers
+            (``CodecBase.largest_unit``), or None.
 
     Returns:
         Each unit that is where its port is, with the name it has
@@ -1662,7 +1667,7 @@ def _units_that_followed(
         here; the caller sets one that did not apart
         (``MappingPlan.untagged_units``).
     """
-    from ..migration.canonical.port_names import split_unit
+    from ..migration.canonical.port_names import goes_by_its_tag, split_unit
 
     gone = set(job.port_drops)
     followed: dict[str, str | None] = {}
@@ -1683,7 +1688,9 @@ def _units_that_followed(
             if port in gone:
                 followed[name] = None
             continue
-        if name in tags and name not in stated and (named_by_tag or not unit.strip("0")):
+        if name in tags and name not in stated and goes_by_its_tag(
+            unit, same_codec=False, named_by_tag=named_by_tag, largest_unit=largest_unit,
+        ):
             unit = str(tags[name])
         where = f"{job.port_renames.get(port, port)}.{unit}"
         if job.port_renames.get(name, name) == where:
@@ -2644,6 +2651,7 @@ def run_plan_with_models(
         collect_hardware_port_names,
         collect_port_names,
         stated_sub_interfaces,
+        unit_tags,
     )
     from ..migration.port_mapping import name_key, plan_port_mapping, settle_plan
 
@@ -2812,11 +2820,11 @@ def run_plan_with_models(
         }
         for name, where in _units_that_followed(
             plan, operator_map, merged, job, stated_sub_interfaces(tree),
-            tags={
-                iface.name: iface.dot1q_vlan
-                for iface in tree.interfaces if iface.dot1q_vlan is not None
-            },
+            tags=unit_tags(
+                tree, named_by_tag=getattr(target, "units_are_named_by_their_tag", False),
+            ),
             named_by_tag=getattr(target, "units_are_named_by_their_tag", False),
+            largest_unit=getattr(target, "largest_unit", None),
         ).items():
             if where is None or name in tagged:
                 followers[name] = where

@@ -122,6 +122,13 @@ class JunosCodec(CodecBase):
     #: See ``CodecBase.vlans_have_only_a_name``.
     vlans_have_only_a_name: ClassVar[bool] = True
 
+    #: Juniper's ``unit`` statement at ``[edit interfaces
+    #: interface-name]``: "Range: 0 through 16,384".  A page of the 13.2
+    #: guide gives "0 through 16,385 for all other static interface
+    #: types" (and 65,535 for demux and PPPoE only); the lower figure
+    #: is the one both pages admit.  See ``CodecBase.largest_unit``.
+    largest_unit: ClassVar[int | None] = 16384
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="juniper_junos",
         vendor_id="juniper_junos",

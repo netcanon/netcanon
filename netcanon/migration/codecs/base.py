@@ -326,6 +326,23 @@ class CodecBase(ABC):
     #: ``True`` to a set typed by hand.
     units_are_named_by_their_tag: ClassVar[bool] = False
 
+    #: The highest number a sub-interface of this platform carries after
+    #: its dot, where the vendor's own reference states one; ``None``
+    #: where no bound is established here.
+    #:
+    #: Read by the port translator
+    #: (:func:`~netcanon.migration.canonical.port_names.goes_by_its_tag`).
+    #: Across vendors a sub-interface numbered above it goes where its
+    #: port goes named by its 802.1Q tag, which is at most 4094 (of two
+    #: tags, its inner tag: ``port_names.unit_tags``); one with
+    #: no tag is not sent after its port, and holds the job as a name
+    #: the translator did not place.  Sent with its own number, an IOS-XE
+    #: ``GigabitEthernet0/0/1.20000`` was a Junos ``unit 20000``, a
+    #: number Junos does not give a unit, in a job that said
+    #: ``completed``.  ``test_a_unit_the_target_cannot_number.py`` holds
+    #: the codecs that state one to a table typed by hand.
+    largest_unit: ClassVar[int | None] = None
+
     #: This platform's VLAN is called by its name, which is the label an
     #: operator reads: the renderer writes ``CanonicalVlan.name`` and,
     #: save on Junos, nothing of ``.description`` (IOS-XE, NX-OS, EOS
