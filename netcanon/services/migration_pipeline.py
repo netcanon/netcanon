@@ -144,7 +144,12 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from ..migration._one_line import one_line_each, said
+from ..migration._one_line import (
+    one_line_each,
+    said,
+    said_of_a_control_character,
+    text_only_each,
+)
 from ..migration._tier3_detection import is_left_out_row
 from ..migration._vlan_labels import vlan_labels_as_names
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
@@ -362,6 +367,10 @@ def run_plan(
         # is a command of its own.  After the transforms, which put an
         # operator's values into the tree (`netcanon.migration._one_line`).
         job.warnings.extend(said(where) for where in one_line_each(tree))
+        # And with no control character, which a terminal acts on.
+        job.warnings.extend(
+            said_of_a_control_character(where) for where in text_only_each(tree)
+        )
 
         # Stage 4 — validate
         job.status = MigrationJobStatus.validating

@@ -1479,6 +1479,17 @@ status is not changed by it.  If the layout mattered (a description
 meant to show on two lines), set it on the target by hand.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § C1.
 
+### The job warns "... held a control character: each run of them is written as a space"
+
+A value of the config held a control character -- an escape, a bell,
+a backspace, a C1 control -- and each run of them was written as a
+space.  A terminal acts on such a character rather than showing it
+(`ESC [1A ESC [2K` erases the line above), so no target is given one.
+A parser that reads its config as text keeps one a value holds, and
+the RouterOS parser reads an escape such as `\1B` as the character.
+The warning names the place; the job's status is not changed by it.
+See [`CAPABILITIES.md`](CAPABILITIES.md) § C2.
+
 ### The job says `refused:` — "my config was refused"
 
 Not a parse failure and not a bug: the config was read, and it asks

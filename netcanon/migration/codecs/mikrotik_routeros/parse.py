@@ -35,12 +35,10 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
-import unicodedata
 from collections.abc import Iterable
 from itertools import groupby
 from typing import Any
 
-from ..._one_line import LINE_BREAKS
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -384,28 +382,16 @@ def _parse_kv(line: str) -> dict[str, str]:
 _AN_ESCAPE = re.compile(r"((?:\\[0-9A-F]{2})+)|\\(.)", re.DOTALL)
 
 #: The escapes of a letter, from the same table: ``\n``, ``\r``,
-#: ``\t``, ``\v``, ``\f`` and ``\_`` (a space).  The page gives ``\f``
-#: as "form feed (0xFF)", a name and a number that disagree; it is read
-#: as the form feed, a line break, which the pipeline writes as a space
-#: and says (:mod:`netcanon.migration._one_line`) -- as it does the
-#: others that end a line.  ``\a`` (bell) and ``\b`` (backspace) are
-#: kept as written: see :func:`_unescape`.  Any other character after a
+#: ``\t``, ``\v``, ``\f``, ``\a`` (bell), ``\b`` (backspace) and ``\_``
+#: (a space).  The page gives ``\f`` as "form feed (0xFF)", a name and a
+#: number that disagree; it is read as the form feed.  A line break and
+#: a control character are the pipeline's to mend, and it says where
+#: (:mod:`netcanon.migration._one_line`).  Any other character after a
 #: backslash is itself (``\"``, ``\\``, ``\$``, ``\?``).
 _A_LETTER_ESCAPE = {
-    "n": "\n", "r": "\r", "t": "\t", "v": "\x0b", "f": "\x0c", "_": " ",
-    "a": "\\a", "b": "\\b",
+    "n": "\n", "r": "\r", "t": "\t", "v": "\x0b", "f": "\x0c",
+    "a": "\x07", "b": "\x08", "_": " ",
 }
-
-
-def _acted_on(char: str) -> bool:
-    """Whether *char* is a control character a terminal acts on rather
-    than shows: neither white space it reads as such (a tab, a line
-    break) nor text."""
-    return (
-        unicodedata.category(char) == "Cc"
-        and char != "\t"
-        and char not in LINE_BREAKS
-    )
 
 
 def _bytes_read(written: str) -> str:
@@ -413,22 +399,19 @@ def _bytes_read(written: str) -> str:
 
     RouterOS keeps a string as bytes, and an export writes each byte
     outside printable ASCII as an escape; the text does not say which
-    encoding the bytes are in.  A byte below 0x80 is that character; a
-    run of bytes above it is read as UTF-8, and where it is not UTF-8
-    (a comment typed in Windows-1251, say) it is kept as written -- the
-    escapes, as the export has them -- rather than read in a guessed
-    encoding.  So is a character :func:`_acted_on`."""
+    encoding the bytes are in.  A run of bytes below 0x80 is those
+    characters; a run of bytes above it is read as UTF-8, and where it
+    is not UTF-8 (a comment typed in Windows-1251, say) it is kept as
+    written -- the escapes, as the export has them -- rather than read
+    in a guessed encoding."""
     out: list[str] = []
     escapes = written.split("\\")[1:]
-    for high, run in groupby(escapes, key=lambda escape: escape[0] in "89ABCDEF"):
-        for piece in [list(run)] if high else [[escape] for escape in run]:
-            as_written = "".join(f"\\{escape}" for escape in piece)
-            try:
-                text = bytes.fromhex("".join(piece)).decode("utf-8")
-            except UnicodeDecodeError:
-                out.append(as_written)
-                continue
-            out.append(as_written if any(map(_acted_on, text)) else text)
+    for _, run in groupby(escapes, key=lambda escape: escape[0] in "89ABCDEF"):
+        piece = list(run)
+        try:
+            out.append(bytes.fromhex("".join(piece)).decode("utf-8"))
+        except UnicodeDecodeError:
+            out.append("".join(f"\\{escape}" for escape in piece))
     return "".join(out)
 
 
@@ -445,12 +428,13 @@ def _unescape(value: str) -> str:
     ``\\\\``, ``\\"`` and ``\\$`` -- the escapes
     :func:`~netcanon.migration.codecs.mikrotik_routeros.render._escape`
     writes -- are the character; ``\\_`` a space; ``\\t`` a tab;
-    ``\\n``, ``\\r``, ``\\v`` and ``\\f`` a line break; a run of hex
-    escapes the text its bytes are in UTF-8 (:func:`_bytes_read`).  A
-    character a terminal acts on rather than shows (``\\a``, ``\\b``,
-    ``\\1B``) is kept as the export wrote it, a backslash and all: the
-    tree is written into another vendor's config, and read on a
-    terminal.  A trailing lone backslash is kept as it is.
+    ``\\n``, ``\\r``, ``\\v`` and ``\\f`` a line break; ``\\a`` and
+    ``\\b`` the bell and the backspace; a run of hex escapes the text
+    its bytes are in UTF-8 (:func:`_bytes_read`).  A line break and a
+    control character are in the tree as the export means them, and
+    the pipeline writes each run as a space and says where
+    (:mod:`netcanon.migration._one_line`).  A trailing lone backslash
+    is kept as it is.
 
     Up to 0.7.7 a backslash took the character after it whatever it
     was, so ``\\C3\\A9`` was read as ``C3A9`` and ``\\n`` as ``n``."""

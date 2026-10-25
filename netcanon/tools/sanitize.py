@@ -136,7 +136,7 @@ from dataclasses import dataclass, field
 
 from ..ip_transition import embedded_ipv4s
 from ..migration._derived_values import is_derivation_keyword
-from ..migration._one_line import one_line_each
+from ..migration._one_line import one_line_each, text_only_each
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
@@ -274,6 +274,7 @@ def sanitize_text(
     # refuses a tree that holds a line break (`migration._one_line`).
     # Most of the text values that can hold one are redacted above.
     one_line_each(sanitized_intent)
+    text_only_each(sanitized_intent)
     sanitized_text = codec.render(sanitized_intent)
     return SanitizationResult(
         sanitized_text=sanitized_text,
