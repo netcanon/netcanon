@@ -777,3 +777,42 @@ class TestADeactivatedStatement:
             "and is left out here for that reason. Write it on the target by hand "
             "only if the target is to hold configuration for the same hardware."
         )
+
+    def test_a_sub_interface_with_no_tag(self, page: Page, base_url: str):
+        """An EOS sub-interface that states no tag is not up on the
+        switch: listed as a statement the source held and did not run,
+        under a heading that says so, with a sentence of its own."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("arista_eos")
+        mig.pick_target("cisco_iosxe_cli")
+        mig.fill_raw(
+            "hostname r1\n"
+            "interface Ethernet1\n   no switchport\n!\n"
+            "interface Ethernet1.7\n   ip address 10.0.7.1/24\n!\n"
+            "interface Ethernet1.20\n   encapsulation dot1q vlan 20\n"
+            "   ip address 10.0.20.1/24\n!\nend\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("10.0.20.1")
+        expect(mig.output).not_to_contain_text("10.0.7.1")
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Statements the source held and did not run")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "untagged: interface Ethernet1.7 "
+            "(states no 802.1Q tag, so the source passes no traffic on it; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
+            "A line that begins untagged: is a sub-interface that states no "
+            "802.1Q tag, which the source device does not bring up: it was not "
+            "in force there, and is left out here for that reason. Write it on "
+            "the target by hand, with the tag it is to carry, only if it is to "
+            "carry traffic there."
+        )

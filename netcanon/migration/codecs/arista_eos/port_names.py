@@ -64,6 +64,22 @@ _LOGICAL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
 )
 
 
+def a_sub_interface_needs_a_tag(name: str) -> bool:
+    """Whether *name* is a sub-interface of an Ethernet port or a
+    port channel, which is not up without a tag: for a subinterface to
+    be operational "a VLAN must be configured on the subinterface"
+    (Arista, EOS User Manual, "Ethernet Ports").  A name the classifier
+    does not read is read as before.
+    """
+    parent, dot, number = name.rpartition(".")
+    return (
+        bool(dot)
+        and number.isascii()
+        and number.isdigit()
+        and classify_port_name(parent).kind in ("physical", "breakout", "lag")
+    )
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse an Arista EOS port name into a :class:`PortIdentity`.
 

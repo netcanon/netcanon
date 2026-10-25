@@ -23,7 +23,9 @@ Phase 1 surface (see ``docs/v0.2.0-planning/04-iosxr-codec/``):
   is configuration for an interface the system does not have: it makes
   no interface, its body is read by nothing, and a row that names it
   (``preconfigure: interface <name> ...``, a left-out row) is left on
-  ``dropped_tier3_sections`` for the codec's ``parse()``.
+  ``dropped_tier3_sections`` for the codec's ``parse()``.  So is a
+  sub-interface of a port or a bundle that states no tag (``untagged:
+  interface <name> ...``), which the router does not bring up.
 * ``router static / address-family ipv4 unicast / <CIDR> <next-hop>+``
   (default VRF) → :class:`CanonicalStaticRoute`.
 
@@ -139,9 +141,11 @@ from ...canonical.intent import (
 )
 from ...limits import ticked
 from .._helpers import (
+    Tags,
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
+    a_tag,
     ip_mtu_read,
     keyword_stanza_rows,
     mtu_read,
@@ -234,26 +238,49 @@ _INDENTED_VRF_RE = re.compile(r"^\s+vrf\s+(\S+)\s*$", re.IGNORECASE)
 #: ``encapsulation dot1q <vid>`` on a sub-interface → the 802.1Q tag,
 #: harvested into a synthesised :class:`CanonicalVlan`.
 _ENCAP_DOT1Q_RE = re.compile(
-    r"^\s+encapsulation\s+dot1q\s+(\d+)", re.IGNORECASE,
+    r"^\s+(?:encapsulation\s+dot1q|dot1q\s+vlan)\s+(\d+)", re.IGNORECASE,
 )
 
 
 def _is_tag_statement(statement: str) -> bool:
     """Whether *statement* is a sub-interface's tag statement:
-    ``encapsulation dot1q ...``, or ``encapsulation dot1ad ...``, whose
-    outer tag is an 802.1ad service tag the tree has no form for.
+    ``encapsulation dot1q ...``; ``encapsulation dot1ad ...``, whose
+    outer tag is an 802.1ad service tag the tree has no form for; or
+    the older ``dot1q vlan ...``.
 
-    Its tags are read whole by
-    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags`, and
-    a stanza whose statement is not read whole is taken out before any
-    reader sees it (``without_unread_tags``).
+    Its tags are read whole by :func:`_tags_read`, and a stanza whose
+    statement is not read whole is taken out before any reader sees it
+    (``without_unread_tags``).
     """
-    words = statement.split(None, 2)
-    return (
-        len(words) >= 2
-        and words[0].lower() == "encapsulation"
-        and words[1].lower() in ("dot1q", "dot1ad")
+    words = [word.lower() for word in statement.split(None, 2)[:2]]
+    return len(words) == 2 and (
+        (words[0] == "encapsulation" and words[1] in ("dot1q", "dot1ad"))
+        or words == ["dot1q", "vlan"]
     )
+
+
+def _tags_read(statement: str) -> Tags | None:
+    """The tags of an IOS XR tag statement, read whole, else ``None``.
+
+    ``encapsulation dot1q`` as
+    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags` reads
+    it, and the older form, "dot1q vlan vlan-id [ vlan-id2 | any ]"
+    (Cisco, "IOS XR Interface and Hardware Component Command Reference",
+    ``dot1q vlan``), where ``vlan-id2`` is the inner tag of a Q-in-Q
+    pair.  Read by the first form alone, ``dot1q vlan 20`` was no tag,
+    and the sub-interface was one of no tag on every target.
+    """
+    words = statement.split()
+    if [word.lower() for word in words[:2]] != ["dot1q", "vlan"]:
+        return second_dot1q_tags(statement)
+    if len(words) == 3:
+        outer = a_tag(words[2])
+        return None if outer is None else (outer, None)
+    if len(words) == 4:
+        outer, inner = a_tag(words[2]), a_tag(words[3])
+        if outer is not None and inner is not None:
+            return (outer, inner)
+    return None
 #: ``bundle id <N> mode <active|passive|on>`` → member of Bundle-Ether<N>.
 _BUNDLE_ID_RE = re.compile(
     r"^\s+bundle\s+id\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
@@ -699,9 +726,13 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # So is a sub-interface whose tag statement is not read whole: a
     # range, a list or ``any``, ``exact``, ``dot1ad``.  Written with its
     # first tag alone it was another sub-interface on every target.
-    # Its row says the statement.
+    # Its row says the statement.  And so is a sub-interface of a port
+    # or a bundle that states no tag, which the router holds and does
+    # not run (``a_sub_interface_needs_a_tag``): its row is a left-out
+    # row.
     raw, unread = without_unread_tags(
-        raw, _is_tag_statement, second_dot1q_tags,
+        raw, _is_tag_statement, _tags_read,
+        _port_names.a_sub_interface_needs_a_tag,
     )
     intent.dropped_tier3_sections = [
         *keyword_stanza_rows(headers), *rows, *unread,
@@ -933,7 +964,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # not read whole was taken out before this reader.
         statement = line.strip()
         if _is_tag_statement(statement):
-            tags = second_dot1q_tags(statement)
+            tags = _tags_read(statement)
             if tags is not None:
                 current["dot1q_vlan"], current["dot1q_inner_vlan"] = tags
             return
@@ -1156,7 +1187,8 @@ def _parse_dot1q_vlans(raw: str) -> list[CanonicalVlan]:
     """Synthesise :class:`CanonicalVlan` records from sub-interface tags.
 
     IOS-XR routers have no classic ``vlan N / name X`` stanza — VLAN ids
-    appear only on sub-interfaces via ``encapsulation dot1q <vid>``.  Each
+    appear only on sub-interfaces via ``encapsulation dot1q <vid>`` (or
+    the older ``dot1q vlan <vid>``).  Each
     distinct tag becomes a bare ``CanonicalVlan`` (``name`` always empty;
     no port membership) so VLAN-centric downstream codecs see the id-list.
     Records are returned sorted + de-duplicated by id for a stable

@@ -690,7 +690,10 @@ listed as `delete: <path>`; and an IOS XR `interface preconfigure
 interface it does not have until the line card is put in, is listed
 as `preconfigure: interface <name>`.  No interface is made of such
 a stanza, neither one called `preconfigure` nor the port it names,
-and nothing in it is read.  The banner counts only the sections,
+and nothing in it is read.  An IOS XR or EOS sub-interface of a port
+or a bundle that states no tag, which the device does not bring up,
+is listed as `untagged: interface <name>`, and nothing of it is in
+the output.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement

@@ -209,6 +209,13 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
   sub-interface is not translated`).  A tag of 0 is no 802.1Q VLAN id, and
   a stanza tagged so is left out the same way.
+- **A sub-interface that states no tag is left out.**  For a
+  subinterface to be operational "a VLAN must be configured on the
+  subinterface" (Arista, "Ethernet Ports").  A sub-interface of an
+  Ethernet port or a port channel with no `encapsulation` line is not
+  translated, and its row begins `untagged:`, a statement the switch
+  held and did not run.  ⚠️ Up to 0.7.7 it was written with no tag on
+  every target.
 - **A VLAN's address with no interface of its own gets one, once.**
   A source can hold a VLAN's address on the VLAN itself: Junos folds
   the address of an `irb` unit that a VLAN binds with `l3-interface`

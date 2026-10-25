@@ -2957,9 +2957,14 @@ class TestSubInterfaces:
         assert plan.untagged_units == {"1/1/1.54": "Ethernet1.54"}
         assert plan.sub_interfaces == {} and plan.unresolved_ports == ["1/1/1.54"]
         assert job.status == MigrationJobStatus.partial
-        (written,) = [i for i in eos.parse(job.rendered).interfaces if i.name == "Ethernet1.54"]
-        assert written.dot1q_vlan is None
-        assert [a.ip for a in written.ipv4_addresses] == ["10.54.0.1"]
+        # Written with its address and no tag: a sub-interface EOS does
+        # not bring up, which is why the job asks.  Read as text, since
+        # the EOS parser reads it back as a stanza held and not run.
+        assert "interface Ethernet1.54\n   ip address 10.54.0.1/24\n!\n" in job.rendered
+        assert eos.parse(job.rendered).dropped_tier3_sections == [
+            "untagged: interface Ethernet1.54 "
+            "(states no 802.1Q tag, so the source passes no traffic on it; not translated)"
+        ]
 
     def test_one_codec_both_sides_asks_nothing(self) -> None:
         """One grammar on both sides: a unit is written as the tree

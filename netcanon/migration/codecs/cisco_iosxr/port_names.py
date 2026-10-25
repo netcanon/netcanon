@@ -112,6 +112,25 @@ def mtu_counts_a_header(name: str) -> bool:
     return classify_port_name(base).kind in ("physical", "mgmt", "lag")
 
 
+def a_sub_interface_needs_a_tag(name: str) -> bool:
+    """Whether *name* is a sub-interface of a port, a management port
+    or a ``Bundle-Ether``, which passes no traffic without a tag: "An
+    802.1Q VLAN subinterface must have a configured VLAN ID to send and
+    receive traffic; without a VLAN ID, the subinterface remains in the
+    down state" (Cisco, "IOS XR Interface and Hardware Component Command
+    Reference", ``dot1q vlan``).  A sub-interface of a name the
+    classifier does not read (a serial line's, under Frame Relay) is no
+    802.1Q one, and is read as before.
+    """
+    parent, dot, number = name.rpartition(".")
+    return (
+        bool(dot)
+        and number.isascii()
+        and number.isdigit()
+        and classify_port_name(parent).kind in ("physical", "mgmt", "lag")
+    )
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Cisco IOS-XR port name into a :class:`PortIdentity`.
 
