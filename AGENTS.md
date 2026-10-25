@@ -1619,16 +1619,20 @@ tests use these exclusively — never CSS classes or element structure.  See
   description holding `ESC [1A ESC [2K` erased the line above it on
   the terminal an operator reviewed the output on.  The same two
   halves (`text_only_each`, `first_control_character`), and a run is a
-  SPACE, never nothing: a secret with a character taken out is another
-  secret, written with no review line, while one that holds white
-  space is left out where a line is read a word at a time.  A parser
+  space, so that the words on either side stay two.  **A secret is
+  mended neither way**: with a space in its place, or with the
+  character taken out, it is another secret.  The space was first
+  thought safe because the renderers that read a line a word at a
+  time leave a secret with white space out -- and the ones that quote
+  wrote it.  So each secret (`SECRETS`, which a test holds to the
+  schema's field names) that holds a break or a control character is
+  LEFT OUT first, with what it composes, and the job is `partial`
+  (`secrets_left_out`).  A parser
   that DECODES an escape (RouterOS `\1B`) reads it as the character
   and leaves the rule to the pipeline: one rule in one place, not a
   list of what each parser keeps as written.  Not reached: a format
   character (`Cf`: a zero-width space, a bidirectional override),
-  which is also part of text in several scripts; and a secret a
-  target writes between quotes, which the space makes another secret
-  (pinned in the test).  Guarded by
+  which is also part of text in several scripts.  Guarded by
   `tests/unit/migration/test_a_value_holds_no_control_character.py`.
 - **Never** write a value of the tree where the target reads it as
   more than a value.  RouterOS imports an `.rsc` as a script: outside

@@ -1488,7 +1488,21 @@ space.  A terminal acts on such a character rather than showing it
 A parser that reads its config as text keeps one a value holds, and
 the RouterOS parser reads an escape such as `\1B` as the character.
 The warning names the place; the job's status is not changed by it.
-See [`CAPABILITIES.md`](CAPABILITIES.md) § C2.
+A secret is not mended: see the next entry.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § C2.
+
+### The job is `partial`: "secret(s) held a line break or a control character and were left out"
+
+An SNMP community, an SNMPv3 user's passphrase, a local user's
+password, a RADIUS key or an FHRP authentication held a line break or
+a control character.  With a space in its place it would be another
+secret, and so would it with the character taken out, so it was left
+out with what it composes: a community with every trap host that
+would carry it, a user whole, a RADIUS key or an FHRP authentication
+alone (the server and the group are kept).  A warning names each
+place, never the value (`snmp.community held a line break or a
+control character: ...`).  Re-create what was left out on the
+device.  See [`CAPABILITIES.md`](CAPABILITIES.md) § C3.
 
 ### The job says `refused:` — "my config was refused"
 

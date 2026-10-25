@@ -936,10 +936,11 @@ Every character Unicode calls a control character, but a tab and the
 line breaks (`CONTROL_CHARACTERS`), is mended the same way: each run a
 space, after the transforms, said in the job's warnings
 (`text_only_each`), and refused by `CodecBase.render`
-(`first_control_character`).  A space and not nothing, because a
-secret with a character taken out is another secret, while one that
-holds white space is left out by the renderers that read a line a word
-at a time.
+(`first_control_character`).  A secret is mended neither way: with a
+space in its place, or with the character taken out, it is another
+secret, so one that holds a line break or a control character is left
+out first, with what it composes (`secrets_left_out`, over the table
+`SECRETS`), and the job is `partial`.
 
 **A VLAN's label as its name** (`netcanon/migration/_vlan_labels.py`).
 OPNsense and RouterOS have no name for a VLAN of its own: the tree

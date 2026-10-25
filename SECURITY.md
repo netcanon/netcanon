@@ -1044,13 +1044,19 @@ line, and erase it) reached the output, and an operator reviewing it
 on a terminal did not see the line above it.  The same two halves:
 the pipeline and the sanitiser write each run as a space and say
 where (`text_only_each`), and the render refuses a tree that still
-holds one (`first_control_character`).  A space and not nothing: a
-secret that held one then holds white space, which the renderers
-whose lines are read a word at a time leave out; taken out, the
-character would leave another secret.  Guarded by
+holds one (`first_control_character`).  A secret is mended neither
+way -- with a space in its place, or with the character taken out,
+it is another secret, and a target that writes a secret with white
+space between quotes wrote it -- so a secret that holds a line break
+or a control character is left out first, with what it composes
+(`secrets_left_out`: a community with every trap host that would
+carry it, a user whole, a RADIUS key or an FHRP authentication
+alone); the job says each place and never the value, and is
+`partial`.  The places of a secret are one table (`SECRETS`), which
+a test holds to every field of the schema named as a secret.
+Guarded by
 `tests/unit/migration/test_a_value_holds_no_control_character.py`.
-A format character (`Cf`), and a secret that a target writes between
-quotes, are known limitations (below).
+A format character (`Cf`) is a known limitation (below).
 
 The parsers' half: a body of text the device prints inside its config
 (a banner, a FortiOS quoted value of several lines -- a certificate, a
@@ -1478,7 +1484,6 @@ constrains the *application* (the container).
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
 | The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
 | A format character in a value reaches the output | A zero-width space or a bidirectional override (Unicode's `Cf`) a value holds is written as it stands, and can make a line on a terminal or in an editor read otherwise than it is | Documented (not mended) | A control character and a line break are mended on the way ("Config Text (what reaches the output)"); a format character is also part of text in several scripts, and is not taken out.  Read an output with an editor that shows such characters |
-| A secret that held a line break or a control character, written between quotes | The pipeline writes each run as a space; onto a target that writes a secret with white space between quotes (an SNMP community on AOS-S, FortiOS, Junos, RouterOS and OPNsense) that is another secret than the source held | Documented (not mended) | The job's warnings name the place, and the other targets leave such a secret out.  See "Config Text (what reaches the output)" |
 | A value with white space written bare into a line read a word at a time | A target whose line a device reads a word at a time (IOS-XE CLI, NX-OS, EOS, AOS-CX, AOS-S, OS10, IOS XR) may read a value from another vendor with white space in it -- an SNMP community, a RADIUS key -- as more words on its line | Documented (not audited) | The RouterOS renderer writes such a value as a string; the other renderers have not been read for it.  See "Input Validation — Config Text (a value is not script)" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
 | A set-form Junos or VyOS text is read a line at a time | A line after a quote that no later quote on its line ends is read as a statement of its own, so a quoted value of several lines -- if either device prints one so, which is not established -- would be read as configuration of the source | Documented | No value of the tree is written on more than one line, so such a value cannot add a line to the output; what it can do is make the source's tree hold a statement the source does not.  FortiOS reads a quoted value of several lines whole.  See "Input Validation — Config Text (what reaches the output)" |

@@ -635,7 +635,9 @@ the policy locally:
   breaks): `text_only_each(tree)` and `first_control_character(tree)`
   are the same two halves, and a parser that decodes an escape
   (RouterOS `\1B`) reads it as the character and leaves the rest to
-  the pipeline.
+  the pipeline.  A secret (`SECRETS`) that holds a break or a control
+  character is left out before either mend (`secrets_left_out`): a
+  renderer is never handed one with a space in its place.
 
 * **`netcanon/migration/_vlan_labels.py`** — a VLAN's label as its
   name.  Public API: `vlan_labels_as_names(tree)`,

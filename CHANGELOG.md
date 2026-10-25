@@ -78,6 +78,22 @@ timestamp if your timezone matters for an audit.
   If you reviewed an output of 0.7.7 or earlier on a terminal, read it
   again with `cat -v` or an editor that shows control characters.
 
+- **A secret that holds a line break or a control character is left
+  out, never mended.**  The two rules above write each run as a
+  space, which is right for a description and wrong for a secret:
+  AOS-S, FortiOS, Junos, RouterOS and OPNsense write an SNMP
+  community with white space between quotes, so a community that held
+  a line break came out as a community nobody set, and with the
+  character taken out instead it would be another one too.  Such a
+  secret is left out first, with what it composes: an SNMP community
+  with every trap host that would carry it, a local user or an SNMPv3
+  user whole, a RADIUS key or an FHRP authentication alone (the
+  server and the group kept).  The job says each place, never the
+  value, and is `partial`.  The places are one table (`SECRETS` in
+  `netcanon/migration/_one_line.py`), which a test holds to every
+  field of the schema named as a secret.  Guarded by
+  `tests/unit/migration/test_a_value_holds_no_control_character.py`.
+
 - **A value of the config was written into a RouterOS output as
   script, and a description could run a command on the router that
   imported it.**  RouterOS reads an imported `.rsc` as a script:
@@ -5134,13 +5150,6 @@ timestamp if your timezone matters for an audit.
   (`\CF\F0\E8`), so another vendor is given that text, and RouterOS
   is given it as text too: written back, the string holds a backslash
   and two digits where it held a byte.
-- **A secret that held a line break or a control character is
-  written with a space in its place where the target quotes it.**
-  The pipeline writes each run as a space (Security, above).  Onto
-  AOS-S, FortiOS, Junos, RouterOS and OPNsense, which write an SNMP
-  community with white space between quotes, that is another secret
-  than the source held; the other targets leave it out.  The job's
-  warnings name the place; the secret is not left out.
 - **A format character is written as it stands.**  A zero-width
   space or a bidirectional override (Unicode's `Cf`) is not a control
   character, and no target is kept from one; it can make a line on a
