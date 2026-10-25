@@ -790,7 +790,8 @@ for _model, (_access_names, _uplinks) in _C9300L.items():
 #: the 2960-X and 2960-XR Hardware Installation Guide's Product
 #: Overview, the data sheet's Table 27, and the 15.2(2)E and 15.2(6)E
 #: configuration guides.  Inferred (see KNOWN_INFERRED_PARTS): a D
-#: model's two SFP+ uplinks, TenGigabitEthernet<n>/0/1-2.  The
+#: model's two SFP+ uplinks, TenGigabitEthernet<n>/0/1-2, and every
+#: name of a LAN Lite switch.  The
 #: WS-C2960X-24PSQ-L is not modelled; the YAML says why.
 _C2960X_TE = _run(1, 2, "TenGigabitEthernet1/0/")
 _C2960X: dict[str, tuple[list[str], list[str]]] = {
@@ -1569,6 +1570,11 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # on module 0 in one release and on module 1 in the next.
     *(f"cisco_iosxe/C2960X / panel / {pid}" for pid in _C2960X if "D-" in pid),
     *(f"cisco_iosxe/C2960XR / panel / {pid}" for pid in _C2960XR if "D-" in pid),
+    # A 2960-X LAN Lite switch's names: the interface chapters of the
+    # 2960-X guides give only names with a switch number and say
+    # nothing of LAN Lite, and the 2960-S guide names a port of a LAN
+    # Lite 2960-S with none.
+    "cisco_iosxe/C2960X-LL / mode naming / standalone",
     # A 3750-X module's ports that no Cisco document read names (the
     # C3KX-NM-1G's four, the C3KX-NM-10GT's two), and the SFP downlinks
     # of the 12S and 24S, which its guides number nowhere.
@@ -2247,12 +2253,31 @@ class TestCiscoC2960X:
 
     def test_what_is_not_inferred_says_nothing_of_it(self) -> None:
         for key, mode in _C2960X_FAMILIES:
+            if key == self.LITE.key:
+                continue
             for pid in REGISTRY.families[key].models:
                 if pid in _C2960X_INFERRED:
                     continue
                 inventory = _compile("cisco_iosxe", mode, {"model": pid})
                 assert {p.evidence for p in inventory.ports} == {"vendor-doc"}, pid
                 assert not any("inferred" in c for c in inventory.caveats), pid
+
+    @pytest.mark.parametrize("pid", sorted(_C2960X_LL))
+    def test_a_lan_lite_switchs_names_are_inferred(self, pid: str) -> None:
+        """The 2960-X guides' interface chapters name every port with its
+        switch number and say nothing of LAN Lite; the 2960-S guide names a port of a LAN
+        Lite 2960-S ``gigabitethernet0/4``.  The names are kept and
+        graded, not swapped for the other form, and the management
+        port's own grade is untouched."""
+        inventory = _compile("cisco_iosxe", None, {"model": pid})
+        assert inventory.names()[0] == "GigabitEthernet1/0/1"
+        assert {p.evidence for p in inventory.ports if p.member_rank is not None} == {"inferred"}
+        caveat = next(c for c in inventory.caveats if c.startswith("C2960X-LL: "))
+        assert "GigabitEthernet1/0/N are inferred" in caveat
+        assert "gigabitethernet0/4" in caveat and "is not established" in caveat
+        assert [(p.name, p.evidence) for p in inventory.ports if p.member_rank is None] == [
+            ("FastEthernet0", "vendor-doc"),
+        ]
 
     def test_the_management_port_is_fast_ethernet(self) -> None:
         for key, _mode in _C2960X_FAMILIES:

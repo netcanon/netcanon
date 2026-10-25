@@ -1759,7 +1759,9 @@ running-config` from a Catalyst has a `switch N provision <type>` line
 for each switch, a switch that is alone included (as the number it
 keeps), and detection reads those lines: the members, by switch
 number, in the family's mode that numbers them (`stack`, or
-`standalone` for a 2960-X LAN Lite switch, which does not stack).
+`standalone` for a 2960-X LAN Lite switch, which does not stack;
+whether a LAN Lite switch prints such a line is not established, and
+its names are `inferred`).
 Three things it cannot show, which its notes say.  The line is what
 the stack is *provisioned* for;
 Cisco's guide says the stack keeps it "whether or not the provisioned

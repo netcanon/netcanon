@@ -670,7 +670,10 @@ translate it again from `show running-config` as the device prints it.
   The Catalyst 2960-X and 2960-XR are three families: `C2960X` (LAN
   Base) and `C2960XR`, each a stack of up to eight that Cisco does not
   build of the two together, and `C2960X-LL` (LAN Lite), which does
-  not stack.  Every port is module 0 of the switch, and the SFP
+  not stack and whose names are `inferred` (the interface chapters of
+  Cisco's 2960-X guides say nothing of LAN Lite, and its 2960-S guide names a LAN Lite 2960-S
+  port with no switch number, `gigabitethernet0/4`).  Every port is
+  module 0 of the switch, and the SFP
   uplinks are numbered on from the downlinks
   (`GigabitEthernet1/0/49-52` on a WS-C2960X-48TS-L); a D model's two
   SFP+ uplinks, `TenGigabitEthernet1/0/1-2`, are `inferred`, since

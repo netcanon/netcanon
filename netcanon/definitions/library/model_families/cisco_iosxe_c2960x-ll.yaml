@@ -15,8 +15,24 @@
 # starts with: "The default switch number, before it is integrated into
 # a switch stack, is 1" (Interface and Hardware Component Configuration
 # Guide, Cisco IOS Release 15.2(2)E).  So the one mode has one member
-# id, 1, and its names are GigabitEthernet1/0/N.  Its two SFP slots are
-# numbered after the downlinks: GigabitEthernet1/0/49-50 on a 48TS-LL.
+# id, 1, and its names are taken to be GigabitEthernet1/0/N.  Its two
+# SFP slots are numbered after the downlinks: GigabitEthernet1/0/49-50
+# on a 48TS-LL.
+#
+# Those names are INFERRED.  The interface chapters of the 2960-X
+# guides read (15.2(2)E and 15.2(6)E) give only names with a switch
+# number and say nothing of LAN Lite, and the FAQ says "All Cisco Catalyst 2960-X and 2960-XR
+# switches use a single universal image".  But the 15.2(6)E guide also
+# says an interface is identified by "the device number (only on
+# stacking-capable switches)", which a LAN Lite switch is not, and the
+# guide of the switch before it names the stack member number only for
+# "a Catalyst 2960-S switch running the LAN base image (supporting
+# stacking)": for "a Catalyst 2960-S switch running the LAN Lite image"
+# it gives "interface gigabitethernet0/4" (Catalyst 2960, 2960-S,
+# 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS
+# Release 15.0(2)SE and Later).  Which form a 2960-X LAN Lite switch
+# prints is not established, and the names are graded rather than
+# swapped for the other plausible form.
 #
 # Not modelled yet, and said here so that nobody adds it by guessing:
 #
@@ -35,9 +51,10 @@ modes:
     label: "standalone: LAN Lite does not stack, and the switch is number 1"
     member_ids: [1, 1]
     naming:
-      grade: vendor-doc
-      ref: "Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Security Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Managing Switch Stacks (stacking is not supported on switches running the LAN Lite image); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (the FlexStack module slot is not available on the Catalyst 2960X-48TS-LL and 2960X-24TS-LL switches)"
-    caveat: "A LAN Lite switch does not stack (Cisco Catalyst 2960-X Series FAQ), and its names carry switch number 1. No configuration of a Catalyst 2960-X LAN Lite switch was seen."
+      grade: inferred
+      ref: "Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Security Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Managing Switch Stacks (stacking is not supported on switches running the LAN Lite image); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (the FlexStack module slot is not available on the Catalyst 2960X-48TS-LL and 2960X-24TS-LL switches); Consolidated Platform Configuration Guide, Cisco IOS Release 15.2(6)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (an interface is identified by the interface type, the device number (only on stacking-capable switches), and the number of the connector); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN Lite image is identified by the interface type, module number, and switch port number, and one running the LAN base image (supporting stacking) by the stack member number too; example on a Catalyst 2960-S switch running the LAN Lite image: interface gigabitethernet0/4); Cisco Catalyst 2960-X Series FAQ (all Cisco Catalyst 2960-X and 2960-XR switches use a single universal image; the feature set is bound to the hardware model type)"
+      caveat: "C2960X-LL: the names GigabitEthernet1/0/N are inferred. The interface chapters of the Catalyst 2960-X configuration guides give every name with a switch number, 1 on a switch that has not joined a stack, and say nothing of LAN Lite, and every 2960-X runs one universal image; but the 15.2(6)E guide also says an interface is identified by its device number only on stacking-capable switches, which a LAN Lite switch is not, and the Catalyst 2960-S guide gives a stack member number only to a 2960-S running the LAN base image (supporting stacking) and names a port of one running the LAN Lite image gigabitethernet0/4. Which form a 2960-X LAN Lite switch prints is not established."
+    caveat: "A LAN Lite switch does not stack (Cisco Catalyst 2960-X Series FAQ), and is number 1. No configuration of a Catalyst 2960-X LAN Lite switch was seen."
 
 deployment_ports:
   - name: FastEthernet0

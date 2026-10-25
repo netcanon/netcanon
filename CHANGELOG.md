@@ -500,7 +500,11 @@ timestamp if your timezone matters for an audit.
   2960-X with no 2960-XR ("can't be stacked together") and a LAN Lite
   switch with nothing: `C2960X`, the LAN Base models, and `C2960XR`,
   each a FlexStack-Plus stack of up to eight, and `C2960X-LL`, the two
-  LAN Lite models, a switch that is alone and number 1.  Every port is
+  LAN Lite models, a switch that is alone and number 1, whose names are
+  `inferred`: the interface chapters of Cisco's 2960-X guides give
+  every name with a switch number and say nothing of LAN Lite, and its
+  2960-S guide names a port of a 2960-S "running the LAN Lite image"
+  `gigabitethernet0/4`, with none.  Every port is
   module 0 of the switch, and "SFP module ports are numbered
   consecutively following the 10/100/1000 ports": a WS-C2960X-48TS-L is
   `GigabitEthernet1/0/1-48` and then `GigabitEthernet1/0/49-52`.  The
