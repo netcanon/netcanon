@@ -160,6 +160,16 @@ no place, the reason, which the job reports as it drops the name.
 Every other codec keeps the default (`None`: each loopback is
 formatted alone).  See `tests/unit/migration/test_a_loopback_is_a_unit_of_lo0.py`.
 
+**A `virtual` identity is its own vendor's.**  The kind is for an
+interface only one vendor has (an IOS-XE `VirtualPortGroup`, a
+RouterOS bridge), and the classifier marks whose it is in `meta`
+(`cisco_virtual_port_group`, `mikrotik_bridge`).  A formatter writes
+a name for one only where it reads its own mark, and otherwise
+returns `None`: no "closest analogue".  A RouterOS bridge written
+as a loopback carried the LAN's gateway onto an interface with no
+port.  See
+`tests/unit/migration/test_a_virtual_interface_is_its_vendors_own.py`.
+
 **Two codecs may SHARE one bridge when they are the same platform in
 different wire formats.**  `cisco_iosxe` (NETCONF / OpenConfig)
 delegates both methods to `cisco_iosxe_cli.port_names` rather than

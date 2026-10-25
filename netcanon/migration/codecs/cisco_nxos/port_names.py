@@ -146,8 +146,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "vtep":
         # NX-OS has exactly one VTEP, always nve1 (grammar survey § 4.6).
         return "nve1"
-    if identity.kind == "virtual":
-        # Closest NX-OS analogue for a vendor-specific virtual port.
-        return f"loopback{identity.index or 0}"
-    # breakout / tunnel / hw_aggregate / unknown — no native NX-OS form.
+    # breakout / tunnel / hw_aggregate / unknown — no native NX-OS form;
+    # nor another vendor's virtual interface: a RouterOS bridge or an
+    # IOS-XE VirtualPortGroup is no loopback, and the LAN address of
+    # one was written on ``loopback0``.
     return None
