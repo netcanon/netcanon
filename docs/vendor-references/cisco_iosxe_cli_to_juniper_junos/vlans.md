@@ -302,7 +302,7 @@ again against pages fetched on 2026-10-14.
 | Arista EOS | `switchport trunk native vlan`, a line of its own | **not established** | nothing: Arista's sentences read both ways (A1), and no account of the case was found | `LIST_DECIDES`, for how the text is written and no more |
 | Aruba AOS-CX | `vlan trunk native`, a line of its own | untagged frames dropped on receive; the native VLAN not forwarded | HPE's sentences (H4, H5, H6) | `LIST_DECIDES` |
 | Junos, ELS grammar | `native-vlan-id` on the physical interface, beside the unit's `vlan members` | the unit has to have the native VLAN for untagged packets to be received; that a frame is dropped otherwise is not printed, and the send direction is not established | Juniper's requirement and its procedure (J3) | `LIST_DECIDES` |
-| Junos, older grammar (`port-mode trunk`) | `native-vlan-id` under the unit, beside `vlan members` | carried untagged both ways -- and when the VLAN is ALSO on `vlan members`, sent TAGGED | one Juniper knowledge-base article for EX Series, read in an archived copy (J4) | none: the parser reads this grammar as the ELS one (see below) |
+| Junos, older grammar (`port-mode trunk`) | `native-vlan-id` under the unit, beside `vlan members` | carried untagged both ways -- and when the VLAN is ALSO on `vlan members`, sent TAGGED | one Juniper knowledge-base article for EX Series, read in an archived copy (J4); the statement's page (J5) | the parser reads it by itself: off the members it is put into the list, on them it is said in a row (see below) |
 | Dell OS10 | the trunk's `switchport access vlan`; the allowed line names tagged VLANs | no such state: the access VLAN is carried, and cannot be on the allowed line as well | Dell's sentences (D3, D4); one Dell article for "cannot" (D2) | `BESIDE_THE_LIST` |
 | Aruba AOS-S | a VLAN's `untagged <ports>` line; there is no allowed list | no such state: the port carries the VLAN that lists it untagged | HPE's sentences for receive (H7); HPE's examples for send (H6) | none: it is told VLAN by VLAN |
 
@@ -669,6 +669,16 @@ default (`wants_no_untagged_vlan`, same module):
   the members as well: "MGMT IS a member of the trunk and native
   VLANs: Transmit = tagged (pass) Receive = untagged (pass - mapped
   to MGMT)".
+- **J5** -- Juniper, *native-vlan-id*, the configuration statement for
+  EX Series switches, Junos OS 13.2:
+  <https://juniper.net/documentation/en_US/junos13.2/topics/reference/configuration-statement/native-vlan-id-bridging.html>.
+  Syntax `native-vlan-id vlan-id;` at `[edit interfaces
+  interface-name unit 0 family ethernet-switching]`, "Statement
+  introduced in Junos OS Release 9.0 for EX Series switches";
+  "Configure the VLAN identifier to associate with untagged packets
+  received on the interface"; the option is "Numeric identifier of
+  the VLAN", range 0 through 4095.  The page says nothing of the
+  trunk's members.
 
 ### Not established from a vendor's page
 
@@ -681,7 +691,9 @@ default (`wants_no_untagged_vlan`, same module):
   not a member (the requirement is printed, the consequence is not);
   the send direction; whether `vlan members all` takes the native
   VLAN in.
-- **Junos, older grammar**: anything beyond the one archived article.
+- **Junos, older grammar**: anything beyond the one archived article
+  and the statement's page; whether the statement takes a VLAN's name
+  (J5 names a number only, and the parser reads a number only).
 - **OS10**: what `no switchport access vlan` leaves a trunk with --
   no untagged VLAN, or VLAN 1.  Dell's pages do not agree: the
   command page says VLAN 1 (D6), the VLAN-stacking notes describe the
@@ -788,9 +800,14 @@ default (`wants_no_untagged_vlan`, same module):
   takes the older grammar the native VLAN belongs OFF `vlan members`
   (J4): an output of this codec is not for such a switch as it
   stands.  The Junos parser reads `port-mode trunk` as it reads
-  `interface-mode trunk` and does not read `native-vlan-id` under the
-  unit, so a trunk in the older grammar loses its native VLAN on the
-  way in.
+  `interface-mode trunk`, and reads `native-vlan-id` under the unit by
+  the older grammar's own rule (J4): a native VLAN off the members is
+  the trunk's native VLAN and is put into its list; one on the
+  members as well -- received untagged and sent tagged, which the
+  tree has no form for -- is said in a row, and the VLAN stays on the
+  list, tagged.  So is one on a port that is not a trunk, one beside
+  a `native-vlan-id` on the interface itself, and one that is not a
+  VLAN id (1 to 4094).
 - A trunk that states no native VLAN has its platform's default in
   the tree (the second table), where that default is an id: the
   parsers of IOS-XE, NX-OS, EOS and AOS-CX put `trunk_native_vlan =

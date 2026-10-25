@@ -313,10 +313,14 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   belongs OFF the members: Juniper's knowledge base (KB17419, for EX
   Series, read in an archived copy) has it carried untagged both
   ways when it is not a member, and SENT TAGGED when it is.  An
-  output of this codec is not for such a switch as it stands.  And
-  as a source, a trunk in that grammar is read as an ELS one and its
-  `native-vlan-id` under the unit is not read: the port's untagged
-  VLAN is lost, and the job does not say so.  A Junos trunk with no
+  output of this codec is not for such a switch as it stands.  As a
+  source, that grammar's `native-vlan-id` under the unit ("Configure
+  the VLAN identifier to associate with untagged packets received on
+  the interface") is read: off the members it is the trunk's native
+  VLAN, carried untagged, and written in the ELS grammar.  What the
+  tree has no form for is said in a row: a native VLAN that is a member as well (received untagged and sent tagged, which the tree has no form for), one on a port that is not a trunk, one beside a `native-vlan-id` on the interface itself, and one that is not a VLAN id.  ⚠️ Up to 0.7.7
+  the statement was not read at all: the port's untagged VLAN was
+  lost, and the job did not say so.  A Junos trunk with no
   `native-vlan-id` has no untagged VLAN (Juniper: "By default, the
   untagged packets are dropped on trunk interfaces."), and is
   written none.  **As a target, a Cisco, Arista or AOS-CX trunk that

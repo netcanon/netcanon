@@ -309,15 +309,19 @@ per_field_expectation:
     references: [junos-aoscx-surface]
 
   "vlans[].untagged_ports":
-    disposition: not_applicable
-    note: >
-      Trivially empty on all 11 cells — no Junos fixture in this corpus
-      populates VLAN untagged/access membership, and juniper_junos declares
-      nothing at `/vlans/vlan/untagged-ports`.  A source-side absence, so
-      there is no observation and no loss to record.  aruba_aoscx DOES
-      declare the path supported, so access-port membership authored
-      directly on the target will stick — which makes this the one part of
-      the L2 edge worth re-authoring rather than working around.
+    disposition: unsupported
+    reason: >
+      Lost with `vlans[].tagged_ports`, below, and by the same render.
+      One Junos source in this corpus carries a VLAN untagged on a port:
+      the synthetic kitchen sink, whose trunk `ge-0/0/1` states VLAN 1
+      (`default`) as its native VLAN in the grammar before ELS.  The
+      AOS-CX render writes `no routing` and the `vlan trunk` lines only
+      for a name its own classifier reads as a port or a LAG, and the
+      mesh renders without the port translator, so `ge-0/0/1` gets no
+      `vlan trunk native` line and VLAN 1 comes back with no untagged
+      port -- 1 cell, 1 record.  aruba_aoscx declares the path
+      supported; as with `tagged_ports`, the measured behaviour decides
+      for this pair.  Re-apply the native VLAN with the trunk.
     references: [junos-aoscx-surface]
 
   "vlans[].tagged_ports":

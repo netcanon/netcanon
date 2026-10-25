@@ -923,6 +923,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                         seen_vids.add(vid)
                         iface.trunk_allowed_vlans.append(vid)
 
+    # The older grammar's native VLAN, which its trunk carries beside
+    # its members, now that each list is what its members name.
+    older_native = _older_grammar_native(iface_state, iface_by_name)
+
     # 3. Attach IRB SVI L3 addresses to the matching CanonicalVlan
     #    AND prune the redundant irb.<vid> interface — but ONLY
     #    when:
@@ -1212,6 +1216,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         *unread_tags,
         *_in_several_vlans_row(in_several),
         *_no_native_unit_row(no_native_unit),
+        *_older_native_rows(older_native),
     ]
     if not cut_lines:
         return intent, raw
@@ -2605,6 +2610,18 @@ def _apply_interfaces(  # noqa: C901
                 "l2_vlan_member_names", [],
             ).append(tokens[7])
 
+        # ``unit 0 family ethernet-switching native-vlan-id <id>``: the
+        # older grammar's native VLAN, beside the trunk's members
+        # (:func:`_older_grammar_native`).  The last one read stands.
+        if (
+            unit_num == 0
+            and len(tokens) >= 7
+            and tokens[3] == "family"
+            and tokens[4] == "ethernet-switching"
+            and tokens[5] == "native-vlan-id"
+        ):
+            target_state["unit_native_vlan"] = tokens[6]
+
         # --- Phase 4 rank-4: IRB SVI L3 ---
         # ``set interfaces irb unit <vid> family inet address <ip>/<prefix>``
         # — Wave C extension: detect the ``virtual-gateway-address
@@ -2911,6 +2928,104 @@ def _in_several_vlans_row(names: list[str]) -> list[str]:
         f"access port (no interface-mode is access) that names more than "
         f"one VLAN is written in its first VLAN only"
     ]
+
+
+#: Why an older-grammar ``native-vlan-id`` is not translated
+#: (:func:`_older_grammar_native`), in the order of the rows.
+OLDER_NATIVE_ON_THE_MEMBERS = (
+    "also on the trunk's vlan members, where it is received untagged "
+    "and sent tagged (Juniper KB17419), which the tree has no form for"
+)
+OLDER_NATIVE_BESIDE_ITS_OWN = "beside a native-vlan-id on the interface itself"
+OLDER_NATIVE_NOT_A_TRUNK = "on a port that is not a trunk"
+OLDER_NATIVE_NOT_AN_ID = "not one VLAN id"
+OLDER_NATIVE_REASONS = (
+    OLDER_NATIVE_ON_THE_MEMBERS, OLDER_NATIVE_BESIDE_ITS_OWN,
+    OLDER_NATIVE_NOT_A_TRUNK, OLDER_NATIVE_NOT_AN_ID,
+)
+
+
+def _older_grammar_native(
+    iface_state: dict[str, dict[str, Any]],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> list[tuple[str, str]]:
+    """Read the older grammar's native VLAN onto its trunk, and return
+    each such statement that is not translated.
+
+    The grammar of EX switches before ELS states a trunk's native VLAN
+    under the unit, ``unit 0 family ethernet-switching native-vlan-id
+    <id>`` ("Configure the VLAN identifier to associate with untagged
+    packets received on the interface", Juniper, the statement's page
+    for EX Series), BESIDE its ``vlan members``: a native VLAN that
+    is not a member is carried untagged both ways, and one that is a
+    member as well is received untagged and sent tagged (KB17419, for
+    non-ELS EX switches).  So the first is the tree's native VLAN,
+    put into the trunk's list (``NATIVE_VLAN_AND_THE_LIST`` in
+    ``codecs/_helpers.py``: the list is what the trunk carries), and
+    the second has no form in the tree: the trunk keeps the VLAN on
+    its list, tagged, and the statement is said.  It was not read at
+    all, and the trunk's untagged VLAN was lost with nothing said.
+    The ELS statement, on the interface itself, is read where it is
+    met (``trunk_native_vlan``).
+
+    Returns:
+        ``(what is shown, why)`` for each statement not translated,
+        in the order of the interfaces: what is shown is the
+        interface, and the id in brackets where it is one.
+    """
+    unread: list[tuple[str, str]] = []
+    for name, state in ticked(iface_state.items()):
+        word = state.get("unit_native_vlan")
+        iface = iface_by_name.get(name)
+        if word is None or iface is None:
+            continue
+        vid = a_tag(word)
+        if vid is None:
+            unread.append((name, OLDER_NATIVE_NOT_AN_ID))
+            continue
+        shown = f"{name} ({vid})"
+        if iface.switchport_mode != "trunk":
+            unread.append((shown, OLDER_NATIVE_NOT_A_TRUNK))
+        elif iface.trunk_native_vlan is not None:
+            unread.append((shown, OLDER_NATIVE_BESIDE_ITS_OWN))
+        elif vid in iface.trunk_allowed_vlans:
+            unread.append((shown, OLDER_NATIVE_ON_THE_MEMBERS))
+        else:
+            # Before the first id greater than it, as
+            # ``_helpers.trunk_list_read`` puts it for the platforms
+            # that state the untagged VLAN beside the list: a list in
+            # rising order stays in rising order.
+            listed = iface.trunk_allowed_vlans
+            at = next((n for n, held in enumerate(listed) if held > vid), len(listed))
+            iface.trunk_native_vlan = vid
+            listed.insert(at, vid)
+    return unread
+
+
+def _older_native_rows(unread: list[tuple[str, str]]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for each reason an
+    older-grammar ``native-vlan-id`` is not translated
+    (:func:`_older_grammar_native`), a few named and the rest counted.
+
+    Returns:
+        A row for each reason that has a statement, in the order of
+        :data:`OLDER_NATIVE_REASONS`.
+    """
+    rows: list[str] = []
+    for reason in OLDER_NATIVE_REASONS:
+        named = [shown for shown, why in unread if why == reason]
+        if not named:
+            continue
+        shown = ", ".join(named[:IN_SEVERAL_SHOWN])
+        rest = len(named) - IN_SEVERAL_SHOWN
+        if rest > 0:
+            shown += f" and {rest} more"
+        rows.append(
+            f"interfaces {shown}: unit 0 family ethernet-switching "
+            f"native-vlan-id -- {reason}, so the statement is not "
+            f"translated"
+        )
+    return rows
 
 
 def _native_units(intent: CanonicalIntent) -> list[str]:
