@@ -401,14 +401,25 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   FortiGate `VL_100`) is written here and read back.  Juniper's
   router examples tag unit 0; the EX and QFX references say a tag
   "cannot be configured on logical interface unit 0".  Onto another
-  vendor it goes named by its TAG (`Ethernet1.54`): `.0` is the
-  port itself everywhere else.  Between two Junos configs it stays
-  unit 0, an `ae` or `reth` unit 0 included (`set interfaces ae2
+  vendor it goes named by its TAG (`Ethernet1.54`; of two tags, its
+  inner tag): `.0` is the port itself everywhere else.  Between two
+  Junos configs it stays unit 0, an `ae` or `reth` unit 0 included (`set interfaces ae2
   unit 0 vlan-id 54`).  A routing instance or a route that names
   `ge-0/0/1.0` names the unit, and follows it.  A unit 0 with no
   tag is the device, as before.  A unit 0 tagged 54 beside a unit 54
   of the same port is one name on another vendor: the job is
-  `partial` and lists both (`fused_ports`).  A tagged unit 0 with
+  `partial` and lists both (`fused_ports`).  From another vendor a
+  unit goes where its port goes with its number up to 16,384 --
+  Juniper's `unit` statement: "Range: 0 through 16,384" -- and one
+  numbered above that goes named by its 802.1Q tag (IOS-XE
+  `GigabitEthernet0/0/1.20000` with `encapsulation dot1Q 200` is
+  `unit 200 vlan-id 200`) -- of two tags, its inner tag, since the
+  outer can be every unit's of a port (the IOS-XE carrier capture's
+  `GigabitEthernet2/0/4.223415`, `dot1Q 2234 second-dot1q 15`, is
+  `unit 15 vlan-tags outer 2234 inner 15`); one with no tag is not
+  sent after its port, and the job is `partial` and lists it.  ⚠️ Up
+  to 0.7.7 it was written with its own number (`unit 20000`), in a
+  job that said `completed`.  A tagged unit 0 with
   `family ethernet-switching` has no form in the tree: it is left
   out, its device kept, and a row of the Tier-3 banner says so.
   ⚠️ Up to 0.7.7 a tagged unit 0 was read onto its device: its tag

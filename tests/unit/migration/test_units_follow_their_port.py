@@ -1269,7 +1269,8 @@ class TestAUnitOfTooManyDigits:
         """The bound says what a unit is.  It is not what keeps the
         job alive: with the bound lifted, a unit of any length goes
         with its port like every other unit, and is still only ever
-        read as text."""
+        read as text -- onto Junos, which numbers a unit to 16,384,
+        compared with that bound as text, and named by its tag."""
         monkeypatch.setattr(translator, "UNIT_MAX_DIGITS", 10_000)
         ios, target = get_codec("cisco_iosxe_cli"), get_codec(target_name)
         digits = _TOO_MANY_DIGITS[0]
@@ -1277,8 +1278,9 @@ class TestAUnitOfTooManyDigits:
         text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
         job = run_plan_with_overrides(ios, target, text, port_rename_map={})
         assert job.status == MigrationJobStatus.completed, job.error
+        unit = {"arista_eos": digits, "juniper_junos": "5"}[target_name]
         assert job.port_renames[name] == (
-            job.port_renames["GigabitEthernet0/0/1"] + "." + digits
+            job.port_renames["GigabitEthernet0/0/1"] + "." + unit
         )
 
     def test_ten_digits_are_a_unit_eleven_not(self) -> None:
