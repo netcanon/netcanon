@@ -35,9 +35,12 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import unicodedata
 from collections.abc import Iterable
+from itertools import groupby
 from typing import Any
 
+from ..._one_line import LINE_BREAKS
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -373,25 +376,85 @@ def _parse_kv(line: str) -> dict[str, str]:
     return pairs
 
 
-def _unescape(value: str) -> str:
-    """Reverse :func:`~netcanon.migration.codecs.mikrotik_routeros.render._escape`.
+#: An escape in a string: a run of hex escapes (``\C3\A9``, group 1),
+#: or a backslash and the character after it (group 2).  MikroTik,
+#: "Scripting" (https://help.mikrotik.com/docs/spaces/ROS/pages/47579229/Scripting):
+#: ``\xx`` is "a print character from hex value.  Hex numbers should
+#: use capital letters" -- so ``\a`` is the bell and ``\A1`` a byte.
+_AN_ESCAPE = re.compile(r"((?:\\[0-9A-F]{2})+)|\\(.)", re.DOTALL)
 
-    Single left-to-right pass: a backslash consumes the next character
-    literally (so ``\\\\`` → ``\\`` and ``\\"`` → ``"``), which is the exact
-    inverse of doubling backslashes then escaping quotes.  A trailing lone
-    backslash is emitted verbatim."""
+#: The escapes of a letter, from the same table: ``\n``, ``\r``,
+#: ``\t``, ``\v``, ``\f`` and ``\_`` (a space).  The page gives ``\f``
+#: as "form feed (0xFF)", a name and a number that disagree; it is read
+#: as the form feed, a line break, which the pipeline writes as a space
+#: and says (:mod:`netcanon.migration._one_line`) -- as it does the
+#: others that end a line.  ``\a`` (bell) and ``\b`` (backspace) are
+#: kept as written: see :func:`_unescape`.  Any other character after a
+#: backslash is itself (``\"``, ``\\``, ``\$``, ``\?``).
+_A_LETTER_ESCAPE = {
+    "n": "\n", "r": "\r", "t": "\t", "v": "\x0b", "f": "\x0c", "_": " ",
+    "a": "\\a", "b": "\\b",
+}
+
+
+def _acted_on(char: str) -> bool:
+    """Whether *char* is a control character a terminal acts on rather
+    than shows: neither white space it reads as such (a tab, a line
+    break) nor text."""
+    return (
+        unicodedata.category(char) == "Cc"
+        and char != "\t"
+        and char not in LINE_BREAKS
+    )
+
+
+def _bytes_read(written: str) -> str:
+    """The text a run of hex escapes (``\\C3\\A9\\41``) stands for.
+
+    RouterOS keeps a string as bytes, and an export writes each byte
+    outside printable ASCII as an escape; the text does not say which
+    encoding the bytes are in.  A byte below 0x80 is that character; a
+    run of bytes above it is read as UTF-8, and where it is not UTF-8
+    (a comment typed in Windows-1251, say) it is kept as written -- the
+    escapes, as the export has them -- rather than read in a guessed
+    encoding.  So is a character :func:`_acted_on`."""
     out: list[str] = []
-    i = 0
-    n = len(value)
-    while i < n:
-        c = value[i]
-        if c == "\\" and i + 1 < n:
-            out.append(value[i + 1])
-            i += 2
-        else:
-            out.append(c)
-            i += 1
+    escapes = written.split("\\")[1:]
+    for high, run in groupby(escapes, key=lambda escape: escape[0] in "89ABCDEF"):
+        for piece in [list(run)] if high else [[escape] for escape in run]:
+            as_written = "".join(f"\\{escape}" for escape in piece)
+            try:
+                text = bytes.fromhex("".join(piece)).decode("utf-8")
+            except UnicodeDecodeError:
+                out.append(as_written)
+                continue
+            out.append(as_written if any(map(_acted_on, text)) else text)
     return "".join(out)
+
+
+def _an_escape_read(m: re.Match[str]) -> str:
+    if m.group(1) is not None:
+        return _bytes_read(m.group(1))
+    return _A_LETTER_ESCAPE.get(m.group(2), m.group(2))
+
+
+def _unescape(value: str) -> str:
+    """The text a RouterOS string stands for, its quotes taken off.
+
+    Reads each escape of MikroTik's table (see :data:`_AN_ESCAPE`):
+    ``\\\\``, ``\\"`` and ``\\$`` -- the escapes
+    :func:`~netcanon.migration.codecs.mikrotik_routeros.render._escape`
+    writes -- are the character; ``\\_`` a space; ``\\t`` a tab;
+    ``\\n``, ``\\r``, ``\\v`` and ``\\f`` a line break; a run of hex
+    escapes the text its bytes are in UTF-8 (:func:`_bytes_read`).  A
+    character a terminal acts on rather than shows (``\\a``, ``\\b``,
+    ``\\1B``) is kept as the export wrote it, a backslash and all: the
+    tree is written into another vendor's config, and read on a
+    terminal.  A trailing lone backslash is kept as it is.
+
+    Up to 0.7.7 a backslash took the character after it whatever it
+    was, so ``\\C3\\A9`` was read as ``C3A9`` and ``\\n`` as ``n``."""
+    return _AN_ESCAPE.sub(_an_escape_read, value)
 
 
 # Cross-vendor render path emits ``[ find name=X ]`` against the
