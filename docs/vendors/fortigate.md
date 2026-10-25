@@ -336,13 +336,18 @@ loses the layout too.
   without `ENC` -- a config typed by hand, or a template -- is the
   secret itself, and migrates.  With 0.7.7 or earlier such a secret
   was refused on every other target as if it were encrypted.
-- **A VLAN on a VLAN is one tag on a VLAN interface.**  A VLAN
-  interface whose `set interface` is another VLAN interface (Q-in-Q
-  on FortiOS) is read as a VLAN interface of one tag on that VLAN
-  interface, not as a sub-interface of two tags.  Onto a target that
-  writes tags the job is `partial`; a source's sub-interface of two
-  tags (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has no
-  form here, and is `partial` too.
+- **Two tags are left out.**  A VLAN interface whose `set
+  interface` is another VLAN interface, and one that says `set
+  vlan-protocol 8021ad`, is left out with its addresses, and a row
+  of the Tier-3 banner names it (a route or a DHCP server that names
+  it keeps the name, which is then defined by nothing in the
+  output): the tree's tags are 802.1Q
+  tags, Fortinet documents Q-in-Q with an 802.1ad outer tag ("QinQ",
+  FortiOS Administration Guide), and whether a VLAN interface on an
+  `8021q` one sends two 802.1Q tags is not established.  ⚠️ Up to
+  0.7.7 each was read as a VLAN interface of one 802.1Q tag.  A
+  source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS
+  `inner`, Junos `vlan-tags`) has no form here, and is `partial`.
 - **Names no other vendor has** — a hardware switch (`internal`,
   `lan`) and the SSL-VPN pseudo-interface (`ssl.root`) have no form
   on another vendor and are dropped, with whatever address they

@@ -153,6 +153,11 @@ class MikroTikRouterOSCodec(CodecBase):
             # vlan-id=10`), which the parser reads back as a
             # sub-interface of the port.
             "/interfaces/interface/dot1q-vlan",
+            # Its inner tag is a VLAN interface on that one (Q-in-Q,
+            # "adding one VLAN interface over another"), which the
+            # parser reads back as a sub-interface of the port of two
+            # tags.
+            "/interfaces/interface/dot1q-inner-vlan",
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/description",  # run3 — `comment=...`
@@ -407,17 +412,6 @@ class MikroTikRouterOSCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
-                path="/interfaces/interface/dot1q-inner-vlan",
-                reason=(
-                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
-                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
-                    "outer N inner M`) has no form in this codec.  A RouterOS "
-                    "`/interface vlan` on another `/interface vlan` is read as "
-                    "a VLAN interface of one tag, which is not this field.  "
-                    "Declared so that it is reported as a drop."
-                ),
-            ),
-            UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "RouterOS renders no VRF / routing-instance (see "
@@ -573,8 +567,12 @@ class MikroTikRouterOSCodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 `/path` blocks the parser drops (`/ip firewall`,
         # `/queue`, `/ip ipsec`, `/routing bgp/ospf/filter`).
-        # Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_routeros(raw)
+        # Notification-only.  After them, the rows the parser itself
+        # made: a VLAN interface whose tags the tree has no form for.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_routeros(raw),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

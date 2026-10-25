@@ -32,6 +32,11 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalVlan,
+)
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
 
@@ -350,16 +355,28 @@ def test_a_stated_8021ad_proto_is_left_out():
 
 def test_a_vlan_that_carries_a_device_is_written_8021q():
     """A VLAN interface that another rides on is written ``802.1q``:
-    blank, OPNsense would send it as 802.1ad."""
-    ros = """# by RouterOS 7.12
-/interface ethernet
-set [ find default-name=ether1 ] name=ether1
-/interface vlan
-add interface=ether1 name=vlan0.100 vlan-id=100
-add interface=vlan0.100 name=vlan0.200 vlan-id=200
-"""
-    job = _run("mikrotik_routeros", "opnsense", ros)
-    written = _opnsense_devices(job.rendered)
+    blank, OPNsense would send it as 802.1ad.
+
+    No parser makes such a tree now -- RouterOS reads a VLAN interface
+    on a sub-interface as one sub-interface of two tags, and FortiOS
+    and OPNsense leave a second tag out -- so the tree is built here,
+    as the RouterOS parser made it before."""
+    tree = CanonicalIntent(
+        source_vendor="mikrotik_routeros",
+        interfaces=[
+            CanonicalInterface(name="igb1", interface_type="ianaift:ethernetCsmacd"),
+            CanonicalInterface(
+                name="igb1.100", interface_type="ianaift:ethernetCsmacd",
+                vlan_parent="igb1", dot1q_vlan=100,
+            ),
+            CanonicalInterface(
+                name="vlan0.200", interface_type="ianaift:l3ipvlan",
+                vlan_parent="igb1.100",
+            ),
+        ],
+        vlans=[CanonicalVlan(id=200, name="vlan0.200")],
+    )
+    written = _opnsense_devices(get_codec("opnsense").render(tree))
     outer = [v for v in written.values() if v[1] == "100"]
     assert outer and outer[0][2] == "802.1q", written
 

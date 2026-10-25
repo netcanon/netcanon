@@ -746,7 +746,7 @@ def split_unit(name: str) -> tuple[str, str] | None:
 
 def stated_sub_interfaces(intent: CanonicalIntent) -> dict[str, tuple[str, int]]:
     """Sub-interfaces whose config states the port they ride on apart
-    from their name: ``{name: (port, tag)}``.
+    from their name: ``{name: (port, unit)}``.
 
     RouterOS ``/interface vlan add interface=ether3 name=gn-mgmt
     vlan-id=11`` is one: an operator's own name, which says nothing of
@@ -754,11 +754,17 @@ def stated_sub_interfaces(intent: CanonicalIntent) -> dict[str, tuple[str, int]]
     with a tag, only for a VLAN interface whose parent is a port or a
     LAG; one on a bridge or a switch interface stays a VLAN interface,
     typed as one, and is not here.  The translator sends each after
-    its port, named by its tag (:func:`translate_port_names`), and the
-    model path reads which went so from the same rule
-    (``_units_that_followed``)."""
+    its port, named by a unit that is its tag (:func:`translate_port_names`),
+    and the model path reads which went so from the same rule
+    (``_units_that_followed``).  The unit of one that matches two tags
+    is its INNER tag: its outer tag is the tag of the sub-interface it
+    rides on (RouterOS ``add interface=<that one>``), named by that
+    tag on the same port."""
     return {
-        iface.name: (iface.vlan_parent, iface.dot1q_vlan)
+        iface.name: (
+            iface.vlan_parent,
+            iface.dot1q_vlan if iface.dot1q_inner_vlan is None else iface.dot1q_inner_vlan,
+        )
         for iface in intent.interfaces
         if iface.dot1q_vlan is not None and iface.vlan_parent
         and iface.vlan_parent != iface.name
@@ -1148,9 +1154,8 @@ def translate_port_names(  # noqa: C901
     named_by_tag = target_codec.units_are_named_by_their_tag
     # Sub-interfaces whose config states the port they ride on apart
     # from their name, and that port (:func:`stated_sub_interfaces`).
-    stated_ports: dict[str, str] = {
-        name: port for name, (port, _tag) in stated_sub_interfaces(intent).items()
-    }
+    stated = stated_sub_interfaces(intent)
+    stated_ports: dict[str, str] = {name: port for name, (port, _unit) in stated.items()}
 
     def kind_of(name: str) -> str:
         try:
@@ -1241,8 +1246,9 @@ def translate_port_names(  # noqa: C901
         states apart from its name.  Such a name is the operator's
         own (``gn-mgmt``, ``vlan0.10``) and says nothing another
         platform can read, so across vendors it goes where its port
-        goes, named by its tag (``<port>.<tag>``), as a unit is; its
-        port is swept apart, as a reference.  Between two configs of
+        goes, named by its tag (``<port>.<tag>``; for two tags, its
+        inner tag), as a unit is; its port is swept apart, as a
+        reference.  Between two configs of
         one codec the name stands, as every name nobody mapped does.
         Its port dropped, it is dropped with it."""
         where = resolve(port)
@@ -1259,7 +1265,7 @@ def translate_port_names(  # noqa: C901
             auto_dropped.add(name)
             memo[name] = name
             return name
-        out = name if same_codec else f"{where}.{tags[name]}"
+        out = name if same_codec else f"{where}.{stated[name][1]}"
         memo[name] = out
         if out != name:
             applied[name] = out

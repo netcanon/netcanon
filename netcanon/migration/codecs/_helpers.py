@@ -2049,6 +2049,19 @@ def unread_tags_row(where: str, statement: str) -> str:
     )
 
 
+#: How many names a row of ``dropped_tier3_sections`` that stands for
+#: many shows (:func:`a_few_named`); it counts the rest.
+NAMES_SHOWN = 3
+
+
+def a_few_named(names: Sequence[str]) -> str:
+    """The first :data:`NAMES_SHOWN` of *names* and a count of the
+    rest, so that a row for thousands of them is one line."""
+    shown = ", ".join(names[:NAMES_SHOWN])
+    rest = len(names) - NAMES_SHOWN
+    return f"{shown} and {rest} more" if rest > 0 else shown
+
+
 def without_unread_tags(
     raw: str,
     is_tag_statement: Callable[[str], bool],

@@ -592,6 +592,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS VLAN on a VLAN is two tags, and a FortiOS one is said.**
+  "In RouterOS, Q-in-Q can be configured by adding one VLAN interface
+  over another" (MikroTik, "VLAN"): `add interface=ether1 name=vlan1
+  vlan-id=11` and `add interface=vlan1 name=vlan2 vlan-id=12` send
+  both tags on `ether1`.  The parser read the second as a VLAN
+  interface of one tag on the first, and so did the FortiOS parser a
+  VLAN interface whose `set interface` is a VLAN interface: an SVI of
+  the inner tag and a VLAN no port carried on every target that has
+  the two, in jobs that said `completed` (with a port map; without
+  one the operator's name held the job).  A RouterOS VLAN interface
+  on a sub-interface of a port or a bond is now a sub-interface of
+  that port with two 802.1Q tags, the first's outside, and reaches
+  IOS-XE, IOS XR, EOS and Junos with both; across vendors it is named
+  by its INNER tag (`ether1` -> `GigabitEthernet0/1.12`), its outer
+  sub-interface by its own.  RouterOS writes a source's sub-interface
+  of two tags back the same way, on the VLAN interface of its port
+  with its outer tag -- made where the tree has none, `<port>.<outer>`
+  (another name where the output has that one), under a comment that
+  says so -- and reads it back (`/interfaces/interface/dot1q-inner-vlan`
+  is supported).  What the tree has no form for is left out, with
+  its addresses (a route or a DHCP pool that names it keeps the
+  name), and a row of the Tier-3 banner names a few and counts the
+  rest: a RouterOS VLAN interface that says
+  `use-service-tag=yes` ("IEEE 802.1ad compatible Service Tag") on a
+  port, a bond or a VLAN interface; one on a VLAN interface that is
+  not one 802.1Q tag on a port or a bond (a bridge's VLAN interface,
+  a third tag); a FortiOS VLAN interface that says `set vlan-protocol
+  8021ad`; and a FortiOS VLAN interface on a VLAN interface.  Fortinet
+  documents Q-in-Q with an 802.1ad outer tag ("QinQ", FortiOS
+  Administration Guide), and whether FortiOS sends two 802.1Q tags
+  for one on an `8021q` VLAN interface is not established.
 - **A Junos trunk's native VLAN in the grammar before ELS is read.**
   EX switches before ELS state a trunk's native VLAN under the unit,
   `unit 0 family ethernet-switching native-vlan-id <id>` ("Configure
@@ -763,8 +794,9 @@ timestamp if your timezone matters for an audit.
   sub-interface of it, typed as its parent, with its tag and no
   VLAN, its alias the sub-interface's description; on a FortiLink
   aggregate, a hardware or software switch (`internal`, `lan`),
-  another VLAN interface (Q-in-Q), the interface named `fortilink`,
-  or anything else, it is a VLAN interface and a VLAN, as before.
+  the interface named `fortilink`, or anything else, it is a VLAN
+  interface and a VLAN, as before (one on another VLAN interface is
+  left out: "A RouterOS VLAN on a VLAN is two tags", above).
   Across vendors a sub-interface goes where its parent goes, named
   by its tag; between two FortiOS configs it keeps its name.  An
   aggregate's name is the operator's own, which no classifier
@@ -1351,11 +1383,8 @@ timestamp if your timezone matters for an audit.
   of the switch with the same id is still written.  A sub-interface
   that an entry names with no port in it rides on the parent chosen
   for every VLAN, under a `# review:` line.  A Q-in-Q sub-interface
-  is written with its outer tag, and the job is `partial`, the
-  validation report listing the inner tag
-  (`/interfaces/interface/dot1q-inner-vlan` is unsupported): the
-  IOS-XE carrier capture's job stays `partial` for its six such
-  units.  Over the committed captures one more job onto RouterOS
+  is a VLAN interface on the VLAN interface of its outer tag ("A
+  RouterOS VLAN on a VLAN is two tags", above).  Over the committed captures one more job onto RouterOS
   passes the validation report, the IOS XR CST capture's, which the
   port-name check (below) holds `partial` for its names, so that
   check now makes 217 of 587 jobs `partial`.
@@ -4515,17 +4544,16 @@ timestamp if your timezone matters for an audit.
   9216` is Junos `mtu 9230`, above the EX range); the device refuses
   the line at commit.  The IOS-XE NETCONF codec carries no MTU into
   the tree.
-- **A Q-in-Q sub-interface reaches four targets.**  IOS-XE, IOS XR,
-  EOS and Junos write a sub-interface's inner tag; onto NX-OS, whose
-  sub-interface statement this codec writes is one tag, and onto the
-  targets with no routed sub-interface of their own, the job is
-  `partial` and the validation report lists the inner tag.  A
-  RouterOS `/interface vlan` or a FortiOS VLAN interface whose own
-  interface is a VLAN interface -- Q-in-Q on those platforms -- is
-  read as a VLAN interface of one tag on that VLAN interface, not as
-  a sub-interface of two tags; the job is `partial` onto a target
-  that writes tags.  A VyOS `vif-s` block, and an 802.1ad tag from
-  any source, is left out with a row.  A VyOS `vif 0` is read as a
+- **A Q-in-Q sub-interface reaches five targets.**  IOS-XE, IOS XR,
+  EOS, Junos and RouterOS write a sub-interface's inner tag; onto
+  NX-OS, whose sub-interface statement this codec writes is one tag,
+  onto FortiOS, and onto the targets with no routed sub-interface of
+  their own, the job is `partial` and the validation report lists the
+  inner tag.  A FortiOS VLAN interface on a VLAN interface, a VyOS
+  `vif-s` block, and an 802.1ad tag from any source, is left out with
+  a row.  A RouterOS VLAN interface on a BRIDGE that says
+  `use-service-tag=yes` is read as the bridge's VLAN interface, as
+  before: the bridge's own tag type (`ether-type`) is not read.  A VyOS `vif 0` is read as a
   sub-interface of tag 0, which no 802.1Q VLAN has, and is written
   so onto the targets that write a tag; the IOS-XE, IOS XR and EOS
   parsers leave such a stanza out, with a row, when they read it.
