@@ -1,5 +1,7 @@
 # AOS-CX → AOS-S: measured canonical surface
 
+> **Update 2026-10-21 — none of the SVIs below is shut.**  The AOS-CX parser read every VLAN interface as down until a `no shutdown` said otherwise, and AOS-CX prints none under a VLAN interface that is up: the 16 `False` -> `True` moves of finding 1 were that reading, not a shut SVI coming back up.  A VLAN interface is now read as up unless it says `shutdown`.  One that does still arrives up on AOS-S, which holds no admin state for a VLAN's interface, in a job that says `completed`.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__aruba_aoss.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__aruba_aoss.yaml`.
 
