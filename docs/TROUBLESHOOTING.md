@@ -1472,6 +1472,25 @@ missing](#detection-proposes-a-device-and-says-ports-are-missing)).
 
 See [`vendors/fortigate.md`](vendors/fortigate.md#a-quoted-value-of-several-lines).
 
+### The job says a line holds a run of more than 4,300 digits
+
+- **`<codec>: line <n> holds a run of more than 4,300 digits, more
+  than a number is read from, so the text is not read`** -- Python
+  converts a string of digits to a number only up to a limit (4,300
+  digits unless the server sets another, and the sentence gives the
+  server's), and every parser reads numbers from runs of digits.  Line
+  `<n>` holds a run longer than that, so the text is not read at all,
+  whichever vendor it is read as.  No device configuration seen so far
+  holds a run of even a hundred digits: look at that line for text
+  that was pasted into it by mistake.  The sentence quotes nothing of
+  the line.  It is not a size limit, and no `NETCANON_CONFIG_LIMITS`
+  setting lifts it.
+- **`render failed: <codec>: a value of the tree (<field>) holds a run
+  of more than 4,300 digits ...`** -- the same, for a value that
+  reached the tree another way: an entry of the port map whose target
+  name holds such a run (`interfaces[].name`).  Give the port a shorter
+  name.
+
 ### The job warns "... held a line break: it is written on one line"
 
 A value of the config -- an interface's description, a VLAN's name,

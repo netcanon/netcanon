@@ -2324,6 +2324,14 @@ a job too, since there is no job to make of a request nobody read:
 
 `unlimited` is no limit and no time limit.
 
+**Nor is a number read past Python's limit, under any setting.**  A
+text that holds a run of more digits than Python converts to a number
+(4,300 digits by default) is refused in words, naming the line --
+`parse failed: <codec>: line <n> holds a run of more than 4,300
+digits ...` -- and a port map whose target holds one fails the job at
+render, naming the field.  It is not a size limit: `unlimited` does not
+lift it (see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md#the-job-says-a-line-holds-a-run-of-more-than-4300-digits)).
+
 **Requests at once.**  Every limit in the table is for one request.
 Under `small` the server also works on 1 request that reads config
 text at a time: a second waits its turn (inside its own 20 seconds), at

@@ -1013,7 +1013,8 @@ to the code's.
 ## Input Validation — Config Text (what reaches the output)
 
 **Files:** `netcanon/migration/_one_line.py`,
-`netcanon/migration/codecs/base.py` (`render`),
+`netcanon/migration/_long_numbers.py`,
+`netcanon/migration/codecs/base.py` (`parse`, `render`),
 `netcanon/services/migration_pipeline.py` (`run_plan`),
 `netcanon/tools/sanitize.py`, `netcanon/migration/codecs/_scanner.py`,
 `netcanon/migration/codecs/fortigate_cli/parse.py`
@@ -1064,6 +1065,20 @@ replacement message) is read as text, ended where the vendor ends it,
 and never as lines of configuration; a body that does not end, or
 whose lines end where the device would not end them, is refused.  The
 vendor pages say where each platform ends one.
+
+A number is read only where Python reads one
+(`netcanon/migration/_long_numbers.py`).  Python converts a string of
+digits to a number only up to a limit (`sys.get_int_max_str_digits()`),
+which bounds the time a conversion takes, and every parser reads numbers
+from the runs of digits its patterns take: a pasted run past the limit
+failed the job as a fault, in the interpreter's words, wherever the
+first conversion was.  `CodecBase.parse` refuses such a text before any
+parser reads it, naming the line and quoting nothing of it (a parse
+failure is logged), and `CodecBase.render` a tree whose value holds
+one, naming the field -- an operator's port map puts names into the
+tree too.  The limit is not raised: it is read when the check is made,
+and a server that sets another is held to its own.  Guarded by
+`tests/unit/migration/test_a_number_too_long_to_read.py`.
 
 ---
 

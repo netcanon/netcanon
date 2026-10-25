@@ -59,6 +59,7 @@ pipeline says each place and holds the job ``partial``.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -118,13 +119,19 @@ class _Walk:
     field is (a parser that appends to a list is not validated), and a
     list of values with no text in them, or of text with no line break
     in it, is read at once rather than value by value: a trunk's list
-    of every VLAN is 4,094 of them."""
+    of every VLAN is 4,094 of them.
+
+    *found_in*, where it is given, says whether a value holds what is
+    looked for in the place of ``pattern.search`` (a walk that does not
+    mend: :mod:`netcanon.migration._long_numbers`)."""
 
     def __init__(
         self, *, mend: bool, named: bool, first: bool,
         pattern: re.Pattern[str] = _A_RUN,
+        found_in: Callable[[str], object] | None = None,
     ) -> None:
         self.pattern = pattern
+        self.found_in = found_in or pattern.search
         self.mend = mend
         self.named = named
         self.first = first
@@ -134,7 +141,7 @@ class _Walk:
         return self.first and bool(self.found)
 
     def _one(self, value: str, where: str) -> str | None:
-        if self.pattern.search(value) is None:
+        if self.found_in(value) is None:
             return None
         self.found.append(where)
         return self.pattern.sub(" ", value) if self.mend else None
@@ -175,7 +182,7 @@ class _Walk:
         kinds = set(map(type, values))
         if kinds <= _NO_TEXT:
             return
-        if kinds == {str} and not self.pattern.search("".join(values)):
+        if kinds == {str} and not self.found_in("".join(values)):
             return
         for index, item in enumerate(ticked(values)):
             if isinstance(item, str):

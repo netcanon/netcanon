@@ -42,10 +42,12 @@ another, and a loss common to both cancels out.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
+from netcanon.migration import _long_numbers
 from netcanon.migration.canonical import port_names as translator
 from netcanon.migration.canonical.intent import CanonicalIntent
 from netcanon.migration.canonical.port_names import (
@@ -54,6 +56,7 @@ from netcanon.migration.canonical.port_names import (
     split_unit,
     translate_port_names,
 )
+from netcanon.migration.codecs.base import RenderError
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
 from netcanon.models.migration import MigrationJobStatus
@@ -1222,66 +1225,82 @@ class TestUnitsLeftToTheClassifier:
 _TOO_MANY_DIGITS = ("7" * 4301, "0" * 4301)
 
 
+def _read_whole(codec_name: str, text: str) -> CanonicalIntent:
+    """*text* parsed with Python's limit lifted for the parse alone,
+    so that its run of digits reaches the translator, which is then
+    run under the limit: a unit made a number there fails."""
+    before = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        return get_codec(codec_name).parse(text)
+    finally:
+        sys.set_int_max_str_digits(before)
+
+
 class TestAUnitOfTooManyDigits:
     """A pasted config can write any run of digits after a dot.  A
     rule that makes a number of the unit, to ask whether it is unit
-    0, fails the job: Python refuses to convert more than 4,300
-    digits.  The same config completes while such a name is left to
-    the classifier, so the unit is read as text.  And across
-    vendors a name that ends in more digits than a unit has is not
-    sent after its port: there it would reach the FortiOS and VyOS
-    renderers as ``<port>.<digits>``, which both make a VLAN id
-    of."""
+    0, fails: Python refuses to convert more than 4,300 digits.  So
+    the translator reads a unit as text, and across vendors a name
+    that ends in more digits than a unit has is not sent after its
+    port: there it would reach the FortiOS and VyOS renderers as
+    ``<port>.<digits>``, which both make a VLAN id of.
+
+    Under Python's limit such a text is refused at parse, in words
+    (``_long_numbers``), and a tree that holds such a name at render,
+    so the job never reaches the translator with it: the translator
+    is asked here on its own, under the limit, given what the parser
+    reads with the limit lifted."""
 
     @pytest.mark.parametrize("digits", _TOO_MANY_DIGITS, ids=["sevens", "zeros"])
     @pytest.mark.parametrize("target_name", list_public_codecs())
-    def test_a_run_of_digits_fails_no_job(self, target_name: str, digits: str) -> None:
-        """Onto every target.  Where the bare pipeline -- parse and
-        render, no translator -- gets through, so does the job, and
-        the name is neither renamed nor dropped.  (Its own renderer
-        fails on such a name whoever hands it over: IOS-XE sorts
-        interfaces by the numbers in their names.)"""
+    def test_a_run_of_digits_is_refused_in_words(self, target_name: str, digits: str) -> None:
+        """Onto every target, the job and the bare pipeline alike: the
+        text is not read, and the job says so by its line."""
         ios, target = get_codec("cisco_iosxe_cli"), get_codec(target_name)
         name = f"GigabitEthernet0/0/1.{digits}"
         text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
-        bare = run_plan(ios, target, text)
-        job = run_plan_with_overrides(ios, target, text, port_rename_map={})
-        if bare.status != MigrationJobStatus.failed:
-            assert job.status != MigrationJobStatus.failed, job.error
-        assert name not in job.port_renames and name not in job.port_drops
+        said = "parse failed: " + _long_numbers.parse_refused("cisco_iosxe_cli", 8)
+        for job in (run_plan(ios, target, text),
+                    run_plan_with_overrides(ios, target, text, port_rename_map={})):
+            assert job.status == MigrationJobStatus.failed
+            assert job.error == said
+            assert name not in job.port_renames and name not in job.port_drops
 
     @pytest.mark.parametrize("target_name", ["arista_eos", "juniper_junos"])
     def test_it_is_a_name_nobody_could_read(self, target_name: str) -> None:
-        """The job completes and says of the name what it says of
-        any name its classifier does not know."""
+        """The translator says of the name what it says of any name
+        its classifier does not know, and leaves it as it is -- which
+        the render then refuses in words."""
         ios, target = get_codec("cisco_iosxe_cli"), get_codec(target_name)
         name = "GigabitEthernet0/0/1." + _TOO_MANY_DIGITS[0]
-        text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
-        job = run_plan_with_overrides(ios, target, text, port_rename_map={})
-        assert job.status == MigrationJobStatus.completed
+        tree = _read_whole("cisco_iosxe_cli", _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name))
+        result = translate_port_names(tree, ios, target, rename_map={})
         assert (
             f"cisco_iosxe_cli: could not classify port name {name!r}; left verbatim"
-        ) in job.warnings
-        assert name in job.rendered and "10.54.0.1" in job.rendered
+        ) in result.warnings
+        assert name not in result.applied and name not in result.dropped
+        assert name in [i.name for i in tree.interfaces]
+        with pytest.raises(RenderError) as caught:
+            target.render(tree)
+        assert str(caught.value) == _long_numbers.render_refused(target_name, "interfaces[].name")
 
     @pytest.mark.parametrize("target_name", ["arista_eos", "juniper_junos"])
     def test_it_is_never_made_a_number(self, monkeypatch, target_name: str) -> None:
         """The bound says what a unit is.  It is not what keeps the
-        job alive: with the bound lifted, a unit of any length goes
-        with its port like every other unit, and is still only ever
-        read as text -- onto Junos, which numbers a unit to 16,384,
-        compared with that bound as text, and named by its tag."""
+        translator from failing: with the bound lifted, a unit of any
+        length goes with its port like every other unit, and is still
+        only ever read as text -- onto Junos, which numbers a unit to
+        16,384, compared with that bound as text, and named by its
+        tag."""
         monkeypatch.setattr(translator, "UNIT_MAX_DIGITS", 10_000)
         ios, target = get_codec("cisco_iosxe_cli"), get_codec(target_name)
         digits = _TOO_MANY_DIGITS[0]
         name = f"GigabitEthernet0/0/1.{digits}"
-        text = _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name)
-        job = run_plan_with_overrides(ios, target, text, port_rename_map={})
-        assert job.status == MigrationJobStatus.completed, job.error
+        tree = _read_whole("cisco_iosxe_cli", _IOS_UNIT_0.replace("GigabitEthernet0/0/1.0", name))
+        result = translate_port_names(tree, ios, target, rename_map={})
         unit = {"arista_eos": digits, "juniper_junos": "5"}[target_name]
-        assert job.port_renames[name] == (
-            job.port_renames["GigabitEthernet0/0/1"] + "." + unit
-        )
+        assert result.applied[name] == result.applied["GigabitEthernet0/0/1"] + "." + unit
 
     def test_ten_digits_are_a_unit_eleven_not(self) -> None:
         ios, eos = get_codec("cisco_iosxe_cli"), get_codec("arista_eos")

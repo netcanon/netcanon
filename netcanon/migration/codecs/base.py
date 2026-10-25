@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
+from .._long_numbers import first_long_run, first_long_run_line, parse_refused, render_refused
 from .._one_line import first_control_character, first_line_break
 from ..limits import census, metered
 
@@ -377,7 +378,12 @@ class CodecBase(ABC):
         what it is about to make without being handed anything, the
         finished tree is counted whoever made it, and the length of
         every output is held to the limit.  A caller that opened no
-        scope is counted against the standard limits.  And on a
+        scope is counted against the standard limits.  A text that
+        holds a run of more digits than a number is read from is
+        refused before any parser reads it, and a tree that holds one
+        before any renderer does (:mod:`netcanon.migration._long_numbers`):
+        every parser and renderer reads numbers from runs of digits,
+        and Python reads none past its limit.  And on a
         target whose VLAN has only a name, the tree a ``render`` is
         handed has its VLAN labels as names first
         (``vlans_have_only_a_name``), whoever calls it.
@@ -402,6 +408,16 @@ class CodecBase(ABC):
             codec_name = getattr(self, "name", None) or cls.__name__
             try:
                 with metered("parse", codec_name):
+                    # A number is read from a run of digits only up to
+                    # Python's limit; past it a parser failed as a fault
+                    # (`_long_numbers`).  Said in words, by line.
+                    if isinstance(raw, str):
+                        line = first_long_run_line(raw)
+                        if line is not None:
+                            raise ParseError(
+                                parse_refused(codec_name, line),
+                                path=f"line {line}", snippet="",
+                            )
                     tree = raw_parse(self, raw)
                     # What the tree holds, counted whoever made it: an
                     # expander that counts nothing is still held to
@@ -443,6 +459,11 @@ class CodecBase(ABC):
                         f"{codec_name}: a value of the tree ({where}) holds a "
                         "control character, and no value is written with one"
                     )
+                # Nor with a run of more digits than a number is read
+                # from: renderers read numbers from names (`_long_numbers`).
+                where = first_long_run(tree)
+                if where is not None:
+                    raise RenderError(render_refused(codec_name, where))
                 if self.vlans_have_only_a_name:
                     from .._vlan_labels import vlan_labels_as_names
 
