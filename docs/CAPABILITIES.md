@@ -1768,7 +1768,8 @@ module the bay takes, fitted or not, so a proposal from one is
 `consistent: false` and lists those names, with
 `AppGigabitEthernet1/0/1` (the application-hosting interface): a
 proposal's bay is empty, and a module you declare makes only its own
-names ports of the switch.  And the XML of the NETCONF codec is not
+names ports of the switch.  No configuration of a C9200 or C9200L was
+seen, so whether one does the same is not established.  And the XML of the NETCONF codec is not
 read: its proposal says so.
 
 A proposal lists a stack's members by member number, lowest first,
@@ -2042,8 +2043,8 @@ nothing, as before.
 **Known limitations**
 
 * Model families ship for a first set of Aruba AOS-S switches and
-  for the Cisco Catalyst 9300; `GET /model-families` is the current
-  list.  Everything else goes through target profiles, and a device
+  for the Cisco Catalyst 9300, 9200 and 9200L; `GET /model-families`
+  is the current list.  Everything else goes through target profiles, and a device
   with neither a family nor a profile cannot be declared yet.  A
   Catalyst stack has one management interface, `GigabitEthernet0/0`,
   which belongs to no member and pairs with the other side's
@@ -2057,9 +2058,10 @@ nothing, as before.
   port another VLAN lists untagged leaves VLAN 1 by that line.  A port
   the source removes and puts in no other VLAN gets no line, and stays
   in VLAN 1 on a factory-default target.  Check VLAN 1 on the result.
-* A Catalyst config lists the interfaces of every network module the
+* A C9300 config lists the interfaces of every network module the
   chassis could take, whichever one is fitted, plus an
-  application-hosting port.  Declared with one module, the other
+  application-hosting port (whether a C9200's does is not established:
+  no configuration of one was seen).  Declared with one module, the other
   modules' interface names come back as off-inventory, and one that
   would land on a paired port is displaced.  The job is `partial`
   although the model is right, because netcanon cannot yet tell these

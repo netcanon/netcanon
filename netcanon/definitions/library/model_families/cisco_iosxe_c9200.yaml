@@ -1,0 +1,177 @@
+# Cisco Catalyst 9200 switch series (IOS XE), the modular models
+#
+# A fixed-port access switch with ONE network-module bay and a
+# StackWise-160 stack of up to eight members.  The names are made as a
+# C9300's are:
+#
+#   * Every name is `<type><switch>/<module>/<port>`, and the switch
+#     number is never absent: Cisco's examples name a standalone
+#     switch's ports as switch 1.
+#   * The switch's own ports are module 0, numbered from 1 straight
+#     through the panel whatever their type: a C9200-24PXG is
+#     GigabitEthernet1/0/1-16 and then TenGigabitEthernet1/0/17-24.
+#   * A network module's ports are module 1 and restart at 1:
+#     TenGigabitEthernet1/1/1-4 for a C9200-NM-4X.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# The stack has ONE management interface, GigabitEthernet0/0: each
+# member has the jack and the active switch's carries the link.  It is
+# declared once, under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Cisco Catalyst 9200 Series Switches Hardware Installation
+#         Guide, "Product Overview": Table 1 (C9200L models), Table 2
+#         (C9200 models) and the rear panel figures (the MGMT port).
+#   DS    Cisco Catalyst 9200 Series Switches Data Sheet, Table 2
+#         ("Cisco Catalyst 9200 Series switch configurations"), Table 3
+#         ("Network module part numbers and descriptions") and Table 5
+#         ("Supported stacking options").
+#   CR    Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200
+#         Switches), "Interface and Hardware Commands", `interface`:
+#         the range of switch, module and port numbers per type, and
+#         the ports that are Multigigabit.
+#   CG    Interface and Hardware Components Configuration Guide, Cisco
+#         IOS XE Dublin 17.12.x (Catalyst 9200 Switches), "Configuring
+#         Interface Characteristics" > "Interface Configuration Mode",
+#         and "Configuring Ethernet Management Port".
+#   SG    Stacking and High Availability Configuration Guide, Cisco IOS
+#         XE Dublin 17.12.x (Catalyst 9200 Switches), "Managing Switch
+#         Stacks": the stack restrictions and its size.
+#
+# Which ports are Multigigabit.  HIG and DS give a count and no port
+# numbers; CR says "The range for multi-Gigabit Ethernet ports on
+# 24-port switches is 17-24" and "on 48-port switches is 41-48", and
+# numbers TenGigabitEthernet ports of module 0 in those ranges.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The C9200-NM-2Q (2 x 40G).  DS and HIG list it for the PXG
+#     models, but no Catalyst 9200 document names its ports: CR's
+#     `interface` lists no 40-Gigabit type, and the C9300's name for
+#     its own NM-2Q is another model's.  A PXG with one fitted is
+#     declared with its bay empty, and a job that uses the 40G names
+#     asks what to do with each.
+#   * Whether a C9200 config holds an interface for the ports of a
+#     network module that is not fitted, as a C9300's does: no config
+#     of a C9200 was seen.
+#   * The C9200-24PB and C9200-48PB: SG says they "can only be stacked
+#     with each other", so they are a family of their own
+#     (cisco_iosxe_c9200-pb.yaml).
+#   * The C9200L, which SG says not to stack with a C9200: a family of
+#     its own (cisco_iosxe_c9200l.yaml).
+#   * The C9200CX compact models: no stack, other ports.
+schema: 1
+vendor: cisco_iosxe
+family: C9200
+display_name: "Cisco Catalyst 9200"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise-160 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Interface Characteristics, Interface Configuration Mode (interface type, module number and port number; switch (downlink) ports are module 0 and uplink ports module 1, where the port numbers restart; a standalone device's ports are numbered as switch 1); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (switch ID 1 to 8); Stacking and High Availability Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Managing Switch Stacks (up to eight stacking-capable switches)"
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco does not stack a C9200 with a C9200L or with the C9200-24PB and C9200-48PB, nor switches of different license levels; the license is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 9200 was seen: whether one holds an interface for the ports of a network module that is not fitted, as a C9300's does, is not established."
+
+modules:
+  C9200-NM-4G:
+    description: "4-port 1G SFP network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Data Sheet, Table 3 (C9200-NM-4G: 4x 1G network module, not supported on C9200-24PXG and C9200-48PXG); Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1; the SFP module ports are GigabitEthernet1/1/1 through GigabitEthernet1/1/4)"}
+    ports:
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+  C9200-NM-4X:
+    description: "4-port 10G SFP+ network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Data Sheet, Table 3 (C9200-NM-4X: 4x 1G/10G network module); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet, slot 0 to 1, port ranges 1 to 4, 17 to 24 and 37 to 48); Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Interface Characteristics, Interface Configuration Mode (uplink ports are module 1; interface TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: uplink, count: 4, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+  C9200-NM-2Y:
+    description: "2-port 25G SFP28 network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Data Sheet, Table 3 (C9200-NM-2Y: 2 x 25G network module, supported only on C9200-24PXG and C9200-48PXG); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TwentyFiveGigE, slot 1, ports 1 to 2)"}
+    ports:
+      - {role: uplink, count: 2, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; in a stack the active link is from the Ethernet management port on the active switch); Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Rear Panel of a C9200 Switch (MGMT, RJ-45 10/100/1000 management port)"}
+
+models:
+  # --- 10/100/1000 copper: GigabitEthernet<n>/0/1-24 or -48 ---------------
+  C9200-24T:
+    skus: [C9200-24T]
+    display_name: "Cisco Catalyst C9200-24T"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-24T: 24x1G ports; 4x1G and 4x10G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports data)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C9200-NM-4G, C9200-NM-4X]}
+
+  C9200-48T:
+    skus: [C9200-48T]
+    display_name: "Cisco Catalyst C9200-48T"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-48T: 48x1G ports; 4x1G and 4x10G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports data)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C9200-NM-4G, C9200-NM-4X]}
+
+  C9200-24P:
+    skus: [C9200-24P]
+    display_name: "Cisco Catalyst C9200-24P"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-24P: 24x1G PoE+ ports; 4x1G and 4x10G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C9200-NM-4G, C9200-NM-4X]}
+
+  C9200-48P:
+    skus: [C9200-48P]
+    display_name: "Cisco Catalyst C9200-48P"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-48P: 48x1G PoE+ ports; 4x1G and 4x10G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C9200-NM-4G, C9200-NM-4X]}
+
+  C9200-48PL:
+    skus: [C9200-48PL]
+    display_name: "Cisco Catalyst C9200-48PL"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-48PL: 48x1G PoE+ ports with partial PoE support; 4x1G and 4x10G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports partial PoE+)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true, notes: "partial PoE+"}
+    bays:
+      "1": {accepts: [C9200-NM-4G, C9200-NM-4X]}
+
+  # --- 1G and Multigigabit copper: Gi<n>/0/1-16 then Te<n>/0/17-24 --------
+  C9200-24PXG:
+    skus: [C9200-24PXG]
+    display_name: "Cisco Catalyst C9200-24PXG"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-24PXG: 8 Multigigabit Ethernet and 16x1G PoE+ ports; 4x10G, 2x25G and 2x40G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+: 8 mGig ports up to 10G, 16 ports up to 1G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 24-port switch are 17-24)"}
+    ports:
+      - {role: access, count: 16, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C9200-NM-4X, C9200-NM-2Y]}
+
+  C9200-48PXG:
+    skus: [C9200-48PXG]
+    display_name: "Cisco Catalyst C9200-48PXG"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9200-48PXG: 8 Multigigabit Ethernet and 40x1G PoE+ ports; 4x10G, 2x25G and 2x40G network modules); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+: 8 mGig ports up to 10G, 40 ports up to 1G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 48-port switch are 41-48)"}
+    ports:
+      - {role: access, count: 40, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C9200-NM-4X, C9200-NM-2Y]}

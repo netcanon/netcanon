@@ -395,6 +395,28 @@ timestamp if your timezone matters for an audit.
   counted; XML (the NETCONF codec) is said not to be read.  The
   detector is `codecs/cisco_iosxe_cli/deployment_detect.py`, under
   the `cisco_iosxe` vendor id both IOS-XE codecs share.
+- **The Cisco Catalyst 9200 and 9200L can be declared as a source or
+  target device.**  Three model families, because Cisco stacks none of
+  them with another: `C9200` (the 24/48-port T, P and PL models and
+  the C9200-24PXG and -48PXG; StackWise-160), `C9200-PB` (C9200-24PB
+  and -48PB, which Cisco's stacking guide says "can only be stacked
+  with each other") and `C9200L` (the fixed-uplink models;
+  StackWise-80).  A stack of up to eight.  A C9200 has one bay, for
+  the C9200-NM-4G or -4X on the 1G models and the -4X or -2Y on the
+  PXG models; the C9200-NM-2Q is not modelled, since no Cisco document
+  read gives the names of its ports.  A C9200L's uplinks are fixed and
+  named as module 1 (`TenGigabitEthernet1/1/1-4` on a C9200L-24P-4X).
+  A PXG model's Multigigabit ports are `TenGigabitEthernet`, numbered
+  on from its gigabit ports (`GigabitEthernet1/0/1-16`, then
+  `TenGigabitEthernet1/0/17-24`).  The C9200L-48PXG-4X has twelve
+  Multigigabit ports; Cisco's command reference numbers
+  TenGigabitEthernet ports 37 to 48 but says a 48-port switch's
+  Multigigabit ports are 41-48, so that they are ports 37-48 is
+  inferred and the part is graded `inferred`.  No configuration of any of them was seen: no
+  capture claim is made, and whether a C9200 config holds the
+  interfaces of a module that is not fitted, as a C9300's does, is not
+  established.  `detect-deployment` proposes their stacks from the
+  `switch N provision` lines, as for the C9300.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

@@ -2082,10 +2082,36 @@ class TestCatalystProposal:
         assert proposal.notes[-1].startswith("The config could not be parsed")
 
     def test_a_series_no_family_describes(self) -> None:
-        proposal = propose_deployment(IOSXE_CLI, _catalyst("switch 1 provision c9200l-24p-4g"), REGISTRY)
+        proposal = propose_deployment(IOSXE_CLI, _catalyst("switch 1 provision c1000-24p-4g-l"), REGISTRY)
         assert proposal.stated and proposal.deployment is None
-        assert proposal.unknown_parts == ["C9200L-24P-4G"]
-        assert proposal.notes[0].startswith("No model family describes C9200L-24P-4G")
+        assert proposal.unknown_parts == ["C1000-24P-4G-L"]
+        assert proposal.notes[0].startswith("No model family describes C1000-24P-4G-L")
+
+    def test_a_c9200l_stack(self) -> None:
+        """A C9200L's fixed uplinks are module 1 of each switch; the
+        config names them and the proposal is consistent."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision c9200l-24p-4x", "switch 2 provision c9200l-48p-4g",
+            ports=("GigabitEthernet1/0/24", "TenGigabitEthernet1/1/4",
+                   "GigabitEthernet2/0/48", "GigabitEthernet2/1/1"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C9200L" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "C9200L-24P-4X", "id": 1, "modules": {}},
+                {"model": "C9200L-48P-4G", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 4
+
+    def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
+        """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
+        with Cisco Catalyst 9200 Series Switches"."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision c9200l-24p-4x", "switch 2 provision c9200-24p",
+        ), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
 
     def test_the_higher_scale_models_are_another_family(self) -> None:
         proposal = propose_deployment(IOSXE_CLI, _catalyst(

@@ -633,11 +633,21 @@ translate it again from `show running-config` as the device prints it.
   what the stack is provisioned for.  No line of the config states a
   network module, so a switch is proposed with its bay empty; declare
   the module that is fitted.  The XML of the NETCONF codec is not
-  read.  Other Catalyst series are not modelled yet (the C9500 has
-  target profiles), and a proposal names their type in
-  `unknown_parts`.  IOS-XE lists the
+  read.  The Catalyst 9200 is three families, because Cisco stacks
+  none of them with another: `C9200`, `C9200-PB` (the C9200-24PB and
+  -48PB) and `C9200L`, whose uplinks are fixed and named as module 1
+  (`TenGigabitEthernet1/1/1-4` on a C9200L-24P-4X).  A PXG model's
+  Multigigabit ports are `TenGigabitEthernet`, numbered on from its
+  gigabit ports; on the C9200L-48PXG-4X that its twelve are ports
+  37-48 is inferred, since Cisco's command reference numbers
+  TenGigabitEthernet ports 37 to 48 but says a 48-port switch's
+  Multigigabit ports are 41-48.  The C9200-NM-2Q is not modelled.  Other Catalyst series are
+  not modelled yet (the C9500 has target profiles), and a proposal
+  names their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
-  one is fitted, and an application-hosting port.  With both devices
+  one is fitted, and an application-hosting port; no configuration of
+  a C9200 or C9200L was seen, so whether one does the same is not
+  established.  With both devices
   declared — in the Interface rename modal or on the API — those
   names come back as off-inventory (and
   some of them can be displaced), so the job is `partial` although the
