@@ -417,6 +417,27 @@ timestamp if your timezone matters for an audit.
   interfaces of a module that is not fitted, as a C9300's does, is not
   established.  `detect-deployment` proposes their stacks from the
   `switch N provision` lines, as for the C9300.
+- **The Cisco Catalyst 3850 can be declared as a source or target
+  device.**  One model family, `C3850`: the 24/48-port T, P, F and U
+  models, the Multigigabit WS-C3850-24XU and -12X48U, and the SFP and
+  SFP+ models WS-C3850-12S, -24S, -12XS and -24XS, in a StackWise-480
+  stack of up to nine.  One bay, for what Cisco's data sheet lists per
+  model among the C3850-NM-4-1G, -2-10G, -4-10G and -8-10G.  Named as
+  a C9300 is: a WS-C3850-24XS with a C3850-NM-8-10G in switch 2 is
+  `TenGigabitEthernet2/0/1-24` and `TenGigabitEthernet2/1/1-8`.  Two
+  parts are graded `inferred`, each with its reason: the
+  WS-C3850-12X48U's twelve Multigigabit ports, which Cisco numbers
+  nowhere, are taken as ports 37-48 from the command reference's
+  TenGigabitEthernet range and the configuration guide's example; and
+  the C3850-NM-2-10G, whose two 1G and two 1G/10G slots no Cisco
+  document read names, is `GigabitEthernet1/1/1-2` and then
+  `TenGigabitEthernet1/1/3-4`.  Not modelled: the C3850-NM-2-40G (no
+  Catalyst 3850 document read names a 40-Gigabit interface) and the
+  WS-C3850-48XS, which does not stack.  What the stack's caveat says
+  is not checked: Cisco's eight-switch limit for a stack that holds a
+  WS-C3850-24XS, -24XU or -12X48U, and its license levels.  No
+  configuration of a 3850 was seen.  `detect-deployment` reads
+  `switch N provision ws-c3850-48p` as it reads a C9300's line.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

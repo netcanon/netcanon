@@ -624,6 +624,63 @@ for _model, (_access_names, _uplinks) in _C9200L.items():
         list(_access_names), list(_uplinks),
     )
 
+#: Cisco Catalyst 3850: one bay, named as a C9300's is.  Sources: the
+#: 3850 Hardware Installation Guide's Product Overview, the data sheet's
+#: Tables 1 and 2, and the IOS XE 16.12 configuration guide and command
+#: reference.  Two parts are inferred (see KNOWN_INFERRED_PARTS): the
+#: WS-C3850-12X48U's Multigigabit ports at 37-48, and the C3850-NM-2-10G's
+#: four names.  The C3850-NM-2-40G is not modelled.
+_C3850_PANELS: dict[str, list[str]] = {
+    "WS-C3850-24T": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3850-48T": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3850-24P": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3850-48P": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3850-48F": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3850-24U": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3850-48U": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3850-24XU": _run(1, 24, "TenGigabitEthernet1/0/"),
+    "WS-C3850-12X48U": [
+        *_run(1, 36, "GigabitEthernet1/0/"), *_run(37, 12, "TenGigabitEthernet1/0/"),
+    ],
+    "WS-C3850-12S": _run(1, 12, "GigabitEthernet1/0/"),
+    "WS-C3850-24S": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3850-12XS": _run(1, 12, "TenGigabitEthernet1/0/"),
+    "WS-C3850-24XS": _run(1, 24, "TenGigabitEthernet1/0/"),
+}
+_C3850_NM_4_1G = (("1", "C3850-NM-4-1G"),)
+_C3850_NM_2_10G = (("1", "C3850-NM-2-10G"),)
+_C3850_NM_4_10G = (("1", "C3850-NM-4-10G"),)
+_C3850_NM_8_10G = (("1", "C3850-NM-8-10G"),)
+_C3850_BAY_1: dict[tuple, list[str]] = {
+    (): [],
+    _C3850_NM_4_1G: _run(1, 4, "GigabitEthernet1/1/"),
+    _C3850_NM_2_10G: [*_run(1, 2, "GigabitEthernet1/1/"), *_run(3, 2, "TenGigabitEthernet1/1/")],
+    _C3850_NM_4_10G: _run(1, 4, "TenGigabitEthernet1/1/"),
+    _C3850_NM_8_10G: _run(1, 8, "TenGigabitEthernet1/1/"),
+}
+#: The data sheet's Table 2, typed out per model.
+_C3850_TAKES: dict[str, tuple] = {
+    **dict.fromkeys(
+        ("WS-C3850-24T", "WS-C3850-24P", "WS-C3850-24U", "WS-C3850-12S", "WS-C3850-24S"),
+        ((), _C3850_NM_4_1G, _C3850_NM_2_10G),
+    ),
+    **dict.fromkeys(
+        ("WS-C3850-48T", "WS-C3850-48P", "WS-C3850-48F", "WS-C3850-48U"),
+        ((), _C3850_NM_4_1G, _C3850_NM_2_10G, _C3850_NM_4_10G),
+    ),
+    **dict.fromkeys(
+        ("WS-C3850-24XU", "WS-C3850-12X48U"),
+        ((), _C3850_NM_4_1G, _C3850_NM_2_10G, _C3850_NM_4_10G, _C3850_NM_8_10G),
+    ),
+    "WS-C3850-12XS": ((), _C3850_NM_4_10G),
+    "WS-C3850-24XS": ((), _C3850_NM_4_10G, _C3850_NM_8_10G),
+}
+for _model, _access_names in _C3850_PANELS.items():
+    for _fitted in _C3850_TAKES[_model]:
+        EXPECTED_INVENTORIES[(_C, _model, "stack", _fitted)] = (
+            list(_access_names), list(_C3850_BAY_1[_fitted]),
+        )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -633,6 +690,7 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C9200": ["GigabitEthernet0/0"],
     "cisco_iosxe/C9200-PB": ["GigabitEthernet0/0"],
     "cisco_iosxe/C9200L": ["GigabitEthernet0/0"],
+    "cisco_iosxe/C3850": ["GigabitEthernet0/0"],
 }
 
 
@@ -705,10 +763,12 @@ class TestExactInventories:
     def test_a_catalyst_pid_says_how_many_access_ports(
         self, family: FamilyDef, model: ModelDef,
     ) -> None:
-        """``C9300-48UXM`` is 48 access ports, whatever their types, and
-        a C9200L's ``-4X`` is its four fixed 10G uplinks."""
+        """``C9300-48UXM`` is 48 access ports, whatever their types, a
+        3850's ``12X48U`` is 48 of which twelve are Multigigabit, and a
+        C9200L's ``-4X`` is its four fixed 10G uplinks."""
         count = re.fullmatch(
-            r"C9[23]00L?-(\d+)[A-Z]+(?:-(\d)([GXY]))?", model.skus[0],
+            r"(?:C9[23]00L?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXY]))?",
+            model.skus[0],
         )
         assert count, model.skus[0]
         assert sum(g.count for g in model.ports if g.role == "access") == int(
@@ -1229,7 +1289,7 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     # Cisco Catalyst 9200 and 9200L: the PID is the model key.
     **{
         ("cisco_iosxe", pid): pid
-        for pid in (*_C9200_PANELS, *_C9200L)
+        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS)
     },
 }
 
@@ -1242,6 +1302,13 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # switch cannot hold; 37-48 is read from the TenGigabitEthernet
     # range of the command reference.
     "cisco_iosxe/C9200L / panel / C9200L-48PXG-4X",
+    # Twelve Multigigabit ports that Cisco numbers nowhere; 37-48 is read
+    # from the command reference's TenGigabitEthernet range and the
+    # configuration guide's example of port 37.
+    "cisco_iosxe/C3850 / panel / WS-C3850-12X48U",
+    # Two 1G slots on the left, two 1G/10G on the right, and no name
+    # for any of the four in a Cisco document read.
+    "cisco_iosxe/C3850 / module / C3850-NM-2-10G",
 }
 
 
@@ -1570,3 +1637,77 @@ class TestCiscoC9200:
     def test_no_configuration_was_seen_and_that_is_said(self) -> None:
         for family in (self.FAMILY, self.PB, self.FIXED):
             assert "No configuration of a Catalyst 9200" in family.modes["stack"].caveat, family.key
+
+
+class TestCiscoC3850:
+    """A Catalyst 3850 is named as a C9300 is, in a stack of up to nine;
+    two of its parts are inferred and say so, and what no document read
+    names is not modelled."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C3850"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.FAMILY.models) == sorted(_C3850_PANELS)
+        assert "WS-C3850-48XS" not in self.FAMILY.models
+
+    def test_the_bay_takes_what_the_data_sheet_says(self) -> None:
+        """Data sheet, Table 2, less the C3850-NM-2-40G, whose ports no
+        Catalyst 3850 document read names."""
+        assert sorted(self.FAMILY.modules) == sorted([
+            "C3850-NM-4-1G", "C3850-NM-2-10G", "C3850-NM-4-10G", "C3850-NM-8-10G",
+        ])
+        for key, model in self.FAMILY.models.items():
+            assert list(model.bays) == ["1"], key
+            assert model.bays["1"].accepts == [
+                fitted[0][1] for fitted in _C3850_TAKES[key] if fitted
+            ], key
+
+    def test_a_stack_of_nine(self) -> None:
+        assert list(self.FAMILY.modes) == ["stack"]
+        assert self.FAMILY.modes["stack"].member_ids == (1, 9)
+        inventory = _compile("cisco_iosxe", None, {"model": "WS-C3850-24P", "id": 9})
+        assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+        assert inventory.names()[0] == "GigabitEthernet9/0/1"
+        with pytest.raises(Exception, match="outside 1-9"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3850-24P", "id": 10})
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        caveat = self.FAMILY.modes["stack"].caveat
+        assert "maximum of 8 switches" in caveat and "not checked here" in caveat
+        assert "No configuration of a Catalyst 3850 was seen" in caveat
+
+    @pytest.mark.parametrize("other", ["C9300-24P", "C9200-24P", "C9200L-24P-4G"])
+    def test_a_3850_stacks_with_no_catalyst_9000(self, other: str) -> None:
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3850-24P"}, {"model": other})
+
+    def test_the_nm_2_10g_is_two_types_and_inferred(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "WS-C3850-48P", "modules": {"1": "C3850-NM-2-10G"}},
+        )
+        uplinks = [(p.name, p.speed, p.cage, p.evidence) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            ("GigabitEthernet1/1/1", "gig", "sfp", "inferred"),
+            ("GigabitEthernet1/1/2", "gig", "sfp", "inferred"),
+            ("TenGigabitEthernet1/1/3", "10gig", "sfp+", "inferred"),
+            ("TenGigabitEthernet1/1/4", "10gig", "sfp+", "inferred"),
+        ]
+        assert any("is inferred" in c and "C3850-NM-2-10G" in c for c in inventory.caveats)
+        assert {p.evidence for p in inventory.ports if p.role == "access"} == {"vendor-doc"}
+
+    def test_the_12x48u_panel_is_inferred_and_says_so(self) -> None:
+        ports = {p.name: p for p in _compile("cisco_iosxe", "stack", {"model": "WS-C3850-12X48U"}).ports}
+        assert ports["GigabitEthernet1/0/36"].speed == "gig"
+        assert ports["TenGigabitEthernet1/0/37"].speed == "10gig"
+        assert ports["TenGigabitEthernet1/0/37"].notes == "Multigigabit"
+        assert {p.evidence for p in ports.values() if p.member_rank is not None} == {"inferred"}
+        other = _compile("cisco_iosxe", "stack", {"model": "WS-C3850-24XU"})
+        assert {p.evidence for p in other.ports} == {"vendor-doc"}
+        assert not any("inferred" in c for c in other.caveats)
+
+    def test_poe_models(self) -> None:
+        for key, model in self.FAMILY.models.items():
+            powered = key.endswith(("P", "F", "U"))
+            assert {g.poe for g in model.ports} == {powered}, key
+        for module in self.FAMILY.modules.values():
+            assert not any(g.poe for g in module.ports)

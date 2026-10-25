@@ -641,13 +641,21 @@ translate it again from `show running-config` as the device prints it.
   gigabit ports; on the C9200L-48PXG-4X that its twelve are ports
   37-48 is inferred, since Cisco's command reference numbers
   TenGigabitEthernet ports 37 to 48 but says a 48-port switch's
-  Multigigabit ports are 41-48.  The C9200-NM-2Q is not modelled.  Other Catalyst series are
-  not modelled yet (the C9500 has target profiles), and a proposal
-  names their type in `unknown_parts`.  A C9300 config lists the
+  Multigigabit ports are 41-48.  The C9200-NM-2Q is not modelled.
+  The Catalyst 3850 is one family, `C3850`, a stack of up to nine;
+  Cisco's limit of eight for a stack that holds a WS-C3850-24XS, -24XU
+  or -12X48U is not checked.  Two of its parts are `inferred`: the
+  WS-C3850-12X48U's Multigigabit ports at 37-48, and the
+  C3850-NM-2-10G's names, `GigabitEthernet1/1/1-2` and then
+  `TenGigabitEthernet1/1/3-4` (Cisco says only that its two left slots
+  take 1G and its two right slots 1G or 10G).  The C3850-NM-2-40G and
+  the WS-C3850-48XS are not modelled.  Other Catalyst series are not
+  modelled yet (the C9500 has target profiles), and a proposal names
+  their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port; no configuration of
-  a C9200 or C9200L was seen, so whether one does the same is not
-  established.  With both devices
+  a C9200, C9200L or 3850 was seen, so whether one does the same is
+  not established.  With both devices
   declared — in the Interface rename modal or on the API — those
   names come back as off-inventory (and
   some of them can be displaced), so the job is `partial` although the

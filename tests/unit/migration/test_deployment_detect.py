@@ -2104,6 +2104,22 @@ class TestCatalystProposal:
         }
         assert proposal.consistent is True and proposal.used_port_count == 4
 
+    def test_a_3850_stack(self) -> None:
+        """Cisco's own example of the line is ``switch 2 provision
+        WS-xxxx``: the type is the part number, WS- and all."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c3850-48p", "switch 9 provision ws-c3850-24xs",
+            ports=("GigabitEthernet1/0/48", "TenGigabitEthernet9/0/24"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C3850" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "WS-C3850-48P", "id": 1, "modules": {}},
+                {"model": "WS-C3850-24XS", "id": 9, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
     def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
         """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
         with Cisco Catalyst 9200 Series Switches"."""
