@@ -379,8 +379,22 @@ timestamp if your timezone matters for an audit.
   new kind of entry, a port of the whole deployment
   (`deployment_ports:`): it belongs to no member and pairs with the
   other side's management port -- a flat profile's management port
-  now belongs to no member either, so the two pair.  The
-  `switch N provision` lines are not read yet.
+  now belongs to no member either, so the two pair.
+- **A Catalyst's source switches are read from its config.**  A
+  Catalyst `show running-config` has a `switch N provision <type>`
+  line for each switch of its stack (a switch that is alone too), and
+  `detect-deployment` -- and with it the source picker of the
+  Interface rename modal -- now reads them: the members by switch
+  number, in the family's `stack` mode, each line quoted as evidence.
+  The notes say that the line is what the stack is provisioned for,
+  and that no line states a network module, so each switch's bay is
+  proposed empty; a C9300 config, which holds the interfaces of every
+  module the bay takes, is then `consistent: false` and lists them.
+  Lines in a banner or a stanza are not read;
+  a line that sets out to state a switch and cannot be read is
+  counted; XML (the NETCONF codec) is said not to be read.  The
+  detector is `codecs/cisco_iosxe_cli/deployment_detect.py`, under
+  the `cisco_iosxe` vendor id both IOS-XE codecs share.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

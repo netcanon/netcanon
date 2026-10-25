@@ -1751,8 +1751,25 @@ not take, a member number outside the mode's range, more members than
 the mode allows; and when the vendor has no detector yet.  The first
 of `notes` says which.  None of these is an error: the answer is a 200
 either way.
-Detection reads Aruba AOS-S configs today; no other vendor has a
-detector yet.
+Detection reads Aruba AOS-S and Cisco Catalyst (IOS-XE) configs today;
+no other vendor has a detector yet.
+
+**A Catalyst config states each switch of its stack.**  A `show
+running-config` from a Catalyst has a `switch N provision <type>` line
+for each switch, a switch that is alone included (as the number it
+keeps), and detection reads those lines: the members, by switch
+number, in the family's `stack` mode.  Three things it cannot show,
+which its notes say.  The line is what the stack is *provisioned* for;
+Cisco's guide says the stack keeps it "whether or not the provisioned
+switch is part of the stack".  No line states a network module, so
+each switch is proposed with its bay empty: declare the module that is
+fitted.  A C9300 config holds an interface for every port of every
+module the bay takes, fitted or not, so a proposal from one is
+`consistent: false` and lists those names, with
+`AppGigabitEthernet1/0/1` (the application-hosting interface): a
+proposal's bay is empty, and a module you declare makes only its own
+names ports of the switch.  And the XML of the NETCONF codec is not
+read: its proposal says so.
 
 A proposal lists a stack's members by member number, lowest first,
 whatever order the config states them in.  Two stacks are paired in the
@@ -2031,8 +2048,9 @@ nothing, as before.
   Catalyst stack has one management interface, `GigabitEthernet0/0`,
   which belongs to no member and pairs with the other side's
   management port, whether that is a family's or a profile's.  A
-  Catalyst's source device is not read from its config yet (its
-  `switch N provision` lines): choose it.
+  Catalyst's source switches are read from its `switch N provision`
+  lines, but not its network modules: declare the module that is
+  fitted.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

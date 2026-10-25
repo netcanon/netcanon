@@ -2,9 +2,10 @@
 
 Two layers, tested apart:
 
-* the AOS-S **detector** reads the lines that state the hardware.  It
-  is pinned on short configs written for the purpose (every stanza form
-  HPE's guides and real captures show) and on the committed captures;
+* a vendor's **detector** reads the lines that state the hardware --
+  AOS-S's and the Catalyst's (IOS-XE).  Each is pinned on short configs
+  written for the purpose (every stanza form the vendor's guides and
+  real captures show) and on the committed captures;
 * :func:`propose_deployment` resolves a detection against the model
   registry and checks it against the port names the config uses.
 
@@ -30,6 +31,7 @@ from netcanon.migration import deployment_detect
 from netcanon.migration.codecs.aruba_aoss import deployment_detect as aoss_deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
 from netcanon.migration.codecs.base import ParseError
+from netcanon.migration.codecs.cisco_iosxe_cli import deployment_detect as catalyst_detect
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.deployment_detect import (
     MAX_EVIDENCE_LINES,
@@ -125,11 +127,11 @@ vlan 1
 #: Which codec reads a vendor's configs.  A vendor that gains a
 #: detector has to be named here: the tests that walk every detector
 #: fail until it is.
-_CODEC_OF = {"aruba_aoss": "aruba_aoss"}
+_CODEC_OF = {"aruba_aoss": "aruba_aoss", "cisco_iosxe": "cisco_iosxe_cli"}
 
 #: The words a vendor's detector reports as ``fabric``: its configs'
 #: own names for the stanza a stack's members are in.
-_STANZA_WORDS = {"aruba_aoss": ("stacking", "vsf")}
+_STANZA_WORDS = {"aruba_aoss": ("stacking", "vsf"), "cisco_iosxe": ("switch",)}
 
 _T = TypeVar("_T")
 
@@ -402,10 +404,10 @@ class TestProposalsThatStopShort:
         assert "does not say which device" in proposal.notes[0]
 
     def test_a_vendor_with_no_detector(self) -> None:
-        proposal = propose_deployment(get_codec("cisco_iosxe_cli"), "hostname x\n", REGISTRY)
+        proposal = propose_deployment(get_codec("arista_eos"), "hostname x\n", REGISTRY)
         assert not proposal.stated and proposal.deployment is None
         assert proposal.notes == [
-            "No detector reads the hardware lines of cisco_iosxe configurations yet; "
+            "No detector reads the hardware lines of arista_eos configurations yet; "
             "declare the device yourself."
         ]
 
@@ -1837,3 +1839,314 @@ class TestTheNoteAboutMissingPortsIsBounded:
         )
         proposal = propose_deployment(get_codec("aruba_aoss"), raw, REGISTRY)
         assert sorted(proposal.missing_ports) == [whole, over[: bound - 1] + "…"]
+
+
+# ---------------------------------------------------------------------------
+# The Catalyst detector (IOS-XE)
+# ---------------------------------------------------------------------------
+
+IOSXE_CLI = get_codec("cisco_iosxe_cli")
+IOSXE_NETCONF = get_codec("cisco_iosxe")
+
+#: A real C9300-24UX, switch 1, its module bay not stated: the one
+#: committed capture with a ``switch N provision`` line.
+CAPTURE_C9300_24UX = (
+    REPO_ROOT / "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt"
+).read_text(encoding="utf-8")
+
+#: The names of that capture that are not ports of a C9300-24UX with
+#: its bay empty, typed by hand: the interfaces a C9300 config holds
+#: for every network module the bay can take, and the app-hosting
+#: interface.
+_C9300_24UX_NOT_ON_THE_BARE_SWITCH = [
+    *(f"GigabitEthernet1/1/{n}" for n in range(1, 5)),
+    *(f"TenGigabitEthernet1/1/{n}" for n in range(1, 9)),
+    "FortyGigabitEthernet1/1/1", "FortyGigabitEthernet1/1/2",
+    "TwentyFiveGigE1/1/1", "TwentyFiveGigE1/1/2",
+    "AppGigabitEthernet1/0/1",
+]
+
+
+def _catalyst(*lines: str, ports: tuple[str, ...] = ()) -> str:
+    """A Catalyst config: *lines* at the top, then an interface stanza
+    for each of *ports*."""
+    body = "".join(f"interface {port}\n description p\n!\n" for port in ports)
+    return "hostname sw\n!\n" + "".join(line + "\n" for line in lines) + "!\n" + body + "end\n"
+
+
+class TestCatalystDetector:
+    def test_the_capture(self) -> None:
+        detected = catalyst_detect.detect_deployment(CAPTURE_C9300_24UX)
+        assert detected.fabric == "switch"
+        assert _members(detected) == [(1, "C9300-24UX", {})]
+        assert detected.evidence == ["switch 1 provision c9300-24ux"]
+
+    def test_a_stack_comes_back_in_switch_order(self) -> None:
+        text = _catalyst(
+            "switch 3 provision c9300-48p", "switch 1 provision c9300-24ux",
+            "switch 2 provision c9300-48uxm",
+        )
+        detected = catalyst_detect.detect_deployment(text)
+        assert _members(detected) == [
+            (1, "C9300-24UX", {}), (2, "C9300-48UXM", {}), (3, "C9300-48P", {}),
+        ]
+        assert detected.evidence == [
+            "switch 1 provision c9300-24ux", "switch 2 provision c9300-48uxm",
+            "switch 3 provision c9300-48p",
+        ]
+
+    def test_a_switch_that_is_alone_keeps_its_number(self) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst("switch 3 provision c9300-24p"))
+        assert _members(detected) == [(3, "C9300-24P", {})]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "hostname sw\n",
+            "",
+            _catalyst("switch 1 priority 15"),
+            _catalyst("switchport provision c9300-24p"),
+            _catalyst("no switch 1 provision c9300-24p"),
+            # A line of a stanza, not of the top of the config.
+            "interface GigabitEthernet1/0/1\n switch 1 provision c9300-24p\n!\n",
+            "interface GigabitEthernet1/0/1\n\tswitch 1 provision c9300-24p\n!\n",
+        ],
+        ids=["no hardware line", "empty", "a priority line", "switchport",
+             "a no form", "indented by a space", "indented by a tab"],
+    )
+    def test_text_that_states_no_switch(self, text: str) -> None:
+        assert catalyst_detect.detect_deployment(text) is None
+
+    def test_the_notes_say_what_the_lines_do_not_prove(self) -> None:
+        notes = catalyst_detect.detect_deployment(CAPTURE_C9300_24UX).notes
+        assert notes[0].startswith("A `switch <number> provision` line shows what the stack is provisioned for")
+        assert "whether or not that switch is in the stack" in notes[0]
+        assert notes[1].startswith("No line of the config states a network module")
+        assert "declare the module that is fitted" in notes[1]
+        assert len(notes) == 2
+
+    def test_windows_line_endings(self) -> None:
+        text = _catalyst("switch 1 provision c9300-24p").replace("\n", "\r\n")
+        detected = catalyst_detect.detect_deployment(text)
+        assert _members(detected) == [(1, "C9300-24P", {})]
+        assert detected.evidence == ["switch 1 provision c9300-24p"]
+
+    def test_white_space_after_the_type_is_not_the_type(self) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst("switch  2\tprovision c9300-24p \t"))
+        assert _members(detected) == [(2, "C9300-24P", {})]
+        assert detected.evidence == ["switch 2 provision c9300-24p"]
+
+    def test_a_banners_line_is_text(self) -> None:
+        """A banner is what the switch shows at login.  Its line is not
+        a line of the config, to the parser or to the detector."""
+        text = "hostname sw\nbanner motd ^C\nswitch 1 provision c9300-48p\n^C\nend\n"
+        assert catalyst_detect.detect_deployment(text) is None
+        both = "hostname sw\nbanner motd ^C\nswitch 1 provision c9300-48p\n^C\nswitch 2 provision c9300-24p\n"
+        assert _members(catalyst_detect.detect_deployment(both)) == [(2, "C9300-24P", {})]
+
+    def test_a_banner_with_no_end_is_not_read_past(self) -> None:
+        text = "hostname sw\nbanner motd ^C\nswitch 1 provision c9300-48p\n"
+        with pytest.raises(ParseError):
+            catalyst_detect.detect_deployment(text)
+        proposal = propose_deployment(IOSXE_CLI, text, REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        assert proposal.notes == [
+            "The lines that state the hardware could not be read; declare the device yourself."
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            '<?xml version="1.0"?>\n<config><native/></config>\n',
+            "  \n<data><native><hostname>sw</hostname></native></data>\n",
+        ],
+        ids=["a declaration", "white space first"],
+    )
+    def test_xml_is_said_not_to_be_read(self, text: str) -> None:
+        detected = catalyst_detect.detect_deployment(text)
+        assert detected.members == [] and detected.evidence == []
+        (note,) = detected.notes
+        assert note.startswith("The config is XML.")
+        proposal = propose_deployment(IOSXE_NETCONF, text, REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        assert proposal.notes == [note]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "switch 1 provision c9300-24p extra",
+            "switch 1234567 provision c9300-24p",
+            "switch x provision c9300-24p",
+            "switch 1 provision " + "c" * 33,
+            "switch 1 provision -c9300",
+            "switch 1 provision c9300_24p",
+        ],
+        ids=["more after the type", "a number of seven digits", "no number",
+             "a type of 33 characters", "a type that begins with a hyphen",
+             "an underscore"],
+    )
+    def test_a_line_no_device_prints_is_counted_and_left_out(self, line: str) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst(line, "switch 2 provision c9300-24p"))
+        assert _members(detected) == [(2, "C9300-24P", {})]
+        assert detected.notes[2] == (
+            "1 line(s) begin `switch <number> provision` and could not be read as "
+            "a switch (the number or the type is not in a form a device prints); "
+            "each was left out."
+        )
+        alone = catalyst_detect.detect_deployment(_catalyst(line))
+        assert alone.members == [] and alone.fabric == "switch"
+        assert alone.notes[0] == (
+            "The config has `switch <number> provision` lines, but none could be "
+            "read as a switch's number and type."
+        )
+        assert alone.notes[1].startswith("1 line(s) begin")
+
+    @pytest.mark.parametrize(
+        ("line", "number", "part"),
+        [
+            ("switch 999999 provision c9300-24p", 999999, "C9300-24P"),
+            ("switch 1 provision c" + "9" * 31, 1, "C" + "9" * 31),
+            ("switch 01 provision C9300-24P", 1, "C9300-24P"),
+        ],
+        ids=["six digits", "a type of 32 characters", "as typed"],
+    )
+    def test_the_bounds_are_read_up_to(self, line: str, number: int, part: str) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst(line))
+        assert _members(detected) == [(number, part, {})]
+
+    def test_a_switch_stated_twice_is_what_its_last_line_says(self) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst(
+            "switch 1 provision c9300-24p", "switch 1 provision c9300-48p",
+        ))
+        assert _members(detected) == [(1, "C9300-48P", {})]
+        assert detected.evidence == ["switch 1 provision c9300-48p"]
+        assert detected.notes[2] == (
+            "More than one line states switch 1 with different types; the last was used."
+        )
+
+    def test_stated_twice_the_same_is_not_a_contradiction(self) -> None:
+        detected = catalyst_detect.detect_deployment(_catalyst(
+            "switch 1 provision c9300-24p", "switch 1 provision C9300-24P",
+        ))
+        assert len(detected.notes) == 2
+
+    def test_a_few_switch_numbers_are_named_and_the_rest_counted(self) -> None:
+        lines = [f"switch {n} provision c9300-24p\nswitch {n} provision c9300-48p" for n in range(1, 21)]
+        detected = catalyst_detect.detect_deployment(_catalyst(*lines))
+        assert detected.notes[2] == (
+            "More than one line states switch 1, 2, 3, 4, 5, 6, 7, 8 and 12 more "
+            "with different types; the last was used."
+        )
+
+
+class TestCatalystProposal:
+    def test_the_capture_is_its_switch_with_the_bay_empty(self) -> None:
+        proposal = propose_deployment(IOSXE_CLI, CAPTURE_C9300_24UX, REGISTRY)
+        assert proposal.family == "cisco_iosxe/C9300" and proposal.mode == "stack"
+        assert proposal.fabric == "switch"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [{"model": "C9300-24UX", "id": 1, "modules": {}}],
+        }
+        # The capture names the interfaces of every module the bay
+        # takes; none is fitted in this proposal, so they are said.
+        assert proposal.consistent is False
+        assert proposal.missing_ports == _C9300_24UX_NOT_ON_THE_BARE_SWITCH
+        assert proposal.notes[-1].startswith("The config uses 17 port name(s) the proposed device does not have")
+
+    def test_a_config_that_uses_only_the_switchs_own_ports(self) -> None:
+        text = _catalyst(
+            "switch 2 provision c9300-24p",
+            ports=("GigabitEthernet2/0/1", "GigabitEthernet2/0/24", "GigabitEthernet0/0"),
+        )
+        proposal = propose_deployment(IOSXE_CLI, text, REGISTRY)
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [{"model": "C9300-24P", "id": 2, "modules": {}}],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 3
+        assert proposal.inventory.port_count == 25
+
+    def test_the_proposal_is_accepted_as_a_source_deployment(self) -> None:
+        text = _catalyst("switch 1 provision c9300-24p", ports=("GigabitEthernet1/0/5",))
+        proposal = propose_deployment(IOSXE_CLI, text, REGISTRY)
+        compiled = compile_deployment(
+            Deployment(vendor="cisco_iosxe", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        assert compiled.summary() == proposal.inventory
+
+    def test_the_netconf_codec_shares_the_detector(self) -> None:
+        """One vendor id, two codecs.  CLI text named as the NETCONF
+        codec's is still read for its hardware; it is the parse that
+        fails, and that is said."""
+        proposal = propose_deployment(IOSXE_NETCONF, CAPTURE_C9300_24UX, REGISTRY)
+        assert proposal.deployment is not None and proposal.consistent is None
+        assert proposal.notes[-1].startswith("The config could not be parsed")
+
+    def test_a_series_no_family_describes(self) -> None:
+        proposal = propose_deployment(IOSXE_CLI, _catalyst("switch 1 provision c9200l-24p-4g"), REGISTRY)
+        assert proposal.stated and proposal.deployment is None
+        assert proposal.unknown_parts == ["C9200L-24P-4G"]
+        assert proposal.notes[0].startswith("No model family describes C9200L-24P-4G")
+
+    def test_the_higher_scale_models_are_another_family(self) -> None:
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision c9300-24ub", "switch 2 provision c9300-24p",
+        ), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
+
+    def test_a_switch_number_the_stack_does_not_have(self) -> None:
+        proposal = propose_deployment(IOSXE_CLI, _catalyst("switch 9 provision c9300-24p"), REGISTRY)
+        assert proposal.deployment is None and proposal.family == "cisco_iosxe/C9300"
+        assert proposal.notes[0].startswith("What the config states does not compile as a deployment of")
+
+    def test_a_ninth_switch(self) -> None:
+        lines = [f"switch {n} provision c9300-24p" for n in range(1, 10)]
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(*lines), REGISTRY)
+        assert proposal.deployment is None and len(proposal.members) == 9
+        assert proposal.notes[0].startswith("What the config states does not compile as a deployment of")
+
+    def test_nothing_shaped_like_a_mac_address_or_a_serial_is_in_the_proposal(self) -> None:
+        dumped = propose_deployment(IOSXE_CLI, CAPTURE_C9300_24UX, REGISTRY).model_dump_json()
+        assert not re.search(r"[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}", dumped, re.IGNORECASE)
+        assert not re.search(r"(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}", dumped, re.IGNORECASE)
+
+
+class TestTheCatalystDetectorOnTextMadeToBeSlow:
+    """Each tail is built to make the one pattern go back over a run it
+    has already crossed, or to make a note grow with the text.  The
+    detector is called by itself: the parser's cost is not what this
+    pins."""
+
+    PREFIXES = {
+        "nothing stated": "",
+        "a switch": "switch 1 provision c9300-24p\n",
+    }
+    TAILS = {
+        "the word and spaces": "switch" + " " * 300_000 + "x",
+        "a number and spaces": "switch 1" + " " * 300_000 + "provision",
+        "a long number": "switch " + "1" * 300_000 + " provision c9300-24p",
+        "the keyword and spaces": "switch 1 provision" + " " * 300_000,
+        "a long type": "switch 1 provision " + "c" * 300_000,
+        "a type of hyphens": "switch 1 provision c" + "-" * 300_000 + " x",
+        "a type and spaces": "switch 1 provision c9300-24p" + " " * 300_000 + "x",
+        "lines that trail off": ("switch 1 provision c9300-24p" + " " * 3000 + "x\n") * 100,
+        "lines no pattern reads": "switch 1 provision c9300-24p x\n" * 50_000,
+        "more switches than any stack": "".join(f"switch {n} provision c9300-24p\n" for n in range(50_000)),
+        "every switch stated twice": "".join(
+            f"switch {n} provision c9300-24p\nswitch {n} provision c9300-48p\n" for n in range(25_000)
+        ),
+        "blank lines": "\n" * 300_000,
+        "lines of spaces": "   \n" * 100_000,
+        "tabs then the word": ("\t" * 3000 + "switch\n") * 100,
+        "the word again and again": "switch " * 60_000,
+        "an open angle bracket after spaces": " " * 300_000 + "<",
+    }
+
+    @pytest.mark.parametrize("prefix", sorted(PREFIXES))
+    @pytest.mark.parametrize("tail", sorted(TAILS))
+    def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
+        text = self.PREFIXES[prefix] + self.TAILS[tail]
+        detected = _within(5.0, lambda: catalyst_detect.detect_deployment(text))
+        if detected is not None:
+            assert sum(map(len, detected.notes)) < 4_000
+            assert max(map(len, detected.evidence), default=0) < 64

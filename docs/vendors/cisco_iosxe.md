@@ -623,9 +623,19 @@ translate it again from `show running-config` as the device prints it.
   was last given, so its ports can be `GigabitEthernet3/0/N`.  The
   stack's one management interface, `GigabitEthernet0/0`, belongs to
   no switch and pairs with the other side's management port.  The
-  `switch N provision` lines are not read yet, so the source device
-  is chosen by hand; other Catalyst series are not modelled yet (the
-  C9500 has target profiles).  IOS-XE lists the
+  source switches are read from the config's `switch N provision`
+  lines (`detect-deployment`, and the Interface rename modal): Cisco
+  says the type on that line "must match the switch type of the newly
+  added switch", and that the stack keeps the line "whether or not the
+  provisioned switch is part of the stack" (Stack Manager and High
+  Availability Configuration Guide, IOS XE 17.12.x, Catalyst 9300,
+  "Offline Configuration to Provision a Stack Member") -- so it states
+  what the stack is provisioned for.  No line of the config states a
+  network module, so a switch is proposed with its bay empty; declare
+  the module that is fitted.  The XML of the NETCONF codec is not
+  read.  Other Catalyst series are not modelled yet (the C9500 has
+  target profiles), and a proposal names their type in
+  `unknown_parts`.  IOS-XE lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port.  With both devices
   declared — in the Interface rename modal or on the API — those

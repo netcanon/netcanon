@@ -2096,9 +2096,27 @@ class TestDetectDeployment:
         assert proposal["deployment"] is None and proposal["consistent"] is None
         assert proposal["unknown_parts"] == ["J9729A"]
 
+    def test_a_catalyst_is_read_from_its_provision_line(self, client: TestClient) -> None:
+        raw = (
+            REPO_ROOT / "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt"
+        ).read_text(encoding="utf-8")
+        resp = client.post(self.URL, json={"source": "cisco_iosxe_cli", "raw_text": raw})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["fabric"] == "switch"
+        assert proposal["evidence"] == ["switch 1 provision c9300-24ux"]
+        assert proposal["deployment"] == {
+            "mode": "stack", "members": [{"model": "C9300-24UX", "id": 1, "modules": {}}],
+        }
+        # The capture names the ports of every module the bay takes,
+        # and the config does not say which is fitted.
+        assert proposal["consistent"] is False
+        assert "TenGigabitEthernet1/1/1" in proposal["missing_ports"]
+        assert any("module bay empty" in note for note in proposal["notes"])
+
     def test_a_vendor_without_a_detector_says_so(self, client: TestClient) -> None:
         resp = client.post(self.URL, json={
-            "source": "cisco_iosxe_cli", "raw_text": "hostname sw\n",
+            "source": "arista_eos", "raw_text": "hostname sw\n",
         })
         assert resp.status_code == 200
         proposal = resp.json()

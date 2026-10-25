@@ -262,20 +262,33 @@ The rules:
   was pasted.  Anchor every pattern to a line, bound what it takes (a
   member number, a part), and apply none to a fragment another pattern
   matched unless that fragment is itself bounded: a pattern that
-  backtracks over a run of spaces holds the server.  A detector must not raise on any text; one that does is
-  answered as "could not be read".
+  backtracks over a run of spaces holds the server.  A detector must
+  not raise on any text; one that does is answered as "could not be
+  read".
+* **Read the lines the parser reads.**  Cut the text into lines where
+  the parser cuts it, and empty a banner's text with the parser's own
+  helper (`without_banner_bodies`), so that a banner's words are not
+  hardware.
+* **A vendor id can be more than one codec.**  The detector is chosen
+  by the codec's vendor id, so it is handed the text of every codec
+  that shares it: the Catalyst detector gets IOS-XE CLI text and the
+  NETCONF codec's XML.  A form it does not read is said in a note, not
+  answered as a config that states no device.
 
 Test it on every stanza form the vendor's documents and real captures
 show, and on the committed captures.  Name the vendor's codec in
-`_CODEC_OF` in `tests/unit/migration/test_deployment_detect.py`: the
-guards that walk every detector then run for it by themselves.  The
+`_CODEC_OF` in `tests/unit/migration/test_deployment_detect.py`, and
+its configs' word for a stack (the detection's `fabric`) in
+`_STANZA_WORDS`: the guards that walk every detector then run for it
+by themselves.  The
 detector must propose, for every capture a capture claim of that vendor
 cites, the deployment the claim states; it is handed text made to be
 slow; and a vendor whose ports keep a factory name is refused until the
 check in `propose_deployment` does for it what a translation does.
 Those slow texts state no device, so they stop at the detector's first
 patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`
-does) with a device stated and a tail made for each pattern.
+and `TestTheCatalystDetectorOnTextMadeToBeSlow` do) with a device
+stated and a tail made for each pattern.
 
 ### A new naming grammar
 
