@@ -225,15 +225,22 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
   sub-interface is not translated`).  The older form, `dot1q vlan 20`
   (`dot1q vlan 20 30` for two tags), is read the same way.
+- **An encapsulation that is no 802.1Q tag is left out.**
+  `encapsulation untagged` maps "untagged frames on an interface", and
+  `encapsulation default` "any tagged or untagged traffic that has not
+  been matched by another subinterface" (Cisco).  The tree has no form
+  for either, so a sub-interface that states one -- an `l2transport`
+  attachment circuit, as a rule -- is left out with the same row.  ⚠️
+  Up to 0.7.7 it was written as a sub-interface of no tag on every
+  target, and VyOS took its number for the tag.
 - **A sub-interface that states no tag is left out.**  "An 802.1Q VLAN
   subinterface must have a configured VLAN ID to send and receive
   traffic; without a VLAN ID, the subinterface remains in the down
   state" (Cisco, `dot1q vlan`).  A sub-interface of a port, a
   management port or a `Bundle-Ether` with no `encapsulation` line is
   not translated, and its row begins `untagged:`, a statement the
-  router held and did not run.  One that states another encapsulation
-  (`l2transport` with `encapsulation untagged`) and one of a serial
-  line are read as before.  ⚠️ Up to 0.7.7 such a sub-interface was
+  router held and did not run.  One of a serial line is read as
+  before.  ⚠️ Up to 0.7.7 such a sub-interface was
   written with no tag on every target, and `dot1q vlan` was read as no
   tag.
 - **An interface's `mtu` counts the Ethernet header.**  Cisco: the

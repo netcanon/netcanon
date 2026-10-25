@@ -2104,6 +2104,15 @@ def without_unread_tags(
     written with fewer tags than it matches is another sub-interface --
     and :func:`unread_tags_row` says which.
 
+    Where *needs_a_tag* names the sub-interface, an ``encapsulation``
+    line of its own that is not a tag statement is one too, and is not
+    read whole: what it matches is not the one tag, or the pair, the
+    tree can hold (IOS XR ``encapsulation untagged``, the frames that
+    carry no tag; ``encapsulation default``, every frame no other
+    sub-interface takes).  Kept, the sub-interface was one of no tag on
+    every target, and VyOS wrote its number as the tag.  A port's own
+    ``encapsulation`` (a serial line's ``ppp``) is not asked about.
+
     And where *needs_a_tag* is given, without each stanza of a
     sub-interface it names that states no tag at all: no tag statement
     and no other ``encapsulation`` line among its own lines.  On such
@@ -2168,6 +2177,8 @@ def without_unread_tags(
                     unread = statement
             elif _states_an_encapsulation(statement):
                 stated = True
+                if untagged:
+                    unread = statement
             continue
         if stanza:
             close()
