@@ -19,10 +19,15 @@ reports ``severity: ok`` and the migrate banner is green while the
 overlay reachability config silently vanishes.
 
 **Base-identity-coverage rule.**  A codec must declare a sub-detail leaf
-lossy/unsupported only when it KEEPS (renders, and does not loss-declare)
-the list's identity leaf yet DROPS the sub-detail.  A codec that already
-loss-declares the identity leaf surfaces the whole-surface loss there, so
-the sub-detail defaulting to ``supported`` is harmless noise — exempt.
+lossy/unsupported only when it KEEPS (renders, and does not declare
+unsupported) the list's identity leaf yet DROPS the sub-detail.  A codec
+that declares the identity leaf unsupported surfaces the whole-surface
+loss there, so the sub-detail defaulting to ``supported`` is harmless
+noise — exempt.  One that declares it LOSSY is not: lossy means the
+records survive with caveats (a RouterOS, FortiOS or OPNsense VLAN on a
+port comes back as a sub-interface's tag, one on a bridge as a VLAN),
+and a sub-detail it drops from a record that survives is a loss of its
+own.
 Likewise, a codec whose render does not keep the identity leaf at all has
 a *whole-surface* drop (a different guard's concern), not a sub-detail
 silent loss.
@@ -445,8 +450,9 @@ def test_dropped_list_subdetail_is_declared(name: str, case: _Case):
         {lp.path for lp in caps.lossy} | {u.path for u in caps.unsupported}
     )
 
-    # Exempt: whole-surface loss already surfaced via the identity leaf.
-    if case.identity in loss_declared:
+    # Exempt: whole-surface loss already surfaced via the identity leaf
+    # (unsupported; a lossy identity keeps records, whose sub-details count).
+    if case.identity in {u.path for u in caps.unsupported}:
         return
 
     reparsed = codec.parse(codec.render(case.intent()))
@@ -479,10 +485,7 @@ def test_some_codec_demonstrates_each_case(case: _Case):
     for name in _CODEC_NAMES:
         codec = get_codec(name)
         caps = codec.capabilities
-        loss_declared = (
-            {lp.path for lp in caps.lossy} | {u.path for u in caps.unsupported}
-        )
-        if case.identity in loss_declared:
+        if case.identity in {u.path for u in caps.unsupported}:
             continue
         reparsed = codec.parse(codec.render(case.intent()))
         if case.identity_kept(reparsed) and not case.subdetail_survived(reparsed):

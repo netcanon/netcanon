@@ -300,11 +300,16 @@ per_field_expectation:
   # -- VLANs -- IDs and names survive, everything else does not --------------
 
   "vlans[].id":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells, 30 of 30 VLAN records.  The VLAN survives as a
-      `<vlans><vlan>` child-interface binding carrying `<tag>`, and the record
-      count does not change.
+    disposition: lossy
+    reason: >
+      Every VLAN record is dropped on all 7 cells (2, 2, 4, 4, 8, 9 and 13
+      records).  OPNsense has no VLAN apart from a VLAN device on one parent:
+      the render writes each VLAN as a `<vlan>` device on a LAGG or a port
+      that carries it, else on the first LAGG or port, and the OPNsense parser
+      reads a device on a port or a LAGG back as a routed sub-interface of it,
+      its tag the VLAN's id, with no VLAN record (opnsense declares
+      `/vlans/vlan/id` lossy).  Up to 0.7.7 every device was read back as a
+      VLAN.
     references: [aoscx-opnsense-surface]
 
   "vlans[].name":

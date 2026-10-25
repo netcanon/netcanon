@@ -188,13 +188,20 @@ per_field_expectation:
   "interfaces[].dot1q_vlan":
     disposition: lossy
     reason: >
-      Routed sub-interface 802.1Q tags are declared lossy on the opnsense
-      matrix: a sub-interface is written as an OPNsense VLAN device on its
-      port (`<vlan>` with `<if>` the port and `<tag>` its own tag), and
-      the OPNsense parser reads it back as a VLAN device and a VLAN of its
-      tag, not as the interface's tag.  The NX-OS source never populates
-      the field on this corpus (0 of 13 cells), so nothing was measured.
-      Up to 0.7.7 the path was unsupported and no `<vlan>` was written.
+      The NX-OS source sets no tag on this corpus; the round trip adds one.
+      Each VLAN is written as an OPNsense `<vlan>` device on a LAGG or a port,
+      and the SVI as the interface its zone assigns; the OPNsense parser reads
+      a device on a port or a LAGG back as a routed sub-interface of it, its
+      tag the VLAN's id, so the SVI comes back tagged: `Vlan1` -> 1, `Vlan10`
+      -> 10 and so on, on the 6 cells whose interface list keeps its size
+      (`akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`, the two
+      `batfish_nxos_evpn_l3vni_nx*.txt`, the two `batfish_nxos_hsrp_nxos*.txt`
+      and `networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`); on the
+      other 7 the list changes size and the reconciler gives the drift to its
+      first field. The address, the description and the admin state stay on
+      the record; what is lost is that it was a VLAN interface rather than a
+      unit of a port. Up to 0.7.7 the device was read back as a VLAN device
+      and a VLAN, with no tag.
     references: [nxos-opnsense-surface]
 
   "interfaces[].vrf":
@@ -290,13 +297,18 @@ per_field_expectation:
       description are port-channel members and lose it.  Every other
       record keeps its text: NX-OS `description` maps to `<descr>`,
       which OPNsense does not length-limit.
-      No cell's comparison shows the loss: on each cell that holds
-      such a member, the VLAN devices OPNsense reads back from
-      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
-      longer, and the reconciler compares a list whose size changes
-      as a whole and gives the drift to ``interfaces[].name``.  The
-      loss is pinned by
+      No cell's comparison shows the member's loss: on each cell
+      that holds such a member the output's list changes size, and
+      the reconciler compares such a list as a whole and gives the
+      drift to its first field.  The loss is pinned by
       ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
+      What the cells compared record by record show is the other
+      way: on ``akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`` and
+      ``networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`` a VLAN
+      interface (``Vlan10``) comes back with its VLAN's name as its
+      description -- the ``<descr>`` of the VLAN device its zone
+      assigns, which the OPNsense parser gives a zone that has none
+      (see ``vlans[].name``).
     references: [nxos-opnsense-surface]
 
   "interfaces[].enabled":
@@ -356,10 +368,16 @@ per_field_expectation:
   # -- VLANs.  Sub-field keys only; every VLAN record survives. --
 
   "vlans[].id":
-    disposition: good
-    note: >
-      The VLAN id becomes the `<vlans>/<vlan>/<tag>` value and re-parses
-      intact on 13 of 13 cells.
+    disposition: lossy
+    reason: >
+      Every VLAN record is dropped on all 13 cells (7, 1, 3, 2, 2, 3, 3, 1, 5,
+      47, 4, 2 and 4 records).  OPNsense has no VLAN apart from a VLAN device
+      on one parent: the render writes each VLAN as a `<vlan>` device on a
+      LAGG or a port that carries it, else on the first LAGG or port, and the
+      OPNsense parser reads a device on a port or a LAGG back as a routed
+      sub-interface of it, its tag the VLAN's id, with no VLAN record
+      (opnsense declares `/vlans/vlan/id` lossy).  Up to 0.7.7 every device
+      was read back as a VLAN.
     references: [nxos-opnsense-surface]
 
   "vlans[].name":

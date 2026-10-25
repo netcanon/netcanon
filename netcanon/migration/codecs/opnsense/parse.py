@@ -98,6 +98,7 @@ from ...canonical.intent import (
 )
 from ...limits import ticked
 from ..base import ParseError
+from .port_names import classify_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -427,7 +428,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     left_out_devices: set[str] = set()
     vlans_el = root.find("vlans")
     if vlans_el is not None:
-        left_out_devices = _parse_vlan_devices(vlans_el, intent)
+        left_out_devices = _parse_vlan_devices(
+            vlans_el, intent,
+            laggs=_names_of(root, "laggs/lagg/laggif"),
+            bridges=_names_of(root, "bridges/bridged/bridgeif"),
+        )
 
     # ----- <dhcpd> block (Tier 2 DHCP) -----
     dhcpd_el = root.find("dhcpd")
@@ -835,8 +840,64 @@ def _text_of(el: ET.Element, tag: str) -> str:
     return (child.text or "").strip() if child is not None else ""
 
 
+def _names_of(root: ET.Element, path: str) -> set[str]:
+    """The text of every element at *path*, stripped: the names the
+    config gives its LAGGs or its bridges."""
+    return {
+        (el.text or "").strip() for el in ticked(root.findall(path))
+    } - {""}
+
+
+#: What a name says it is when it is no port: a VLAN interface, a
+#: loopback, a tunnel.
+_NO_PORT_KINDS = frozenset({"svi", "loopback", "tunnel"})
+
+
+def _is_a_zone_key(name: str) -> bool:
+    """Whether *name* is the key ``<interfaces>`` names a zone by
+    (``wan``, ``lan``, ``opt`` and digits): never a device, which
+    FreeBSD names by its driver and a number.  This codec's renderer
+    writes ``lan`` for the parent of a VLAN nothing carries, in a
+    config with no port."""
+    if name in ("wan", "lan"):
+        return True
+    number = name[len("opt"):]
+    return name.startswith("opt") and number.isascii() and number.isdigit()
+
+
+def _port_type_of(
+    parent: str, laggs: set[str], bridges: set[str], devices: set[str],
+) -> str | None:
+    """The type of the port or LAGG *parent* is, or ``None`` where it
+    is neither: no parent, a zone's key (:func:`_is_a_zone_key`), a
+    bridge, another VLAN device, or a name that says it is a VLAN
+    interface, a loopback or a tunnel.
+
+    A bridge is one ``<bridges>`` names, or one named as FreeBSD names
+    a bridge device (``bridge0``): this codec's renderer writes no
+    ``<bridges>``.  Any other parent is a port, whatever its name: the
+    classifier does not read every driver's (``igc0``), nor the port
+    names of another vendor that a config written from one holds.  A
+    LAGG is one ``<laggs>`` names, or one whose name says it is.
+    """
+    if not parent or parent in bridges or parent in devices:
+        return None
+    if _is_a_zone_key(parent):
+        return None
+    number = parent[len("bridge"):]
+    if parent.startswith("bridge") and number.isascii() and number.isdigit():
+        return None
+    kind = classify_port_name(parent).kind
+    if kind in _NO_PORT_KINDS:
+        return None
+    if parent in laggs or kind == "lag":
+        return "ianaift:ieee8023adLag"
+    return "ianaift:ethernetCsmacd"
+
+
 def _parse_vlan_devices(
     vlans_el: ET.Element, intent: CanonicalIntent,
+    laggs: set[str] = frozenset(), bridges: set[str] = frozenset(),
 ) -> set[str]:
     """Read every ``<vlan>`` of *vlans_el* into *intent*.
 
@@ -847,10 +908,29 @@ def _parse_vlan_devices(
     ``vlan02``... or ``<parent>_vlan<tag>`` on older configs) or takes
     one typed as ``vlan0`` and digits and dots (``Vlan.php``), so its
     digits are not the tag.  The device is given the record its zone
-    made, or a record of its own where no zone assigns it, typed
-    ``ianaift:l3ipvlan`` with ``vlan_parent`` set to ``<if>``; and a
-    :class:`CanonicalVlan` named after it, its ``<descr>`` its
-    description -- the RouterOS and FortiOS parsers link a VLAN
+    made, or a record of its own where no zone assigns it, with
+    ``vlan_parent`` set to ``<if>``.
+
+    On a port or a LAGG it is a routed sub-interface of it: it tags
+    the frames of that one parent, and OPNsense takes the same tag on
+    another parent as another device.  It is typed as its parent,
+    ``dot1q_vlan`` its tag, and makes no VLAN record -- the form a
+    sub-interface has in the tree, from every parser that reads one.
+    Its description is its zone's, and the device's ``<descr>`` where
+    the zone has none; a ``<descr>`` beside a zone's own is said in a
+    row.  Read as a VLAN interface, it was an SVI and a VLAN no port
+    carried on every target that has the two (``interface Vlan10``
+    on IOS-XE, ``irb.10`` on Junos).  The parent is a bridge where
+    ``<bridges>`` names it, another VLAN device where ``<vlans>``
+    does, a LAGG where ``<laggs>`` does, and otherwise a port, unless
+    its name says it is something else (:func:`_port_type_of`):
+    zones are not typed, and the classifier does not read every
+    driver's name (``igc0``).
+
+    On a bridge, another VLAN device or a name that says it is no
+    port it is a VLAN interface, typed ``ianaift:l3ipvlan``, and the
+    tag is a :class:`CanonicalVlan` named after the device, its
+    ``<descr>`` its description -- the RouterOS and FortiOS parsers link a VLAN
     interface to its tag by that name, and the renderers find the tag
     by it.  Read for its tag alone, every VLAN of a config came back on
     one guessed parent under another device name, and each zone on a
@@ -869,6 +949,8 @@ def _parse_vlan_devices(
     Args:
         vlans_el: The ``<vlans>`` element.
         intent: The tree, whose ``<interfaces>`` have been read.
+        laggs: The names ``<laggs>`` gives its LAGGs.
+        bridges: The names ``<bridges>`` gives its bridges.
 
     Returns:
         The names of the devices left out, so that what else is on
@@ -952,6 +1034,7 @@ def _parse_vlan_devices(
         named.setdefault(iface.name, iface)
     zoned = set(named)
     made: set[str] = set()
+    devices = {entry["device"] for entry in entries if entry["device"]}
     for entry in entries:
         reason = reasons.get(id(entry))
         if reason is not None:
@@ -979,11 +1062,11 @@ def _parse_vlan_devices(
             record = CanonicalInterface(name=device)
             intent.interfaces.append(record)
             named[device] = record
-        record.interface_type = "ianaift:l3ipvlan"
         record.vlan_parent = entry["parent"] or None
-        intent.vlans.append(CanonicalVlan(
-            id=entry["tag"], name=device, description=entry["descr"],
-        ))
+        _read_the_device(
+            record, entry, intent, where(entry),
+            _port_type_of(entry["parent"], laggs, bridges, devices),
+        )
         if entry["pcp"] not in ("", "0"):
             intent.dropped_tier3_sections.append(
                 f"{where(entry)}: <pcp> other than 0 -- the priority its "
@@ -994,6 +1077,31 @@ def _parse_vlan_devices(
             iface for iface in intent.interfaces if iface.name not in left_out
         ]
     return left_out
+
+
+def _read_the_device(
+    record: CanonicalInterface, entry: dict[str, Any],
+    intent: CanonicalIntent, where: str, port_type: str | None,
+) -> None:
+    """Read the device of *entry* into *record*: a sub-interface of
+    its parent where *port_type* is the parent's type, and otherwise a
+    VLAN interface and a VLAN of its tag (:func:`_parse_vlan_devices`).
+    """
+    if port_type is None:
+        record.interface_type = "ianaift:l3ipvlan"
+        intent.vlans.append(CanonicalVlan(
+            id=entry["tag"], name=record.name, description=entry["descr"],
+        ))
+        return
+    record.interface_type = port_type
+    record.dot1q_vlan = entry["tag"]
+    if entry["descr"] and not record.description:
+        record.description = entry["descr"]
+    elif entry["descr"] and entry["descr"] != record.description:
+        intent.dropped_tier3_sections.append(
+            f"{where}: a <descr> of its own beside its zone's -- the "
+            f"VLAN device's description is not translated"
+        )
 
 
 def _parse_opnsense_dhcp_zone(

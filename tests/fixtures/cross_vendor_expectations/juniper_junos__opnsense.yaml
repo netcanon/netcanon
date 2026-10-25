@@ -348,13 +348,18 @@ per_field_expectation:
       Every other record keeps its text: Junos ``description "X"``
       (quoted when whitespace) ↔ OPNsense ``<descr>X</descr>`` (no
       length limit).
-      No cell's comparison shows the loss: on each cell that holds
-      such a member, the VLAN devices OPNsense reads back from
-      ``<vlans>`` (``<parent>_vlan<tag>``) make the output's list
-      longer, and the reconciler compares a list whose size changes
-      as a whole and gives the drift to ``interfaces[].name``.  The
-      loss is pinned by
+      No cell's comparison shows the member's loss: on each cell
+      that holds such a member the output's list changes size, and
+      the reconciler compares such a list as a whole and gives the
+      drift to its first field.  The loss is pinned by
       ``tests/unit/migration/test_a_lag_member_has_a_record.py``.
+      What the cells compared record by record show is the other
+      way: on ``batfish_evpntype5_router1_junos2541.set`` and
+      ``ksator_labmgmt_qfx10k2_junos173.set`` a VLAN
+      interface (``irb.100``) comes back with its VLAN's name as its
+      description -- the ``<descr>`` of the VLAN device its zone
+      assigns, which the OPNsense parser gives a zone that has none
+      (see ``vlans[].name``).
     references: [junos-iface-fundamentals, opnsense-interfaces, opnsense-laggs]
 
   interfaces[].enabled:
@@ -512,16 +517,16 @@ per_field_expectation:
   vlans[].id:
     disposition: lossy
     reason: >
-      Junos ``set vlans NAME vlan-id N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``;
-      both vendors share the 1-4094 range, and every VLAN of the source
-      comes back.  The list grows: a unit with a ``vlan-id`` is written as
-      a `<vlan>` device of its tag on its port, which the OPNsense parser
-      reads back as a VLAN of that tag too (opnsense declares
-      `/interfaces/interface/dot1q-vlan` lossy for that reading): 6 -> 9 on
-      the QFX10K2 capture (`xe-0/0/6:2.10`, `.30`, `.100`), 0 -> 4 on the
-      EVPN leaf (`ge-0/0/0.54` and the like) and 4 -> 5 on the kitchen
-      sink.  The cells with no such unit keep their list, and stand under
-      this disposition.
+      Every VLAN record is dropped on the 7 cells that hold one (4, 6, 6, 16,
+      3, 87 and 4 records).  OPNsense has no VLAN apart from a VLAN device on
+      one parent: the render writes each VLAN as a `<vlan>` device on a LAGG
+      or a port that carries it, else on the first LAGG or port, and the
+      OPNsense parser reads a device on a port or a LAGG back as a routed
+      sub-interface of it, its tag the VLAN's id, with no VLAN record
+      (opnsense declares `/vlans/vlan/id` lossy).  Up to 0.7.7 every device
+      was read back as a VLAN.  A unit with a `vlan-id` is written as a
+      `<vlan>` device of its tag on its port and read back as the
+      sub-interface it is, so it no longer adds a VLAN record.
     references: [junos-vlans-statement, opnsense-vlans]
 
   vlans[].name:

@@ -148,7 +148,11 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/tunnel-type",             # /interface gre vs eoip vs ipip discriminator
-            "/vlans/vlan/id",
+            # A routed sub-interface is a VLAN interface on its port
+            # (`/interface vlan add interface=ether2 name=ether2.10
+            # vlan-id=10`), which the parser reads back as a
+            # sub-interface of the port.
+            "/interfaces/interface/dot1q-vlan",
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/description",  # run3 — `comment=...`
@@ -171,20 +175,6 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
-            LossyPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "A routed sub-interface (Cisco `encapsulation dot1Q N`, "
-                    "Junos `unit N vlan-id`) is written as RouterOS's own "
-                    "VLAN interface on its port (`/interface vlan add "
-                    "interface=ether2 name=ether2.10 vlan-id=10`), which "
-                    "the device runs as the sub-interface.  RouterOS writes "
-                    "a VLAN interface on a port and on a bridge alike, so "
-                    "the parser reads it back as a VLAN interface and a "
-                    "VLAN of its tag, not as a sub-interface of the port."
-                ),
-                severity="warn",
-            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(
@@ -348,6 +338,18 @@ class MikroTikRouterOSCodec(CodecBase):
                     "RouterOS does not expose IANA ifType; the codec "
                     "infers it from the interface-name prefix "
                     "(etherN → ethernetCsmacd, vlanN → l3ipvlan)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/id",
+                reason=(
+                    "RouterOS has no VLAN apart from an /interface vlan on "
+                    "a parent.  A VLAN on a bridge is read back as a VLAN; "
+                    "one another platform carries on a port or a LAG is "
+                    "written as an /interface vlan on it, which the parser "
+                    "reads back as a routed sub-interface of the port (its "
+                    "tag the VLAN's id), with no VLAN record."
                 ),
                 severity="warn",
             ),

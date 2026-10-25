@@ -1736,8 +1736,10 @@ class TestAnAnswerNobodyReads:
     #: (9,296,754 since each OPNsense VLAN's name is a lossy path of the
     #: validation report: the rendered config did not change.  9,296,702
     #: since the job's sentence offers no devices for NX-OS, of which
-    #: none is described.)
-    LENGTH = 9_296_702
+    #: none is described.  9,507,861 since each OPNsense VLAN's id is a
+    #: lossy path as well, a VLAN on a port being read back as a
+    #: sub-interface of it: the rendered config did not change.)
+    LENGTH = 9_507_861
 
     @staticmethod
     def _client_that_does_not_read(port: int) -> socket.socket:
@@ -1783,8 +1785,9 @@ class TestAnAnswerNobodyReads:
         assert len(lines) == 1, lines
         said = re.fullmatch(
             r"an answer from /api/v1/migration/plan had not gone out when its request's 4 seconds \(small "
-            r"limits\) were up, and was abandoned: (\d+) of 9,296,702 bytes had been handed to the client; the "
-            r"rest was let go and the connection closed", lines[0],
+            r"limits\) were up, and was abandoned: (\d+) of " + f"{self.LENGTH:,}"
+            + r" bytes had been handed to the client; the rest was let go and the connection closed",
+            lines[0],
         )
         assert said, lines[0]
         assert len(got) <= int(said[1]) < self.LENGTH - 1_000_000

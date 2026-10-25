@@ -52,7 +52,10 @@ next
 ```
 
 — and the re-parse reads it back as a VLAN interface (`ianaift:l3ipvlan`) and
-as a VLAN of its tag named after it, which is why `interfaces[].interface_type`,
+as a VLAN of its tag named after it: the mesh leaves the port its IOS-XR name,
+which the FortiGate parser does not read as a port (on one it does read, or
+an aggregate, a VLAN interface is a sub-interface of it, with no VLAN
+record). That is why `interfaces[].interface_type`,
 `vlans[].name` and `vlans[].description` are lossy on the four cells that carry
 one (`batfish_ebgp_border01`, `batfish_ebgp_border02`,
 `iosxr_design_cst_pa3_xr752`, `kitchen_sink`). The IOS-XR parser makes a VLAN

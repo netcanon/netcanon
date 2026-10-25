@@ -397,17 +397,22 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields are lost or move (the name to the description,
-      the address to the VLAN's interface) — see ``vlans[].*``
-      entries below.
+      Every VLAN record is dropped on all 7 cells (3, 2, 12, 4, 3, 3 and 5
+      records).  OPNsense has no VLAN apart from a VLAN device on one parent:
+      the render writes each VLAN as a `<vlan>` device on a LAGG or a port
+      that carries it, else on the first LAGG or port, and the OPNsense parser
+      reads a device on a port or a LAGG back as a routed sub-interface of it,
+      its tag the VLAN's id, with no VLAN record (opnsense declares
+      `/vlans/vlan/id` lossy).  Up to 0.7.7 every device was read back as a
+      VLAN.  Per-VLAN sub-fields go with the record (see `vlans[].*` below).
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].id:
-    disposition: good
-    note: >
-      Aruba ``vlan N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``.  Both
-      vendors share the 1-4094 range.
+    disposition: lossy
+    reason: >
+      Every id is dropped with its record on all 7 cells (3, 2, 12, 4, 3, 3
+      and 5): each comes back as the tag of a sub-interface (see `vlans`).
+      opnsense declares `/vlans/vlan/id` lossy.
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].name:

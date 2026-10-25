@@ -287,11 +287,17 @@ per_field_expectation:
   # -- VLANs -- the campus surface, and most of it does not arrive -----------
 
   "vlans[].id":
-    disposition: good
-    note: >
-      All 30 VLAN records across the 7 cells keep their id — the VLAN survives
-      as a FortiOS `set vlanid <id>` on the synthesised child interface.  This
-      is the only part of the VLAN record that round-trips intact.
+    disposition: lossy
+    reason: >
+      Every VLAN record is dropped on all 7 cells (2, 2, 4, 4, 8, 9 and 13
+      records); on the arch4 cores each rides on `lag 1`.  FortiOS has no VLAN
+      apart from a VLAN interface on a parent: the render writes each VLAN as
+      one on the port or aggregate it chooses for every VLAN interface, and
+      the FortiGate parser reads a VLAN interface on an aggregate, or on a
+      port it knows by its name, back as a routed sub-interface of it, its tag
+      the VLAN's id, with no VLAN record (fortigate_cli declares
+      `/vlans/vlan/id` lossy).  Up to 0.7.7 every VLAN interface was read back
+      as a VLAN.
     references: [aoscx-fortigate-surface]
 
   "vlans[].name":

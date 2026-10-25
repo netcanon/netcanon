@@ -87,10 +87,14 @@ Canonical fields covered (`CanonicalInterface`).
   rationale.
 - `enabled`: **good** — OPNsense `<enable>` element ↔ Arista `no
   shutdown` / `shutdown`.
-- `interface_type`: **good** — the OPNsense parser types its VLAN
-  devices (`ianaift:l3ipvlan`) and leaves every other interface
-  untyped; the Arista round trip gives each the type it had
-  (`vlan0.10` reads back as a VLAN interface).
+- `interface_type`: **lossy** — the OPNsense parser types a VLAN
+  device on a port as a routed sub-interface of it (its port's type)
+  and one on a bridge as a VLAN interface (`ianaift:l3ipvlan`), and
+  leaves every other interface untyped.  The mesh translates no port
+  name, so a sub-interface reaches EOS under its OPNsense name
+  (`vlan0.10`), which the EOS parser reads by its shape as a VLAN
+  interface; through the port translator it is `Ethernet<n>.<tag>`,
+  typed as its port.
 - `mtu`: **good** — OPNsense `<mtu>` ↔ Arista `mtu N`.
 - `ipv4_addresses`: **good** — OPNsense `<ipaddr>` + `<subnet>`
   ↔ Arista CIDR.  OPNsense's non-static keywords (`dhcp`,

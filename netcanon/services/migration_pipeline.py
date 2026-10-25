@@ -1513,6 +1513,7 @@ def _sub_interface_followers(
     plan: MappingPlan,
     operator_map: dict[str, str | None],
     names: dict[str, str | None],
+    stated: dict[str, tuple[str, int]] | None = None,
 ) -> dict[str, str | None]:
     """Explicit entries that make a sub-interface follow its parent port.
 
@@ -1533,19 +1534,40 @@ def _sub_interface_followers(
     which for a port that keeps an operator's own name is that name,
     not the hardware it moved to.
 
+    A sub-interface whose config states its port apart from its name
+    (*stated*: RouterOS ``gn-mgmt`` on ``ether3``) keeps its name, as
+    the translator keeps it between two configs of one codec, and
+    goes where its port goes by the reference to the port.
+
     Args:
         plan: The pairing; its off-inventory names are the candidates.
         operator_map: The operator's own entries, as applied.
         names: Source port to the name it has on the target, as the
             pairing (and any pinned label) decided.
+        stated: Each sub-interface whose config states its port,
+            with the port and its tag
+            (:func:`~netcanon.migration.canonical.port_names.stated_sub_interfaces`);
+            none if not given.
 
     Returns:
         A rename-map entry for each sub-interface that follows its
-        parent: the parent's target with the unit, or ``None`` where
-        the parent is dropped.
+        parent: the parent's target with the unit (or, for one whose
+        config states its port, its own name), or ``None`` where the
+        parent is dropped.
     """
+    stated = stated or {}
     followers: dict[str, str | None] = {}
     for name in plan.off_inventory:
+        if name in stated:
+            parent = stated[name][0]
+            if parent in operator_map:
+                target = operator_map[parent]
+            elif parent in names:
+                target = names[parent]
+            else:
+                continue
+            followers[name] = name if target else None
+            continue
         parent, dot, unit = name.rpartition(".")
         # A unit suffix is a number.  A RouterOS port an operator named
         # ``ether1.backup`` is not a sub-interface of ``ether1``.
@@ -1566,6 +1588,7 @@ def _units_that_followed(
     operator_map: dict[str, str | None],
     names: dict[str, str | None],
     job: MigrationJob,
+    stated: dict[str, tuple[str, int]] | None = None,
 ) -> dict[str, str | None]:
     """Sub-interfaces the translator sent after their port, across
     vendors, read from the finished run.
@@ -1584,6 +1607,12 @@ def _units_that_followed(
         names: Source port to its name on the target, as given to
             the run.
         job: The finished run.
+        stated: Each sub-interface whose config states its port apart
+            from its name, with the port and its tag: the translator
+            sends it after its port named by its TAG, not by a unit
+            its name does not have (RouterOS ``gn-mgmt`` on
+            ``ether3``, tag 84, goes to ``Ethernet3.84``).  None if
+            not given.
 
     Returns:
         Each unit that is where its port is, with the name it has
@@ -1596,8 +1625,13 @@ def _units_that_followed(
 
     gone = set(job.port_drops)
     followed: dict[str, str | None] = {}
+    stated = stated or {}
     for name in plan.off_inventory:
-        split = split_unit(name)
+        if name in stated:
+            port, tag = stated[name]
+            split: tuple[str, str] | None = (port, str(tag))
+        else:
+            split = split_unit(name)
         if split is None or name in operator_map:
             continue
         port, unit = split
@@ -2565,6 +2599,7 @@ def run_plan_with_models(
     from ..migration.canonical.port_names import (
         collect_hardware_port_names,
         collect_port_names,
+        stated_sub_interfaces,
     )
     from ..migration.port_mapping import name_key, plan_port_mapping, settle_plan
 
@@ -2658,7 +2693,9 @@ def run_plan_with_models(
                 and name_key(name, fold_target) not in on_target
             ):
                 merged[name] = name
-        followers = _sub_interface_followers(plan, operator_map, merged)
+        followers = _sub_interface_followers(
+            plan, operator_map, merged, stated_sub_interfaces(tree),
+        )
     if plan is not None and paired:
         forms = _management_forms(plan, source, target, operator_map, fold_target)
     merged.update(followers)
@@ -2729,7 +2766,9 @@ def run_plan_with_models(
         tagged = {
             iface.name for iface in tree.interfaces if iface.dot1q_vlan is not None
         }
-        for name, where in _units_that_followed(plan, operator_map, merged, job).items():
+        for name, where in _units_that_followed(
+            plan, operator_map, merged, job, stated_sub_interfaces(tree),
+        ).items():
             if where is None or name in tagged:
                 followers[name] = where
             else:

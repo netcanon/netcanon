@@ -555,6 +555,133 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS VLAN interface on a port was not a sub-interface onto
+  another vendor.**  `/interface vlan add interface=ether3
+  name=gn-mgmt vlan-id=11` was read as a VLAN interface and a VLAN of
+  its tag, and the port it rides on was not kept in the tree: onto
+  IOS-XE, NX-OS, EOS or Junos it came out as VLAN 11 and its VLAN
+  interface (`interface Vlan11`, `irb.11`), which no port carries,
+  and a name such as `gn-mgmt`, which no classifier reads, was
+  written into the other vendor's config as it stood, holding the
+  job `partial`.  That was also how RouterOS's own output for
+  another vendor's sub-interface was read back.  RouterOS writes a
+  VLAN interface on a port and on a bridge with the same line, so
+  the parser now tells them apart by the parent: on a port -- one a
+  line of `/interface ethernet` names, renamed or not, or else one
+  whose name says it is a port -- or on a LAG, it is a sub-interface
+  of it, typed as its parent, with its tag and no VLAN; on a bridge,
+  or on anything else (`wlan1`), it is a VLAN interface and a VLAN,
+  as before.  Across vendors a sub-interface goes where its port
+  goes, named by its tag whatever its own name looks like (`gn-mgmt`
+  on `ether3` onto EOS is `interface Ethernet3.11` with
+  `encapsulation dot1q vlan 11`); between two RouterOS configs it
+  keeps its name; and it is dropped with a port that is dropped, in
+  one warning.  With devices declared it is read as following its
+  port, where it was a name nobody decided.  Onto AOS-S, AOS-CX,
+  OS10 and IOS-XE NETCONF, which have no form for a sub-interface's
+  tag, such a job is now `partial`, the validation report listing
+  the tag, where it said `completed` over a VLAN interface.
+  `/interfaces/interface/dot1q-vlan` is supported on RouterOS, where
+  it was lossy, and `/vlans/vlan/id` is lossy, where it was
+  supported: a VLAN another platform carries on a port or a LAG is
+  written as an `/interface vlan` on it and read back as a
+  sub-interface of the port, with no VLAN record.  A sub-interface
+  of a port the operator renamed
+  (`ether4` named `wan`) goes after the name, which no classifier
+  reads, and the job lists both.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_vlan_on_a_port_is_a_sub_interface.py`
+  (each kind of parent, read as typed by hand, and the outputs read
+  as text), `tests/unit/migration/test_a_sub_interface_onto_routeros.py`
+  (another vendor's sub-interface read back as one), and RouterOS as
+  a source onto every codec in
+  `tests/unit/migration/test_units_follow_their_port.py`.
+- **A FortiOS VLAN interface on a port or an aggregate was not a
+  sub-interface onto another vendor.**  `edit "VL_100"` / `set
+  vlanid 100` / `set interface "LAG_INTERNAL"` was read as a VLAN
+  interface and a VLAN of its tag: onto IOS-XE, NX-OS, EOS or Junos
+  it came out as VLAN 100 and its VLAN interface (`interface
+  Vlan100`, `irb.100`), which nothing on the aggregate carries, and
+  a name such as `gn-mgmt`, which no classifier reads, was written
+  into the other vendor's config as it stood, holding the job
+  `partial`.  Both committed FortiGate captures that have VLAN
+  interfaces have them on an aggregate.  FortiOS writes a VLAN
+  interface on a port and on a switch interface with the same
+  lines, so the parser now tells them apart by the parent: on a
+  port -- one whose own edit says `set type physical`, or, where it
+  states no type or has no edit, one whose name says it is a port
+  -- or on an aggregate that is not a FortiLink one, it is a
+  sub-interface of it, typed as its parent, with its tag and no
+  VLAN, its alias the sub-interface's description; on a FortiLink
+  aggregate, a hardware or software switch (`internal`, `lan`),
+  another VLAN interface (Q-in-Q), the interface named `fortilink`,
+  or anything else, it is a VLAN interface and a VLAN, as before.
+  Across vendors a sub-interface goes where its parent goes, named
+  by its tag; between two FortiOS configs it keeps its name.  An
+  aggregate's name is the operator's own, which no classifier
+  reads, so the job lists it and the sub-interfaces on it until an
+  entry names it, and they go with that entry
+  (`{"LAG_INTERNAL": "Port-Channel1"}` onto EOS is `interface
+  Port-Channel1.100`).  Onto AOS-S, AOS-CX, OS10 and IOS-XE NETCONF
+  such a job is `partial` for the tag, as for RouterOS above.
+  `/interfaces/interface/dot1q-vlan` is supported on FortiOS, where
+  it was lossy: another vendor's sub-interface written onto FortiOS
+  is read back as one where its port has a name a FortiGate gives a
+  port.  The output writes no `set type` for a port, so on a port
+  named otherwise (another vendor's name, which the bare pipeline
+  leaves as it is, or `port-0-1-2` for NX-OS `Ethernet1/2`) it is
+  read back as a VLAN interface and a VLAN.  The same holds for a
+  VLAN another platform carries on a port or a LAG, written as a
+  VLAN interface on it: on a port with a FortiGate's name it is
+  read back as a sub-interface of the port, with no VLAN record,
+  and `/vlans/vlan/id` is lossy, where it was supported.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_vlan_on_a_port_is_a_sub_interface.py`
+  (each kind of parent, read as typed by hand, and the outputs read
+  as text) and `tests/unit/migration/test_a_sub_interface_onto_fortios.py`
+  (which outputs are read back as a sub-interface, typed by hand).
+- **An OPNsense VLAN device on a port or a LAGG was not a
+  sub-interface onto another vendor.**  `<vlan><if>ixl0</if>
+  <tag>10</tag><vlanif>vlan0.10</vlanif>` was read as a VLAN
+  interface and a VLAN of its tag: onto IOS-XE, NX-OS, EOS or Junos
+  it came out as VLAN 10 and its VLAN interface (`interface Vlan10`,
+  `irb.10`), which nothing on the port carries.  The committed
+  OPNsense capture has five such devices, all on one port.  The
+  parser now reads the parent: on a bridge (one `<bridges>` names,
+  or one named `bridge` and digits), another VLAN device, a zone's
+  key (`lan`, `opt3`: never a device's name, and what the renderer
+  writes for a VLAN in a config with no port), or a name that says
+  it is a VLAN interface, a loopback or a tunnel, it is a VLAN
+  interface and a VLAN, as before; on any other parent -- a
+  port, or a LAGG where `<laggs>` names it -- it is a sub-interface
+  of it, typed as its parent, with its tag and no VLAN.  Zones are
+  not typed and the classifier does not read every driver's name
+  (`igc0`), so such a parent is a port whatever its name.  The
+  sub-interface's description is its zone's, or the device's
+  `<descr>` where the zone has none; a `<descr>` beside a zone's own
+  is said in a row, as on every device of the capture.  Across
+  vendors it goes where its parent goes, named by its tag; between
+  two OPNsense configs it keeps its name.  A parent no classifier
+  reads is listed until an entry names it.  Onto AOS-S, AOS-CX,
+  OS10 and IOS-XE NETCONF such a job is `partial` for the tag, as
+  for RouterOS above.  `/interfaces/interface/dot1q-vlan` is
+  supported on OPNsense, where it was lossy: another vendor's
+  sub-interface written onto OPNsense is read back as one, and so is
+  a VLAN another platform carries on a port or a LAG, written as a
+  VLAN device on it, with no VLAN record: `/vlans/vlan/id` and
+  `/vlans/vlan/description` are lossy, where they were supported.
+  A device
+  no zone assigns is written with its `<descr>` and still no zone, so
+  another vendor's sub-interface that holds a description and
+  nothing else is the device alone with that `<descr>`, where it was
+  a zone that assigned and enabled the device.  Over the committed
+  captures the OPNsense capture's five devices are tagged units of
+  their port onto IOS-XR and VyOS, where each was a name the target
+  had none for, and one more job onto VyOS passes the validation
+  report, which the port-name check holds `partial` for `igc0`, so
+  that check now makes 220 of 590 jobs `partial`.  Guarded by
+  `tests/unit/migration/codecs/opnsense/test_a_vlan_on_a_port_is_a_sub_interface.py`
+  (each kind of parent, the capture, and the outputs read as text)
+  and `tests/unit/migration/test_a_sub_interface_onto_opnsense.py`
+  (another vendor's sub-interface read back as one).
 - **A job no longer offers "declare both devices" where no device
   can be declared.**  The sentence of a job whose port names are not
   settled offered the pairing wherever a hardware port was among
@@ -4262,16 +4389,6 @@ timestamp if your timezone matters for an audit.
   job's report says so.  The IP MTU an IOS-XE or Junos config leaves
   unstated under a raised `mtu` is taken to be the payload, which no
   vendor page read says.
-- **A RouterOS VLAN interface on a port is not a sub-interface onto
-  another vendor.**  `/interface vlan add interface=ether2
-  name=ether2.10 vlan-id=10` is read as a VLAN interface and a VLAN of
-  its tag, and the port it rides on is not kept in the tree: onto
-  IOS-XE, NX-OS, EOS or Junos it comes out as VLAN 10 and its VLAN
-  interface (`interface Vlan10`, `irb.10`), which no port carries, in
-  a job that says `completed`.  That is also how RouterOS's output
-  for another vendor's sub-interface is read, so a sub-interface
-  taken to RouterOS and on to a third vendor is not a sub-interface
-  there.  Re-create it by hand.
 
 - **A Junos routed port's native VLAN reaches Junos alone.**  `set
   interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units
@@ -4891,13 +5008,14 @@ timestamp if your timezone matters for an audit.
   reported: no other codec writes a VLAN interface on a parent the
   config names.  From another vendor, a VLAN interface of a RouterOS,
   FortiOS or OPNsense output is on a parent the renderer chooses.
-- **An OPNsense VLAN device named `vlan0.<n>` is the SVI of VLAN `n`
-  onto another vendor, whatever its tag.**  The port-name translator
-  reads the digits after the dot as the VLAN: a device `vlan0.5` of
-  tag 10 comes out as `interface Vlan5` on IOS-XE, NX-OS and EOS, the
-  `irb` unit 5 on Junos, and RouterOS VLAN 5, carrying VLAN 10's
-  address, in jobs that say `completed`.  The supergate capture's
-  devices are named after their tags, and are right.
+- **An OPNsense VLAN device named `vlan0.<n>` on a bridge, on
+  another VLAN device or on a zone's key is the SVI of VLAN `n` onto
+  another vendor, whatever its tag.**  The port-name translator reads the digits
+  after the dot as the VLAN: such a device `vlan0.5` of tag 10 comes
+  out as `interface Vlan5` on IOS-XE, NX-OS and EOS, the `irb` unit
+  5 on Junos, and RouterOS VLAN 5, carrying VLAN 10's address, in
+  jobs that say `completed`.  A device on a port or a LAGG is a
+  sub-interface named by its tag (Fixed, above).
 - **An OPNsense 802.1ad (QinQ) device is not translated.**  It is left
   out with its zone and what rides on it, and said in a row: the
   canonical tree holds no 802.1ad tag.

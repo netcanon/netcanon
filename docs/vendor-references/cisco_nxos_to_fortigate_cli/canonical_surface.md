@@ -91,6 +91,16 @@ sub-field of the same parent is preserved on every cell that exercises it, so
   trunk — `batfish_nxos_hsrp_nxos1` binds `Vlan10` and `Vlan2000` to
   `loopback123`, while `busterswt_spine_leaf_xk32_1_nxos9312` binds `vlan999`
   to `port-channel10`.
+* **A VLAN whose parent is an aggregate does not come back as a VLAN.** The
+  FortiGate parser reads a VLAN interface on an aggregate, or on a port it
+  knows by its name, as a routed sub-interface of it, its tag the VLAN's
+  id, with no VLAN record: the VLANs of
+  `busterswt_spine_leaf_xk32_1_nxos9312`, written on `port-channel10`, all
+  come back as tagged sub-interfaces, and `kitchen_sink` keeps 2 of its 4
+  VLANs (the two written on `port-channel1` are dropped). A VLAN written
+  on a port name FortiOS does not read as a port (`Ethernet1/2`) comes
+  back as a VLAN. Up to 0.7.7 every VLAN interface was read back as a
+  VLAN.
 * **`vlans[].name` is replaced, not carried.** The FortiOS VLAN child
   interface's edit key becomes the canonical VLAN name on re-parse, so
   `user_svi_1_vrf_service_cust_1` comes back as `Vlan10` and an unnamed VLAN
@@ -146,9 +156,9 @@ sub-field of the same parent is preserved on every cell that exercises it, so
   declared `unsupported` on the fortigate_cli matrix's own account
   ("FortiOS has no native-VLAN on a routed port"), not on measurement.
   `voice_vlan` is declared unsupported by the same matrix and `dot1q_vlan`
-  lossy (a sub-interface is written as a VLAN interface on its port and read
-  back as a VLAN of its tag); neither is populated by the NX-OS source at
-  all.
+  supported (a sub-interface is written as a VLAN interface on its port and
+  read back as a sub-interface of a port the FortiGate parser knows, or of an
+  aggregate); neither is populated by the NX-OS source at all.
 * **`timezone` / `dns_servers`** are untested by the corpus.
   `/system/timezone` is declared unsupported on BOTH matrices with the same
   reason ("Render emits no clock/timezone stanza"), so it is a target-side

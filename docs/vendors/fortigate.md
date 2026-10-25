@@ -51,7 +51,10 @@ firewall translation is your primary need, see
   `set type vlan` + `set vlanid <N>`), on the interface its
   `set interface` names, with the tag its `set vlanid` states --
   not the digits of its name (`edit "vlan100"` may `set vlanid 20`;
-  an OPNsense device `vlan01` may be VLAN 20).  The parent is kept
+  an OPNsense device `vlan01` may be VLAN 20) -- where that
+  interface is a FortiLink aggregate, a hardware or software switch
+  (`internal`, `lan`), another VLAN interface, or anything that is
+  not a port or an aggregate (on those, below).  The parent is kept
   onto FortiOS, RouterOS and OPNsense; onto any other vendor it is
   not carried, and nothing reports it.  Where the output has no interface of that name, a
   parent is chosen and a `# review:` line in the VLAN's block names
@@ -64,14 +67,51 @@ firewall translation is your primary need, see
   chosen before every trunk, and a switch's management port
   before its trunks, so every VLAN of a fabric switch was written
   `set interface "loopback0"` or `set interface "mgmt1"`.
+- **A VLAN interface on a port or an aggregate is a sub-interface
+  of it.**  FortiOS writes a VLAN interface on a port and on a
+  switch with the same lines, so the parser reads the parent: one
+  whose own edit says `set type physical`, or `set type aggregate`
+  without `set fortilink enable`, or, where its edit states no type
+  or there is none, one whose name says it is a port (`port4`,
+  `wan1`).  Such a VLAN interface is typed as its parent, its tag
+  its own, and makes no VLAN; its alias is its description.  Onto
+  another vendor it goes where its parent goes, named by its tag
+  (`gn-mgmt` on `port3` onto EOS is `interface Ethernet3.11` with
+  `encapsulation dot1q vlan 11`); between two FortiOS configs it
+  keeps its name.  An aggregate's name is your own, which no
+  classifier reads: the job lists it, and the sub-interfaces on it,
+  until an entry in the port map names it, and they go with that
+  entry (`{"LAG_INTERNAL": "Port-Channel1"}` onto EOS puts `VL_100`
+  on `interface Port-Channel1.100`).  Onto AOS-S, AOS-CX, OS10 and
+  IOS-XE over NETCONF, which have no form for a sub-interface's tag,
+  the job is `partial`, the validation report listing the tag.
+  ⚠️ Up to 0.7.7 every VLAN interface was a VLAN interface and a
+  VLAN: onto IOS-XE, NX-OS, EOS or Junos one on an aggregate came
+  out as `interface Vlan100` or `irb.100`, which nothing on the
+  aggregate carries.
+- **Another platform's VLAN is a VLAN interface, and comes back as a
+  VLAN where it rides on a switch interface.**  FortiOS has no VLAN
+  apart from a VLAN interface on one parent, so the renderer writes a
+  switch's VLAN (`vlan 10` with tagged ports) on the port it chooses
+  for every VLAN interface (one with a private address or a trunk
+  first, a management port last).  Where that parent is a port the
+  parser knows (`port1`) or an aggregate, it reads the interface back as a
+  sub-interface of it (above): its tag is the VLAN's id, and there
+  is no VLAN record (`/vlans/vlan/id` is lossy).  ⚠️ Up to 0.7.7
+  every VLAN interface was read back as a VLAN.
 - **A sub-interface of another vendor is a VLAN interface on its
   port.**  IOS-XE `GigabitEthernet0/0/1.100` with `encapsulation
   dot1Q 200`, or a Junos `unit 100 vlan-id 200`, is `edit
   "port1.100"` / `set type vlan` / `set vlanid 200` / `set interface
   "port1"`: the tag is the one the sub-interface states, not the
-  number in its name.  Read back, it is a VLAN interface and a VLAN
-  of its tag, not a sub-interface of the port; the job's report says
-  so.  A sub-interface you name with no port in it (`wan10`) rides on
+  number in its name.  Read back, it is a sub-interface of the port
+  again where the port has a name a FortiGate gives a port (`port1`):
+  the output writes no `set type` for a port, so the parser goes by
+  its name, and on a port named otherwise -- another vendor's name,
+  which the bare pipeline (`run_plan`) leaves as it is, or
+  `port-0-1-2`, the name made for NX-OS `Ethernet1/2` -- it is read
+  back as a VLAN interface and a VLAN.  A sub-interface you name with
+  no port in it (`wan10`) rides on
   the parent chosen for every VLAN, under a `# review:` line: move it
   to its port.  A FortiGate takes a VLAN id once on an interface
   (Fortinet's "Rules about VLAN configuration and VDOM interface

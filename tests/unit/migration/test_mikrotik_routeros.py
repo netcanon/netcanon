@@ -926,6 +926,8 @@ class TestVlanInterfaceNamePreservation:
     interface in routeros-diff's verbose_export.rsc."""
 
     def test_named_vlan_iface_round_trips(self):
+        """On a port, it is a sub-interface of the port: typed as the
+        port, its tag its own, and no VLAN."""
         raw = (
             "/interface vlan\n"
             "add interface=ether3 name=gn-mgmt vlan-id=84\n"
@@ -933,7 +935,9 @@ class TestVlanInterfaceNamePreservation:
         c = MikroTikRouterOSCodec()
         first = c.parse(raw)
         gn_mgmt = next(i for i in first.interfaces if i.name == "gn-mgmt")
-        assert gn_mgmt.interface_type == "ianaift:l3ipvlan"
+        assert gn_mgmt.interface_type == "ianaift:ethernetCsmacd"
+        assert (gn_mgmt.dot1q_vlan, gn_mgmt.vlan_parent) == (84, "ether3")
+        assert first.vlans == []
 
         rendered = c.render(first)
         assert "name=gn-mgmt" in rendered
@@ -945,6 +949,9 @@ class TestVlanInterfaceNamePreservation:
         names = {i.name for i in second.interfaces}
         assert "gn-mgmt" in names
         assert "vlan84" not in names
+        again = next(i for i in second.interfaces if i.name == "gn-mgmt")
+        assert (again.dot1q_vlan, again.vlan_parent) == (84, "ether3")
+        assert second.vlans == []
 
     def test_synthetic_name_still_used_for_vlans_without_iface(self):
         """When a CanonicalVlan has no matching interface, render

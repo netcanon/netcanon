@@ -503,6 +503,16 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # Re-measured again after a VLAN's label became its name onto the targets
 # whose VLAN has only a name: mikrotik_routeros__juniper_junos falls to 1,
 # its ``vlans[].name`` now declared good (the comment is the name there).
+#
+# And three down after a VLAN device on a port became a sub-interface of
+# it on OPNsense: cisco_nxos__opnsense (1 to 0), fortigate_cli__opnsense
+# (4 to 3) and juniper_junos__opnsense (5 to 4), each for
+# ``interfaces[].description``.  A switch VLAN written onto OPNsense is
+# read back as a sub-interface of its port, not as a VLAN interface of a
+# device of its own, so on more cells the output's interface list keeps
+# its size and is compared record by record: a VLAN interface there comes
+# back with its VLAN's name as its description, and the FortiGate kitchen
+# sink shows its aggregate members' loss.  The YAML reasons say so.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -531,7 +541,6 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__juniper_junos": 4,
     "cisco_iosxe_cli__mikrotik_routeros": 1,
     "cisco_iosxe_cli__opnsense": 4,
-    "cisco_nxos__opnsense": 1,
     "dell_os10__opnsense": 1,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,
@@ -539,14 +548,14 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 4,
     "fortigate_cli__mikrotik_routeros": 2,
-    "fortigate_cli__opnsense": 4,
+    "fortigate_cli__opnsense": 3,
     "juniper_junos__arista_eos": 2,
     "juniper_junos__aruba_aoss": 2,
     "juniper_junos__cisco_iosxe": 2,
     "juniper_junos__cisco_iosxe_cli": 7,
     "juniper_junos__fortigate_cli": 4,
     "juniper_junos__mikrotik_routeros": 3,
-    "juniper_junos__opnsense": 5,
+    "juniper_junos__opnsense": 4,
     "mikrotik_routeros__arista_eos": 2,
     "mikrotik_routeros__aruba_aoss": 1,
     "mikrotik_routeros__cisco_iosxe": 1,

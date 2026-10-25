@@ -63,6 +63,16 @@ collapse occurs on this pair.
 > `vlans[].description` now drift as well (see the notes below). The pair's
 > expectation YAML holds the current disposition.
 
+> **Since a VLAN device on a port or a LAGG is a sub-interface of it**
+> (0.7.8): the OPNsense parser reads each `<vlan>` the render writes on a
+> port or a LAGG (`port-channel1` below) back as a routed sub-interface of
+> it, its tag the VLAN's id, with no VLAN record. So the VLAN records are
+> dropped (`vlans[].id` is lossy), and an SVI comes back as that
+> sub-interface: tagged, typed as its parent, and with its VLAN's
+> `<descr>` as its description where its zone has none. `dot1q_vlan`,
+> empty on the source, drifts on the cells whose interface list keeps its
+> size. The pair's expectation YAML holds the current disposition.
+
 ## Drifting sub-fields (the authoritative aggregate)
 
 Only the sub-fields listed here drift anywhere in the pair. Every other
@@ -87,7 +97,7 @@ sub-field of the same parent is preserved on every cell that exercises it, so
 | `snmp` | `v3_users` | 11 cells |
 
 Sub-fields with NO data anywhere on the corpus (measured, not assumed;
-`dot1q_vlan` is declared lossy on the opnsense side, a sub-interface being a
+`dot1q_vlan` is declared supported on the opnsense side, a sub-interface being a
 `<vlan>` device of its tag on its port):
 `interfaces[].dot1q_vlan`, `interfaces[].voice_vlan`,
 `interfaces[].tunnel_type`, `interfaces[].dhcp_client_v6`,

@@ -35,7 +35,7 @@ c1 = tgt.parse(rendered)          # compare c0 vs c1 field by field
 
 The four cells:
 
-| fixture | interfaces | vlans | lags | dhcp pools | radius | snmp | users |
+| fixture | interfaces | VLAN interfaces | lags | dhcp pools | radius | snmp | users |
 |---|---|---|---|---|---|---|---|
 | `tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf` | 21 | 2 | 2 | 1 | 0 | – | 1 |
 | `tests/fixtures/real/fortigate/kevinguenay_fgt_vm_hub.conf` | 19 | 0 | 1 | 1 | 0 | – | 1 |
@@ -54,11 +54,11 @@ The pair is therefore asymmetric in an unusual way. The shared surface is
 narrow but *clean* — hostname, DNS, NTP, interface addressing, static routes,
 local-user identity all round-trip intact. What does not survive is
 everything that makes the FortiGate a firewall rather than a router: DHCP
-service, SNMP, RADIUS, VLAN tags, and most LAG membership. And the target's
+service, SNMP, RADIUS, and most LAG membership. And the target's
 own strength — VRFs — receives nothing, because the source models no routing
 instances at all.
 
-## The structural finding: interfaces survive, VLANs do not
+## The structural finding: interfaces survive, and VLANs become tags
 
 Unlike the campus-to-DC pairs in this audit, **the interface inventory does
 not shrink**: 21 → 21, 19 → 19, 34 → 34, 12 → 12. All 86 source interface
@@ -66,27 +66,27 @@ records reach the render. `description`, `enabled`, `mtu`, `ipv4_addresses`
 and `ipv6_addresses` drift on **zero** of them. Those keys are `good` on
 measurement, not on optimism.
 
-The record that vanishes is the **VLAN**: 2 → 0, 5 → 0, 3 → 0 on the three
-cells that carry VLANs. The rendered IOS-XR config contains no `vlan`
-construct of any kind.
+The VLAN surface changes shape. FortiOS carries a VLAN as a VLAN interface on
+a parent (`set type vlan` + `set vlanid 100` + `set interface <parent>` under
+`config system interface`), and every one in the corpus — 2, 5 and 3 on the
+three cells that carry any — rides on a port or an aggregate, which the
+FortiGate parser reads as a routed sub-interface of that parent: the tag is
+the interface's own (`dot1q_vlan`), and no VLAN record is made. IOS-XR writes
+each tag as `encapsulation dot1q <N>` under the sub-interface, and all ten
+come back.
 
-The mechanism is a two-sided declaration mismatch, and it is worth stating
-precisely because both matrices are individually truthful:
+Its parser then does what it does for every sub-interface. `cisco_iosxr`
+declares `/vlans/vlan/id` and `/vlans/vlan/name` **supported**, but its own
+supported-path comment scopes that to VLANs *synthesised from
+`encapsulation dot1q <tag>` on a routed sub-interface* ("no port membership;
+name always empty"), so VLAN records APPEAR: 0 → 2, 0 → 5, 0 → 3. The tag is
+carried; the records are IOS-XR's reading of it, with no name and no ports.
 
-- `cisco_iosxr` declares `/vlans/vlan/id` and `/vlans/vlan/name` **supported**
-  — but its own supported-path comment scopes that to VLANs *synthesised from
-  `encapsulation dot1q <tag>` on a routed sub-interface* ("no port
-  membership; name always empty").
-- `fortigate_cli` sets `dot1q_vlan` on **none** of the 86 source interface
-  records.  (It declares `/interfaces/interface/dot1q-vlan` lossy, for its
-  render of another vendor's sub-interface; its parser keeps a VLAN
-  interface's tag on the VLAN record.)
-
-FortiOS carries the tag on the VLAN record itself (`set type vlan` +
-`set vlanid 100` under `config system interface`). The only path by which
-IOS-XR can re-emit a VLAN is the interface tag the source never populates, so
-the render emits no `encapsulation dot1q` line and every VLAN record drops.
-Reasoning from either matrix alone gets this wrong in both directions.
+Up to 0.7.7 the FortiGate parser kept a VLAN interface's tag on a VLAN record
+and set `dot1q_vlan` on none of the 86 interface records, so the render had
+no tag to write and every VLAN record vanished (2 → 0, 5 → 0, 3 → 0). A VLAN
+interface on a FortiGate switch interface (`set type switch`) is still read
+as a VLAN; none is in the corpus.
 
 ## The other structural finding: single-token grammar slots
 
@@ -114,7 +114,7 @@ the password case is covered under *Credential material* below.
 | interfaces[].name | – | 1 record of 86 | – |
 | interfaces[].interface_type | 1 record | 84 records | – |
 | interfaces[].lag_member_of | – | 12 records | – |
-| vlans[].* | 0 | 3 (whole record) | 1 |
+| vlans[].* | 0 | 3 (records appear) | 1 |
 | static_routes | 3 | 0 | 1 |
 | dhcp_servers | 0 | 4 (whole record) | 0 |
 | snmp.* | 0 | 2 (whole object) | 2 |
@@ -132,7 +132,8 @@ Interface sub-field drift, counted over all 86 records (author-run
 aggregate, not a single sample): `interface_type` 84 · `lag_member_of` 12 ·
 `name` 1 · `description` 0 · `enabled` 0 · `mtu` 0 · `ipv4_addresses` 0 ·
 `ipv6_addresses` 0. The `interface_type` collapse is uniform —
-68 `ethernetCsmacd`, 10 `l3ipvlan` and 6 `ieee8023adLag` all land on
+69 `ethernetCsmacd` and 15 `ieee8023adLag` (the ten VLAN interfaces among
+them, each typed like its parent) all land on
 `ianaift:other`; only `loopback0` keeps `softwareLoopback`, because the XR
 parser infers type from a name prefix and FortiGate names (`port1`, `dmz`,
 `wan1`, `agg1`, `VL_200`) match none of them.
@@ -145,9 +146,8 @@ parser infers type from a name prefix and FortiGate names (`port1`, `dmz`,
 `/system/timezone` · `/system/syslog-server` · `/routing-instances/instance`
 · `/vlans/vlan/tagged-ports` · `/vlans/vlan/untagged-ports`
 
-`/interfaces/interface/dot1q-vlan` is declared lossy, for the render of
-another vendor's sub-interface; as a source the parser sets it on no
-record either.
+`/interfaces/interface/dot1q-vlan` is declared supported, and as a source the
+parser sets it on the ten VLAN interfaces of the corpus (above).
 
 Two of those are worth separating from the rest, because the device config
 *does* carry the data and the codec drops it at parse time — verified by
@@ -180,8 +180,9 @@ matching `snmp`. That agrees with the `cisco_iosxr` declaration ("SNMP parse
 + render is out of the v1 XR scope") and disagrees with the heuristic, so the
 YAML records `unsupported` for all five `snmp.*` keys.
 
-The same cross-check ran the other way for `vlans`: there the *matrix* looked
-permissive (two supported paths) and the round-trip proved a total drop. Both
+The same cross-check ran the other way for `vlans` up to 0.7.7: there the
+*matrix* looked permissive (two supported paths) and the round-trip proved a
+total drop. Both
 disagreements were resolved by inspecting output, not by preferring one
 source of truth.
 

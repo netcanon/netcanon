@@ -12,7 +12,9 @@ moved off ``ether3`` onto it -- in jobs that said ``completed``.
 The parser keeps the parent (``CanonicalInterface.vlan_parent``), the
 port-name sweep renames it with the interface it names and clears it,
 with a warning, where that interface is dropped, and the renderer
-chooses a parent only for a VLAN that has none of its own.
+chooses a parent only for a VLAN that has none of its own.  A VLAN
+interface on a port (``gn-mgmt``) is a sub-interface of the port, and
+is dropped with it.
 
 The expectations are typed from the captures' text by hand.
 """
@@ -94,18 +96,34 @@ def test_an_entry_for_the_parent_moves_its_vlans_with_it() -> None:
 
 
 def test_a_parent_that_is_dropped_is_said() -> None:
-    """The VLAN stays, the port it rode on does not: the renderer has
-    to choose another parent, and the job says so."""
+    """The VLAN stays, the bridge it rode on does not: the renderer
+    has to choose another parent, and the job says so."""
+    codec = MikroTikRouterOSCodec()
+    job = run_plan_with_overrides(
+        codec, codec, _text("user_contrib_crs310_ros7.rsc"),
+        port_rename_map={"bridge": None},
+    )
+    assert _vlan_lines(job.rendered)["mgmtvlan11"] != "bridge"
+    assert any(
+        "'mgmtvlan11' rides on 'bridge', which is not in the output" in warning
+        for warning in job.warnings
+    )
+
+
+def test_a_sub_interface_goes_with_its_port() -> None:
+    """``gn-mgmt`` rides on the port ``ether3``: dropped with it, and
+    said once, with nothing said of a parent chosen for it."""
     codec = MikroTikRouterOSCodec()
     job = run_plan_with_overrides(
         codec, codec, _text("routeros_diff_verbose_export.rsc"),
         port_rename_map={"ether3": None},
     )
-    assert _vlan_lines(job.rendered)["gn-mgmt"] != "ether3"
-    assert any(
-        "'gn-mgmt' rides on 'ether3', which is not in the output" in warning
-        for warning in job.warnings
-    )
+    assert "gn-mgmt" not in _vlan_lines(job.rendered)
+    said = [warning for warning in job.warnings if "'gn-mgmt'" in warning]
+    assert said == [
+        "port_rename: 'gn-mgmt' is a sub-interface of 'ether3', which is "
+        "not in the output; dropped with it"
+    ]
 
 
 def test_a_vlan_with_no_parent_of_its_own_still_gets_one() -> None:

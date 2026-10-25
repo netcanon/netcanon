@@ -83,10 +83,11 @@ def test_populates_every_expected_canonical_field():
     assert loop.interface_type == "ianaift:softwareLoopback"
     assert loop.ipv6_addresses[0].prefix_length == 128
 
-    # VLAN child interface — interface_type set + IPv6 carried
-    # through the VLAN sub-interface.
+    # VLAN child interface on an aggregate — a sub-interface of it,
+    # typed as it is, its tag its own, and IPv6 carried through.
     v100 = by_name["agg1.100"]
-    assert v100.interface_type == "ianaift:l3ipvlan"
+    assert v100.interface_type == "ianaift:ieee8023adLag"
+    assert (v100.dot1q_vlan, v100.vlan_parent) == (100, "agg1")
     assert v100.ipv4_addresses[0].ip == "10.100.0.1"
     assert v100.ipv6_addresses[0].ip == "2001:db8:100::1"
 
@@ -94,19 +95,21 @@ def test_populates_every_expected_canonical_field():
     # interface alone are enough; matches the FGT-70G real-capture
     # idiom).
     vl200 = by_name["VL_200"]
-    assert vl200.interface_type == "ianaift:l3ipvlan"
+    assert (vl200.dot1q_vlan, vl200.vlan_parent) == (200, "agg1")
 
     # Disabled VLAN child.
     v300 = by_name["port4.300"]
     assert v300.enabled is False
+    assert v300.interface_type == "ianaift:ethernetCsmacd"
+    assert (v300.dot1q_vlan, v300.vlan_parent) == (300, "port4")
 
     # Aggregate ifaces have aggregate type.
     agg1 = by_name["agg1"]
     assert agg1.interface_type == "ianaift:ieee8023adLag"
 
-    # --- Tier 1: vlans (>=3, implicit via VLAN child interfaces) ---
-    vlan_ids = sorted(v.id for v in tree.vlans)
-    assert vlan_ids == [100, 200, 300]
+    # --- Tier 1: vlans -- none: every VLAN child interface is on an
+    # aggregate or a port, a sub-interface of it ---
+    assert tree.vlans == []
 
     # --- Tier 1: static_routes (>=2, IPv4 + a secondary route) ---
     assert len(tree.static_routes) >= 2
