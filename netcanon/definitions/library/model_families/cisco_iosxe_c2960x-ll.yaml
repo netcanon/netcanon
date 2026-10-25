@@ -1,0 +1,66 @@
+# Cisco Catalyst 2960-X switch series (Cisco IOS 15.2E): the LAN Lite models
+#
+# The WS-C2960X-48TS-LL and -24TS-LL, named as the LAN Base models of
+# cisco_iosxe_c2960x.yaml are -- that file's header says how a name is
+# made and where each fact comes from -- in a family of their own for
+# one reason: they do not stack.  The hardware guide says "The FlexStack
+# module slot is not available on the Catalyst 2960X-48TS-LL and
+# 2960X-24TS-LL switches", the stack chapter of the 15.2(2)E guides
+# that "Stacking is not supported on switches running the LAN Lite
+# image", and the FAQ that "the LAN Lite models do not support
+# stacking".  A deployment is one family, so a stack of a LAN Lite
+# switch with anything is refused.
+#
+# A switch that never joins a stack keeps the number every switch
+# starts with: "The default switch number, before it is integrated into
+# a switch stack, is 1" (Interface and Hardware Component Configuration
+# Guide, Cisco IOS Release 15.2(2)E).  So the one mode has one member
+# id, 1, and its names are GigabitEthernet1/0/N.  Its two SFP slots are
+# numbered after the downlinks: GigabitEthernet1/0/49-50 on a 48TS-LL.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * Whether a LAN Lite config prints a `switch 1 provision` line, which
+#     is what source-device detection reads: no config of one was seen,
+#     and with no such line detection proposes no device.
+schema: 1
+vendor: cisco_iosxe
+family: C2960X-LL
+display_name: "Cisco Catalyst 2960-X LAN Lite"
+naming: catalyst
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "standalone: LAN Lite does not stack, and the switch is number 1"
+    member_ids: [1, 1]
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Security Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Managing Switch Stacks (stacking is not supported on switches running the LAN Lite image); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (the FlexStack module slot is not available on the Catalyst 2960X-48TS-LL and 2960X-24TS-LL switches)"
+    caveat: "A LAN Lite switch does not stack (Cisco Catalyst 2960-X Series FAQ), and its names carry switch number 1. No configuration of a Catalyst 2960-X LAN Lite switch was seen."
+
+deployment_ports:
+  - name: FastEthernet0
+    role: mgmt
+    speed: fast
+    cage: rj45
+    notes: "Ethernet management port"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Fa0 or fastethernet0 port, is a Layer 3 host port; when managing a switch stack the active link is from the Ethernet management port on the stack master); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (the 10/100 Ethernet management port, an RJ-45 connector); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 12 (network management interface: 10/100 Mbps Ethernet (RJ-45))"}
+
+models:
+  # --- 2 x SFP: Gi1/0/1-24 or -48, then Gi1/0/25-26 or 49-50 ----------
+  WS-C2960X-48TS-LL:
+    skus: [WS-C2960X-48TS-LL]
+    display_name: "Cisco Catalyst WS-C2960X-48TS-LL"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960X-48TS-LL: LAN Lite, 48 10/100/1000 ports and 2 SFP module slots); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 27 (WS-C2960X-48TS-LL: 48 10/100/1000 Ethernet interfaces, 2 SFP uplink interfaces, LAN Lite, no FlexStack-Plus); Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960X-24TS-LL:
+    skus: [WS-C2960X-24TS-LL]
+    display_name: "Cisco Catalyst WS-C2960X-24TS-LL"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960X-24TS-LL: LAN Lite, 24 10/100/1000 ports and 2 SFP module slots); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 27 (WS-C2960X-24TS-LL: 24 10/100/1000 Ethernet interfaces, 2 SFP uplink interfaces, LAN Lite, no FlexStack-Plus); Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, prefix: GigabitEthernet, speed: gig, cage: sfp}

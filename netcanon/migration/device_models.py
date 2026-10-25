@@ -346,9 +346,14 @@ class PortGroup(BaseModel):
     """Naming bank on the FIXED panel.  Numbering is per slot: each
     slot counts from one, and a later group in the same slot carries
     on where the earlier one stopped, whatever lies between them.
-    Almost always empty: an AOS-S 2930F numbers its uplinks ``49-52``
-    straight after access ``1-48``.  Must be empty in a module's
-    groups — a module's ports are named by the bay it is fitted in."""
+    Usually empty: an AOS-S 2930F numbers its uplinks ``49-52``
+    straight after access ``1-48``.  To the Catalyst rule a slot is the
+    module number, and ``""`` is module 0: a 3650's fixed uplinks are
+    slot ``1`` (``GigabitEthernet1/1/1``), and a 2960-X's SFP+ uplinks
+    slot ``0``, module 0 like its downlinks but a bank that counts from
+    one of its own (``TenGigabitEthernet1/0/1`` beside
+    ``GigabitEthernet1/0/1``).  Must be empty in a module's groups — a
+    module's ports are named by the bay it is fitted in."""
 
     prefix: str = ""
     """The interface type the name begins with, for a grammar that has

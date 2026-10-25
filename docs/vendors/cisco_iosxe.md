@@ -667,6 +667,21 @@ translate it again from `show running-config` as the device prints it.
   stack of up to eight whose uplinks are fixed and named as module 1;
   the Multigigabit ports of its UXG models and of the C9300LM-48UX,
   and the C9300LM's `TwentyFiveGigE1/1/1-4` uplinks, are `inferred`.
+  The Catalyst 2960-X and 2960-XR are three families: `C2960X` (LAN
+  Base) and `C2960XR`, each a stack of up to eight that Cisco does not
+  build of the two together, and `C2960X-LL` (LAN Lite), which does
+  not stack.  Every port is module 0 of the switch, and the SFP
+  uplinks are numbered on from the downlinks
+  (`GigabitEthernet1/0/49-52` on a WS-C2960X-48TS-L); a D model's two
+  SFP+ uplinks, `TenGigabitEthernet1/0/1-2`, are `inferred`, since
+  Cisco's guides name them only in examples, on module 0 in one
+  release and on module 1 in the next.  The stack's management port is
+  `FastEthernet0`, which the name translator does not read: declared,
+  it pairs with the other side's management port; with no device
+  declared, a job onto another vendor lists it as untranslated.  The
+  WS-C2960X-24PSQ-L, and a stack with a Catalyst 2960-S, are not
+  modelled.  The 2960-X runs Cisco IOS 15.2, which the codec reads as
+  it reads the IOSv captures.
   Other Catalyst series are not modelled yet (the C9500 has target
   profiles), and a proposal names their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever

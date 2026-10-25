@@ -1,0 +1,160 @@
+# Cisco Catalyst 2960-XR switch series (Cisco IOS 15.2E): the IP Lite models
+#
+# A fixed-port access switch with fixed uplinks, no network-module bay,
+# and a FlexStack-Plus stack of up to eight 2960-XR switches.  The
+# names are made as a 2960-X's are -- cisco_iosxe_c2960x.yaml says how
+# -- from the 2960-XR's own documents: "Module number -- The module or
+# slot number on the switch (always 0)", the 10/100/1000 ports from 1
+# and the SFP module ports "numbered consecutively following" them, and
+# FastEthernet0, "the Fa0 or fastethernet0 port", for the stack.
+#
+# A family of its own: "Cisco Catalyst 2960-X and 2960-XR Series
+# Switches can't be stacked together" (FAQ), and the data sheet's
+# stacking tables (Tables 6 and 8) give a 2960-XR no partner but
+# another.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Catalyst 2960-X and 2960-XR Switch Hardware Installation
+#         Guide, "Product Overview" (the models, their software image
+#         and power supply; the 10/100 Ethernet management port; a
+#         stack of up to eight 2960-XR switches).
+#   DS    Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet,
+#         Table 28 (the part numbers and their configurations) and
+#         Tables 6 and 8 (which switches stack together).
+#   FAQ   Cisco Catalyst 2960-X Series FAQ.
+#   XCG6  Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E
+#         (Catalyst 2960-XR Switch), "Configuring Interface
+#         Characteristics".
+#   XCG7  Consolidated Platform Configuration Guide, Cisco IOS Release
+#         15.2(7)E (Catalyst 2960-XR Switches), "Configuring Ethernet
+#         Management Port".
+#   XSCG  Consolidated Platform Configuration Guide, Cisco IOS 15.2(3)E
+#         and Later (Catalyst 2960-XR Switch), "Managing Switch Stacks".
+#
+# Where the sources disagree.
+#
+#   * What a 2960-XR stacks with.  XSCG's Restrictions say "The switch
+#     does not support mixed stacking. Stacking is supported only with
+#     other Catalyst 2960-XR switches"; its overview, and XCG6, describe
+#     a mixed stack of 2960-XR, 2960-X and 2960-S switches.  The family
+#     follows the Restrictions, which DS and FAQ agree with.
+#   * The names of a D model's 10G uplinks.  No sentence of XCG6 numbers
+#     a 10-Gigabit port, and its examples name them
+#     `tengigabitethernet1/1/1 - 2`, beside `gigabitethernet1/1/1 - 2`
+#     -- module 1, which its own "always 0" denies.
+#     TenGigabitEthernet1/0/1-2 follows the module number, and each D
+#     model's panel is graded inferred and says so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * Whether a D model's config also holds GigabitEthernet interfaces
+#     numbered after its downlinks: no config of a 2960-XR was seen.
+schema: 1
+vendor: cisco_iosxe
+family: C2960XR
+display_name: "Cisco Catalyst 2960-XR"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "FlexStack-Plus stack of 2960-XR switches (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(3)E and Later (Catalyst 2960-XR Switch), Managing Switch Stacks (switch stack-member-number provision type, the type being the model number of a supported switch; stacking is supported only with other Catalyst 2960-XR switches; a homogenous stack can have up to 8 stack members); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (a stack of Catalyst 2960-XR stack-capable switches: 8 members)"
+    caveat: "Names carry the switch number even on a switch that is alone. A 2960-XR stacks only with another 2960-XR (Consolidated Platform Configuration Guide, Cisco IOS 15.2(3)E and Later (Catalyst 2960-XR Switch), Managing Switch Stacks, Restrictions; Cisco Catalyst 2960-X Series FAQ); the same guide's overview describes a mixed stack of 2960-XR, 2960-X and 2960-S switches, and the Restrictions are followed here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 2960-XR was seen: whether one with SFP+ uplinks also holds GigabitEthernet interfaces numbered after its downlinks is not established."
+
+deployment_ports:
+  - name: FastEthernet0
+    role: mgmt
+    speed: fast
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Consolidated Platform Configuration Guide, Cisco IOS Release 15.2(7)E (Catalyst 2960-XR Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Fa0 or fastethernet0 port, is a Layer 3 host port; if the active device fails and a new active device is elected, the active link is from the Ethernet management port on the new active device); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (the 10/100 Ethernet management port, an RJ-45 connector); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 12 (network management interface: 10/100 Mbps Ethernet (RJ-45))"}
+
+models:
+  # --- 2 x SFP+: Gi<n>/0/1-24 or -48, then Te<n>/0/1-2 (inferred) -------
+  WS-C2960XR-48FPD-I:
+    skus: [WS-C2960XR-48FPD-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48FPD-I"
+    panel: {grade: inferred, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48FPD-I: IP Lite, 48 10/100/1000 PoE+ ports (PoE budget of 740 W) 2 SFP+ module slots, 1025-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48FPD-I: 48 10/100/1000 Ethernet interfaces, 2 SFP+ uplink interfaces, IP Lite, 740W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (examples: interface range gigabitethernet1/0/1 - 3 , tengigabitethernet1/1/1 - 2)", caveat: "WS-C2960XR-48FPD-I: two SFP+ uplinks. The 2960-XR configuration guide says the module number is always 0 and numbers no 10-Gigabit port in a sentence, and its examples name them tengigabitethernet1/1/1 - 2, module 1. That they are TenGigabitEthernet1/0/1-2 follows the module number, is inferred, and no configuration of a 2960-XR was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960XR-48LPD-I:
+    skus: [WS-C2960XR-48LPD-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48LPD-I"
+    panel: {grade: inferred, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48LPD-I: IP Lite, 48 10/100/1000 PoE+ ports (PoE budget of 370 W) 2 SFP+ module slots, 640-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48LPD-I: 48 10/100/1000 Ethernet interfaces, 2 SFP+ uplink interfaces, IP Lite, 370W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (examples: interface range gigabitethernet1/0/1 - 3 , tengigabitethernet1/1/1 - 2)", caveat: "WS-C2960XR-48LPD-I: two SFP+ uplinks. The 2960-XR configuration guide says the module number is always 0 and numbers no 10-Gigabit port in a sentence, and its examples name them tengigabitethernet1/1/1 - 2, module 1. That they are TenGigabitEthernet1/0/1-2 follows the module number, is inferred, and no configuration of a 2960-XR was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960XR-24PD-I:
+    skus: [WS-C2960XR-24PD-I]
+    display_name: "Cisco Catalyst WS-C2960XR-24PD-I"
+    panel: {grade: inferred, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-24PD-I: IP Lite, 24 10/100/1000 PoE+ ports (PoE budget of 370 W) 2 SFP+ module slots, 640-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-24PD-I: 24 10/100/1000 Ethernet interfaces, 2 SFP+ uplink interfaces, IP Lite, 370W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (examples: interface range gigabitethernet1/0/1 - 3 , tengigabitethernet1/1/1 - 2)", caveat: "WS-C2960XR-24PD-I: two SFP+ uplinks. The 2960-XR configuration guide says the module number is always 0 and numbers no 10-Gigabit port in a sentence, and its examples name them tengigabitethernet1/1/1 - 2, module 1. That they are TenGigabitEthernet1/0/1-2 follows the module number, is inferred, and no configuration of a 2960-XR was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960XR-48TD-I:
+    skus: [WS-C2960XR-48TD-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48TD-I"
+    panel: {grade: inferred, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48TD-I: IP Lite, 48 10/100/1000 and 2 SFP+ module slots, 250-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48TD-I: 48 10/100/1000 Ethernet interfaces, 2 SFP+ uplink interfaces, IP Lite, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (examples: interface range gigabitethernet1/0/1 - 3 , tengigabitethernet1/1/1 - 2)", caveat: "WS-C2960XR-48TD-I: two SFP+ uplinks. The 2960-XR configuration guide says the module number is always 0 and numbers no 10-Gigabit port in a sentence, and its examples name them tengigabitethernet1/1/1 - 2, module 1. That they are TenGigabitEthernet1/0/1-2 follows the module number, is inferred, and no configuration of a 2960-XR was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960XR-24TD-I:
+    skus: [WS-C2960XR-24TD-I]
+    display_name: "Cisco Catalyst WS-C2960XR-24TD-I"
+    panel: {grade: inferred, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-24TD-I: IP Lite, 24 10/100/1000 and 2 SFP+ module slots, 250-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-24TD-I: 24 10/100/1000 Ethernet interfaces, 2 SFP+ uplink interfaces, IP Lite, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (examples: interface range gigabitethernet1/0/1 - 3 , tengigabitethernet1/1/1 - 2)", caveat: "WS-C2960XR-24TD-I: two SFP+ uplinks. The 2960-XR configuration guide says the module number is always 0 and numbers no 10-Gigabit port in a sentence, and its examples name them tengigabitethernet1/1/1 - 2, module 1. That they are TenGigabitEthernet1/0/1-2 follows the module number, is inferred, and no configuration of a 2960-XR was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  # --- 4 x SFP: Gi<n>/0/1-24 or -48, then Gi<n>/0/25-28 or 49-52 --------
+  WS-C2960XR-48FPS-I:
+    skus: [WS-C2960XR-48FPS-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48FPS-I"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48FPS-I: IP Lite, 48 10/100/1000 PoE+ ports (PoE budget of 740 W) and 4 SFP module slots, 1025-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48FPS-I: 48 10/100/1000 Ethernet interfaces, 4 SFP uplink interfaces, IP Lite, 740W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960XR-48LPS-I:
+    skus: [WS-C2960XR-48LPS-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48LPS-I"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48LPS-I: IP Lite, 48 10/100/1000 PoE+ ports (PoE budget of 370 W) and 4 SFP module slots, 640-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48LPS-I: 48 10/100/1000 Ethernet interfaces, 4 SFP uplink interfaces, IP Lite, 370W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960XR-24PS-I:
+    skus: [WS-C2960XR-24PS-I]
+    display_name: "Cisco Catalyst WS-C2960XR-24PS-I"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-24PS-I: IP Lite, 24 10/100/1000 PoE+ ports (PoE budget of 370 W) and 4 SFP module slots, 640-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-24PS-I: 24 10/100/1000 Ethernet interfaces, 4 SFP uplink interfaces, IP Lite, 370W available PoE power, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960XR-48TS-I:
+    skus: [WS-C2960XR-48TS-I]
+    display_name: "Cisco Catalyst WS-C2960XR-48TS-I"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-48TS-I: IP Lite, 48 10/100/1000 and 4 SFP module slots, 250-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-48TS-I: 48 10/100/1000 Ethernet interfaces, 4 SFP uplink interfaces, IP Lite, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960XR-24TS-I:
+    skus: [WS-C2960XR-24TS-I]
+    display_name: "Cisco Catalyst WS-C2960XR-24TS-I"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (Catalyst 2960XR-24TS-I: IP Lite, 24 10/100/1000 and 4 SFP module slots, 250-W power supply); Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet, Table 28 (WS-C2960XR-24TS-I: 24 10/100/1000 Ethernet interfaces, 4 SFP uplink interfaces, IP Lite, FlexStack-Plus optional); Consolidated Platform Configuration Guide, Cisco IOS 15.2(6)E (Catalyst 2960-XR Switch), Configuring Interface Characteristics (interface type, stack member number 1 to 8 for a stack of Catalyst 2960-XR switches, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}

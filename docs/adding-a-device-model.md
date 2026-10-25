@@ -35,7 +35,7 @@ rule turns them into names for one stated deployment:
 | a **mode** | a deployment state that changes names (`standalone`, `vsf`, `stacked`) |
 | a **module** | what a bay can hold, and the ports it contributes |
 | a group's **`prefix`** | the interface type a grammar that names by type puts in front of the number (`TenGigabitEthernet`) |
-| a **deployment port** | a port of the whole deployment rather than of one member, by its literal name (a Catalyst stack's one `GigabitEthernet0/0`) |
+| a **deployment port** | a port of the whole deployment rather than of one member, by its literal name (a C9300 stack's one `GigabitEthernet0/0`) |
 | a **capture claim** | a committed real capture, and the exact deployment it is of |
 
 and in code, beside the vendor's codec, there is one small **naming

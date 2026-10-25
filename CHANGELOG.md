@@ -493,6 +493,30 @@ timestamp if your timezone matters for an audit.
   the 100G ports.  The license level is not checked.  No configuration
   of a C9300X was seen.  `detect-deployment` reads `switch N provision
   c9300x-48hx` beside a C9300's line as one stack.
+- **The Cisco Catalyst 2960-X and 2960-XR can be declared as a source
+  or target device.**  Three model families, since Cisco stacks a
+  2960-X with no 2960-XR ("can't be stacked together") and a LAN Lite
+  switch with nothing: `C2960X`, the LAN Base models, and `C2960XR`,
+  each a FlexStack-Plus stack of up to eight, and `C2960X-LL`, the two
+  LAN Lite models, a switch that is alone and number 1.  Every port is
+  module 0 of the switch, and "SFP module ports are numbered
+  consecutively following the 10/100/1000 ports": a WS-C2960X-48TS-L is
+  `GigabitEthernet1/0/1-48` and then `GigabitEthernet1/0/49-52`.  The
+  stack's one management port is `FastEthernet0`, which pairs with the
+  other side's management port when both devices are declared; with
+  none declared, a job onto another vendor lists it as untranslated and
+  is `partial`.  Graded `inferred`, each with its reason: the two SFP+
+  uplinks of a D model, `TenGigabitEthernet1/0/1-2`, which no sentence
+  of Cisco's configuration guides numbers and whose examples name them
+  on module 0 in the 2960-X's 15.2(2)E guide and on module 1 in its
+  15.2(6)E guide and the 2960-XR's.  Not modelled: the
+  WS-C2960X-24PSQ-L (no document read says which eight of its ports
+  have PoE, nor which two uplinks are SFP), and a stack with a Catalyst
+  2960-S or 2960-SF, which Cisco builds of up to four.  The switch runs
+  Cisco IOS 15.2, not IOS XE; the IOS-XE CLI codec reads it as it reads
+  the IOSv captures.  No configuration of a 2960-X or 2960-XR was seen.
+  `detect-deployment` reads `switch N provision ws-c2960x-48fpd-l` as
+  it reads a C9300's line.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

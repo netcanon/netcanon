@@ -2167,6 +2167,58 @@ class TestCatalystProposal:
         }
         assert proposal.consistent is True and proposal.used_port_count == 2
 
+    def test_a_2960x_stack(self) -> None:
+        """The 2960-X Security Configuration Guide: "For type, enter the
+        model number of a supported switch"."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960x-48fpd-l", "switch 2 provision ws-c2960x-24ts-l",
+            ports=("TenGigabitEthernet1/0/2", "GigabitEthernet2/0/28"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C2960X" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "WS-C2960X-48FPD-L", "id": 1, "modules": {}},
+                {"model": "WS-C2960X-24TS-L", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
+    def test_a_2960xr_stack(self) -> None:
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960xr-24td-i", "switch 3 provision ws-c2960xr-48lps-i",
+            ports=("TenGigabitEthernet1/0/1", "GigabitEthernet3/0/52"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C2960XR" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "WS-C2960XR-24TD-I", "id": 1, "modules": {}},
+                {"model": "WS-C2960XR-48LPS-I", "id": 3, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
+    def test_a_2960x_lan_lite_switch(self) -> None:
+        """A LAN Lite switch does not stack: its family's one mode is
+        standalone, and the proposal is that mode."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960x-24ts-ll", ports=("GigabitEthernet1/0/26",),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C2960X-LL" and proposal.mode == "standalone"
+        assert proposal.deployment.model_dump() == {
+            "mode": "standalone", "members": [
+                {"model": "WS-C2960X-24TS-LL", "id": 1, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 1
+
+    def test_a_2960x_and_a_2960xr_are_two_families(self) -> None:
+        """FAQ: a 2960-X and a 2960-XR "can't be stacked together"."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960x-48ts-l", "switch 2 provision ws-c2960xr-48ts-i",
+        ), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
+
     def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
         """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
         with Cisco Catalyst 9200 Series Switches"."""

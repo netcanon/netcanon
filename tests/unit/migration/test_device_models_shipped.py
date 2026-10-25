@@ -783,6 +783,50 @@ for _model, (_access_names, _uplinks) in _C9300L.items():
         list(_access_names), list(_uplinks),
     )
 
+#: Cisco Catalyst 2960-X and 2960-XR: three families, since a LAN Base
+#: 2960-X stacks with no 2960-XR and a LAN Lite switch does not stack.
+#: Every port is module 0 of the switch, and "SFP module ports are
+#: numbered consecutively following the 10/100/1000 ports".  Sources:
+#: the 2960-X and 2960-XR Hardware Installation Guide's Product
+#: Overview, the data sheet's Table 27, and the 15.2(2)E and 15.2(6)E
+#: configuration guides.  Inferred (see KNOWN_INFERRED_PARTS): a D
+#: model's two SFP+ uplinks, TenGigabitEthernet<n>/0/1-2.  The
+#: WS-C2960X-24PSQ-L is not modelled; the YAML says why.
+_C2960X_TE = _run(1, 2, "TenGigabitEthernet1/0/")
+_C2960X: dict[str, tuple[list[str], list[str]]] = {
+    "WS-C2960X-48FPD-L": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960X-48LPD-L": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960X-24PD-L": (_run(1, 24, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960X-48TD-L": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960X-24TD-L": (_run(1, 24, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960X-48FPS-L": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960X-48LPS-L": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960X-24PS-L": (_run(1, 24, "GigabitEthernet1/0/"), _run(25, 4, "GigabitEthernet1/0/")),
+    "WS-C2960X-48TS-L": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960X-24TS-L": (_run(1, 24, "GigabitEthernet1/0/"), _run(25, 4, "GigabitEthernet1/0/")),
+}
+_C2960X_LL: dict[str, tuple[list[str], list[str]]] = {
+    "WS-C2960X-48TS-LL": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 2, "GigabitEthernet1/0/")),
+    "WS-C2960X-24TS-LL": (_run(1, 24, "GigabitEthernet1/0/"), _run(25, 2, "GigabitEthernet1/0/")),
+}
+_C2960XR: dict[str, tuple[list[str], list[str]]] = {
+    "WS-C2960XR-48FPD-I": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960XR-48LPD-I": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960XR-24PD-I": (_run(1, 24, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960XR-48TD-I": (_run(1, 48, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960XR-24TD-I": (_run(1, 24, "GigabitEthernet1/0/"), _C2960X_TE),
+    "WS-C2960XR-48FPS-I": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960XR-48LPS-I": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960XR-24PS-I": (_run(1, 24, "GigabitEthernet1/0/"), _run(25, 4, "GigabitEthernet1/0/")),
+    "WS-C2960XR-48TS-I": (_run(1, 48, "GigabitEthernet1/0/"), _run(49, 4, "GigabitEthernet1/0/")),
+    "WS-C2960XR-24TS-I": (_run(1, 24, "GigabitEthernet1/0/"), _run(25, 4, "GigabitEthernet1/0/")),
+}
+for _models, _mode in ((_C2960X, "stack"), (_C2960X_LL, "standalone"), (_C2960XR, "stack")):
+    for _model, (_access_names, _uplinks) in _models.items():
+        EXPECTED_INVENTORIES[(_C, _model, _mode, ())] = (
+            list(_access_names), list(_uplinks),
+        )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -795,6 +839,9 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C3850": ["GigabitEthernet0/0"],
     "cisco_iosxe/C3650": ["GigabitEthernet0/0"],
     "cisco_iosxe/C9300L": ["GigabitEthernet0/0"],
+    "cisco_iosxe/C2960X": ["FastEthernet0"],
+    "cisco_iosxe/C2960X-LL": ["FastEthernet0"],
+    "cisco_iosxe/C2960XR": ["FastEthernet0"],
 }
 
 
@@ -874,7 +921,10 @@ class TestExactInventories:
         ports and no fixed uplink.  A 3650's letter
         after its PoE letter is its fixed uplinks, as the hardware
         guide's Table 1-1 gives them for the models modelled: S four 1G,
-        D two 1G and two 10G, Q four 10G, R eight 10G."""
+        D two 1G and two 10G, Q four 10G, R eight 10G.  A 2960-X's or
+        2960-XR's letter after its PoE letters is its fixed uplinks, as
+        the hardware guide's Product Overview gives them: D two SFP+
+        (10G), S four SFP (1G), or two on a LAN Lite (``-LL``) switch."""
         sku = model.skus[0]
         fixed = [(g.count, g.speed) for g in model.ports if g.role == "uplink"]
         if sku.startswith("WS-C3650-"):
@@ -884,6 +934,14 @@ class TestExactInventories:
                 "S": [(4, "gig")], "D": [(2, "gig"), (2, "10gig")],
                 "Q": [(4, "10gig")], "R": [(8, "10gig")],
             }[count.group(2)], sku
+        elif sku.startswith("WS-C2960X"):
+            count = re.fullmatch(r"WS-C2960XR?-(\d+)(?:FP|LP|P|T)([DS])-(LL|L|I)", sku)
+            assert count, sku
+            assert fixed == (
+                [(2, "10gig")] if count.group(2) == "D"
+                else [(2, "gig")] if count.group(3) == "LL"
+                else [(4, "gig")]
+            ), sku
         else:
             count = re.fullmatch(
                 r"(?:C9[23]00(?:LM|L|X)?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXQY]))?",
@@ -902,9 +960,12 @@ class TestExactInventories:
 
 #: A Catalyst interface type and the top speed it stands for, typed from
 #: the configuration guide's list of interface types (HundredGigE from
-#: the hardware guide's C9300X network-module tables).  The data says
-#: both for every group; they are stated apart, so they can disagree.
+#: the hardware guide's C9300X network-module tables; FastEthernet, a
+#: 2960-X's 10/100 management port, from its configuration guide).  The
+#: data says both for every group; they are stated apart, so they can
+#: disagree.
 _SPEED_OF_TYPE: dict[str, str] = {
+    "FastEthernet": "fast",
     "GigabitEthernet": "gig",
     "TwoGigabitEthernet": "2.5gig",
     "FiveGigabitEthernet": "5gig",
@@ -1407,12 +1468,15 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
             "C9300X-12Y", "C9300X-24Y", "C9300X-24HX", "C9300X-48HX", "C9300X-48TX",
         )
     },
-    # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L and 9300LM: the
-    # PID is the model key (a 3850's or 3650's without its license
-    # suffix).
+    # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L, 9300LM, 2960-X and
+    # 2960-XR: the PID is the model key (a 3850's or 3650's without its
+    # license suffix; a 2960-X's with it, since it is part of the PID).
     **{
         ("cisco_iosxe", pid): pid
-        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650, *_C9300L)
+        for pid in (
+            *_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650, *_C9300L,
+            *_C2960X, *_C2960X_LL, *_C2960XR,
+        )
     },
 }
 
@@ -1464,6 +1528,11 @@ KNOWN_INFERRED_PARTS: set[str] = {
         f"cisco_iosxe/C9300 / panel / {pid}"
         for pid in ("C9300X-12Y", "C9300X-24Y", "C9300X-24HX", "C9300X-48HX", "C9300X-48TX")
     ),
+    # A 2960-X's or 2960-XR's two SFP+ uplinks, which no sentence of
+    # its configuration guides numbers, and which their examples name
+    # on module 0 in one release and on module 1 in the next.
+    *(f"cisco_iosxe/C2960X / panel / {pid}" for pid in _C2960X if "D-" in pid),
+    *(f"cisco_iosxe/C2960XR / panel / {pid}" for pid in _C2960XR if "D-" in pid),
 }
 
 
@@ -2036,6 +2105,134 @@ class TestCiscoC3650:
             powered = re.search(r"\d[PFU][SDQR]M?$", key) is not None
             assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
             assert not any(g.poe for g in model.ports if g.role == "uplink"), key
+
+
+_C2960X_FAMILIES = (
+    ("cisco_iosxe/C2960X", "stack"),
+    ("cisco_iosxe/C2960X-LL", "standalone"),
+    ("cisco_iosxe/C2960XR", "stack"),
+)
+_C2960X_INFERRED = tuple(pid for pid in (*_C2960X, *_C2960XR) if "D-" in pid)
+
+
+class TestCiscoC2960X:
+    """A Catalyst 2960-X or 2960-XR has fixed uplinks, module 0 of the
+    switch, and one management port, FastEthernet0.  A LAN Base 2960-X
+    and a 2960-XR stack eight each and not together, a LAN Lite switch
+    does not stack, what is inferred says so, and a model whose ports
+    no document read places is not modelled."""
+
+    BASE = REGISTRY.families["cisco_iosxe/C2960X"]
+    LITE = REGISTRY.families["cisco_iosxe/C2960X-LL"]
+    XR = REGISTRY.families["cisco_iosxe/C2960XR"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.BASE.models) == sorted(_C2960X)
+        assert sorted(self.LITE.models) == sorted(_C2960X_LL)
+        assert sorted(self.XR.models) == sorted(_C2960XR)
+
+    def test_the_24psq_is_not_modelled_and_said(self) -> None:
+        text = (FAMILIES_DIR / "cisco_iosxe_c2960x.yaml").read_text(encoding="utf-8")
+        assert "WS-C2960X-24PSQ-L" in text
+        assert REGISTRY.resolve("cisco_iosxe", "WS-C2960X-24PSQ-L") is None
+
+    def test_no_bay_and_no_module(self) -> None:
+        for family in (self.BASE, self.LITE, self.XR):
+            assert not family.modules, family.key
+            assert not any(model.bays for model in family.models.values()), family.key
+
+    @pytest.mark.parametrize("pid", ["WS-C2960X-48TS-L", "WS-C2960XR-24TD-I"])
+    def test_a_stack_of_eight(self, pid: str) -> None:
+        family = REGISTRY.resolve("cisco_iosxe", pid)[0]
+        assert list(family.modes) == ["stack"]
+        assert family.modes["stack"].member_ids == (1, 8)
+        inventory = _compile("cisco_iosxe", None, {"model": pid, "id": 8})
+        assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+        assert inventory.names()[0] == "GigabitEthernet8/0/1"
+        with pytest.raises(Exception, match="outside 1-8"):
+            _compile("cisco_iosxe", "stack", {"model": pid, "id": 9})
+
+    def test_a_lan_lite_switch_is_alone_and_number_1(self) -> None:
+        """FAQ: the LAN Lite models do not stack."""
+        assert list(self.LITE.modes) == ["standalone"]
+        assert self.LITE.modes["standalone"].member_ids == (1, 1)
+        inventory = _compile("cisco_iosxe", None, {"model": "WS-C2960X-24TS-LL"})
+        assert (inventory.mode, inventory.mode_defaulted) == ("standalone", True)
+        assert inventory.names()[0] == "GigabitEthernet1/0/1"
+        with pytest.raises(Exception, match="outside 1-1"):
+            _compile("cisco_iosxe", None, {"model": "WS-C2960X-24TS-LL", "id": 2})
+        with pytest.raises(Exception, match="allows at most 1 members"):
+            _compile(
+                "cisco_iosxe", None,
+                {"model": "WS-C2960X-24TS-LL"}, {"model": "WS-C2960X-48TS-LL", "id": 2},
+            )
+        with pytest.raises(Exception, match="has no mode 'stack'"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C2960X-24TS-LL"})
+
+    @pytest.mark.parametrize(("first", "other"), [
+        ("WS-C2960X-48TS-L", "WS-C2960XR-48TS-I"),
+        ("WS-C2960XR-48TS-I", "WS-C2960X-24TS-L"),
+        ("WS-C2960X-48TS-L", "WS-C2960X-48TS-LL"),
+        ("WS-C2960X-48TS-L", "WS-C3650-24PS"),
+        ("WS-C2960XR-48TS-I", "C9200L-24P-4G"),
+    ])
+    def test_the_stacks_cisco_does_not_build_are_refused(self, first: str, other: str) -> None:
+        """FAQ: a 2960-X and a 2960-XR "can't be stacked together"."""
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": first}, {"model": other, "id": 2})
+
+    def test_a_fixed_uplink_is_module_0_and_an_uplink(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", "stack",
+            {"model": "WS-C2960X-48FPD-L"}, {"model": "WS-C2960X-24TS-L", "id": 2},
+        )
+        uplinks = [(p.name, p.slot, p.speed, p.cage) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            ("TenGigabitEthernet1/0/1", "0", "10gig", "sfp+"),
+            ("TenGigabitEthernet1/0/2", "0", "10gig", "sfp+"),
+            *((f"GigabitEthernet2/0/{n}", "", "gig", "sfp") for n in range(25, 29)),
+        ]
+        assert inventory.names(role="mgmt") == ["FastEthernet0"]
+
+    @pytest.mark.parametrize("pid", _C2960X_INFERRED)
+    def test_what_is_inferred_says_so(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        assert {p.evidence for p in inventory.ports if p.member_rank is not None} == {"inferred"}
+        caveat = next(c for c in inventory.caveats if c.startswith(f"{pid}: "))
+        assert "is inferred" in caveat
+        assert "tengigabitethernet1/1/1 - 2" in caveat
+
+    def test_what_is_not_inferred_says_nothing_of_it(self) -> None:
+        for key, mode in _C2960X_FAMILIES:
+            for pid in REGISTRY.families[key].models:
+                if pid in _C2960X_INFERRED:
+                    continue
+                inventory = _compile("cisco_iosxe", mode, {"model": pid})
+                assert {p.evidence for p in inventory.ports} == {"vendor-doc"}, pid
+                assert not any("inferred" in c for c in inventory.caveats), pid
+
+    def test_the_management_port_is_fast_ethernet(self) -> None:
+        for key, _mode in _C2960X_FAMILIES:
+            ports = REGISTRY.families[key].deployment_ports
+            assert [(p.name, p.role, p.speed, p.cage) for p in ports] == [
+                ("FastEthernet0", "mgmt", "fast", "rj45"),
+            ], key
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        base = self.BASE.modes["stack"].caveat
+        assert "2960-S is not modelled" in base
+        assert "No configuration of a Catalyst 2960-X was seen" in base
+        assert "No configuration of a Catalyst 2960-XR was seen" in self.XR.modes["stack"].caveat
+        lite = self.LITE.modes["standalone"].caveat
+        assert "does not stack" in lite
+        assert "No configuration of a Catalyst 2960-X LAN Lite switch was seen" in lite
+
+    def test_poe_models(self) -> None:
+        for key, _mode in _C2960X_FAMILIES:
+            for pid, model in REGISTRY.families[key].models.items():
+                powered = re.search(r"-\d+(?:FP|LP|P)[DS]-", pid) is not None
+                assert {g.poe for g in model.ports if g.role == "access"} == {powered}, pid
+                assert not any(g.poe for g in model.ports if g.role == "uplink"), pid
 
 
 _C9300L_INFERRED = (

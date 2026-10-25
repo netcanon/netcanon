@@ -1476,7 +1476,7 @@ out-of-band management is the `oobm` context, not a numbered port).
 A grammar that names a port by its interface type (the Catalyst's
 `TwoGigabitEthernet1/0/36`) takes the type from the data, stated on
 each port group (`prefix`), and never from a speed; the rule says
-which types it accepts.  A port of the WHOLE deployment — a Catalyst
+which types it accepts.  A port of the WHOLE deployment — a C9300
 stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under
 `deployment_ports`, belongs to no member (rank `None`) and comes after

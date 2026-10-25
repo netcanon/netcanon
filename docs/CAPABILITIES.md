@@ -1758,8 +1758,10 @@ no other vendor has a detector yet.
 running-config` from a Catalyst has a `switch N provision <type>` line
 for each switch, a switch that is alone included (as the number it
 keeps), and detection reads those lines: the members, by switch
-number, in the family's `stack` mode.  Three things it cannot show,
-which its notes say.  The line is what the stack is *provisioned* for;
+number, in the family's mode that numbers them (`stack`, or
+`standalone` for a 2960-X LAN Lite switch, which does not stack).
+Three things it cannot show, which its notes say.  The line is what
+the stack is *provisioned* for;
 Cisco's guide says the stack keeps it "whether or not the provisioned
 switch is part of the stack".  No line states a network module, so
 each switch is proposed with its bay empty: declare the module that is
@@ -2043,14 +2045,15 @@ nothing, as before.
 **Known limitations**
 
 * Model families ship for a first set of Aruba AOS-S switches and
-  for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L
-  and 9300LM; `GET /model-families` is the current list.  A part
-  graded `inferred` says why in its caveat.  Everything else goes
-  through target profiles, and a device with neither a family nor a
-  profile cannot be declared yet.  A
-  Catalyst stack has one management interface, `GigabitEthernet0/0`,
-  which belongs to no member and pairs with the other side's
-  management port, whether that is a family's or a profile's.  A
+  for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
+  9300LM, 2960-X and 2960-XR; `GET /model-families` is the current
+  list.  A part graded `inferred` says why in its caveat.  Everything
+  else goes through target profiles, and a device with neither a
+  family nor a profile cannot be declared yet.  A Catalyst stack has
+  one management interface (`GigabitEthernet0/0`; `FastEthernet0` on
+  a 2960-X or 2960-XR), which belongs to no member and pairs with the
+  other side's management port, whether that is a family's or a
+  profile's.  A
   Catalyst's source switches are read from its `switch N provision`
   lines, but not its network modules: declare the module that is
   fitted.
