@@ -1,0 +1,260 @@
+# Cisco Catalyst 3650 switch series (IOS XE)
+#
+# A fixed-port access switch with FIXED uplinks (no network-module bay)
+# and an optional StackWise-160 stack of up to nine members.  The names
+# are made as a Catalyst 9300's are:
+#
+#   * Every name is `<type><switch>/<module>/<port>`, and the switch
+#     number is never absent: Cisco's examples name a standalone
+#     switch's ports as switch 1.
+#   * The switch's downlink ports are module 0, numbered from 1 straight
+#     through the panel whatever their type.
+#   * The uplink ports are module 1 of the fixed panel (`slot: "1"`) and
+#     restart at 1: GigabitEthernet1/1/1-4 on a WS-C3650-24PS.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# The stack has ONE management interface, GigabitEthernet0/0: each
+# member has the jack and the active switch's carries the link.  It is
+# declared once, under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# HIG's Table 1-1 lists each model three times, with -L, -S or -E after
+# it for its license level (LAN Base, IP Base, IP Services).  A model
+# here is named without the suffix, and the license level is not
+# checked.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Catalyst 3650 Switch Hardware Installation Guide, "Overview":
+#         Table 1-1 (the models), the uplink ports and their LED labels,
+#         the Ethernet management port, and the stack ("Up to nine
+#         switches can be members of a stack").
+#   DS    Cisco Catalyst 3650 Series Switches Data Sheet, Table 1 (the
+#         switch configurations) and the stacking notes (StackWise-160,
+#         license levels).
+#   CG    Interface and Hardware Components Configuration Guide, Cisco
+#         IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), "Configuring
+#         Interface Characteristics" > "Interface Configuration Mode" and
+#         "Multigigabit Ethernet", and "Configuring Ethernet Management
+#         Port".
+#   CR    Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst
+#         3650 Switches), "Interface and Hardware Commands", `interface`
+#         (TenGigabitEthernet: switch ID 1 to 8, slot 0 to 1, port 1 to
+#         24 and 37 to 48).
+#
+# The stack's size.  CG and HIG say nine; CR's `interface` entry gives
+# TenGigabitEthernet a switch ID of 1 to 8.  The family takes 1 to 9,
+# from the two that agree.
+#
+# The 2 x 1G and 2 x 10G uplinks of the TD, PD, FD and PDM models.  HIG:
+# "Four uplink port LEDs labeled G1, G2, G3, G4 and two right-side
+# uplink port LEDs also labeled TE3 and TE4 -- This labeling represents
+# two ports (left side) supporting SFP modules and two ports (right
+# side) supporting SFP and SFP+ modules."  CG names the uplinks
+# gigabitethernet1/1/1-4 "or" tengigabitethernet1/1/1-4 and says
+# nothing of a model with both.  The names given -- GigabitEthernet1/1/1-2
+# and then TenGigabitEthernet1/1/3-4 -- follow the labels and are
+# inferred, and those panels are graded so.
+#
+# Which ports of a WS-C3650-12X48UQ or -12X48UR are Multigigabit.  HIG
+# and DS give twelve and no port numbers.  CR numbers TenGigabitEthernet
+# ports of module 0 from 1 to 24 and from 37 to 48, and CG's
+# Multigigabit examples configure `tengigabitethernet 1/1/37` and show
+# `te2/0/43`.  That they are ports 37-48 is inferred from these, and
+# the two panels are graded so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The WS-C3650-8X24PD and WS-C3650-8X24UQ: eight Multigigabit
+#     ports of 24, and no document read says which eight (CR's range 1
+#     to 24 holds any of them).
+#   * The WS-C3650-12X48FD: HIG gives it two 10G uplink ports ("2
+#     10-Gigabit SFP+ uplink ports"), and DS lists it under "2x10G and
+#     2x1G"; the two disagree on how many uplinks it has.
+#   * The WS-C3650-12X48UZ: no Catalyst 3650 document read names a
+#     40-Gigabit interface (CR's `interface` lists none).
+#   * Which interfaces a 3650 config holds for the uplink ports (both a
+#     GigabitEthernet and a TenGigabitEthernet name for one port, or
+#     one): no config of a 3650 was seen.
+#   * A stack that mixes a 3650 with a 3850: the 3850 stacks over
+#     StackWise-480 and is a family of its own (cisco_iosxe_c3850.yaml),
+#     so a deployment of both is refused.
+schema: 1
+vendor: cisco_iosxe
+family: C3650
+display_name: "Cisco Catalyst 3650"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise-160 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (the device number range is 1 to 9; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart); Catalyst 3650 Switch Hardware Installation Guide, Overview (up to nine switches can be members of a stack)"
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco does not stack a LAN Base switch with an IP Base or IP Services one (Cisco Catalyst 3650 Series Switches Data Sheet); that is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 3650 was seen: whether one holds a GigabitEthernet name, a TenGigabitEthernet name or both for an uplink port is not established."
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; in a stack the active link is from the Ethernet management port on the active switch); Catalyst 3650 Switch Hardware Installation Guide, Overview (the 10/100/1000 Ethernet management port, an RJ-45 connector)"}
+
+models:
+  WS-C3650-24TS:
+    skus: [WS-C3650-24TS]
+    display_name: "Cisco Catalyst WS-C3650-24TS"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-24TS: stackable, 24 10/100/1000 Ethernet downlink ports, 4 1-Gigabit small form-factor pluggable (SFP) uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (if the device has 24 10/100/1000 ports, the SFP module ports are gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C3650-48TS:
+    skus: [WS-C3650-48TS]
+    display_name: "Cisco Catalyst WS-C3650-48TS"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48TS: stackable, 48 10/100/1000 Ethernet downlink ports, 4 1-Gigabit SFP uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C3650-24PS:
+    skus: [WS-C3650-24PS]
+    display_name: "Cisco Catalyst WS-C3650-24PS"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-24PS: stackable, 24 10/100/1000 PoE+ downlink ports, 4 1-Gigabit SFP uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (if the device has 24 10/100/1000 ports, the SFP module ports are gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C3650-48PS:
+    skus: [WS-C3650-48PS]
+    display_name: "Cisco Catalyst WS-C3650-48PS"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48PS: stackable, 48 10/100/1000 PoE+ downlink ports, 4 1-Gigabit SFP uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C3650-48FS:
+    skus: [WS-C3650-48FS]
+    display_name: "Cisco Catalyst WS-C3650-48FS"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48FS: stackable, 48 10/100/1000 Full PoE downlink ports, 4 1-Gigabit SFP uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C3650-24TD:
+    skus: [WS-C3650-24TD]
+    display_name: "Cisco Catalyst WS-C3650-24TD"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-24TD: stackable, 24 10/100/1000 Ethernet downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-24TD: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48TD:
+    skus: [WS-C3650-48TD]
+    display_name: "Cisco Catalyst WS-C3650-48TD"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48TD: stackable, 48 10/100/1000 Ethernet downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-48TD: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-24PD:
+    skus: [WS-C3650-24PD]
+    display_name: "Cisco Catalyst WS-C3650-24PD"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-24PD: stackable, 24 10/100/1000 PoE+ downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-24PD: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48PD:
+    skus: [WS-C3650-48PD]
+    display_name: "Cisco Catalyst WS-C3650-48PD"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48PD: stackable, 48 10/100/1000 PoE+ downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-48PD: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48FD:
+    skus: [WS-C3650-48FD]
+    display_name: "Cisco Catalyst WS-C3650-48FD"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48FD: stackable, 48 10/100/1000 Full PoE+ downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-48FD: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-24PDM:
+    skus: [WS-C3650-24PDM]
+    display_name: "Cisco Catalyst WS-C3650-24PDM"
+    panel: {grade: inferred, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-24PDM: stackable, 24 10/100/1000 PoE+ downlink ports, 2 1-Gigabit SFP uplink ports, 2 10-Gigabit SFP+ uplink ports, fixed 640-W power supply), Uplink Ports (two slots (left side) supporting only 1-Gigabit SFP modules, two slots (right side) supporting either 10-Gigabit SFP+ modules or 1-Gigabit SFP modules) and Uplink port LEDs (four uplink port LEDs labeled G1, G2, G3, G4 and two right-side uplink port LEDs also labeled TE3 and TE4); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart)", caveat: "WS-C3650-24PDM: two 1G and two 10G uplinks. Cisco labels the four G1-G4 and the two on the right also TE3 and TE4, and names none of them in its interface lists. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred from the labels, and no configuration of a 3650 with these uplinks was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48TQ:
+    skus: [WS-C3650-48TQ]
+    display_name: "Cisco Catalyst WS-C3650-48TQ"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48TQ: stackable, 48 10/100/1000 Ethernet downlink ports, 4 10-Gigabit SFP+ uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; tengigabitethernet1/1/1 through tengigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48PQ:
+    skus: [WS-C3650-48PQ]
+    display_name: "Cisco Catalyst WS-C3650-48PQ"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48PQ: stackable, 48 10/100/1000 PoE+ downlink ports, 4 10-Gigabit SFP+ uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; tengigabitethernet1/1/1 through tengigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48FQ:
+    skus: [WS-C3650-48FQ]
+    display_name: "Cisco Catalyst WS-C3650-48FQ"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48FQ: stackable, 48 10/100/1000 Full PoE downlink ports, 4 10-Gigabit SFP+ uplink ports); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; tengigabitethernet1/1/1 through tengigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-48FQM:
+    skus: [WS-C3650-48FQM]
+    display_name: "Cisco Catalyst WS-C3650-48FQM"
+    panel: {grade: vendor-doc, ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-48FQM: stackable, 48 10/100/1000 Full PoE downlink ports, 4 10-Gigabit SFP+ uplink ports, fixed 975-W power supply); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; tengigabitethernet1/1/1 through tengigabitethernet1/1/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-12X48UQ:
+    skus: [WS-C3650-12X48UQ]
+    display_name: "Cisco Catalyst WS-C3650-12X48UQ"
+    panel:
+      grade: inferred
+      ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-12X48UQ: 12 100M/1G/2.5G/5G/10G Cisco UPOE downlink ports, 36 10/100/1000 Cisco UPOE downlink ports, 4 10-Gigabit uplink SFP+ ports); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics (the mGig feature on the WS-C3650-12X48UQ; examples: interface tengigabitethernet 1/1/37, show interfaces te2/0/43 downshift)"
+      caveat: "WS-C3650-12X48UQ: Cisco gives this model 12 Multigigabit ports and 36 1G ports, and names no port numbers for either. Its command reference numbers TenGigabitEthernet ports of module 0 from 37 to 48, and its configuration guide's Multigigabit examples use ports 37 and 43; that the Multigigabit ports are 37-48 is inferred from these, and no configuration of a WS-C3650-12X48UQ was seen."
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C3650-12X48UR:
+    skus: [WS-C3650-12X48UR]
+    display_name: "Cisco Catalyst WS-C3650-12X48UR"
+    panel:
+      grade: inferred
+      ref: "Catalyst 3650 Switch Hardware Installation Guide, Overview, Table 1-1 (WS-C3650-12X48UR: 12 100M/1G/2.5G/5G/10G Cisco UPOE downlink ports, 36 10/100/1000 Cisco UPOE downlink ports, 8 10-Gigabit uplink SFP+ ports); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics (the mGig feature on the WS-C3650-12X48UR; examples: interface tengigabitethernet 1/1/37, show interfaces te2/0/43 downshift)"
+      caveat: "WS-C3650-12X48UR: Cisco gives this model 12 Multigigabit ports and 36 1G ports, and names no port numbers for either. Its command reference numbers TenGigabitEthernet ports of module 0 from 37 to 48, and its configuration guide's Multigigabit examples use ports 37 and 43; that the Multigigabit ports are 37-48 is inferred from these, and no configuration of a WS-C3650-12X48UR was seen."
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 8, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}

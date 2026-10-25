@@ -649,13 +649,21 @@ translate it again from `show running-config` as the device prints it.
   C3850-NM-2-10G's names, `GigabitEthernet1/1/1-2` and then
   `TenGigabitEthernet1/1/3-4` (Cisco says only that its two left slots
   take 1G and its two right slots 1G or 10G).  The C3850-NM-2-40G and
-  the WS-C3850-48XS are not modelled.  Other Catalyst series are not
-  modelled yet (the C9500 has target profiles), and a proposal names
-  their type in `unknown_parts`.  A C9300 config lists the
+  the WS-C3850-48XS are not modelled.  The Catalyst 3650 is one family,
+  `C3650`, a stack of up to nine whose uplinks are fixed and named as
+  module 1, as a C9200L's are.  The names of a TD, PD, FD or PDM
+  model's two 1G and two 10G uplinks are `inferred`
+  (`GigabitEthernet1/1/1-2` and then `TenGigabitEthernet1/1/3-4`, from
+  Cisco's labels G1-G4 and TE3-TE4), and so are the Multigigabit ports
+  of the WS-C3650-12X48UQ and -12X48UR, at 37-48.  The WS-C3650-8X24PD,
+  -8X24UQ, -12X48FD and -12X48UZ are not modelled; the family's YAML
+  says why.  Other Catalyst series are not modelled yet (the C9500 has
+  target profiles), and a proposal names their type in
+  `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port; no configuration of
-  a C9200, C9200L or 3850 was seen, so whether one does the same is
-  not established.  With both devices
+  a C9200, C9200L, 3850 or 3650 was seen, so whether one does the same
+  is not established.  With both devices
   declared — in the Interface rename modal or on the API — those
   names come back as off-inventory (and
   some of them can be displaced), so the job is `partial` although the

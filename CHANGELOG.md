@@ -438,6 +438,26 @@ timestamp if your timezone matters for an audit.
   WS-C3850-24XS, -24XU or -12X48U, and its license levels.  No
   configuration of a 3850 was seen.  `detect-deployment` reads
   `switch N provision ws-c3850-48p` as it reads a C9300's line.
+- **The Cisco Catalyst 3650 can be declared as a source or target
+  device.**  One model family, `C3650`: the T, P and F models with four
+  1G uplinks (S), two 1G and two 10G (D) or four 10G (Q), the
+  WS-C3650-24PDM and -48FQM among them, and the Multigigabit
+  WS-C3650-12X48UQ and -12X48UR, in a StackWise-160 stack of up to
+  nine.  The uplinks are fixed and named as module 1, as a C9200L's
+  are: a WS-C3650-48PQ as switch 2 has `TenGigabitEthernet2/1/1-4`.
+  Graded `inferred`, each with its reason: the names of a D model's
+  uplinks, `GigabitEthernet1/1/1-2` and then
+  `TenGigabitEthernet1/1/3-4`, which Cisco labels G1-G4 (the two on the
+  right also TE3 and TE4) and names in no interface list; and the
+  twelve Multigigabit ports of the 12X48UQ and -12X48UR, taken as 37-48
+  as the 3850's are.  Not modelled: the WS-C3650-8X24PD and -8X24UQ (no
+  document read says which eight of their 24 ports are Multigigabit),
+  the -12X48FD (the hardware guide and the data sheet disagree on its
+  uplinks) and the -12X48UZ (no 3650 document read names a 40-Gigabit
+  interface).  A model is named without its license suffix (-L, -S or
+  -E), and the license level is not checked.  No configuration of a
+  3650 was seen.  `detect-deployment`
+  reads a 3650's `switch N provision` line as it reads a C9300's.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

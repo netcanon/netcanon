@@ -1768,9 +1768,10 @@ module the bay takes, fitted or not, so a proposal from one is
 `consistent: false` and lists those names, with
 `AppGigabitEthernet1/0/1` (the application-hosting interface): a
 proposal's bay is empty, and a module you declare makes only its own
-names ports of the switch.  No configuration of a C9200, C9200L or
-3850 was seen, so whether one does the same is not established.  And the XML of the NETCONF codec is not
-read: its proposal says so.
+names ports of the switch.  No configuration of a C9200, C9200L,
+3850 or 3650 was seen, so whether one does the same is not
+established.  And the XML of the NETCONF codec is not read: its
+proposal says so.
 
 A proposal lists a stack's members by member number, lowest first,
 whatever order the config states them in.  Two stacks are paired in the
@@ -2043,10 +2044,11 @@ nothing, as before.
 **Known limitations**
 
 * Model families ship for a first set of Aruba AOS-S switches and
-  for the Cisco Catalyst 9300, 9200, 9200L and 3850;
+  for the Cisco Catalyst 9300, 9200, 9200L, 3850 and 3650;
   `GET /model-families` is the current list.  A part graded `inferred`
-  (two of the 3850's) says why in its caveat.  Everything else goes through target profiles, and a device
-  with neither a family nor a profile cannot be declared yet.  A
+  (some of the 3850's and 3650's) says why in its caveat.  Everything
+  else goes through target profiles, and a device with neither a
+  family nor a profile cannot be declared yet.  A
   Catalyst stack has one management interface, `GigabitEthernet0/0`,
   which belongs to no member and pairs with the other side's
   management port, whether that is a family's or a profile's.  A
@@ -2061,8 +2063,9 @@ nothing, as before.
   in VLAN 1 on a factory-default target.  Check VLAN 1 on the result.
 * A C9300 config lists the interfaces of every network module the
   chassis could take, whichever one is fitted, plus an
-  application-hosting port (whether a C9200's or a 3850's does is not
-  established: no configuration of one was seen).  Declared with one module, the other
+  application-hosting port (whether a C9200's, a 3850's or a 3650's
+  does is not established: no configuration of one was seen).
+  Declared with one module, the other
   modules' interface names come back as off-inventory, and one that
   would land on a paired port is displaced.  The job is `partial`
   although the model is right, because netcanon cannot yet tell these

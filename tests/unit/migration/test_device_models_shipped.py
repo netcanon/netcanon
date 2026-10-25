@@ -681,6 +681,39 @@ for _model, _access_names in _C3850_PANELS.items():
             list(_access_names), list(_C3850_BAY_1[_fitted]),
         )
 
+#: Cisco Catalyst 3650: fixed uplinks, module 1 of the switch, as a
+#: C9200L's are.  Sources: the 3650 Hardware Installation Guide's
+#: Overview (Table 1-1, the uplink ports and their LED labels), and the
+#: IOS XE 16.12 configuration guide and command reference.  Inferred
+#: (see KNOWN_INFERRED_PARTS): the names of the two 1G and two 10G
+#: uplinks, and the Multigigabit ports of the 12X48UQ and -UR at 37-48.
+#: Four models are not modelled; the YAML says why.
+_C3650_TWO_AND_TWO = [*_run(1, 2, "GigabitEthernet1/1/"), *_run(3, 2, "TenGigabitEthernet1/1/")]
+_C3650_MGIG = [*_run(1, 36, "GigabitEthernet1/0/"), *_run(37, 12, "TenGigabitEthernet1/0/")]
+_C3650: dict[str, tuple[list[str], list[str]]] = {
+    "WS-C3650-24TS": (_run(1, 24, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "WS-C3650-48TS": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "WS-C3650-24PS": (_run(1, 24, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "WS-C3650-48PS": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "WS-C3650-48FS": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "WS-C3650-24TD": (_run(1, 24, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-48TD": (_run(1, 48, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-24PD": (_run(1, 24, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-48PD": (_run(1, 48, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-48FD": (_run(1, 48, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-24PDM": (_run(1, 24, "GigabitEthernet1/0/"), _C3650_TWO_AND_TWO),
+    "WS-C3650-48TQ": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "WS-C3650-48PQ": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "WS-C3650-48FQ": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "WS-C3650-48FQM": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "WS-C3650-12X48UQ": (_C3650_MGIG, _TE_UPLINKS),
+    "WS-C3650-12X48UR": (_C3650_MGIG, _run(1, 8, "TenGigabitEthernet1/1/")),
+}
+for _model, (_access_names, _uplinks) in _C3650.items():
+    EXPECTED_INVENTORIES[(_C, _model, "stack", ())] = (
+        list(_access_names), list(_uplinks),
+    )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -691,6 +724,7 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C9200-PB": ["GigabitEthernet0/0"],
     "cisco_iosxe/C9200L": ["GigabitEthernet0/0"],
     "cisco_iosxe/C3850": ["GigabitEthernet0/0"],
+    "cisco_iosxe/C3650": ["GigabitEthernet0/0"],
 }
 
 
@@ -765,21 +799,32 @@ class TestExactInventories:
     ) -> None:
         """``C9300-48UXM`` is 48 access ports, whatever their types, a
         3850's ``12X48U`` is 48 of which twelve are Multigigabit, and a
-        C9200L's ``-4X`` is its four fixed 10G uplinks."""
-        count = re.fullmatch(
-            r"(?:C9[23]00L?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXY]))?",
-            model.skus[0],
-        )
-        assert count, model.skus[0]
+        C9200L's ``-4X`` is its four fixed 10G uplinks.  A 3650's letter
+        after its PoE letter is its fixed uplinks, as the hardware
+        guide's Table 1-1 gives them for the models modelled: S four 1G,
+        D two 1G and two 10G, Q four 10G, R eight 10G."""
+        sku = model.skus[0]
+        fixed = [(g.count, g.speed) for g in model.ports if g.role == "uplink"]
+        if sku.startswith("WS-C3650-"):
+            count = re.fullmatch(r"WS-C3650-(?:\d+X(?=\d))?(\d+)[TPFU]([SDQR])M?", sku)
+            assert count, sku
+            assert fixed == {
+                "S": [(4, "gig")], "D": [(2, "gig"), (2, "10gig")],
+                "Q": [(4, "10gig")], "R": [(8, "10gig")],
+            }[count.group(2)], sku
+        else:
+            count = re.fullmatch(
+                r"(?:C9[23]00L?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXY]))?", sku,
+            )
+            assert count, sku
+            if count.group(2) is None:
+                assert not fixed, sku
+            else:
+                speed = {"G": "gig", "X": "10gig", "Y": "25gig"}[count.group(3)]
+                assert fixed == [(int(count.group(2)), speed)], sku
         assert sum(g.count for g in model.ports if g.role == "access") == int(
             count.group(1)
-        ), model.skus[0]
-        fixed = [(g.count, g.speed) for g in model.ports if g.role == "uplink"]
-        if count.group(2) is None:
-            assert not fixed, model.skus[0]
-        else:
-            speed = {"G": "gig", "X": "10gig", "Y": "25gig"}[count.group(3)]
-            assert fixed == [(int(count.group(2)), speed)], model.skus[0]
+        ), sku
 
 
 #: A Catalyst interface type and the top speed it stands for, typed from
@@ -1286,10 +1331,11 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
             "C9300-48UN", "C9300-24UB", "C9300-48UB", "C9300-24UXB",
         )
     },
-    # Cisco Catalyst 9200 and 9200L: the PID is the model key.
+    # Cisco Catalyst 9200, 9200L, 3850 and 3650: the PID is the model
+    # key (a 3850's or 3650's without its license suffix).
     **{
         ("cisco_iosxe", pid): pid
-        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS)
+        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650)
     },
 }
 
@@ -1309,6 +1355,20 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # Two 1G slots on the left, two 1G/10G on the right, and no name
     # for any of the four in a Cisco document read.
     "cisco_iosxe/C3850 / module / C3850-NM-2-10G",
+    # Two 1G and two 10G uplinks that Cisco labels G1-G4, the two on the
+    # right also TE3 and TE4, and names in no interface list.
+    *(
+        f"cisco_iosxe/C3650 / panel / {pid}"
+        for pid in (
+            "WS-C3650-24TD", "WS-C3650-48TD", "WS-C3650-24PD",
+            "WS-C3650-48PD", "WS-C3650-48FD", "WS-C3650-24PDM",
+        )
+    ),
+    # Twelve Multigigabit ports that Cisco numbers nowhere; 37-48 is read
+    # from the command reference's TenGigabitEthernet range and the
+    # configuration guide's examples of ports 37 and 43.
+    "cisco_iosxe/C3650 / panel / WS-C3650-12X48UQ",
+    "cisco_iosxe/C3650 / panel / WS-C3650-12X48UR",
 }
 
 
@@ -1711,3 +1771,95 @@ class TestCiscoC3850:
             assert {g.poe for g in model.ports} == {powered}, key
         for module in self.FAMILY.modules.values():
             assert not any(g.poe for g in module.ports)
+
+
+#: The 3650 models the family leaves out, each for a reason its YAML
+#: gives.
+_C3650_NOT_MODELLED = (
+    "WS-C3650-8X24PD", "WS-C3650-8X24UQ", "WS-C3650-12X48FD", "WS-C3650-12X48UZ",
+)
+_C3650_TWO_AND_TWO_MODELS = (
+    "WS-C3650-24TD", "WS-C3650-48TD", "WS-C3650-24PD",
+    "WS-C3650-48PD", "WS-C3650-48FD", "WS-C3650-24PDM",
+)
+
+
+class TestCiscoC3650:
+    """A Catalyst 3650 has fixed uplinks, module 1 of the switch, in a
+    stack of up to nine; what is inferred says so, and a model whose
+    ports no document read places is not modelled."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C3650"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.FAMILY.models) == sorted(_C3650)
+        text = (FAMILIES_DIR / "cisco_iosxe_c3650.yaml").read_text(encoding="utf-8")
+        for left_out in _C3650_NOT_MODELLED:
+            assert left_out not in self.FAMILY.models
+            assert left_out in text, left_out
+
+    def test_no_bay_and_no_module(self) -> None:
+        assert not self.FAMILY.modules
+        assert not any(model.bays for model in self.FAMILY.models.values())
+
+    def test_a_stack_of_nine(self) -> None:
+        assert list(self.FAMILY.modes) == ["stack"]
+        assert self.FAMILY.modes["stack"].member_ids == (1, 9)
+        inventory = _compile("cisco_iosxe", None, {"model": "WS-C3650-48PS", "id": 9})
+        assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+        assert inventory.names()[0] == "GigabitEthernet9/0/1"
+        with pytest.raises(Exception, match="outside 1-9"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3650-48PS", "id": 10})
+
+    @pytest.mark.parametrize("other", ["WS-C3850-48P", "C9300-24P", "C9200L-24P-4G"])
+    def test_a_3650_stacks_with_neither_a_3850_nor_a_catalyst_9000(self, other: str) -> None:
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3650-24PS"}, {"model": other})
+
+    def test_a_fixed_uplink_is_module_1_and_an_uplink(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "WS-C3650-24PS"}, {"model": "WS-C3650-48PQ", "id": 2},
+        )
+        uplinks = [(p.name, p.slot, p.module, p.speed, p.cage) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            *((f"GigabitEthernet1/1/{n}", "1", "", "gig", "sfp") for n in range(1, 5)),
+            *((f"TenGigabitEthernet2/1/{n}", "1", "", "10gig", "sfp+") for n in range(1, 5)),
+        ]
+        assert inventory.names(role="mgmt") == ["GigabitEthernet0/0"]
+        assert {p.evidence for p in inventory.ports} == {"vendor-doc"}
+        assert not any("inferred" in c for c in inventory.caveats)
+
+    @pytest.mark.parametrize("pid", _C3650_TWO_AND_TWO_MODELS)
+    def test_two_and_two_uplinks_are_inferred_and_say_so(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        uplinks = [(p.name, p.speed, p.cage) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            ("GigabitEthernet1/1/1", "gig", "sfp"),
+            ("GigabitEthernet1/1/2", "gig", "sfp"),
+            ("TenGigabitEthernet1/1/3", "10gig", "sfp+"),
+            ("TenGigabitEthernet1/1/4", "10gig", "sfp+"),
+        ]
+        assert {p.evidence for p in inventory.ports if p.member_rank is not None} == {"inferred"}
+        assert any(c.startswith(f"{pid}: ") and "is inferred" in c for c in inventory.caveats)
+
+    @pytest.mark.parametrize("pid", ["WS-C3650-12X48UQ", "WS-C3650-12X48UR"])
+    def test_the_multigigabit_range_is_inferred_and_said(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        ports = {p.name: p for p in inventory.ports}
+        assert ports["GigabitEthernet1/0/36"].speed == "gig"
+        assert ports["TenGigabitEthernet1/0/37"].speed == "10gig"
+        assert ports["TenGigabitEthernet1/0/37"].notes == "Multigigabit"
+        assert "GigabitEthernet1/0/37" not in ports
+        assert {p.evidence for p in ports.values() if p.member_rank is not None} == {"inferred"}
+        assert any("37-48 is inferred" in c for c in inventory.caveats)
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        caveat = self.FAMILY.modes["stack"].caveat
+        assert "LAN Base" in caveat and "not checked here" in caveat
+        assert "No configuration of a Catalyst 3650 was seen" in caveat
+
+    def test_poe_models(self) -> None:
+        for key, model in self.FAMILY.models.items():
+            powered = re.search(r"\d[PFU][SDQR]M?$", key) is not None
+            assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
+            assert not any(g.poe for g in model.ports if g.role == "uplink"), key
