@@ -1100,6 +1100,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # list narrow enough to be a specific declaration.  Only VIDs
     # appearing solely in a WIDE range are dropped as possible phantoms.
     # See ``canonical.transforms.switchport_declared_vlan_ids``.
+    _describe_vlans(intent, found.vlan_descriptions)
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
@@ -1899,6 +1900,10 @@ class _Found:
         self.once = Uniques()
         self.stated: set[str] = set()
         self.tagging: dict[str, str] = {}
+        # A VLAN's description, by the VLAN's name: a set-form config
+        # may state it ahead of ``vlan-id``, so the record it belongs
+        # to may not be made yet when the line is read.
+        self.vlan_descriptions: dict[str, str] = {}
 
 
 def _dispatch_set(
@@ -2711,8 +2716,15 @@ def _apply_vlans(
     found: _Found | None = None,
 ) -> None:
     """``set vlans <NAME> vlan-id <N>``
+    ``set vlans <NAME> description <TEXT>``
     ``set vlans <NAME> vxlan vni <VNI>``  (GAP 6)
     ``set vlans <NAME> l3-interface irb.<vid>``  (Phase 4 rank-4)
+
+    A description is kept by the VLAN's name and given to its record
+    when the whole config has been read (``_describe_vlans``): a
+    set-form config may state it ahead of ``vlan-id``, which makes
+    the record.  A handler called with no ``found`` gives it to a
+    record that is there already.
 
     ``vlan_by_id`` / ``vlan_by_name`` are the O(1) indices threaded from
     ``parse_intent`` (2026-07-06 review MEDIUM #32).  Legacy/isolated callers
@@ -2726,6 +2738,12 @@ def _apply_vlans(
     if vlan_by_name is None:
         vlan_by_name = {v.name: v for v in intent.vlans if v.name}
     vlan_name = tokens[0]
+    if tokens[1] == "description":
+        if found is not None:
+            found.vlan_descriptions[vlan_name] = tokens[2]
+        elif vlan_name in vlan_by_name:
+            vlan_by_name[vlan_name].description = tokens[2]
+        return
     if tokens[1] == "vlan-id":
         try:
             vid = int(tokens[2])
@@ -2785,6 +2803,23 @@ def _apply_vlans(
         # convention).  A future enrichment could stash pending
         # mappings.
         return
+
+
+def _describe_vlans(intent: CanonicalIntent, descriptions: dict[str, str]) -> None:
+    """Give each VLAN of *intent* the description its name was given
+    (``set vlans <NAME> description``), the last one read.  A name
+    no VLAN of the tree has (a VLAN with no ``vlan-id``) is no
+    record, and its description goes nowhere.
+
+    Args:
+        intent: The tree, every ``set vlans`` line read.
+        descriptions: Each description by the VLAN's name.
+    """
+    if not descriptions:
+        return
+    for vlan in intent.vlans:
+        if vlan.name in descriptions:
+            vlan.description = descriptions[vlan.name]
 
 
 def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:

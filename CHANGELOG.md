@@ -555,6 +555,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Junos: a VLAN's description is read and written.**  The parser
+  read nothing of `set vlans <name> description <text>` and the
+  renderer wrote no such line, so a Junos VLAN's description was gone
+  on every target, in jobs that did not say so, and one from another
+  platform -- an AOS-CX `description` beside a `name` of the VLAN's
+  own -- was gone on Junos, which has a line for it.  The parser keeps
+  a description by the VLAN's name until the whole config is read (a
+  set-form config may state it ahead of `vlan-id`), and the renderer
+  writes it beside the name.  A description that is written as the
+  VLAN's name, because the name was only an interface's (an OPNsense
+  `<descr>`, a RouterOS `comment=`), is not written a second time.
+  Junos now declares `/vlans/vlan/description` supported; onto a
+  target with no VLAN description (EOS, IOS-XE, NX-OS, AOS-S, OS10) the
+  job lists it as lossy.  Every AOS-CX capture with a VLAN description
+  now keeps it on Junos.  Several reference notes said EOS and AOS-S
+  wrote a Junos VLAN description as a comment; neither does, and the
+  notes say so.
+
 - **A value is written on one line, on every target, and the job says
   where** (Security, above).  The pipeline writes each run of line
   breaks in a value -- any character `str.splitlines` ends a line at,

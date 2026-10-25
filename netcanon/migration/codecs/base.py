@@ -326,10 +326,11 @@ class CodecBase(ABC):
     #: ``True`` to a set typed by hand.
     units_are_named_by_their_tag: ClassVar[bool] = False
 
-    #: This platform's VLAN has a name and no label apart from it, so
-    #: the renderer writes ``CanonicalVlan.name`` and nothing of
-    #: ``.description`` (IOS-XE, NX-OS, EOS and AOS-S ``name``, Junos
-    #: ``set vlans <name>``, the one ``description`` of an OS10
+    #: This platform's VLAN is called by its name, which is the label an
+    #: operator reads: the renderer writes ``CanonicalVlan.name`` and,
+    #: save on Junos, nothing of ``.description`` (IOS-XE, NX-OS, EOS
+    #: and AOS-S ``name``, Junos ``set vlans <name>`` with its
+    #: ``description`` beside it, the one ``description`` of an OS10
     #: ``interface vlan``).  Where a VLAN's name is only the name of an
     #: interface of the config, or empty, and it has a description, the
     #: description is written as its name

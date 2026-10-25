@@ -28,8 +28,8 @@ welcome.
   syslog servers
 - Interfaces — `set interfaces <name> unit <N> family inet address`
   CIDR form; IPv4 + IPv6; per-unit and bare-interface forms
-- VLANs (`set vlans <name> vlan-id <id>`) with VLAN-centric
-  membership projection
+- VLANs (`set vlans <name> vlan-id <id>`, and its `description`) with
+  VLAN-centric membership projection
 - Static routes (`set routing-options static route ...`)
 - LAGs (`ae<N>` aggregated-ethernet, reconciled with cross-vendor
   names like `Port-channel<N>` / `trk<N>`)

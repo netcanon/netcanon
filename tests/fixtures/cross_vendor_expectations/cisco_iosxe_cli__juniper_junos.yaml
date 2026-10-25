@@ -451,8 +451,8 @@ per_field_expectation:
       Junos supports ``set vlans <name> description X``; Cisco has
       no first-class VLAN-level description (only interface
       descriptions).  Cisco source -> Junos preserves the empty
-      description; Junos source -> Cisco drops the description with
-      a comment in render.
+      description; Junos source -> Cisco drops the description, and
+      the job lists it as lossy.
     references: [junos-vlans-statement]
 
   vlans[].tagged_ports:

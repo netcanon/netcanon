@@ -396,9 +396,8 @@ per_field_expectation:
     note: >
       Source-side gap: vyos declares no path under `/vlans/vlan/` beyond the
       unsupported ones and emits no VLAN description on any committed cell.
-      juniper_junos declares `/vlans/vlan/description` LOSSY ("Render emits
-      the VLAN name but not a separate description line"), which would matter
-      only for a source that actually produces one.  vyos does not.
+      Junos writes `set vlans <name> description X` for a source that holds
+      one; vyos does not.
     references: [vyos-junos-surface]
 
   # -- Routing --------------------------------------------------------------

@@ -163,6 +163,10 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/dot1q-inner-vlan",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
+            # `set vlans <NAME> description`, read and written.  Where
+            # the name is only an interface's, the description is
+            # written as the name instead (_vlan_labels).
+            "/vlans/vlan/description",
             "/routing/static-route",
             # v0.2.0 — per-VRF binding (set routing-instances <NAME> routing-options static)
             "/routing/static-route/vrf",
@@ -209,20 +213,6 @@ class JunosCodec(CodecBase):
                     "is dropped on render while the address value, VGA and VGM "
                     "round-trip natively via the irb fold. Declared lossy "
                     "(blind-audit f92e97a T0-2)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/vlans/vlan/description",
-                reason=(
-                    "Render emits the VLAN name but not a separate "
-                    "description line.  Where the VLAN's name is only the "
-                    "name of an interface of the config, or empty, its "
-                    "description is written as its name (_vlan_labels: an "
-                    "OPNsense <descr>, a RouterOS comment, a FortiOS "
-                    "alias); any other "
-                    "description drops on render (silent-loss guard, "
-                    "Bucket-C stage 2)."
                 ),
                 severity="warn",
             ),
