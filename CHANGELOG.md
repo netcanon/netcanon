@@ -592,6 +592,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS VLAN interface that states no `vlan-id=` is VLAN 1.**
+  "vlan-id (integer: 1..4094; Default: 1)" (MikroTik, "VLAN"), and an
+  export prints no default ("By default, the export command writes
+  only user-edited configuration, RouterOS defaults are omitted",
+  MikroTik, "Configuration Management"), so `/interface vlan add
+  interface=ether2 name=mgmt` is VLAN 1 on `ether2`.  The parser
+  passed such a line over: the VLAN interface was in no output, its
+  addresses were written on its name, which the output defined
+  nowhere, and a RouterOS config translated to RouterOS said
+  `completed`.  It is now read as VLAN 1, as the verbose form
+  (`vlan-id=1`) is; a `vlan-id=` with no number after it is no VLAN
+  id, left out with a row as `vlan-id=0` is.  No committed capture
+  holds such a line.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_vlan_id_left_out_is_1.py`.
 - **A Junos unit the tree has no form for is left out, and said.**  A
   unit is not always a routed sub-interface.  Under `encapsulation
   flexible-ethernet-services` a port takes units of several kinds
