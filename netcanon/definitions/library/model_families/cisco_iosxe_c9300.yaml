@@ -70,8 +70,12 @@
 #     models", so they are a family of their own
 #     (cisco_iosxe_c9300-higher-scale.yaml) and cannot share a stack
 #     with the models here.
-#   * The C9300L, C9300LM and C9300X: other stacks, other uplinks,
-#     other families.
+#   * The C9300L and C9300LM, whose uplinks are fixed: DS says a
+#     fixed uplink model does not stack with a C9300, so they are a
+#     family of their own (cisco_iosxe_c9300l.yaml).
+#   * The C9300X.  DS says it "Stacks with C9300 SKUs at StackWise-480
+#     speeds", and that its C9300X-NM modules fit only a C9300X; it is
+#     not modelled yet.
 schema: 1
 vendor: cisco_iosxe
 family: C9300

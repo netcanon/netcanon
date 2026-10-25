@@ -714,6 +714,46 @@ for _model, (_access_names, _uplinks) in _C3650.items():
         list(_access_names), list(_uplinks),
     )
 
+#: Cisco Catalyst 9300L and 9300LM: one family, since Cisco stacks them
+#: together and with nothing else; fixed uplinks, module 1 of the switch.
+#: Sources: the C9300 Hardware Installation Guide's Product Overview
+#: (Tables 2 and 3), the data sheet's Table 2, and the IOS XE 17.12
+#: configuration guides and command reference.  Inferred (see
+#: KNOWN_INFERRED_PARTS): the Multigigabit ports of the UXG models and
+#: of the C9300LM-48UX at the end of the panel, and the C9300LM's four
+#: TwentyFiveGigE uplinks.
+_FO_UPLINKS = _run(1, 2, "FortyGigabitEthernet1/1/")
+_TWE4_UPLINKS = _run(1, 4, "TwentyFiveGigE1/1/")
+_C9300L_24UXG = [*_run(1, 16, "GigabitEthernet1/0/"), *_run(17, 8, "TenGigabitEthernet1/0/")]
+_C9300L_48UXG = [*_run(1, 36, "GigabitEthernet1/0/"), *_run(37, 12, "TenGigabitEthernet1/0/")]
+_C9300L: dict[str, tuple[list[str], list[str]]] = {
+    "C9300L-24T-4G": (_run(1, 24, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "C9300L-24P-4G": (_run(1, 24, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "C9300L-24T-4X": (_run(1, 24, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "C9300L-24P-4X": (_run(1, 24, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "C9300L-48T-4G": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "C9300L-48P-4G": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "C9300L-48T-4X": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "C9300L-48P-4X": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "C9300L-48PF-4G": (_run(1, 48, "GigabitEthernet1/0/"), _GI_UPLINKS),
+    "C9300L-48PF-4X": (_run(1, 48, "GigabitEthernet1/0/"), _TE_UPLINKS),
+    "C9300L-24UXG-4X": (_C9300L_24UXG, _TE_UPLINKS),
+    "C9300L-24UXG-2Q": (_C9300L_24UXG, _FO_UPLINKS),
+    "C9300L-48UXG-4X": (_C9300L_48UXG, _TE_UPLINKS),
+    "C9300L-48UXG-2Q": (_C9300L_48UXG, _FO_UPLINKS),
+    "C9300LM-48T-4Y": (_run(1, 48, "GigabitEthernet1/0/"), _TWE4_UPLINKS),
+    "C9300LM-24U-4Y": (_run(1, 24, "GigabitEthernet1/0/"), _TWE4_UPLINKS),
+    "C9300LM-48U-4Y": (_run(1, 48, "GigabitEthernet1/0/"), _TWE4_UPLINKS),
+    "C9300LM-48UX-4Y": (
+        [*_run(1, 40, "GigabitEthernet1/0/"), *_run(41, 8, "TenGigabitEthernet1/0/")],
+        _TWE4_UPLINKS,
+    ),
+}
+for _model, (_access_names, _uplinks) in _C9300L.items():
+    EXPECTED_INVENTORIES[(_C, _model, "stack", ())] = (
+        list(_access_names), list(_uplinks),
+    )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -725,6 +765,7 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C9200L": ["GigabitEthernet0/0"],
     "cisco_iosxe/C3850": ["GigabitEthernet0/0"],
     "cisco_iosxe/C3650": ["GigabitEthernet0/0"],
+    "cisco_iosxe/C9300L": ["GigabitEthernet0/0"],
 }
 
 
@@ -798,8 +839,9 @@ class TestExactInventories:
         self, family: FamilyDef, model: ModelDef,
     ) -> None:
         """``C9300-48UXM`` is 48 access ports, whatever their types, a
-        3850's ``12X48U`` is 48 of which twelve are Multigigabit, and a
-        C9200L's ``-4X`` is its four fixed 10G uplinks.  A 3650's letter
+        3850's ``12X48U`` is 48 of which twelve are Multigigabit, a
+        C9200L's ``-4X`` is its four fixed 10G uplinks, and a C9300L's
+        ``-2Q`` its two 40G ones.  A 3650's letter
         after its PoE letter is its fixed uplinks, as the hardware
         guide's Table 1-1 gives them for the models modelled: S four 1G,
         D two 1G and two 10G, Q four 10G, R eight 10G."""
@@ -814,13 +856,14 @@ class TestExactInventories:
             }[count.group(2)], sku
         else:
             count = re.fullmatch(
-                r"(?:C9[23]00L?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXY]))?", sku,
+                r"(?:C9[23]00(?:LM|L)?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXQY]))?",
+                sku,
             )
             assert count, sku
             if count.group(2) is None:
                 assert not fixed, sku
             else:
-                speed = {"G": "gig", "X": "10gig", "Y": "25gig"}[count.group(3)]
+                speed = {"G": "gig", "X": "10gig", "Q": "40gig", "Y": "25gig"}[count.group(3)]
                 assert fixed == [(int(count.group(2)), speed)], sku
         assert sum(g.count for g in model.ports if g.role == "access") == int(
             count.group(1)
@@ -1331,11 +1374,12 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
             "C9300-48UN", "C9300-24UB", "C9300-48UB", "C9300-24UXB",
         )
     },
-    # Cisco Catalyst 9200, 9200L, 3850 and 3650: the PID is the model
-    # key (a 3850's or 3650's without its license suffix).
+    # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L and 9300LM: the
+    # PID is the model key (a 3850's or 3650's without its license
+    # suffix).
     **{
         ("cisco_iosxe", pid): pid
-        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650)
+        for pid in (*_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650, *_C9300L)
     },
 }
 
@@ -1369,6 +1413,17 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # configuration guide's examples of ports 37 and 43.
     "cisco_iosxe/C3650 / panel / WS-C3650-12X48UQ",
     "cisco_iosxe/C3650 / panel / WS-C3650-12X48UR",
+    # Multigigabit ports that Cisco numbers nowhere (and that the
+    # configuration guide says a C9300L does not have), taken as the
+    # last ports of the panel; and the C9300LM's four 25G uplinks, where
+    # the command reference numbers TwentyFiveGigE ports 1 to 2 only.
+    *(
+        f"cisco_iosxe/C9300L / panel / {pid}"
+        for pid in (
+            "C9300L-24UXG-4X", "C9300L-24UXG-2Q", "C9300L-48UXG-4X", "C9300L-48UXG-2Q",
+            "C9300LM-48T-4Y", "C9300LM-24U-4Y", "C9300LM-48U-4Y", "C9300LM-48UX-4Y",
+        )
+    ),
 }
 
 
@@ -1861,5 +1916,101 @@ class TestCiscoC3650:
     def test_poe_models(self) -> None:
         for key, model in self.FAMILY.models.items():
             powered = re.search(r"\d[PFU][SDQR]M?$", key) is not None
+            assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
+            assert not any(g.poe for g in model.ports if g.role == "uplink"), key
+
+
+_C9300L_INFERRED = (
+    "C9300L-24UXG-4X", "C9300L-24UXG-2Q", "C9300L-48UXG-4X", "C9300L-48UXG-2Q",
+    "C9300LM-48T-4Y", "C9300LM-24U-4Y", "C9300LM-48U-4Y", "C9300LM-48UX-4Y",
+)
+
+
+class TestCiscoC9300L:
+    """A Catalyst 9300L or 9300LM has fixed uplinks, module 1 of the
+    switch, in a StackWise-320 stack of up to eight that Cisco builds of
+    the two series and of nothing else; what is inferred says so."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C9300L"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.FAMILY.models) == sorted(_C9300L)
+
+    def test_no_bay_and_no_module(self) -> None:
+        assert not self.FAMILY.modules
+        assert not any(model.bays for model in self.FAMILY.models.values())
+
+    def test_a_stack_of_eight(self) -> None:
+        assert list(self.FAMILY.modes) == ["stack"]
+        assert self.FAMILY.modes["stack"].member_ids == (1, 8)
+        inventory = _compile("cisco_iosxe", None, {"model": "C9300L-48P-4X", "id": 8})
+        assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+        assert inventory.names()[0] == "GigabitEthernet8/0/1"
+        with pytest.raises(Exception, match="outside 1-8"):
+            _compile("cisco_iosxe", "stack", {"model": "C9300L-48P-4X", "id": 9})
+
+    def test_a_c9300l_and_a_c9300lm_stack_together(self) -> None:
+        """Data sheet: each "Stacks with other Catalyst 9300L and 9300LM
+        models with same license level"."""
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "C9300L-24P-4G"}, {"model": "C9300LM-48UX-4Y", "id": 2},
+        )
+        uplinks = [(p.name, p.slot, p.speed, p.cage) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            *((f"GigabitEthernet1/1/{n}", "1", "gig", "sfp") for n in range(1, 5)),
+            *((f"TwentyFiveGigE2/1/{n}", "1", "25gig", "sfp28") for n in range(1, 5)),
+        ]
+        assert inventory.names(role="mgmt") == ["GigabitEthernet0/0"]
+
+    @pytest.mark.parametrize("other", ["C9300-24P", "C9300-24UB", "C9200L-24P-4G", "WS-C3850-24P"])
+    def test_the_stacks_cisco_does_not_build_are_refused(self, other: str) -> None:
+        """Data sheet: "You cannot stack fixed uplink models (C9300L SKUs)
+        with modular uplink models (C9300 SKUs)"."""
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": "C9300L-24P-4G"}, {"model": other})
+
+    @pytest.mark.parametrize("pid", ["C9300L-24UXG-2Q", "C9300L-48UXG-2Q"])
+    def test_a_2q_is_two_forty_gig_uplinks(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        uplinks = [(p.name, p.speed, p.cage) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            ("FortyGigabitEthernet1/1/1", "40gig", "qsfp+"),
+            ("FortyGigabitEthernet1/1/2", "40gig", "qsfp+"),
+        ]
+
+    @pytest.mark.parametrize("pid", _C9300L_INFERRED)
+    def test_what_is_inferred_says_so(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        assert {p.evidence for p in inventory.ports if p.member_rank is not None} == {"inferred"}
+        assert any(c.startswith(f"{pid}: ") and "is inferred" in c for c in inventory.caveats)
+
+    def test_what_is_not_inferred_says_nothing_of_it(self) -> None:
+        for key in self.FAMILY.models:
+            if key in _C9300L_INFERRED:
+                continue
+            inventory = _compile("cisco_iosxe", "stack", {"model": key})
+            assert {p.evidence for p in inventory.ports} == {"vendor-doc"}, key
+            assert not any("inferred" in c for c in inventory.caveats), key
+
+    @pytest.mark.parametrize(("pid", "last_gig", "first_ten"), [
+        ("C9300L-24UXG-4X", 16, 17), ("C9300L-48UXG-2Q", 36, 37), ("C9300LM-48UX-4Y", 40, 41),
+    ])
+    def test_the_multigigabit_ports_are_the_last(self, pid: str, last_gig: int, first_ten: int) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+        ports = {p.name: p for p in inventory.ports}
+        assert ports[f"GigabitEthernet1/0/{last_gig}"].speed == "gig"
+        assert ports[f"TenGigabitEthernet1/0/{first_ten}"].notes == "Multigigabit"
+        assert f"GigabitEthernet1/0/{first_ten}" not in ports
+        if pid.startswith("C9300L-"):
+            assert any("does not support Multigigabit" in c for c in inventory.caveats)
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        caveat = self.FAMILY.modes["stack"].caveat
+        assert "license is not checked here" in caveat
+        assert "No configuration of a Catalyst 9300L or 9300LM was seen" in caveat
+
+    def test_poe_models(self) -> None:
+        for key, model in self.FAMILY.models.items():
+            powered = re.search(r"-\d+T-", key) is None
             assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
             assert not any(g.poe for g in model.ports if g.role == "uplink"), key

@@ -458,6 +458,22 @@ timestamp if your timezone matters for an audit.
   -E), and the license level is not checked.  No configuration of a
   3650 was seen.  `detect-deployment`
   reads a 3650's `switch N provision` line as it reads a C9300's.
+- **The Cisco Catalyst 9300L and 9300LM can be declared as a source or
+  target device.**  One model family, `C9300L`, since Cisco stacks the
+  two series together and with nothing else: a StackWise-320 stack of
+  up to eight, whose uplinks are fixed and named as module 1 --
+  `GigabitEthernet1/1/1-4` on a -4G model, `TenGigabitEthernet1/1/1-4`
+  on a -4X, `FortyGigabitEthernet1/1/1-2` on a -2Q and
+  `TwentyFiveGigE1/1/1-4` on a C9300LM.  Graded `inferred`, each with
+  its reason: the Multigigabit ports of the C9300L-24UXG, -48UXG and
+  C9300LM-48UX, which no Cisco document read numbers (and which the
+  configuration guide says a C9300L does not have), taken as the last
+  ports of the panel; and the C9300LM's 25G uplinks, where the command
+  reference numbers `TwentyFiveGigE` ports 1 to 2 only.  No
+  configuration of a C9300L or C9300LM was seen.  The C9300 family's
+  YAML said the C9300X stacks apart from a C9300; Cisco's data sheet
+  says the two stack at StackWise-480 speeds, and the YAML says so now.
+  The C9300X is not modelled yet.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

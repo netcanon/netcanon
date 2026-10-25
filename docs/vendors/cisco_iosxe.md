@@ -657,13 +657,17 @@ translate it again from `show running-config` as the device prints it.
   Cisco's labels G1-G4 and TE3-TE4), and so are the Multigigabit ports
   of the WS-C3650-12X48UQ and -12X48UR, at 37-48.  The WS-C3650-8X24PD,
   -8X24UQ, -12X48FD and -12X48UZ are not modelled; the family's YAML
-  says why.  Other Catalyst series are not modelled yet (the C9500 has
-  target profiles), and a proposal names their type in
+  says why.  The Catalyst 9300L and 9300LM are one family, `C9300L`, a
+  stack of up to eight whose uplinks are fixed and named as module 1;
+  the Multigigabit ports of its UXG models and of the C9300LM-48UX,
+  and the C9300LM's `TwentyFiveGigE1/1/1-4` uplinks, are `inferred`.
+  The C9300X and other Catalyst series are not modelled yet (the C9500
+  has target profiles), and a proposal names their type in
   `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port; no configuration of
-  a C9200, C9200L, 3850 or 3650 was seen, so whether one does the same
-  is not established.  With both devices
+  another Catalyst was seen, so whether one does the same is not
+  established.  With both devices
   declared — in the Interface rename modal or on the API — those
   names come back as off-inventory (and
   some of them can be displaced), so the job is `partial` although the
