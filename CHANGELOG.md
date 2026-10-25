@@ -555,6 +555,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Junos: a port that states no mode is an access port.**  A port
+  whose `family ethernet-switching` has `vlan members` and no
+  `interface-mode` (or `port-mode`) line was read as a trunk, on the
+  word of a comment that the commit validator treats it so; Juniper
+  documents the opposite -- with no port mode configured, "all
+  interfaces on the switch are in access mode".  An access port of
+  VLAN 10 came out as a trunk of VLAN 10 on every target, in a job
+  that said `completed`.  It is now an access port of its first VLAN.
+  An access port whose `vlan members` name more than one VLAN (or
+  `all`) -- stated or not, which was left to its first VLAN in
+  silence before -- is said in one row of `dropped_tier3_sections`
+  for all such ports, which names a few and counts the rest.  No
+  committed capture has such a port.  Still open: the set form's
+  bracket list (`set ... vlan members [ DATA VOICE ]`) names no VLAN
+  the parser can find, so the port is in none (before, a trunk of
+  none), with nothing said; the block form's bracket list is read.
+  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_port_with_no_mode_is_access.py`.
 - **Junos: a VLAN's description is read and written.**  The parser
   read nothing of `set vlans <name> description <text>` and the
   renderer wrote no such line, so a Junos VLAN's description was gone

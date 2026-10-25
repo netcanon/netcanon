@@ -235,6 +235,23 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   not counted in words.  An `interface-range` with addresses on it is
   counted too (`copies`): every address goes onto every member.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
+- **A port with no mode is an access port.**  A port whose `family
+  ethernet-switching` states `vlan members` and no `interface-mode`
+  (or `port-mode`) is in access mode, the switch's default (Juniper,
+  "Configuring Gigabit Ethernet Interfaces (CLI Procedure)", ELS:
+  "when you boot the switch and do not explicitly configure a port
+  mode, all interfaces on the switch are in access mode"; the
+  `port-mode` statement's Default says the same).  ⚠️ Up to 0.7.7
+  such a port was read as a TRUNK of its VLANs and written as one on
+  every target: check the ports of a Junos config translated then
+  whose source states no mode.  An access port -- stated or not --
+  whose `vlan members` name more than one VLAN, or `all`, is written
+  in its first VLAN, and one row of the Tier-3 banner says so for all
+  such ports (`... -- an access port (no interface-mode is access)
+  that names more than one VLAN is written in its first VLAN only`).
+  Not read: the set form's bracket list (`vlan members [ DATA VOICE
+  ]` on one `set` line) -- the port is in no VLAN and nothing says
+  so; write one `vlan members` line a VLAN, or paste the block form.
 - **A trunk's allowed list is written as a list.**  `vlan members
   all` is written only when the list is every VLAN id (1-4094).
   Any other list is cut into runs of consecutive ids: a run made
