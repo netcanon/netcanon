@@ -592,6 +592,26 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Onto FortiOS, a VLAN rides on the port that carries it.**  The
+  renderer chose one parent for every VLAN interface of an output --
+  the first LAG for a VLAN, and for an interface of a VLAN (an SVI)
+  a port scored for a private address -- and never asked which port
+  the source carries the VLAN on.  The NX-OS kitchen sink's VLANs 10
+  and 20 came out on a routed port that carries no VLAN, and VLAN 30
+  on a port-channel that does not carry it, in jobs that said
+  nothing; over the committed captures, nearly a third of the
+  VLAN interfaces whose VLAN some port carries were on a port that
+  does not.  FortiOS now takes the parent from the rule OPNsense
+  already had, shared between them (`vlan_carriers` in
+  `codecs/_helpers.py`): a LAG one of whose ports carries the VLAN,
+  then a port that names it, then a trunk of every VLAN.  A VLAN
+  nothing carries is on the port chosen as before.  A VLAN whose
+  carriers the target has no name for (an OS10 breakout lane onto
+  FortiOS) is on that port too, in a job that is already `partial`
+  for the names it dropped.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_vlan_rides_a_port.py`,
+  which reads the carriers from the source's own tree.
+
 - **A RouterOS bridge or an IOS-XE `VirtualPortGroup` is no other
   vendor's loopback.**  The port translator reads both as a
   `virtual` interface, a kind only its own vendor has, and AOS-CX,

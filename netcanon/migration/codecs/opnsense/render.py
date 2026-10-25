@@ -53,8 +53,7 @@ from ..._user_secrets import (
     is_migratable,
 )
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
-from ...canonical.transforms import is_every_vlan
-from .._helpers import one_mtu_written
+from .._helpers import one_mtu_written, vlan_carriers
 from ..base import RenderError
 from .port_names import classify_port_name
 
@@ -314,7 +313,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     if intent.vlans or devices:
         vlans_el = ET.SubElement(root, "vlans")
         parent_default = _vlan_parent_default(intent)
-        carriers = _vlan_carriers(intent)
+        carriers = vlan_carriers(intent)
         written: set[tuple[str, int]] = set()
         # Each device's parent, and what the output says of it.
         placed = {
@@ -1009,79 +1008,6 @@ def _vlan_parent_default(intent: CanonicalIntent) -> str:
     return "lan"
 
 
-def _vlan_carriers(intent: CanonicalIntent) -> dict[int, str]:
-    """For every VLAN something carries, the LAG or the plain
-    interface that is its parent.
-
-    What :func:`_vlan_parent_for` looked for by walking every interface
-    for every LAG, and again for every member of it, for every VLAN:
-    three kinds that grow together, and 400 VLANs, port-channels and
-    member ports took twelve seconds to render.  Read once here
-    instead, in the same order, so that the first LAG or interface
-    that carries a VLAN is still the one found.
-
-    A trunk that NAMES the VLAN is looked for before a trunk of EVERY
-    VLAN (:func:`...canonical.transforms.is_every_vlan`).  A trunk
-    that states no allowed list is a trunk of every VLAN on four
-    platforms, and such a trunk is in the list of every VLAN there
-    is: found first, a vPC peer link is the parent of each VLAN its
-    switch has, ahead of the port-channel that lists them.
-
-    Returns:
-        For the id of a VLAN of the tree, the name of the first of
-        these that there is:
-
-        1. the first LAG, in the order of ``intent.lags``, whose own
-           interface or one of whose members names it on its trunk;
-        2. the first interface, in the order of ``intent.interfaces``,
-           that names it and is neither VLAN-named nor a member of a
-           LAG;
-        3. the first LAG a trunk of every VLAN belongs to;
-        4. the first such interface that is a trunk of every VLAN.
-
-        A VLAN nothing carries is not in it.
-    """
-    # Only the ids that will be asked about: a trunk that allows every
-    # VLAN lists 4,094, and the tree declares a handful.
-    wanted = {vlan.id for vlan in intent.vlans}
-    named: dict[str, list[Any]] = {}
-    for iface in intent.interfaces:
-        named.setdefault(iface.name, []).append(iface)
-    lag_members: set[str] = set()
-    for lag in intent.lags:
-        lag_members.update(lag.members)
-    # Each interface that allows something, once, with what it is the
-    # parent as (a LAG for the LAG's own interface and its members) and
-    # whether its list is every VLAN: LAGs first, in their order, then
-    # the plain interfaces in theirs.
-    carriers: list[tuple[str, Any, bool]] = []
-    for lag in intent.lags:
-        for name in (lag.name, *lag.members):
-            for iface in named.get(name, ()):
-                if iface.trunk_allowed_vlans:
-                    carriers.append(
-                        (lag.name, iface, is_every_vlan(iface.trunk_allowed_vlans))
-                    )
-    for iface in intent.interfaces:
-        if iface.name.lower().startswith("vlan") or iface.name in lag_members:
-            continue
-        if iface.trunk_allowed_vlans:
-            carriers.append(
-                (iface.name, iface, is_every_vlan(iface.trunk_allowed_vlans))
-            )
-    parent: dict[int, str] = {}
-    # Two rounds over that one order: the trunks that name their
-    # VLANs, then the trunks of every VLAN.  Within a round a LAG is
-    # still found before a plain interface.
-    for every in (False, True):
-        for name, iface, is_every in carriers:
-            if is_every is not every:
-                continue
-            for vid in wanted.intersection(iface.trunk_allowed_vlans):
-                parent.setdefault(vid, name)
-    return parent
-
-
 def _vlan_parent_for(
     vlan: Any,
     carriers: dict[int, str],
@@ -1110,7 +1036,7 @@ def _vlan_parent_for(
 
     Args:
         vlan: The VLAN.
-        carriers: What :func:`_vlan_carriers` read from the tree the
+        carriers: What :func:`.._helpers.vlan_carriers` read from the tree the
             VLAN is in.
         default: The parent when nothing carries the VLAN.
 

@@ -2279,15 +2279,19 @@ class TestARenderFitsTheTrunksItIsGiven:
 
     def test_they_are_the_codecs_that_ask(self) -> None:
         """The targets here are the codecs that ask what a trunk's
-        list says and are not in the table of platforms that have
-        such a list: they ask in order to choose a port.  One that
-        starts to ask is added here with it."""
+        list says -- themselves, or through the shared rule that finds
+        the port that carries a VLAN (``vlan_carriers``) -- and are not
+        in the table of platforms that have such a list: they ask in
+        order to choose a port.  One that starts to ask is added here
+        with it."""
         from netcanon.migration.codecs._helpers import TRUNK_THAT_STATES_NO_LIST
 
         asks = {
             name for name in list_public_codecs()
             if name not in TRUNK_THAT_STATES_NO_LIST and any(
-                re.search(r"\b(?:is_every_vlan|trunk_list_says)\(", path.read_text(encoding="utf-8"))
+                re.search(
+                    r"\b(?:is_every_vlan|trunk_list_says|vlan_carriers)\(", path.read_text(encoding="utf-8"),
+                )
                 for path in (PACKAGE / "migration" / "codecs" / name).glob("*.py")
             )
         }

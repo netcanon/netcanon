@@ -87,20 +87,26 @@ sub-field of the same parent is preserved on every cell that exercises it, so
 * **VLAN port membership does not survive.** FortiOS binds a VLAN to exactly
   one parent via `set interface "<parent>"`, so the canonical
   `tagged_ports` / `untagged_ports` lists have nowhere to go and re-parse
-  empty. The parent the render picks is inferred and is not always a real
-  trunk — `batfish_nxos_hsrp_nxos1` binds `Vlan10` and `Vlan2000` to
-  `loopback123`, while `busterswt_spine_leaf_xk32_1_nxos9312` binds `vlan999`
-  to `port-channel10`.
+  empty. The render binds each VLAN to the port-channel or port that
+  carries it in the source — `batfish_nxos_hsrp_nxos1` binds `Vlan10` and
+  `Vlan2000` to `port-channel1`, and `busterswt_spine_leaf_xk32_1_nxos9312`
+  binds `vlan999` to `port-channel10` — and a VLAN nothing carries to a port
+  it chooses (VLAN 1 of `batfish_nxos_hsrp_nxos1`, on `Ethernet1/4`). Up to
+  0.7.7 one parent was chosen for every VLAN of an output, and the hsrp
+  leaf's two SVIs were bound to `loopback123`.
 * **A VLAN whose parent is an aggregate does not come back as a VLAN.** The
   FortiGate parser reads a VLAN interface on an aggregate, or on a port it
   knows by its name, as a routed sub-interface of it, its tag the VLAN's
   id, with no VLAN record: the VLANs of
-  `busterswt_spine_leaf_xk32_1_nxos9312`, written on `port-channel10`, all
-  come back as tagged sub-interfaces, and `kitchen_sink` keeps 2 of its 4
-  VLANs (the two written on `port-channel1` are dropped). A VLAN written
-  on a port name FortiOS does not read as a port (`Ethernet1/2`) comes
-  back as a VLAN. Up to 0.7.7 every VLAN interface was read back as a
-  VLAN.
+  `busterswt_spine_leaf_xk32_1_nxos9312` (on `port-channel10`) and of
+  `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939` (on `port-channel1`) all
+  come back as tagged sub-interfaces, the hsrp leaves keep 1 of 3, and
+  `kitchen_sink` keeps 1 of 4 (the three written on `port-channel1` are
+  dropped). An SVI that comes back so is typed as its parent
+  (`ieee8023adLag`), and one that stated no description comes back with
+  its VLAN's name as one. A VLAN written on a port name FortiOS does not
+  read as a port (`Ethernet1/4`) comes back as a VLAN. Up to 0.7.7 every
+  VLAN interface was read back as a VLAN.
 * **`vlans[].name` is replaced, not carried.** The FortiOS VLAN child
   interface's edit key becomes the canonical VLAN name on re-parse, so
   `user_svi_1_vrf_service_cust_1` comes back as `Vlan10` and an unnamed VLAN

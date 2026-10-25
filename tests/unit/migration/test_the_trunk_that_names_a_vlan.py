@@ -14,6 +14,10 @@ each VLAN its switch has, ahead of the port-channel that lists them.
 So a trunk that NAMES the VLAN is looked for before a trunk of EVERY
 VLAN, on all three.
 
+OPNsense and FortiOS give each VLAN the port that carries it, by one
+rule (``vlan_carriers`` in ``codecs/_helpers.py``); RouterOS hangs
+every VLAN on one anchor.
+
 One IOS-XE config with a trunk of each kind, written in both orders,
 onto each target; the OUTPUT is read as text for the parent it gives.
 
@@ -143,23 +147,30 @@ def test_the_trunk_that_names_it_is_parent(order: str, target: str) -> None:
     )
 
 
+#: The targets that give each VLAN a parent of its own.
+PER_VLAN = ("fortigate_cli", "opnsense")
+
+
+@pytest.mark.parametrize("target", PER_VLAN)
 @pytest.mark.parametrize("order", sorted(BOTH_ORDERS))
-def test_opnsense_the_rest_ride_every_vlan(order: str) -> None:
-    """OPNsense gives each VLAN a parent of its own.  VLAN 999 is named
-    by no trunk: the trunk of every VLAN carries it, and is its parent
-    -- not the port a default would pick without looking."""
+def test_the_rest_ride_every_vlan(order: str, target: str) -> None:
+    """OPNsense and FortiOS give each VLAN a parent of its own.  VLAN
+    999 is named by no trunk: the trunk of every VLAN carries it, and
+    is its parent -- not the port a default would pick without
+    looking."""
     first, second = BOTH_ORDERS[order]
-    parents, renamed = _parents("opnsense", _iosxe((_port(1), first), (_port(2), second)))
+    parents, renamed = _parents(target, _iosxe((_port(1), first), (_port(2), second)))
     assert parents[999] == renamed[_port(1) if first is EVERY_VLAN else _port(2)], (order, parents)
 
 
+@pytest.mark.parametrize("target", PER_VLAN)
 @pytest.mark.parametrize("order", sorted(BOTH_ORDERS))
-def test_opnsense_vlan_one_rides_its_trunk(order: str) -> None:
+def test_vlan_one_rides_its_trunk(order: str, target: str) -> None:
     """VLAN 1 is carried by the trunk of every VLAN alone, untagged by
-    its default, and that trunk is its parent on OPNsense -- not the
-    trunk that names VLAN 100, which does not carry it."""
+    its default, and that trunk is its parent -- not the trunk that
+    names VLAN 100, which does not carry it."""
     first, second = BOTH_ORDERS[order]
-    parents, renamed = _parents("opnsense", _iosxe((_port(1), first), (_port(2), second)))
+    parents, renamed = _parents(target, _iosxe((_port(1), first), (_port(2), second)))
     assert parents[1] == renamed[_port(1) if first is EVERY_VLAN else _port(2)], (order, parents)
 
 
@@ -178,14 +189,13 @@ def test_no_default_trunk_no_vlan_one() -> None:
 
 
 @pytest.mark.parametrize("order", sorted(BOTH_ORDERS))
-def test_the_other_two_have_one_parent(order: str) -> None:
-    """RouterOS and FortiOS choose one port for every VLAN they write:
-    the trunk that names one."""
+def test_routeros_has_one_parent(order: str) -> None:
+    """RouterOS chooses one port for every VLAN it writes: the trunk
+    that names one."""
     first, second = BOTH_ORDERS[order]
-    for target in ("mikrotik_routeros", "fortigate_cli"):
-        parents, renamed = _parents(target, _iosxe((_port(1), first), (_port(2), second)))
-        names_it = renamed[_port(1) if first is NAMES_100 else _port(2)]
-        assert set(parents.values()) == {names_it}, (target, order, parents)
+    parents, renamed = _parents("mikrotik_routeros", _iosxe((_port(1), first), (_port(2), second)))
+    names_it = renamed[_port(1) if first is NAMES_100 else _port(2)]
+    assert set(parents.values()) == {names_it}, (order, parents)
 
 
 # ---------------------------------------------------------------------------
@@ -285,26 +295,30 @@ def test_routeros_a_port_that_is_both_counts() -> None:
 
 
 # ---------------------------------------------------------------------------
-# FortiOS: the scorer
+# FortiOS: the port that carries a VLAN, and the scorer for the rest
 # ---------------------------------------------------------------------------
 
 
-def test_fortios_port_index_within_a_kind() -> None:
-    """Two trunks of every VLAN tie, and the higher port index is the
-    parent, as it was for any two trunks."""
+def test_fortios_the_first_of_two_carriers() -> None:
+    """Two trunks that carry a VLAN: the first is its parent, as on
+    OPNsense.  A VLAN neither carries is the scorer's, which puts the
+    higher port index first."""
     parents, renamed = _parents("fortigate_cli", _iosxe((_port(1), EVERY_VLAN), (_port(2), EVERY_VLAN)))
-    assert set(parents.values()) == {renamed[_port(2)]}, parents
+    assert parents == {1: renamed[_port(1)], 100: renamed[_port(1)], 999: renamed[_port(1)]}, parents
     parents, renamed = _parents("fortigate_cli", _iosxe((_port(1), NAMES_100), (_port(2), NAMES_100)))
-    assert set(parents.values()) == {renamed[_port(2)]}, parents
+    assert parents == {100: renamed[_port(1)], 999: renamed[_port(2)]}, parents
 
 
-def test_fortios_a_private_address_is_first() -> None:
-    """The signal comes first: a port with a private address is the
-    parent ahead of a trunk of either kind."""
+def test_fortios_a_carrier_before_a_private_address() -> None:
+    """A VLAN a trunk carries rides on that trunk, ahead of a routed
+    port with a private address -- which carries no VLAN at all.  Only
+    a VLAN nothing carries is the scorer's, and there the private
+    address comes first."""
     lan = ("no switchport", "ip address 192.168.1.1 255.255.255.0")
-    for trunk in (EVERY_VLAN, NAMES_100):
-        parents, renamed = _parents("fortigate_cli", _iosxe((_port(1), lan), (_port(2), trunk)))
-        assert set(parents.values()) == {renamed[_port(1)]}, (trunk, parents)
+    parents, renamed = _parents("fortigate_cli", _iosxe((_port(1), lan), (_port(2), EVERY_VLAN)))
+    assert set(parents.values()) == {renamed[_port(2)]}, parents
+    parents, renamed = _parents("fortigate_cli", _iosxe((_port(1), lan), (_port(2), NAMES_100)))
+    assert parents == {100: renamed[_port(2)], 999: renamed[_port(1)]}, parents
 
 
 def test_fortios_every_vlan_is_still_a_trunk() -> None:

@@ -900,6 +900,14 @@ the policy locally:
     `juniper_junos` have grammars of their own and call
     `trunk_list_says` / `is_every_vlan`.)
 
+* **`netcanon/migration/codecs/_helpers.py::vlan_carriers(intent)`**
+  — for each VLAN of a tree that something carries, the LAG or the
+  port that carries it: a LAG one of whose ports names it, then a
+  port that names it, then a trunk of every VLAN.  The parent of a
+  VLAN's device on a target that hangs each VLAN on one port
+  (`opnsense`, `fortigate_cli`).  Ask it once a render: a walk of the
+  ports for each VLAN grows with their product.
+
 * **`netcanon/migration/codecs/_helpers.py::NATIVE_VLAN_AND_THE_LIST`**
   — where a platform's text states the VLAN a trunk carries
   untagged, by codec: `LIST_DECIDES` on `arista_eos`, `aruba_aoscx`,

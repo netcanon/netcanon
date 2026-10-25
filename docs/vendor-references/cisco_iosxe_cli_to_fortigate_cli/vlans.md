@@ -107,8 +107,9 @@ class CanonicalVlan(BaseModel):
   switchport model declares VLAN membership on each port; FortiOS
   expresses it as child VLAN interfaces hanging off a parent.  The
   FortiGate codec creates one VLAN-child interface per VLAN with
-  `set interface "<parent>"` set to the first untagged or tagged
-  port, but cannot represent multi-port VLAN membership without
+  `set interface "<parent>"` set to the port-channel or port that
+  carries it (a port-channel one of whose ports carries it first),
+  but cannot represent multi-port VLAN membership without
   spawning multiple child interfaces.  This is a known gap; on
   Cisco -> FortiGate the membership becomes a model translation
   rather than a literal port-list copy.
