@@ -827,6 +827,40 @@ for _models, _mode in ((_C2960X, "stack"), (_C2960X_LL, "standalone"), (_C2960XR
             list(_access_names), list(_uplinks),
         )
 
+#: Cisco Catalyst 3750-X: one bay, its ports module 1, as a 3850's are.
+#: Sources: the 3750-X and 3560-X Hardware Installation Guide's Product
+#: Overview (Tables 1-1 and 1-3), the network modules' installation
+#: notes, and the 15.0(2)SE and 15.2(4)E configuration guides.  The
+#: C3KX-NM-10G and C3KX-SM-10G are described with an SFP+ in each 10G
+#: slot, the names Cisco gives them at 10G.  Inferred (see
+#: KNOWN_INFERRED_PARTS): the C3KX-NM-1G's and C3KX-NM-10GT's names, and
+#: the SFP downlinks of the 12S and 24S.  Every model's bay takes every
+#: module: the hardware guide lists the four for the switch and names no
+#: exception.
+_C3750X_PANELS: dict[str, list[str]] = {
+    "WS-C3750X-24T": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3750X-48T": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3750X-24P": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3750X-48P": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3750X-48PF": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3750X-24U": _run(1, 24, "GigabitEthernet1/0/"),
+    "WS-C3750X-48U": _run(1, 48, "GigabitEthernet1/0/"),
+    "WS-C3750X-12S": _run(1, 12, "GigabitEthernet1/0/"),
+    "WS-C3750X-24S": _run(1, 24, "GigabitEthernet1/0/"),
+}
+_C3750X_BAY_1: dict[tuple, list[str]] = {
+    (): [],
+    (("1", "C3KX-NM-1G"),): _run(1, 4, "GigabitEthernet1/1/"),
+    (("1", "C3KX-NM-10G"),): _run(1, 2, "TenGigabitEthernet1/1/"),
+    (("1", "C3KX-NM-10GT"),): _run(1, 2, "TenGigabitEthernet1/1/"),
+    (("1", "C3KX-SM-10G"),): _run(1, 2, "TenGigabitEthernet1/1/"),
+}
+for _model, _access_names in _C3750X_PANELS.items():
+    for _fitted, _uplinks in _C3750X_BAY_1.items():
+        EXPECTED_INVENTORIES[(_C, _model, "stack", _fitted)] = (
+            list(_access_names), list(_uplinks),
+        )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -842,6 +876,7 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C2960X": ["FastEthernet0"],
     "cisco_iosxe/C2960X-LL": ["FastEthernet0"],
     "cisco_iosxe/C2960XR": ["FastEthernet0"],
+    "cisco_iosxe/C3750X": ["FastEthernet0"],
 }
 
 
@@ -917,8 +952,8 @@ class TestExactInventories:
         """``C9300-48UXM`` is 48 access ports, whatever their types, a
         3850's ``12X48U`` is 48 of which twelve are Multigigabit, a
         C9200L's ``-4X`` is its four fixed 10G uplinks, a C9300L's
-        ``-2Q`` its two 40G ones, and a C9300X's ``-48HX`` 48 access
-        ports and no fixed uplink.  A 3650's letter
+        ``-2Q`` its two 40G ones, and a C9300X's ``-48HX`` or a 3750-X's
+        ``-48PF`` 48 access ports and no fixed uplink.  A 3650's letter
         after its PoE letter is its fixed uplinks, as the hardware
         guide's Table 1-1 gives them for the models modelled: S four 1G,
         D two 1G and two 10G, Q four 10G, R eight 10G.  A 2960-X's or
@@ -944,7 +979,7 @@ class TestExactInventories:
             ), sku
         else:
             count = re.fullmatch(
-                r"(?:C9[23]00(?:LM|L|X)?|WS-C3850)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXQY]))?",
+                r"(?:C9[23]00(?:LM|L|X)?|WS-C3850|WS-C3750X)-(?:\d+X(?=\d))?(\d+)[A-Z]+(?:-(\d)([GXQY]))?",
                 sku,
             )
             assert count, sku
@@ -1468,14 +1503,15 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
             "C9300X-12Y", "C9300X-24Y", "C9300X-24HX", "C9300X-48HX", "C9300X-48TX",
         )
     },
-    # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L, 9300LM, 2960-X and
-    # 2960-XR: the PID is the model key (a 3850's or 3650's without its
-    # license suffix; a 2960-X's with it, since it is part of the PID).
+    # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L, 9300LM, 2960-X,
+    # 2960-XR and 3750-X: the PID is the model key (a 3850's, 3650's or
+    # 3750-X's without its license suffix; a 2960-X's with it, since it
+    # is part of the PID).
     **{
         ("cisco_iosxe", pid): pid
         for pid in (
             *_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650, *_C9300L,
-            *_C2960X, *_C2960X_LL, *_C2960XR,
+            *_C2960X, *_C2960X_LL, *_C2960XR, *_C3750X_PANELS,
         )
     },
 }
@@ -1533,6 +1569,13 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # on module 0 in one release and on module 1 in the next.
     *(f"cisco_iosxe/C2960X / panel / {pid}" for pid in _C2960X if "D-" in pid),
     *(f"cisco_iosxe/C2960XR / panel / {pid}" for pid in _C2960XR if "D-" in pid),
+    # A 3750-X module's ports that no Cisco document read names (the
+    # C3KX-NM-1G's four, the C3KX-NM-10GT's two), and the SFP downlinks
+    # of the 12S and 24S, which its guides number nowhere.
+    "cisco_iosxe/C3750X / module / C3KX-NM-1G",
+    "cisco_iosxe/C3750X / module / C3KX-NM-10GT",
+    "cisco_iosxe/C3750X / panel / WS-C3750X-12S",
+    "cisco_iosxe/C3750X / panel / WS-C3750X-24S",
 }
 
 
@@ -2233,6 +2276,118 @@ class TestCiscoC2960X:
                 powered = re.search(r"-\d+(?:FP|LP|P)[DS]-", pid) is not None
                 assert {g.poe for g in model.ports if g.role == "access"} == {powered}, pid
                 assert not any(g.poe for g in model.ports if g.role == "uplink"), pid
+
+
+_C3750X_MODULES = ["C3KX-NM-1G", "C3KX-NM-10G", "C3KX-NM-10GT", "C3KX-SM-10G"]
+
+
+class TestCiscoC3750X:
+    """A Catalyst 3750-X is named as a 3850 is, in a stack of up to nine,
+    with one management port, FastEthernet0.  A port of its 10-Gigabit
+    modules has two names, by the optic in it, and a module is described
+    in one state and says which; what no document read names is
+    inferred and says so."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C3750X"]
+
+    def _uplinks(self, model: str, module: str) -> list[tuple]:
+        inventory = _compile("cisco_iosxe", "stack", {"model": model, "modules": {"1": module}})
+        return [(p.name, p.speed, p.cage, p.evidence) for p in inventory.ports if p.role == "uplink"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.FAMILY.models) == sorted(_C3750X_PANELS)
+        # The 3560-X does not stack and has no switch number in its names.
+        assert REGISTRY.resolve("cisco_iosxe", "WS-C3560X-48P") is None
+
+    def test_every_bay_takes_the_four_modules(self) -> None:
+        """The blank module has no ports: a switch with it fitted is
+        declared with its bay empty."""
+        assert sorted(self.FAMILY.modules) == sorted(_C3750X_MODULES)
+        for key, model in self.FAMILY.models.items():
+            assert list(model.bays) == ["1"], key
+            assert model.bays["1"].accepts == _C3750X_MODULES, key
+
+    def test_a_stack_of_nine(self) -> None:
+        assert list(self.FAMILY.modes) == ["stack"]
+        assert self.FAMILY.modes["stack"].member_ids == (1, 9)
+        inventory = _compile("cisco_iosxe", None, {"model": "WS-C3750X-24P", "id": 9})
+        assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+        assert inventory.names()[0] == "GigabitEthernet9/0/1"
+        with pytest.raises(Exception, match="outside 1-9"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3750X-24P", "id": 10})
+
+    @pytest.mark.parametrize("module", ["C3KX-NM-10G", "C3KX-SM-10G"])
+    def test_a_10g_module_is_described_with_an_sfp_plus_and_says_so(self, module: str) -> None:
+        assert self._uplinks("WS-C3750X-48P", module) == [
+            ("TenGigabitEthernet1/1/1", "10gig", "sfp+", "vendor-doc"),
+            ("TenGigabitEthernet1/1/2", "10gig", "sfp+", "vendor-doc"),
+        ]
+        caveat = self.FAMILY.modules[module].caveat
+        assert caveat.startswith(f"{module}: described with a 10-Gigabit SFP+ module")
+        assert "is a GigabitEthernet port" in caveat and "declare the bay empty" in caveat
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "WS-C3750X-48P", "modules": {"1": module}},
+        )
+        assert caveat in inventory.caveats
+        assert not any("inferred" in c for c in inventory.caveats)
+
+    def test_what_is_inferred_says_so(self) -> None:
+        assert self._uplinks("WS-C3750X-24T", "C3KX-NM-1G") == [
+            (f"GigabitEthernet1/1/{n}", "gig", "sfp", "inferred") for n in range(1, 5)
+        ]
+        assert self._uplinks("WS-C3750X-24T", "C3KX-NM-10GT") == [
+            (f"TenGigabitEthernet1/1/{n}", "10gig", "rj45", "inferred") for n in (1, 2)
+        ]
+        for module in ("C3KX-NM-1G", "C3KX-NM-10GT"):
+            inventory = _compile(
+                "cisco_iosxe", "stack", {"model": "WS-C3750X-24T", "modules": {"1": module}},
+            )
+            assert any(c.startswith(f"{module}: ") and "is inferred" in c for c in inventory.caveats)
+        assert "1 Gb/s is not established" in self.FAMILY.modules["C3KX-NM-10GT"].inventory.caveat
+        for pid in ("WS-C3750X-12S", "WS-C3750X-24S"):
+            inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+            assert {p.evidence for p in inventory.ports if p.role == "access"} == {"inferred"}
+            assert {p.cage for p in inventory.ports if p.role == "access"} == {"sfp"}
+            assert any(c.startswith(f"{pid}: ") and "is inferred" in c for c in inventory.caveats)
+
+    def test_what_is_not_inferred_says_nothing_of_it(self) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": "WS-C3750X-48PF"})
+        assert {p.evidence for p in inventory.ports} == {"vendor-doc"}
+        assert not any("inferred" in c for c in inventory.caveats)
+
+    def test_the_management_port_is_fast_ethernet(self) -> None:
+        assert [(p.name, p.role, p.speed, p.cage) for p in self.FAMILY.deployment_ports] == [
+            ("FastEthernet0", "mgmt", "fast", "rj45"),
+        ]
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "WS-C3750X-24P"}, {"model": "WS-C3750X-48U"},
+        )
+        assert [p.name for p in inventory.ports if p.role == "mgmt"] == ["FastEthernet0"]
+
+    @pytest.mark.parametrize("other", ["WS-C3850-24P", "WS-C3650-24PS", "C9300-24P", "WS-C2960X-24PS-L"])
+    def test_a_3750x_stacks_with_no_other_family(self, other: str) -> None:
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": "WS-C3750X-24P"}, {"model": other})
+
+    def test_a_3850_module_is_refused(self) -> None:
+        with pytest.raises(Exception, match="does not take 'C3850-NM-4-10G'"):
+            _compile(
+                "cisco_iosxe", "stack",
+                {"model": "WS-C3750X-48P", "modules": {"1": "C3850-NM-4-10G"}},
+            )
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        caveat = self.FAMILY.modes["stack"].caveat
+        assert "is not checked here" in caveat and "3750-E" in caveat
+        assert "C3KX-NM_BLNK" in caveat
+        assert "No configuration of a Catalyst 3750-X was seen" in caveat
+
+    def test_poe_models(self) -> None:
+        for key, model in self.FAMILY.models.items():
+            powered = re.search(r"-\d+(?:PF|P|U)$", key) is not None
+            assert {g.poe for g in model.ports} == {powered}, key
+        for module in self.FAMILY.modules.values():
+            assert not any(g.poe for g in module.ports)
 
 
 _C9300L_INFERRED = (

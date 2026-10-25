@@ -1,0 +1,244 @@
+# Cisco Catalyst 3750-X switch series (Cisco IOS 15.0 / 15.2)
+#
+# A fixed-port access switch with ONE network-module slot and a
+# StackWise Plus stack of up to nine members.  The names are made as a
+# Catalyst 3850's are:
+#
+#   * Every name is `<type><switch>/<module>/<port>`, and the switch
+#     number is never absent: "The default switch number, before it is
+#     integrated into a switch stack, is 1" (CG).
+#   * The switch's own ports are module 0, numbered from 1 starting with
+#     the far left port (CG).
+#   * A network module's ports are module 1 ("switch (downlink) ports
+#     are 0, and uplink ports are 1", CG4).  CG's own bullet says the
+#     module number "is always 0", and both guides say so of an
+#     `interface range`; their sentences about the network module and
+#     its names (below) put its ports on module 1.
+#
+# The switch runs Cisco IOS, not IOS XE; the IOS-XE CLI codec reads it
+# as it reads the IOSv captures.
+#
+# The stack has ONE management interface, FastEthernet0 ("The Ethernet
+# management port, also referred to as the Fa0 or fastethernet0 port",
+# CG; "the 10/100 Ethernet management port", HIG).  It is declared once,
+# under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# HIG's Table 1-1 lists each model with -L, -S or -E after it for its
+# image (LAN Base, IP Base, IP Services); the 12S and 24S come in -S and
+# -E only.  A model here is named without the suffix, as a 3850's is,
+# and the image is not checked.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Catalyst 3750-X and 3560-X Switch Hardware Installation Guide,
+#         "Product Overview": Table 1-1 (the models), the network module
+#         slot and Table 1-3 (the network modules), the 10/100 Ethernet
+#         management port, and stacking ("Up to nine switches can be
+#         members of a stack").
+#   NOTE  Installation Notes for the Catalyst 3750-X and 3560-X Network
+#         Modules (the modules' slots, how the C3KX-NM-10G's slots pair,
+#         and its LED labels G1, G2/TE1, G3, G4/TE2).
+#   CG    Catalyst 3750-X and Catalyst 3560-X Switch Software
+#         Configuration Guide, Cisco IOS Release 15.0(2)SE and Later,
+#         "Configuring Interface Characteristics" (the interface types,
+#         the switch number range 1 to 9, port numbering, "Network
+#         Module Interfaces", the C3KX-NM-10GT, and the Ethernet
+#         management port).
+#   CG4   Software Configuration Guide, Cisco IOS Release 15.2(4)E
+#         (Catalyst 3750-X and 3560-X Switches), "Configuring Interface
+#         Characteristics" (the module number of uplink ports).
+#
+# The 10-Gigabit modules, and the one state each is described in.  A
+# port of a 3750-X module can have two names, by the optic in it.  CG:
+# the uplink ports of the C3KX-NM-10G and the C3KX-SM-10G "are labeled
+# Te1/Gi2 and Te2/Gi4", "can operate at either 1 Gigabit per second or
+# 10 Gigabits per second", and "are identified in software as
+# gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1 and
+# x/1/2".  NOTE: the C3KX-NM-10G's four slots "are grouped as two pairs,
+# with each pair consisting of one SFP slot and one SFP+ slot", and
+# "Each pair supports either two 1-Gigabit SFP modules or one 10-Gigabit
+# SFP+ module".  A port's name is a function of its state, and a module
+# here describes ONE state and says which (its `caveat`, carried into
+# the inventory): both are described with an SFP+ module in each 10G
+# slot, TenGigabitEthernet<n>/1/1-2, the state the 10-Gigabit modules
+# are for.  A module that holds 1-Gigabit SFP modules is not modelled.
+#
+# Inferred, and graded so, each with its reason in its caveat:
+#
+#   * The C3KX-NM-1G's four ports, GigabitEthernet<n>/1/1-4: no document
+#     read names them; the module number is CG4's and the numbering
+#     follows the 1G names CG gives the C3KX-NM-10G (x/1/2, x/1/4).
+#   * The C3KX-NM-10GT's two ports, TenGigabitEthernet<n>/1/1-2: no
+#     document read names them.  CG: they "can operate at either 1
+#     Gigabit per second or 10 Gigabits per second", set by the
+#     `hw-module switch` command; what such a port is called at 1 Gb/s
+#     is not established.
+#   * The 12 or 24 SFP downlinks of the WS-C3750X-12S and -24S,
+#     GigabitEthernet<n>/0/1-12 or -24: CG names an SFP port a
+#     GigabitEthernet interface and numbers the 10/100/1000 ports from
+#     1, and numbers no SFP downlink.
+#
+# Not modelled, and said here so that nobody adds it by guessing:
+#
+#   * The blank module, C3KX-NM_BLNK ("The module has no ports", NOTE):
+#     a switch with it fitted is declared with its bay empty.
+#   * A C3KX-NM-10G or C3KX-SM-10G with a 1-Gigabit SFP module in a
+#     slot: declare the bay empty, and a job asks what to do with each
+#     of its ports.
+#   * The Catalyst 3560-X: "The Catalyst 3560-X switches do not support
+#     switch stacking" (HIG), and "The Catalyst 3560-X switch port
+#     numbers are the same, with no switch number" (CG), which the
+#     Catalyst naming rule does not make.
+#   * A stack of a 3750-X with a Catalyst 3750-E or 3750: neither has a
+#     family here.
+#   * Which type word a 3750-X prints in its `switch N provision` line:
+#     the command reference's `type` is the model number "as listed in
+#     the command-line help strings", and lists none.
+#   * Which interfaces a 3750-X config holds for a module that is not
+#     fitted, or for both names of a 10-Gigabit module's slot: no
+#     configuration of a 3750-X was seen.
+schema: 1
+vendor: cisco_iosxe
+family: C3750X
+display_name: "Cisco Catalyst 3750-X"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise Plus stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (interface type, stack member number, module number and port number; the switch number range is 1 to 9; the default switch number, before it is integrated into a switch stack, is 1); Software Configuration Guide, Cisco IOS Release 15.2(4)E (Catalyst 3750-X and 3560-X Switches), Configuring Interface Characteristics (the module or slot number on the switch: switch (downlink) ports are 0, and uplink ports are 1); Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview (up to nine switches can be members of a stack)"
+    caveat: "Names carry the switch number even on a switch that is alone. The image (LAN Base, IP Base or IP Services) is not checked here, and a stack with a Catalyst 3750-E or 3750 is not modelled. A switch with the blank network module (C3KX-NM_BLNK) is declared with its bay empty. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated, and which type word a 3750-X prints in its switch N provision line is not established. No configuration of a Catalyst 3750-X was seen: which interfaces one holds for a network module that is not fitted, or for both names of a 10-Gigabit module's slot, is not established."
+
+modules:
+  C3KX-NM-1G:
+    description: "4-port 1G SFP network module"
+    inventory:
+      grade: inferred
+      ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-3 (C3KX-NM-1G: this module has four 1-Gigabit SFP module slots; SFP+ modules are not supported); Software Configuration Guide, Cisco IOS Release 15.2(4)E (Catalyst 3750-X and 3560-X Switches), Configuring Interface Characteristics (uplink ports are module 1); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics, Network Module Interfaces (the uplink ports on the 10-Gigabit service module and on the 10-Gigabit Ethernet network module are labeled Te1/Gi2 and Te2/Gi4; they can operate at either 1 Gigabit per second or 10 Gigabits per second, and are identified in software as gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1 and x/1/2, with x being the switch number on Catalyst 3750-X stacks)"
+      caveat: "C3KX-NM-1G: four 1-Gigabit SFP slots, which no Cisco document read names. That they are GigabitEthernet1/1/1-4 on switch 1 is inferred from the module number Cisco gives uplink ports (1) and the names it gives the 1-Gigabit ports of the C3KX-NM-10G (x/1/2 and x/1/4), and no configuration of a switch with one fitted was seen."
+    ports:
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+  C3KX-NM-10G:
+    description: "2 x 10G SFP+ (or 4 x 1G SFP) network module, described with an SFP+ in each pair"
+    inventory: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-3 (C3KX-NM-10G: this module has four slots; two slots support only 1-Gigabit SFP modules, two slots support either 1-Gigabit SFP or 10-Gigabit SFP+ modules); Installation Notes for the Catalyst 3750-X and 3560-X Network Modules (the four slots are grouped as two pairs, with each pair consisting of one SFP slot and one SFP+ slot; each pair supports either two 1-Gigabit SFP modules or one 10-Gigabit SFP+ module; LEDs G1, G2/TE1, G3, G4/TE2); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics, Network Module Interfaces (the uplink ports on the 10-Gigabit service module and on the 10-Gigabit Ethernet network module are labeled Te1/Gi2 and Te2/Gi4; they can operate at either 1 Gigabit per second or 10 Gigabits per second, and are identified in software as gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1 and x/1/2, with x being the switch number on Catalyst 3750-X stacks)"}
+    caveat: "C3KX-NM-10G: described with a 10-Gigabit SFP+ module in each of its two pairs of slots, TenGigabitEthernet1/1/1-2 on switch 1. Each pair takes either two 1-Gigabit SFP modules or one SFP+ module, and a slot that holds a 1-Gigabit SFP module is a GigabitEthernet port (x/1/2 and x/1/4 for the slots labeled Te1/Gi2 and Te2/Gi4): a module with SFP modules fitted is not modelled; declare the bay empty and say what each of its ports becomes."
+    ports:
+      - {role: uplink, count: 2, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+  C3KX-NM-10GT:
+    description: "2-port 10GBASE-T network module"
+    inventory:
+      grade: inferred
+      ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-3 (C3KX-NM-10GT: this module has two autonegotiating 10-Gigabit Ethernet (copper) ports); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (the C3KX-NM-10GT has two 10-Gigabit Ethernet copper ports that can operate at either 1 Gigabit per second or 10 Gigabits per second; the hw-module switch global configuration command sets 1 Gigabit per second); Software Configuration Guide, Cisco IOS Release 15.2(4)E (Catalyst 3750-X and 3560-X Switches), Configuring Interface Characteristics (uplink ports are module 1)"
+      caveat: "C3KX-NM-10GT: two 10-Gigabit copper ports, which no Cisco document read names. That they are TenGigabitEthernet1/1/1-2 on switch 1 is inferred from the names Cisco gives the 10-Gigabit ports of the C3KX-NM-10G and C3KX-SM-10G; what a port is called once the hw-module switch command has set it to 1 Gb/s is not established, and no configuration of a switch with one fitted was seen."
+    ports:
+      - {role: uplink, count: 2, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45}
+  C3KX-SM-10G:
+    description: "2-port 10G SFP+ service module, described with an SFP+ in each slot"
+    inventory: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-3 (C3KX-SM-10G: this module has two slots that support either 1-Gigabit SFP or 10-Gigabit SFP+ modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics, Network Module Interfaces (the uplink ports on the 10-Gigabit service module and on the 10-Gigabit Ethernet network module are labeled Te1/Gi2 and Te2/Gi4; they can operate at either 1 Gigabit per second or 10 Gigabits per second, and are identified in software as gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1 and x/1/2, with x being the switch number on Catalyst 3750-X stacks)"}
+    caveat: "C3KX-SM-10G: described with a 10-Gigabit SFP+ module in each of its two slots, TenGigabitEthernet1/1/1-2 on switch 1. A slot that holds a 1-Gigabit SFP module is a GigabitEthernet port (x/1/2 or x/1/4) instead: such a module is not modelled; declare the bay empty and say what each of its ports becomes."
+    ports:
+      - {role: uplink, count: 2, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+deployment_ports:
+  - name: FastEthernet0
+    role: mgmt
+    speed: fast
+    cage: rj45
+    notes: "Ethernet management port, one per stack"
+    naming: {grade: vendor-doc, ref: "Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (the Ethernet management port, also referred to as the Fa0 or fastethernet0 port; to specify the Ethernet management port in the CLI, enter fastethernet0); Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview (the 10/100 Ethernet management port, an RJ-45 connection)"}
+
+models:
+  WS-C3750X-24T:
+    skus: [WS-C3750X-24T]
+    display_name: "Cisco Catalyst WS-C3750X-24T"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-24T-L, Catalyst 3750-X-24T-S, Catalyst 3750-X-24T-E: 24 10/100/1000 Ethernet ports, StackWise Plus, 1 network module slot, 350-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-48T:
+    skus: [WS-C3750X-48T]
+    display_name: "Cisco Catalyst WS-C3750X-48T"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-48T-L, Catalyst 3750-X-48T-S, Catalyst 3750-X-48T-E: 48 10/100/1000 Ethernet ports, StackWise Plus, 1 network module slot, 350-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-24P:
+    skus: [WS-C3750X-24P]
+    display_name: "Cisco Catalyst WS-C3750X-24P"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-24P-L, Catalyst 3750-X-24P-S, Catalyst 3750-X-24P-E: 24 10/100/1000 PoE+ ports, StackWise Plus, 1 network module slot, 715-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-48P:
+    skus: [WS-C3750X-48P]
+    display_name: "Cisco Catalyst WS-C3750X-48P"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-48P-L, Catalyst 3750-X-48P-S, Catalyst 3750-X-48P-E: 48 10/100/1000 PoE+ ports, StackWise Plus, 1 network module slot, 715-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-48PF:
+    skus: [WS-C3750X-48PF]
+    display_name: "Cisco Catalyst WS-C3750X-48PF"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-48PF-L, Catalyst 3750-X-48PF-S, Catalyst 3750-X-48PF-E: 48 10/100/1000 PoE+ ports, StackWise Plus, 1 network module slot, 1100-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-24U:
+    skus: [WS-C3750X-24U]
+    display_name: "Cisco Catalyst WS-C3750X-24U"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-24U-L, Catalyst 3750-X-24U-S, Catalyst 3750-X-24U-E: 24 10/100/1000 UPOE ports, StackWise Plus, 1 network module slot, 1100-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-48U:
+    skus: [WS-C3750X-48U]
+    display_name: "Cisco Catalyst WS-C3750X-48U"
+    panel: {grade: vendor-doc, ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-48U-L, Catalyst 3750-X-48U-S, Catalyst 3750-X-48U-E: 48 10/100/1000 UPOE ports, StackWise Plus, 1 network module slot, 1100-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (Gigabit Ethernet (gigabitethernet or gi) for 10/100/1000 Mb/s Ethernet ports; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-12S:
+    skus: [WS-C3750X-12S]
+    display_name: "Cisco Catalyst WS-C3750X-12S"
+    panel:
+      grade: inferred
+      ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-12S-S, Catalyst 3750-X-12S-E: 12 SFP module slots, StackWise Plus, 1 network module slot, 350-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (small form-factor pluggable (SFP) module Gigabit Ethernet interfaces (gigabitethernet or gi); the 10/100/1000 port numbers always begin at 1)"
+      caveat: "WS-C3750X-12S: Cisco names an SFP port a GigabitEthernet interface and numbers the 10/100/1000 ports from 1, and numbers no SFP downlink. That the 12 SFP downlinks are GigabitEthernet1/0/1-12 is inferred, and no configuration of a WS-C3750X-12S was seen."
+    ports:
+      - {role: access, count: 12, prefix: GigabitEthernet, speed: gig, cage: sfp}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}
+
+  WS-C3750X-24S:
+    skus: [WS-C3750X-24S]
+    display_name: "Cisco Catalyst WS-C3750X-24S"
+    panel:
+      grade: inferred
+      ref: "Catalyst 3750-X and 3560-X Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 3750-X-24S-S, Catalyst 3750-X-24S-E: 24 SFP module slots, StackWise Plus, 1 network module slot, 350-W power supply) and Table 1-3 (the network modules); Catalyst 3750-X and Catalyst 3560-X Switch Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (small form-factor pluggable (SFP) module Gigabit Ethernet interfaces (gigabitethernet or gi); the 10/100/1000 port numbers always begin at 1)"
+      caveat: "WS-C3750X-24S: Cisco names an SFP port a GigabitEthernet interface and numbers the 10/100/1000 ports from 1, and numbers no SFP downlink. That the 24 SFP downlinks are GigabitEthernet1/0/1-24 is inferred, and no configuration of a WS-C3750X-24S was seen."
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: sfp}
+    bays:
+      "1": {accepts: [C3KX-NM-1G, C3KX-NM-10G, C3KX-NM-10GT, C3KX-SM-10G]}

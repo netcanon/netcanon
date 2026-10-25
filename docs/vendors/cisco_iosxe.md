@@ -682,6 +682,16 @@ translate it again from `show running-config` as the device prints it.
   WS-C2960X-24PSQ-L, and a stack with a Catalyst 2960-S, are not
   modelled.  The 2960-X runs Cisco IOS 15.2, which the codec reads as
   it reads the IOSv captures.
+  The Catalyst 3750-X is one family, `C3750X`, a stack of up to nine
+  with one network-module bay, named as a 3850's; its management port
+  is `FastEthernet0`.  A port of the C3KX-NM-10G or C3KX-SM-10G is
+  named by the optic in it (`GigabitEthernet` with a 1G SFP,
+  `TenGigabitEthernet` with an SFP+), so each module is described with
+  an SFP+ in each 10G slot (`TenGigabitEthernet1/1/1-2`); with 1G SFP
+  modules fitted, declare the bay empty.  The names of the C3KX-NM-1G
+  and C3KX-NM-10GT ports, and of the SFP downlinks of the 12S and 24S,
+  are `inferred`.  The Catalyst 3560-X, and a stack with a 3750-E or
+  3750, are not modelled.
   Other Catalyst series are not modelled yet (the C9500 has target
   profiles), and a proposal names their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever

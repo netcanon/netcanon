@@ -519,6 +519,28 @@ timestamp if your timezone matters for an audit.
   the IOSv captures.  No configuration of a 2960-X or 2960-XR was seen.
   `detect-deployment` reads `switch N provision ws-c2960x-48fpd-l` as
   it reads a C9300's line.
+- **The Cisco Catalyst 3750-X can be declared as a source or target
+  device.**  One model family, `C3750X`: the nine models of the
+  hardware guide's table, each named without its image suffix (`-L`,
+  `-S`, `-E`), in a StackWise Plus stack of up to nine, with one
+  network-module bay whose ports are module 1 ("uplink ports are 1").
+  The stack's one management port is `FastEthernet0`.  A port of the
+  C3KX-NM-10G or C3KX-SM-10G has two names, by the optic in it --
+  Cisco: "gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1
+  and x/1/2" -- so each module is described with an SFP+ in each 10G
+  slot, `TenGigabitEthernet1/1/1-2`, and its caveat says so; a module
+  that holds 1G SFP modules is declared with its bay empty.  Graded
+  `inferred`, each with its reason: the C3KX-NM-1G's
+  `GigabitEthernet1/1/1-4` and the C3KX-NM-10GT's
+  `TenGigabitEthernet1/1/1-2`, which no document read names, and the
+  SFP downlinks of the WS-C3750X-12S and -24S, which Cisco's guides
+  number nowhere.  Not modelled: the Catalyst 3560-X, whose names have
+  no switch number, and a stack with a Catalyst 3750-E or 3750.  The
+  switch runs Cisco IOS 15.0 or 15.2; the IOS-XE CLI codec reads it as
+  it reads the IOSv captures.  No configuration of a 3750-X was seen,
+  and which type word its `switch N provision` line prints is not
+  established: `detect-deployment` reads `switch N provision
+  ws-c3750x-48p` as a WS-C3750X-48P.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

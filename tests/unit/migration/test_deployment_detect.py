@@ -2222,6 +2222,36 @@ class TestCatalystProposal:
         assert proposal.deployment is None
         assert proposal.notes[0].startswith("The members belong to different model families")
 
+    def test_a_3750x_stack(self) -> None:
+        """The 3750-X command reference: "Specify the switch type of the
+        new switch before it joins the stack", the model number its
+        help strings list.  Which word a 3750-X prints is not
+        established; the model key, a PID without its license suffix,
+        is what is read."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c3750x-48p", "switch 2 provision ws-c3750x-24s",
+            ports=("GigabitEthernet1/0/48", "GigabitEthernet2/0/24"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C3750X" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "WS-C3750X-48P", "id": 1, "modules": {}},
+                {"model": "WS-C3750X-24S", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+        # A 3750-X has a bay, and no switch is proposed with a module in it.
+        assert any("no switch is proposed with one fitted" in note for note in proposal.notes)
+
+    def test_a_3750x_and_a_3850_are_two_families(self) -> None:
+        """A 3750-X stacks over StackWise Plus and a 3850 over
+        StackWise-480: no family holds both."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c3750x-48p", "switch 2 provision ws-c3850-48p",
+        ), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
+
     def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
         """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
         with Cisco Catalyst 9200 Series Switches"."""

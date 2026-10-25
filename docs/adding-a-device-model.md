@@ -54,7 +54,12 @@ type is **stated** on each port group as `prefix:`, from the vendor's
 own interface lists, and never derived from a speed: a rule cannot
 know that a 25G module's ports are `TwentyFiveGigE` while a 10G
 panel's are `TenGigabitEthernet`.  A rule that puts no type in a name
-refuses a `prefix`.
+refuses a `prefix`.  Where the type is the optic's and not the port's
+-- a Catalyst 3750-X's C3KX-NM-10G names a slot `GigabitEthernet1/1/2`
+with a 1G SFP in it and `TenGigabitEthernet1/1/1` with an SFP+ --
+describe the module in ONE state and say which in its `caveat`, which
+the inventory carries: a port's name is a function of its state, and
+two states are not one module.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
