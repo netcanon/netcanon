@@ -592,6 +592,25 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS XR sub-interface whose encapsulation is no 802.1Q tag is
+  left out, and said.**  `encapsulation untagged` defines "the
+  matching criteria to map untagged frames on an interface" (Cisco,
+  "Interface and Hardware Component Command Reference for Cisco 8000
+  Series Routers", VLAN Subinterface Commands), and `encapsulation
+  default` matches "any tagged or untagged traffic that has not been
+  matched by another subinterface" (Cisco, "Understand IOS XR L2VPN
+  Services and Features").  The parser read neither, and kept the
+  sub-interface -- an `l2transport` attachment circuit, as a rule --
+  as one of no tag: VyOS wrote `vif <its number>`, and every other
+  target a sub-interface of no tag, in jobs that said `completed`.
+  The tree has no form for either, so such a sub-interface is left
+  out with the row of a tag statement not read whole (`... -- not one
+  802.1Q tag and at most one inner tag, so the sub-interface is not
+  translated`), as `encapsulation dot1ad` is.  It is the rule of the
+  sub-interface that states no tag (below), for a line that states
+  something else; a port's own `encapsulation` (a serial line's `ppp`)
+  is read as before.  Guarded by
+  `tests/unit/migration/test_an_encapsulation_that_is_no_tag.py`.
 - **An IOS XR or EOS sub-interface that states no tag is left out, and
   said.**  "An 802.1Q VLAN subinterface must have a configured VLAN ID
   to send and receive traffic; without a VLAN ID, the subinterface
@@ -609,9 +628,9 @@ timestamp if your timezone matters for an audit.
   the sections with a sentence of its own and does not count, and a
   text of nothing else is not `completed`.  IOS XR's older tag
   statement, `dot1q vlan <id> [<inner>]`, is read as a tag (it was
-  none).  A stanza that states another encapsulation, or a
-  sub-interface of a serial line, is read as before; an IOS-XE or
-  NX-OS sub-interface with no tag as well (Known limitations).
+  none).  A sub-interface of a serial line is read as before; an
+  IOS-XE or NX-OS sub-interface with no tag as well (Known
+  limitations).
   Guarded by `tests/unit/migration/test_a_sub_interface_with_no_tag.py`.
 - **A RouterOS VLAN interface that states no `vlan-id=` is VLAN 1.**
   "vlan-id (integer: 1..4094; Default: 1)" (MikroTik, "VLAN"), and an

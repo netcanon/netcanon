@@ -157,26 +157,18 @@ class TestTheParse:
         assert "dot1q vlan 20 any" in row
         assert not is_left_out_row(row)
 
-    @pytest.mark.parametrize(
-        "text",
-        [
-            pytest.param(
-                "interface GigabitEthernet0/0/0/1.7 l2transport\n encapsulation untagged\n!\n",
-                id="another encapsulation",
-            ),
-            pytest.param(
-                "interface Serial0/1/0/0.1 point-to-point\n"
-                " ipv4 address 192.0.2.1 255.255.255.252\n!\n",
-                id="no 802.1Q parent",
-            ),
-        ],
-    )
-    def test_what_the_rule_does_not_reach(self, text: str) -> None:
-        """A stanza that states an encapsulation states something; a
-        sub-interface of a serial line is not an 802.1Q one.  Neither is
-        given the row, and each is read as before."""
-        tree = _parse(XR, "hostname r1\n" + text + "end\n")
-        assert not any(row.startswith("untagged: ") for row in tree.dropped_tier3_sections)
+    def test_what_the_rule_does_not_reach(self) -> None:
+        """A sub-interface of a serial line is not an 802.1Q one: it is
+        not given the row, and is read as before.  (One that states an
+        encapsulation of another kind states something, and has the
+        row of a statement not read whole:
+        ``test_an_encapsulation_that_is_no_tag.py``.)"""
+        tree = _parse(
+            XR,
+            "hostname r1\ninterface Serial0/1/0/0.1 point-to-point\n"
+            " ipv4 address 192.0.2.1 255.255.255.252\n!\nend\n",
+        )
+        assert tree.dropped_tier3_sections == []
         assert any("." in i.name for i in tree.interfaces)
 
 

@@ -726,10 +726,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # So is a sub-interface whose tag statement is not read whole: a
     # range, a list or ``any``, ``exact``, ``dot1ad``.  Written with its
     # first tag alone it was another sub-interface on every target.
-    # Its row says the statement.  And so is a sub-interface of a port
-    # or a bundle that states no tag, which the router holds and does
-    # not run (``a_sub_interface_needs_a_tag``): its row is a left-out
-    # row.
+    # Its row says the statement, and so does the row of one whose
+    # ``encapsulation`` is no tag statement (``untagged``, ``default``),
+    # which the tree has no form for.  And so is a
+    # sub-interface of a port or a bundle that states no tag, which
+    # the router holds and does not run (``a_sub_interface_needs_a_tag``):
+    # its row is a left-out row.
     raw, unread = without_unread_tags(
         raw, _is_tag_statement, _tags_read,
         _port_names.a_sub_interface_needs_a_tag,
