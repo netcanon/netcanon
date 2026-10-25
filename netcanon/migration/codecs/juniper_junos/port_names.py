@@ -155,6 +155,32 @@ def media_mtu_counts_a_tag(device: str) -> bool:
     return classify_port_name(device).kind in ("physical", "lag")
 
 
+def takes_vlan_tagging(device: str) -> bool:
+    """Whether *device* is an Ethernet interface, where Juniper puts
+    the tagging statement (``[edit interfaces ethernet-interface-name]``):
+    a port or an ``ae`` bundle, a channel of a port (``xe-0/0/6:2``, a
+    committed capture writes ``vlan-tagging`` on one), or a chassis
+    cluster's ``reth`` (Juniper's chassis-cluster CoS example writes
+    ``set interfaces reth0 vlan-tagging``).  Not ``irb``, ``lo0`` or a
+    tunnel, whose units are not told apart by a tag on the wire.
+
+    The renderer writes a ``<device>.0`` record as unit 0 of such a
+    device only, and the parser makes a record of a tagged unit 0 of
+    such a device only, so that each reads back what the other writes.
+    """
+    if classify_port_name(device).kind in ("physical", "lag"):
+        return True
+    port, colon, channel = device.rpartition(":")
+    if (
+        colon
+        and channel.isascii()
+        and channel.isdigit()
+        and classify_port_name(port).kind == "physical"
+    ):
+        return True
+    return re.fullmatch(r"reth\d{1,4}", device) is not None
+
+
 #: How many 802.1Q tags a device's media MTU counts, by the tagging
 #: statement on the device: one under ``vlan-tagging``, two under
 #: ``stacked-vlan-tagging`` ("dual VLAN tags for all logical

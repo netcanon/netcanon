@@ -96,9 +96,9 @@ from .._helpers import mtu_written
 from ..base import RenderError
 from .port_names import (
     TAGGING_STATEMENT_TAGS,
-    classify_port_name,
     media_mtu_counts_a_header,
     media_mtu_counts_a_tag,
+    takes_vlan_tagging,
 )
 
 logger = logging.getLogger(__name__)
@@ -445,8 +445,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # ``st0.100``, ``ae1.10``, ``irb.10`` -- ``irb.10`` IS ``irb
         # unit 10``): no Junos interface has a dot in its name, and
         # ``set interfaces lo0.10 unit 0`` is refused at commit.  A
-        # unit 0 is split by ``_split_subiface_name`` only on a port
-        # shape; ``irb.0`` / ``vlan.0`` are taken here by
+        # unit 0 is split by ``_split_subiface_name`` only of a device
+        # that takes a tagging statement; ``irb.0`` / ``vlan.0`` are
+        # taken here by
         # ``_LOGICAL_SVI_NAME_RE`` (Issue #3 in
         # ``user_smoke_findings.md``), and any other ``<name>.0`` is
         # written as a name.
@@ -1583,9 +1584,10 @@ _IS_JUNOS_PHYSICAL_PORT_RE = re.compile(
     r")$"
 )
 
-# ``<port>.<unit>`` — e.g. ``ge-0/0/0.100``: the one parent shape
-# whose unit 0 is split as well (``_split_subiface_name`` splits a
-# unit above 0 of any parent).
+# ``<port>.<unit>`` — e.g. ``ge-0/0/0.100``: a parent shape whose
+# unit 0 is split as well (``_split_subiface_name`` splits a unit
+# above 0 of any parent, and unit 0 of a device that takes a tagging
+# statement).
 #
 # Optional ``:<channel>`` segment after the port index covers
 # channelized (break-out) ports — ``xe-0/0/6:2`` is channel 2 of
@@ -1760,27 +1762,6 @@ _TAGGING: dict[frozenset[bool], str] = {
 }
 
 
-def _takes_vlan_tagging(device: str) -> bool:
-    """Whether *device* is an Ethernet interface, where Juniper puts
-    the tagging statement (``[edit interfaces ethernet-interface-name]``):
-    a port or an ``ae`` bundle, a channel of a port (``xe-0/0/6:2``, a
-    committed capture writes ``vlan-tagging`` on one), or a chassis
-    cluster's ``reth`` (Juniper's chassis-cluster CoS example writes
-    ``set interfaces reth0 vlan-tagging``).  Not ``irb``, ``lo0`` or a
-    tunnel, whose units are not told apart by a tag on the wire."""
-    if classify_port_name(device).kind in ("physical", "lag"):
-        return True
-    port, colon, channel = device.rpartition(":")
-    if (
-        colon
-        and channel.isascii()
-        and channel.isdigit()
-        and classify_port_name(port).kind == "physical"
-    ):
-        return True
-    return re.fullmatch(r"reth\d{1,4}", device) is not None
-
-
 class _DeviceTags(NamedTuple):
     """What each Ethernet device whose units carry tags is told about
     them, written once, ahead of the first of its units' tags.
@@ -1827,7 +1808,7 @@ def _device_tags(interfaces: list[CanonicalInterface]) -> _DeviceTags:
         device = iface.name if parent is None else parent
         if iface.dot1q_native and iface.dot1q_inner_vlan is None:
             routed_native.setdefault(device, iface.dot1q_vlan)
-        if _takes_vlan_tagging(device):
+        if takes_vlan_tagging(device):
             kinds.setdefault(device, set()).add(
                 iface.dot1q_inner_vlan is not None,
             )
@@ -1928,10 +1909,15 @@ def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
     unit 0``: a name Junos refuses, and for a LAG unit its
     ``vlan-id`` gone, in jobs that said ``completed``.
 
-    A unit 0 is split only on a port shape (``ge-0/0/0.0``), as
-    before.  Of any other parent it would be written as that
-    interface's own unit 0, two interfaces in one.  ``irb.0`` and
-    ``vlan.0`` are the caller's.  A unit longer than
+    A unit 0 is split only of a device that takes a tagging
+    statement (:func:`.port_names.takes_vlan_tagging`: a port, a channel of one,
+    an ``ae`` or ``reth``), where the parser makes a record of it, of
+    such a device only, when it carries a tag (its
+    ``_tagged_units_0``), and the device's
+    own record then holds no unit 0 of its own.  Of any other parent
+    (``lo0.0``) it would be written as that interface's own unit 0,
+    two interfaces in one.  ``irb.0`` and ``vlan.0`` are the
+    caller's.  A unit longer than
     :data:`~netcanon.migration.canonical.port_names.UNIT_MAX_DIGITS`
     is no unit of any platform, and is not made a number.
     """
@@ -1946,9 +1932,9 @@ def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
         return (None, None)
     parent, unit = split
     if (
-        not unit.strip("0")
-        or len(unit) > UNIT_MAX_DIGITS
+        len(unit) > UNIT_MAX_DIGITS
         or any(char.isspace() for char in parent)
+        or (not unit.strip("0") and not takes_vlan_tagging(parent))
     ):
         return (None, None)
     return (parent, int(unit))
