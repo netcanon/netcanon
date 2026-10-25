@@ -112,7 +112,7 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from ...limits import charge, ticked
-from .._helpers import Uniques, _is_link_local_v6
+from .._helpers import Uniques, _is_link_local_v6, a_tag, unread_tags_row
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -501,6 +501,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if len(stk) == 2:
             return _touch_iface(arg, typ)
         if len(stk) == 3 and stk[2][0] == "vif" and stk[2][1]:
+            # A ``vif`` whose id is no VLAN id (``vif 0``) is not an
+            # interface of the tree: its block is left out, and the
+            # row made where it opens says so.
+            vid = a_tag(stk[2][1])
+            if vid is None:
+                return None
             sc = _touch_iface(f"{arg}.{stk[2][1]}", "ethernet")
             # A VyOS ``vif <vid>`` IS the 802.1Q tag of a routed
             # sub-interface.  Record it on ``dot1q_vlan`` so cross-vendor
@@ -509,16 +515,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # therefore invalid — sub-interface.  Same-vendor render is
             # unaffected: it reconstructs ``vif <vid>`` from the ``.<vid>``
             # name suffix, not from this field.
-            if stk[2][1].isdigit():
-                sc["dot1q_vlan"] = int(stk[2][1])
+            sc["dot1q_vlan"] = vid
             return sc
         return None  # deeper nesting we don't model in v1
 
     # ``system name-server`` dedup (perf review P2): a ``seen`` set keeps the
     # per-line membership test O(1) instead of an O(N^2) growing-list scan.
     seen_dns_servers = set(intent.dns_servers)
-    # The row of each ``vif-s`` block, once each (the codec's
-    # ``parse()`` keeps them beside the Tier-3 rows).
+    # The row of each ``vif-s`` block, and of each ``vif`` whose id
+    # is no VLAN id, once each (the codec's ``parse()`` keeps them
+    # beside the Tier-3 rows).
     vif_s_rows: dict[str, None] = {}
     for raw_line in ticked(raw.splitlines()):
         line = raw_line.strip()
@@ -561,6 +567,25 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 _current_iface(stack)
                 if node[0] == "bonding" and node[1]:
                     _touch_lag(node[1])
+                # ``vif 0`` is a block VyOS takes, and 0 is no VLAN
+                # id: a frame of VID 0 carries a priority and no VLAN
+                # (IEEE 802.1Q).  Read as tag 0 it was written so onto
+                # every target that writes a tag.  The tree's tag is
+                # 1 to 4094, so the block is left out, as the IOS-XE,
+                # IOS XR, EOS and Junos parsers leave such a
+                # sub-interface out.
+                if (
+                    node[0] == "vif"
+                    and len(stack) == 3
+                    and stack[0][0] == "interfaces"
+                    and stack[1][1]
+                    and node[1]
+                    and a_tag(node[1]) is None
+                ):
+                    vif_s_rows[unread_tags_row(
+                        f"interfaces {stack[1][0]} {stack[1][1]}",
+                        f"vif {node[1]}",
+                    )] = None
             # ``vif-s <id>`` is a service VLAN, its ``vif-c <id>`` blocks
             # the sub-interfaces inside it, and the S-tag "uses the
             # Ethertype 0x88a8 by default" (VyOS, "QinQ (802.1ad)"): an

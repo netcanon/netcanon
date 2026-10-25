@@ -649,7 +649,12 @@ class CiscoNXOSCodec(CodecBase):
         # (BGP / OSPF / EIGRP / ACLs / route-maps / QoS).  Notification-
         # only — never read by any render-side code.  Read from the text
         # the parser read: a banner's lines are text, not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_nxos(without_banner_bodies(raw))
+        # After them, the rows the parser itself made: a sub-interface
+        # whose tag statement is not one VLAN id.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_nxos(without_banner_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

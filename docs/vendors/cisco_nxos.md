@@ -269,6 +269,11 @@ translate it again from `show running-config` as the switch prints it.
   source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS
   `inner`, Junos `vlan-tags`) is written with its outer tag, and the
   job is `partial`, the validation report listing the inner tag.
+  An `encapsulation dot1q` line that is not one VLAN id, 1 to 4094
+  (`encapsulation dot1q 0`: VID 0 is a priority tag and no VLAN),
+  is not read: the sub-interface is left out with its addresses, and
+  a row of the Tier-3 banner names it.  ⚠️ Up to 0.7.7 the line's
+  first number was the tag.
 - **A VLAN's address with no interface of its own gets one.**  A
   source can hold a VLAN's address on the VLAN itself: Junos folds
   the address of an `irb` unit that a VLAN binds with `l3-interface`

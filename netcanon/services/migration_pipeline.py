@@ -992,8 +992,9 @@ def _shared_final_names(
     unit 0 of another name of its group is therefore left out of the
     group -- but never so far that the group has fewer names than the
     tree that was rendered has interfaces under the shared name: a
-    config that gives unit 0 a stanza of its own beside its port (a
-    VyOS ``vif 0``) has written two interfaces, and they are counted.
+    tree that holds unit 0 as an interface of its own beside its port
+    has two interfaces there, and they are counted.  (A VyOS ``vif 0``
+    was one; it is left out now, 0 being no VLAN id.)
     A unit other than 0 is always counted: ``lo0.2`` is the loopback
     of a routing instance, and on ``Loopback0`` beside ``lo0`` it is
     two interfaces in one.

@@ -47,6 +47,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from netcanon.migration.canonical.intent import (
+    CanonicalInterface,
+    CanonicalIPv4Address,
+)
 from netcanon.migration.canonical.port_names import names_a_target
 from netcanon.migration.codecs.base import CodecBase, RenderError
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
@@ -382,7 +386,8 @@ _IOS_TWO_SPELLINGS = "\n".join([
     "end", "",
 ])
 
-#: A VyOS port with a ``vif 0``: unit 0 with a stanza of its own.
+#: A VyOS port with a ``vif 0``.  It was unit 0 with a stanza of its
+#: own; 0 is no VLAN id, and the block is left out.
 _VYOS_VIF_0 = "\n".join([
     "interfaces {", "    ethernet eth1 {", "        address 10.1.0.1/24",
     "        vif 0 {", "            address 10.54.0.1/24", "        }", "    }",
@@ -601,22 +606,36 @@ class TestWhatIsNotASecondInterface:
         assert job.status == PARTIAL
 
     def test_unit_0_with_a_stanza_of_its_own(self) -> None:
-        """A VyOS ``vif 0`` is an interface with an address of its
-        own.  Its name is unit 0 of its port all the same, and here
-        the tree that is rendered holds two interfaces under the one
-        name: they are counted."""
+        """A name that is unit 0 of its port, where the tree that is
+        rendered holds two interfaces under the one name, is a second
+        interface: both are listed.  With one interface under it, it
+        is a second way of writing the port."""
+        job = MigrationJob(
+            source_codec="vyos", target_codec="arista_eos",
+            source_ports=["eth1"], source_other_names=["eth1.0"],
+            port_renames={"eth1": "Ethernet1", "eth1.0": "Ethernet1"},
+        )
+        listed = migration_pipeline._shared_final_names(
+            job, Counter({"Ethernet1": 2}), False, False,
+        )
+        assert listed == {"Ethernet1": ["eth1", "eth1.0"]}
+        listed = migration_pipeline._shared_final_names(
+            job, Counter({"Ethernet1": 1}), False, False,
+        )
+        assert listed == {}
+
+    def test_a_vif_0_is_no_unit(self) -> None:
+        """A VyOS ``vif 0`` made such a pair from a parse: VLAN 0 is
+        no 802.1Q VLAN id, and the block is left out and said.  One
+        interface is under the name, and nothing is listed."""
         job = _checked("vyos", "arista_eos", _VYOS_VIF_0)
-        assert job.fused_ports == {"Ethernet1": ["eth1", "eth1.0"]}
-        assert job.status == PARTIAL
-        # And the output shows it: two stanzas of the one name.  The
-        # EOS reader does not read the second back -- VLAN 0 is no
-        # 802.1Q VLAN id, so a stanza tagged 0 is left out, and says
-        # so -- so the text is read, not the parse.
-        assert job.rendered.count("\ninterface Ethernet1\n") == 2
-        assert get_codec("arista_eos").parse(job.rendered).dropped_tier3_sections == [
-            "interface Ethernet1: encapsulation dot1q vlan 0 -- not one "
-            "802.1Q tag and at most one inner tag, so the sub-interface "
-            "is not translated"
+        assert (job.status, job.fused_ports) == (COMPLETED, {})
+        assert "eth1.0" not in job.port_renames
+        assert "10.54.0.1" not in job.rendered
+        assert job.rendered.count("\ninterface Ethernet1\n") == 1
+        assert job.dropped_tier3_sections == [
+            "interfaces ethernet eth1: vif 0 -- not one 802.1Q tag and "
+            "at most one inner tag, so the sub-interface is not translated"
         ]
 
     def test_unit_0_of_a_port_that_is_not_there(self) -> None:
@@ -632,24 +651,25 @@ class TestWhatIsNotASecondInterface:
         assert job.status == PARTIAL
 
     def test_what_is_counted_is_what_is_rendered(self) -> None:
-        """A caller's transforms run before the count.  One that takes
-        the ``vif 0`` out leaves one interface under the name: its
-        unit 0 is then a second way of writing it and no more, where
-        without the transform it is a second interface."""
-        def without_the_vif(tree):
-            tree.interfaces = [
-                iface for iface in tree.interfaces
-                if "10.54.0.1" not in [a.ip for a in iface.ipv4_addresses]
-            ]
+        """A caller's transforms run before the count.  One that puts
+        a second interface under the loopback's name makes the
+        reference ``lo0.0`` a second interface, where without the
+        transform it is a second way of writing ``lo0`` and no more."""
+        def with_a_second_loopback(tree):
+            tree.interfaces.append(CanonicalInterface(
+                name="Loopback0", interface_type="ianaift:softwareLoopback",
+                ipv4_addresses=[CanonicalIPv4Address(ip="192.0.2.54", prefix_length=32)],
+            ))
             return tree
 
-        job = _checked("vyos", "arista_eos", _VYOS_VIF_0, transforms=[without_the_vif])
-        assert "10.54.0.1" not in job.rendered and "10.1.0.1" in job.rendered
-        assert job.port_renames["eth1.0"] == job.port_renames["eth1"] == "Ethernet1"
-        assert job.fused_ports == {}
-        assert _checked("vyos", "arista_eos", _VYOS_VIF_0).fused_ports == {
-            "Ethernet1": ["eth1", "eth1.0"],
-        }
+        job = _checked(
+            "juniper_junos", "arista_eos", _JUNOS, transforms=[with_a_second_loopback],
+        )
+        assert job.rendered.count("\ninterface Loopback0\n") == 2
+        assert job.port_renames["lo0.0"] == job.port_renames["lo0"] == "Loopback0"
+        assert job.fused_ports == {"Loopback0": ["lo0", "lo0.0"]}
+        assert job.status == PARTIAL
+        assert _checked("juniper_junos", "arista_eos", _JUNOS).fused_ports == {}
 
     def test_no_more_are_set_aside_than_missing(self) -> None:
         """Four names on one name, three interfaces under it in the
