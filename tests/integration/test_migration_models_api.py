@@ -92,10 +92,10 @@ class TestModelFamilies:
             "2930F-48G-4SFP"
         ]
         assert model["ports"] == [
-            {"role": "access", "count": 48, "slot": "", "speed": "gig",
-             "cage": "rj45", "poe": False, "notes": ""},
-            {"role": "uplink", "count": 4, "slot": "", "speed": "gig",
-             "cage": "sfp", "poe": False, "notes": ""},
+            {"role": "access", "count": 48, "slot": "", "prefix": "",
+             "speed": "gig", "cage": "rj45", "poe": False, "notes": ""},
+            {"role": "uplink", "count": 4, "slot": "", "prefix": "",
+             "speed": "gig", "cage": "sfp", "poe": False, "notes": ""},
         ]
 
     def test_filter_by_vendor(self, client: TestClient) -> None:

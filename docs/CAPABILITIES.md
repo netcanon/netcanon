@@ -2024,10 +2024,15 @@ nothing, as before.
 
 **Known limitations**
 
-* Model families ship for a first set of Aruba AOS-S switches only;
-  `GET /model-families` is the current list.  Everything else goes
-  through target profiles, and a device with neither a family nor a
-  profile cannot be declared yet.
+* Model families ship for a first set of Aruba AOS-S switches and
+  for the Cisco Catalyst 9300; `GET /model-families` is the current
+  list.  Everything else goes through target profiles, and a device
+  with neither a family nor a profile cannot be declared yet.  A
+  Catalyst stack has one management interface, `GigabitEthernet0/0`,
+  which belongs to no member and pairs with the other side's
+  management port, whether that is a family's or a profile's.  A
+  Catalyst's source device is not read from its config yet (its
+  `switch N provision` lines): choose it.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

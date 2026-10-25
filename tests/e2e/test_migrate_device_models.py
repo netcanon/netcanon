@@ -398,7 +398,8 @@ class TestSourceDeviceIsReadFromTheConfig:
         self, page: Page, live_server_url: str,
     ) -> None:
         """Nothing reads the hardware lines of a Cisco config yet: the
-        picker stays empty, lists that vendor's profiles, and says why."""
+        picker stays empty, lists that vendor's families and profiles,
+        and says why."""
         _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_SRC)
         page.locator(_tid("migrate-rename-open-btn")).click()
         select = page.locator(_tid("migrate-device-source-model-select"))
@@ -412,7 +413,7 @@ class TestSourceDeviceIsReadFromTheConfig:
         )
         values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
         assert "profile:C9300-48P" in values
-        assert not [v for v in values if v.startswith("fam:")]
+        assert "fam:C9300:C9300-48P" in values
 
 
 # ---------------------------------------------------------------------------

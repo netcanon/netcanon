@@ -361,6 +361,26 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **The Cisco Catalyst 9300 can be declared as a source or target
+  device.**  Two model families: `C9300` (the 24/48-port T, P, U, H
+  and S models, the C9300-24UX, -48UXM and -48UN) and
+  `C9300-higher-scale` (C9300-24UB, -48UB, -24UXB, which Cisco's data
+  sheet says stack only with each other, so a stack that mixes the two
+  is refused).  A stack of up to eight; each switch has one bay for
+  the C9300-NM-4G, -4M, -8X, -2Q or -2Y.  Names come from a new
+  `catalyst` naming rule -- type, switch, module, port -- with the
+  type stated per group of ports from Cisco's interface lists
+  (`prefix:`), never derived from a speed: a C9300-48UXM is
+  `TwoGigabitEthernet1/0/1-36` then `TenGigabitEthernet1/0/37-48`.
+  Every name is graded `vendor-doc`; no capture claim is made, since a
+  C9300 config lists the interfaces of every network module the bay
+  can take and so no capture's names equal one deployment's ports.
+  The stack's one management interface, `GigabitEthernet0/0`, is a
+  new kind of entry, a port of the whole deployment
+  (`deployment_ports:`): it belongs to no member and pairs with the
+  other side's management port -- a flat profile's management port
+  now belongs to no member either, so the two pair.  The
+  `switch N provision` lines are not read yet.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

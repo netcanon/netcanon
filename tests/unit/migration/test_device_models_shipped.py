@@ -194,6 +194,8 @@ class TestShippedFamiliesLoad:
                     assert mode.bay_naming.ref.strip(), (family.key, name)
             for sku, module in family.modules.items():
                 assert module.inventory.ref.strip(), (family.key, sku)
+            for port in family.deployment_ports:
+                assert port.naming.ref.strip(), (family.key, port.name)
 
     def test_no_evidence_ref_leans_on_a_legend_only_a_comment_holds(self) -> None:
         """A ``ref`` is served to API clients, who see neither the
@@ -201,12 +203,13 @@ class TestShippedFamiliesLoad:
         in a header comment (and meaning a different document in each
         file) is of no use to them, and neither is "real configs"
         with nothing to find them by."""
-        tags = re.compile(r"\b(IGSG|QS|ATMG|MCG|BP|DS)\b")
+        tags = re.compile(r"\b(IGSG|QS|ATMG|MCG|BP|DS|HIG|CG|CR)\b")
         for family in REGISTRY.families.values():
             grades = [mode.naming for mode in family.modes.values()]
             grades += [m.bay_naming for m in family.modes.values() if m.bay_naming]
             grades += [module.inventory for module in family.modules.values()]
             grades += [model.panel for model in family.models.values()]
+            grades += [port.naming for port in family.deployment_ports]
             for grade in grades:
                 assert not tags.search(grade.ref), grade.ref
                 assert "real " not in grade.ref, grade.ref
@@ -493,6 +496,59 @@ for _access, _models in _2930M_PANELS.items():
             )
 
 
+#: Cisco Catalyst 9300, the higher-scale models included.  Switch 1 (the
+#: number a member takes when none is stated); the fixed panel is module
+#: 0 and the network module module 1.  A name is the interface type,
+#: then switch/module/port, and the type is the port's top speed, so a
+#: panel of two speeds is two types numbered straight through (the
+#: 48UXM).  Sources: the C9300 Hardware Installation Guide's Product
+#: Overview and network-module tables, the data sheet's Table 2 and the
+#: IOS XE 17.12 configuration guide and command reference.
+_C = "cisco_iosxe"
+_C9300_PANELS: dict[str, list[str]] = {
+    "C9300-24T": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48T": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24P": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48P": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24U": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48U": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24H": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48H": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24S": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48S": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24UX": _run(1, 24, "TenGigabitEthernet1/0/"),
+    "C9300-48UXM": [
+        *_run(1, 36, "TwoGigabitEthernet1/0/"), *_run(37, 12, "TenGigabitEthernet1/0/"),
+    ],
+    "C9300-48UN": _run(1, 48, "FiveGigabitEthernet1/0/"),
+    "C9300-24UB": _run(1, 24, "GigabitEthernet1/0/"),
+    "C9300-48UB": _run(1, 48, "GigabitEthernet1/0/"),
+    "C9300-24UXB": _run(1, 24, "TenGigabitEthernet1/0/"),
+}
+#: Bay 1: what each network module contributes.  ``()`` is the empty bay.
+_C9300_BAY_1: dict[tuple, list[str]] = {
+    (): [],
+    (("1", "C9300-NM-4G"),): _run(1, 4, "GigabitEthernet1/1/"),
+    (("1", "C9300-NM-4M"),): _run(1, 4, "TenGigabitEthernet1/1/"),
+    (("1", "C9300-NM-8X"),): _run(1, 8, "TenGigabitEthernet1/1/"),
+    (("1", "C9300-NM-2Q"),): _run(1, 2, "FortyGigabitEthernet1/1/"),
+    (("1", "C9300-NM-2Y"),): _run(1, 2, "TwentyFiveGigE1/1/"),
+}
+for _model, _access_names in _C9300_PANELS.items():
+    for _fitted, _uplinks in _C9300_BAY_1.items():
+        EXPECTED_INVENTORIES[(_C, _model, "stack", _fitted)] = (
+            list(_access_names), list(_uplinks),
+        )
+
+#: Family key -> the ports of the whole deployment, after every
+#: member's: a stack has ONE management interface, whichever switch is
+#: active.
+EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
+    "cisco_iosxe/C9300": ["GigabitEthernet0/0"],
+    "cisco_iosxe/C9300-higher-scale": ["GigabitEthernet0/0"],
+}
+
+
 def _every_combination() -> list[tuple[str, str, str, tuple]]:
     out = []
     for family, model in _every_model():
@@ -517,13 +573,25 @@ class TestExactInventories:
     def test_ports_and_roles(self, combo: tuple[str, str, str, tuple]) -> None:
         vendor, model, mode, fitted = combo
         access, uplinks = EXPECTED_INVENTORIES[combo]
+        family = REGISTRY.resolve(vendor, model)[0]
+        mgmt = EXPECTED_DEPLOYMENT_PORTS.get(family.key, [])
         inventory = _compile(vendor, mode, {"model": model, "modules": dict(fitted)})
         assert inventory.names(role="access") == access
         assert inventory.names(role="uplink") == uplinks
-        assert inventory.names() == access + uplinks
-        assert inventory.names(role="mgmt") == []
+        assert inventory.names(role="mgmt") == mgmt
+        assert inventory.names() == access + uplinks + mgmt
 
-    @pytest.mark.parametrize(("family", "model"), _every_model(), ids=_model_id)
+    def test_every_deployment_port_is_pinned(self) -> None:
+        assert {
+            family.key: [p.name for p in family.deployment_ports]
+            for family in REGISTRY.families.values() if family.deployment_ports
+        } == EXPECTED_DEPLOYMENT_PORTS
+
+    @pytest.mark.parametrize(
+        ("family", "model"),
+        [(f, m) for f, m in _every_model() if f.naming == "aoss"],
+        ids=_model_id,
+    )
     def test_the_name_says_how_many_access_ports(
         self, family: FamilyDef, model: ModelDef,
     ) -> None:
@@ -542,6 +610,55 @@ class TestExactInventories:
             int(smart_rate.group(1)) if smart_rate else 0
         ), model.display_name
 
+    @pytest.mark.parametrize(
+        ("family", "model"),
+        [(f, m) for f, m in _every_model() if f.naming == "catalyst"],
+        ids=_model_id,
+    )
+    def test_a_catalyst_pid_says_how_many_access_ports(
+        self, family: FamilyDef, model: ModelDef,
+    ) -> None:
+        """``C9300-48UXM`` is 48 access ports, whatever their types."""
+        count = re.fullmatch(r"C9300-(\d+)[A-Z]+", model.skus[0])
+        assert count, model.skus[0]
+        assert sum(g.count for g in model.ports if g.role == "access") == int(
+            count.group(1)
+        ), model.skus[0]
+
+
+#: A Catalyst interface type and the top speed it stands for, typed from
+#: the configuration guide's list of interface types.  The data says both
+#: for every group; they are stated apart, so they can disagree.
+_SPEED_OF_TYPE: dict[str, str] = {
+    "GigabitEthernet": "gig",
+    "TwoGigabitEthernet": "2.5gig",
+    "FiveGigabitEthernet": "5gig",
+    "TenGigabitEthernet": "10gig",
+    "TwentyFiveGigE": "25gig",
+    "FortyGigabitEthernet": "40gig",
+}
+
+
+class TestCatalystTypeAndSpeed:
+    @pytest.mark.parametrize(
+        "family",
+        [f for f in REGISTRY.families.values() if f.naming == "catalyst"],
+        ids=lambda f: f.key,
+    )
+    def test_every_group_states_the_speed_its_type_names(self, family: FamilyDef) -> None:
+        groups = [
+            (model.model, group)
+            for model in family.models.values() for group in model.ports
+        ] + [
+            (module.sku, group)
+            for module in family.modules.values() for group in module.ports
+        ]
+        for owner, group in groups:
+            assert _SPEED_OF_TYPE[group.prefix] == group.speed, (owner, group.prefix)
+        for port in family.deployment_ports:
+            prefix = re.match(r"[A-Za-z]+", port.name).group(0)
+            assert _SPEED_OF_TYPE[prefix] == port.speed, port.name
+
 
 # ---------------------------------------------------------------------------
 # Grammar round trip
@@ -558,22 +675,29 @@ class TestExactInventories:
 _UNCLASSIFIED_BARE_LETTER = re.compile(r"^[A-Z]\d+$")
 
 
-def _codec_for(vendor: str):
-    for name in list_public_codecs():
-        if vendor_of(name) == vendor:
-            return get_codec(name)
-    raise AssertionError(f"no codec is filed under vendor {vendor!r}")
+#: Naming rule -> the codec whose grammar it writes.  Two codecs share
+#: the ``cisco_iosxe`` vendor id; the Catalyst names are the CLI's.
+_CODEC_OF_RULE: dict[str, str] = {
+    "aoss": "aruba_aoss",
+    "catalyst": "cisco_iosxe_cli",
+}
 
 
 class TestCompiledNamesRoundTripThroughTheCodec:
     """Will this name survive the render path?  NOT evidence that the
     name is right — the data and the classifier can be wrong together."""
 
+    def test_every_rule_has_its_codec(self) -> None:
+        assert set(_CODEC_OF_RULE) == set(dm._naming_rules())
+        for rule, codec in _CODEC_OF_RULE.items():
+            assert codec in list_public_codecs(), rule
+
     @pytest.mark.parametrize(("family", "model"), _every_model(), ids=_model_id)
     def test_the_classifier_recovers_member_slot_and_port(
         self, family: FamilyDef, model: ModelDef,
     ) -> None:
-        codec = _codec_for(family.vendor)
+        codec = get_codec(_CODEC_OF_RULE[family.naming])
+        assert vendor_of(_CODEC_OF_RULE[family.naming]) == family.vendor
         checked = 0
         for mode_name, modules in product(family.modes, _module_choices(model)):
             if not family.supports(model, mode_name):
@@ -583,6 +707,10 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                 {"model": model.model, "modules": modules},
             )
             for port in inventory.ports:
+                if port.member_rank is None:
+                    # A port of the whole deployment is typed whole in
+                    # the family file; no rule made it.
+                    continue
                 identity = codec.classify_port_name(port.name)
                 where = (model.model, mode_name, port.name)
                 if identity.kind == "unknown":
@@ -592,7 +720,10 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     continue
                 assert identity.kind == "physical", (*where, identity.kind)
                 assert identity.stack == port.member_id, where
-                assert identity.subslot_letter == port.slot, where
+                if family.naming == "catalyst":
+                    assert identity.module == int(port.slot or "0"), where
+                else:
+                    assert identity.subslot_letter == port.slot, where
                 assert identity.port == port.index + 1, where
                 checked += 1
         assert checked, f"{model.model}: no name was checked"
@@ -611,7 +742,9 @@ class TestCompiledNamesRoundTripThroughTheCodec:
 #: NUMBER, never by key: the legacy keys are not consistent with each
 #: other (``2930F-24G`` is the SFP+ model, ``2930F-48G`` the 1G-SFP one).
 #: Every such profile must be listed (the completeness test finds them
-#: by the part number in their display name).
+#: by the part number in their display name, or by a model that is a
+#: part number a family models).  A Cisco profile states the network
+#: module it preselects (the C9300-NM-8X) and stack member 1.
 #:
 #: Where both exist, the family is authoritative for port mapping; the
 #: profile keeps feeding the older dropdown until it is retired.
@@ -620,15 +753,28 @@ PROFILE_AGREES_WITH: dict[str, dict] = {
     "aruba_aoss/2930F-24G-PoEP": {"mode": "standalone", "members": [{"model": "JL255A"}]},
     "aruba_aoss/2930F-48G": {"mode": "standalone", "members": [{"model": "JL260A"}]},
     "aruba_aoss/2930F-48G-PoEP": {"mode": "standalone", "members": [{"model": "JL256A"}]},
+    **{
+        f"cisco_iosxe/{pid}": {
+            "mode": "stack",
+            "members": [{"model": pid, "id": 1, "modules": {"1": "C9300-NM-8X"}}],
+        }
+        for pid in (
+            "C9300-24P", "C9300-24U", "C9300-24UX",
+            "C9300-48P", "C9300-48U", "C9300-48UXM",
+        )
+    },
 }
 
 _PART_NUMBER = re.compile(r"\(([A-Z0-9-]+)\)")
 
 
 def _comparable(inventory: Inventory) -> list[tuple]:
-    return [
-        (p.name, p.role, p.ordinal, p.speed, p.poe) for p in inventory.ports
-    ]
+    """The ports as one role's list after another.  A profile lists its
+    management port among the chassis ports and a family after every
+    member's: where it sits in the list is not something either says."""
+    return sorted(
+        ((p.role, p.ordinal, p.name, p.speed, p.poe) for p in inventory.ports),
+    )
 
 
 class TestAgreementWithTargetProfiles:
@@ -647,7 +793,7 @@ class TestAgreementWithTargetProfiles:
         two registries can drift apart on that device unnoticed."""
         modelled = set()
         for key, profile in PROFILES.items():
-            for part in _PART_NUMBER.findall(profile.display_name):
+            for part in [*_PART_NUMBER.findall(profile.display_name), profile.model]:
                 if REGISTRY.resolve(profile.vendor, part) is not None:
                     modelled.add(key)
         assert modelled == set(PROFILE_AGREES_WITH)
@@ -947,33 +1093,43 @@ class TestAruba2930M:
 #: panel table is not a guard: two J-numbers swapped in a family file
 #: would compile a 48-port switch as a 24-port one with every other
 #: test green.
-EXPECTED_PART_NUMBERS: dict[str, str] = {
+EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     # Aruba 2930F
-    "JL253A": "2930F-24G-4SFPP",
-    "JL254A": "2930F-48G-4SFPP",
-    "JL255A": "2930F-24G-PoEP-4SFPP",
-    "JL256A": "2930F-48G-PoEP-4SFPP",
-    "JL258A": "2930F-8G-PoEP-2SFPP",
-    "JL259A": "2930F-24G-4SFP",
-    "JL260A": "2930F-48G-4SFP",
-    "JL261A": "2930F-24G-PoEP-4SFP",
-    "JL262A": "2930F-48G-PoEP-4SFP",
-    "JL263A": "2930F-24G-PoEP-4SFPP-TAA",
-    "JL264A": "2930F-48G-PoEP-4SFPP-TAA",
-    "JL557A": "2930F-48G-740W-PoEP-4SFP",
-    "JL558A": "2930F-48G-740W-PoEP-4SFPP",
-    "JL559A": "2930F-48G-740W-PoEP-4SFPP-TAA",
-    "JL692A": "2930F-8G-PoEP-2SFPP-TAA",
-    "JL693A": "2930F-12G-PoEP-2G-2SFPP",
+    ("aruba_aoss", "JL253A"): "2930F-24G-4SFPP",
+    ("aruba_aoss", "JL254A"): "2930F-48G-4SFPP",
+    ("aruba_aoss", "JL255A"): "2930F-24G-PoEP-4SFPP",
+    ("aruba_aoss", "JL256A"): "2930F-48G-PoEP-4SFPP",
+    ("aruba_aoss", "JL258A"): "2930F-8G-PoEP-2SFPP",
+    ("aruba_aoss", "JL259A"): "2930F-24G-4SFP",
+    ("aruba_aoss", "JL260A"): "2930F-48G-4SFP",
+    ("aruba_aoss", "JL261A"): "2930F-24G-PoEP-4SFP",
+    ("aruba_aoss", "JL262A"): "2930F-48G-PoEP-4SFP",
+    ("aruba_aoss", "JL263A"): "2930F-24G-PoEP-4SFPP-TAA",
+    ("aruba_aoss", "JL264A"): "2930F-48G-PoEP-4SFPP-TAA",
+    ("aruba_aoss", "JL557A"): "2930F-48G-740W-PoEP-4SFP",
+    ("aruba_aoss", "JL558A"): "2930F-48G-740W-PoEP-4SFPP",
+    ("aruba_aoss", "JL559A"): "2930F-48G-740W-PoEP-4SFPP-TAA",
+    ("aruba_aoss", "JL692A"): "2930F-8G-PoEP-2SFPP-TAA",
+    ("aruba_aoss", "JL693A"): "2930F-12G-PoEP-2G-2SFPP",
     # Aruba 2930M
-    "JL319A": "2930M-24G",
-    "JL320A": "2930M-24G-PoEP",
-    "JL321A": "2930M-48G",
-    "JL322A": "2930M-48G-PoEP",
-    "JL323A": "2930M-40G-8SR-PoEP",
-    "JL324A": "2930M-24SR-PoEP",
-    "R0M67A": "2930M-40G-8SR-PoE-Class6",
-    "R0M68A": "2930M-24SR-PoE-Class6",
+    ("aruba_aoss", "JL319A"): "2930M-24G",
+    ("aruba_aoss", "JL320A"): "2930M-24G-PoEP",
+    ("aruba_aoss", "JL321A"): "2930M-48G",
+    ("aruba_aoss", "JL322A"): "2930M-48G-PoEP",
+    ("aruba_aoss", "JL323A"): "2930M-40G-8SR-PoEP",
+    ("aruba_aoss", "JL324A"): "2930M-24SR-PoEP",
+    ("aruba_aoss", "R0M67A"): "2930M-40G-8SR-PoE-Class6",
+    ("aruba_aoss", "R0M68A"): "2930M-24SR-PoE-Class6",
+    # Cisco Catalyst 9300: the PID is the model key.
+    **{
+        ("cisco_iosxe", pid): pid
+        for pid in (
+            "C9300-24T", "C9300-48T", "C9300-24P", "C9300-48P",
+            "C9300-24U", "C9300-48U", "C9300-24H", "C9300-48H",
+            "C9300-24S", "C9300-48S", "C9300-24UX", "C9300-48UXM",
+            "C9300-48UN", "C9300-24UB", "C9300-48UB", "C9300-24UXB",
+        )
+    },
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -994,20 +1150,22 @@ def _graded_parts() -> dict[str, str]:
             parts[f"{family.key} / module / {sku}"] = module.inventory.grade
         for key, model in family.models.items():
             parts[f"{family.key} / panel / {key}"] = model.panel.grade
+        for port in family.deployment_ports:
+            parts[f"{family.key} / deployment port / {port.name}"] = port.naming.grade
     return parts
 
 
 class TestPinnedIdentityAndGrades:
     def test_every_part_number_is_the_model_it_should_be(self) -> None:
-        for sku, key in EXPECTED_PART_NUMBERS.items():
-            hit = REGISTRY.resolve("aruba_aoss", sku)
+        for (vendor, sku), key in EXPECTED_PART_NUMBERS.items():
+            hit = REGISTRY.resolve(vendor, sku)
             assert hit is not None and hit[1].model == key, (sku, key)
             assert hit[1].skus[0] == sku, (sku, hit[1].skus)
 
     def test_every_shipped_model_is_in_the_table(self) -> None:
         shipped = {
-            model.skus[0]: model.model
-            for _, model in _every_model()
+            (family.vendor, model.skus[0]): model.model
+            for family, model in _every_model()
         }
         assert shipped == EXPECTED_PART_NUMBERS
 
@@ -1084,3 +1242,115 @@ class TestAruba2930MPowerAndModules:
     def test_a_uniform_panel_has_no_position_to_doubt(self, sku: str) -> None:
         inventory = _compile("aruba_aoss", "standalone", {"model": sku})
         assert not any("read from product photographs" in c for c in inventory.caveats)
+
+
+class TestCiscoC9300:
+    """A Catalyst 9300 name always carries the switch number, a panel of
+    two speeds is two interface types numbered straight through, and a
+    stack has one management interface."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C9300"]
+    HIGHER_SCALE = REGISTRY.families["cisco_iosxe/C9300-higher-scale"]
+
+    def test_the_models(self) -> None:
+        assert sorted(self.FAMILY.models) == sorted([
+            "C9300-24T", "C9300-48T", "C9300-24P", "C9300-48P",
+            "C9300-24U", "C9300-48U", "C9300-24H", "C9300-48H",
+            "C9300-24S", "C9300-48S", "C9300-24UX", "C9300-48UXM",
+            "C9300-48UN",
+        ])
+        assert sorted(self.HIGHER_SCALE.models) == [
+            "C9300-24UB", "C9300-24UXB", "C9300-48UB",
+        ]
+
+    def test_every_model_has_bay_1_taking_the_five_modules(self) -> None:
+        modules = ["C9300-NM-4G", "C9300-NM-4M", "C9300-NM-8X", "C9300-NM-2Q", "C9300-NM-2Y"]
+        for family in (self.FAMILY, self.HIGHER_SCALE):
+            assert list(family.modules) == modules, family.key
+            for model in family.models.values():
+                assert list(model.bays) == ["1"], model.model
+                assert model.bays["1"].accepts == modules, model.model
+
+    def test_stack_is_the_only_mode_and_the_default(self) -> None:
+        for family in (self.FAMILY, self.HIGHER_SCALE):
+            assert list(family.modes) == ["stack"]
+            inventory = _compile("cisco_iosxe", None, {"model": next(iter(family.models))})
+            assert (inventory.mode, inventory.mode_defaulted) == ("stack", True)
+
+    def test_a_lone_switch_can_be_switch_3(self) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": "C9300-24T", "id": 3})
+        assert inventory.names(role="access") == _run(1, 24, "GigabitEthernet3/0/")
+        assert inventory.names(role="mgmt") == ["GigabitEthernet0/0"]
+
+    def test_a_stack_holds_eight_members_and_mixes_models(self) -> None:
+        eight = [{"model": "C9300-48P", "modules": {"1": "C9300-NM-8X"}}] * 4 + [
+            {"model": "C9300-24UX"}
+        ] * 4
+        inventory = _compile("cisco_iosxe", "stack", *eight)
+        assert inventory.member_count == 8
+        assert inventory.names(member_rank=0)[-1] == "TenGigabitEthernet1/1/8"
+        assert inventory.names(member_rank=7) == _run(1, 24, "TenGigabitEthernet8/0/")
+        with pytest.raises(Exception, match="at most 8 members"):
+            _compile("cisco_iosxe", "stack", *eight, {"model": "C9300-24T"})
+
+    def test_one_management_port_for_the_whole_stack_after_every_member(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "C9300-48P"}, {"model": "C9300-48P"},
+            {"model": "C9300-48P"},
+        )
+        assert inventory.names(role="mgmt") == ["GigabitEthernet0/0"]
+        last = inventory.ports[-1]
+        assert (last.name, last.member_rank, last.member_id) == ("GigabitEthernet0/0", None, None)
+
+    def test_a_higher_scale_model_stacks_only_with_its_own(self) -> None:
+        """Data sheet: higher-scale SKUs "need to be stacked with other
+        higher-scale models"."""
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", "stack", {"model": "C9300-48UB"}, {"model": "C9300-48P"})
+        both = _compile("cisco_iosxe", "stack", {"model": "C9300-48UB"}, {"model": "C9300-24UXB"})
+        assert both.names(member_rank=1)[0] == "TenGigabitEthernet2/0/1"
+
+    def test_the_48uxm_is_two_types_numbered_straight_through(self) -> None:
+        ports = {p.name: p for p in _compile("cisco_iosxe", "stack", {"model": "C9300-48UXM"}).ports}
+        assert ports["TwoGigabitEthernet1/0/36"].speed == "2.5gig"
+        assert ports["TenGigabitEthernet1/0/37"].speed == "10gig"
+        assert "TwoGigabitEthernet1/0/37" not in ports
+        assert "TenGigabitEthernet1/0/1" not in ports
+        assert not any(n.startswith("GigabitEthernet1/") for n in ports)
+
+    def test_a_module_is_module_1_of_its_switch_and_its_ports_are_uplinks(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", "stack", {"model": "C9300-24P"},
+            {"model": "C9300-24P", "modules": {"1": "C9300-NM-2Y"}},
+        )
+        uplinks = [p for p in inventory.ports if p.role == "uplink"]
+        assert [p.name for p in uplinks] == ["TwentyFiveGigE2/1/1", "TwentyFiveGigE2/1/2"]
+        assert {(p.module, p.speed, p.cage, p.member_rank) for p in uplinks} == {
+            ("C9300-NM-2Y", "25gig", "sfp28", 1),
+        }
+
+    def test_poe_models(self) -> None:
+        unpowered = {"C9300-24T", "C9300-48T", "C9300-24S", "C9300-48S"}
+        for family in (self.FAMILY, self.HIGHER_SCALE):
+            for model in family.models.values():
+                assert {g.poe for g in model.ports} == {model.model not in unpowered}, model.model
+
+    def test_the_swapped_hardware_guide_rows_are_said(self) -> None:
+        """The hardware guide's Product Overview table gives the 48UN
+        and the 48UXM each other's ports; the inventory says which
+        source it follows."""
+        for pid in ("C9300-48UN", "C9300-48UXM"):
+            inventory = _compile("cisco_iosxe", "stack", {"model": pid})
+            assert any("Product Overview table" in c for c in inventory.caveats), pid
+
+    def test_a_model_nobody_has_seen_a_config_of_says_so(self) -> None:
+        unseen = {"C9300-24S", "C9300-48S", "C9300-24UB", "C9300-48UB", "C9300-24UXB"}
+        for family in (self.FAMILY, self.HIGHER_SCALE):
+            for model in family.models.values():
+                said = "no configuration of a" in (model.caveat or "")
+                assert said == (model.model in unseen), model.model
+
+    def test_unfitted_modules_names_are_said_not_to_be_ports(self) -> None:
+        inventory = _compile("cisco_iosxe", "stack", {"model": "C9300-48P", "modules": {"1": "C9300-NM-8X"}})
+        assert "FortyGigabitEthernet1/1/1" not in inventory.names()
+        assert any("fitted or not" in c for c in inventory.caveats)

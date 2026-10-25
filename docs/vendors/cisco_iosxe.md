@@ -609,7 +609,23 @@ translate it again from `show running-config` as the device prints it.
   `vrf forwarding Mgmt-vrf`) gets `kind=mgmt` override automatically
   by the parser, so cross-vendor rename can cascade to Aruba `oobm`
   / Junos management VRF.
-- **Declaring a Catalyst as the source device** — IOS-XE lists the
+- **Declaring a Catalyst as the source or target device** — the
+  Catalyst 9300 is a model family: a stack of up to eight switches,
+  each with the network module in its bay (or none).  The
+  higher-scale models (C9300-24UB, -48UB, -24UXB) are a family of
+  their own, because Cisco's data sheet says they "need to be stacked
+  with other higher-scale models".  A port's name is its type, then
+  switch, module and port, with the type taken from Cisco's interface
+  lists for each group of ports: a C9300-48UXM is
+  `TwoGigabitEthernet1/0/1-36` and then `TenGigabitEthernet1/0/37-48`,
+  and a C9300-NM-8X in switch 2 is `TenGigabitEthernet2/1/1-8`.  State
+  each switch's number: a switch that is alone keeps the number it
+  was last given, so its ports can be `GigabitEthernet3/0/N`.  The
+  stack's one management interface, `GigabitEthernet0/0`, belongs to
+  no switch and pairs with the other side's management port.  The
+  `switch N provision` lines are not read yet, so the source device
+  is chosen by hand; other Catalyst series are not modelled yet (the
+  C9500 has target profiles).  IOS-XE lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port.  With both devices
   declared — in the Interface rename modal or on the API — those

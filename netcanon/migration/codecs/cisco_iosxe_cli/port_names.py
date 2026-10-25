@@ -329,3 +329,74 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         return f"VirtualPortGroup{identity.index or 0}"
     # hw_aggregate, mgmt, unknown — no native Cisco representation.
     return None
+
+
+#: The interface types a Catalyst names a front-panel or network-module
+#: port with, as the device prints them.  ``AppGigabitEthernet`` is not
+#: one: it is the internal app-hosting interface, not a port.
+CATALYST_PORT_TYPES: frozenset[str] = frozenset({
+    "FastEthernet",
+    "GigabitEthernet",
+    "TwoGigabitEthernet",
+    "FiveGigabitEthernet",
+    "TenGigabitEthernet",
+    "TwentyFiveGigE",
+    "FortyGigabitEthernet",
+    "HundredGigE",
+})
+
+
+def catalyst_port_name(*, port_type: str, member: int, module: int, port: int) -> str:
+    """Compose the name a stackable Catalyst gives a physical port.
+
+    This is the naming GRAMMAR, written down once:
+    ``<type><switch>/<module>/<port>``.  It is used by
+    :mod:`netcanon.migration.device_models` to render a model's port
+    inventory, and is deliberately separate from
+    :func:`format_port_identity`, which guesses a name from the shape
+    of another vendor's name and does not know the model.
+
+    Cisco's interface configuration guide for the Catalyst 9300
+    states it: "specify the interface type, stack member number (only
+    stacking-capable switches), module number, and device port
+    number"; the switch's own ports are module 0 and its uplink (a
+    network module) is module 1, where "the port numbers restart".
+
+    * ``port_type`` is the word the device prints, which the family
+      file states per group of ports (:data:`CATALYST_PORT_TYPES`).
+      It is not derived from a speed: it is a fact about the name.
+    * ``member`` is the switch number.  A switch that is in no stack
+      is switch 1 ("The default device number, before it is
+      integrated into a device stack, is 1"), so the segment is never
+      absent.
+    * ``module`` is 0 for the switch's own ports and the bay's number
+      for a network module's.
+    * ``port`` is 1-based.
+
+    Args:
+        port_type: The interface type, as the device prints it.
+        member: The switch (stack member) number.
+        module: The module number.
+        port: The 1-based port number within the module.
+
+    Returns:
+        The port name, e.g. ``GigabitEthernet1/0/24``,
+        ``TenGigabitEthernet2/1/8``.
+
+    Raises:
+        ValueError: *port_type* is not one of
+            :data:`CATALYST_PORT_TYPES`, *member* or *port* is below
+            1, or *module* is below 0.
+    """
+    if port_type not in CATALYST_PORT_TYPES:
+        raise ValueError(
+            f"{port_type!r} is not an interface type a Catalyst names a "
+            f"port with; known: {sorted(CATALYST_PORT_TYPES)}"
+        )
+    if member < 1:
+        raise ValueError(f"Catalyst switch numbers are 1-based; got {member}")
+    if module < 0:
+        raise ValueError(f"a Catalyst module number is 0 or more; got {module}")
+    if port < 1:
+        raise ValueError(f"Catalyst port numbers are 1-based; got {port}")
+    return f"{port_type}{member}/{module}/{port}"

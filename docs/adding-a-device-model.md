@@ -34,13 +34,27 @@ rule turns them into names for one stated deployment:
 | a **model** | one part number's fixed panel — port groups in port-number order — and its module bays |
 | a **mode** | a deployment state that changes names (`standalone`, `vsf`, `stacked`) |
 | a **module** | what a bay can hold, and the ports it contributes |
+| a group's **`prefix`** | the interface type a grammar that names by type puts in front of the number (`TenGigabitEthernet`) |
+| a **deployment port** | a port of the whole deployment rather than of one member, by its literal name (a Catalyst stack's one `GigabitEthernet0/0`) |
 | a **capture claim** | a committed real capture, and the exact deployment it is of |
 
 and in code, beside the vendor's codec, there is one small **naming
 rule** per naming grammar — not per product line.  Every AOS-S
 fixed-port switch is the single `aoss` rule
 (`physical_port_name` in
-[`codecs/aruba_aoss/port_names.py`](../netcanon/migration/codecs/aruba_aoss/port_names.py)).
+[`codecs/aruba_aoss/port_names.py`](../netcanon/migration/codecs/aruba_aoss/port_names.py)),
+and every Catalyst stackable the `catalyst` rule (`catalyst_port_name`
+in
+[`codecs/cisco_iosxe_cli/port_names.py`](../netcanon/migration/codecs/cisco_iosxe_cli/port_names.py)).
+
+A Catalyst names a port by its type, then switch, module and port
+(`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
+a panel of two speeds is two types numbered straight through.  The
+type is **stated** on each port group as `prefix:`, from the vendor's
+own interface lists, and never derived from a speed: a rule cannot
+know that a 25G module's ports are `TwentyFiveGigE` while a 10G
+panel's are `TenGigabitEthernet`.  A rule that puts no type in a name
+refuses a `prefix`.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
@@ -189,10 +203,12 @@ are uplinks, and what speed each is, is not something a config shows.
    only prove names — it cannot prove which ports are uplinks, since
    many grammars carry no role in the name — so this table is the only
    thing that catches two port groups written in the wrong order.  The
-   test fails if any shipped combination is not pinned.  In the same
-   file add each part number to `EXPECTED_PART_NUMBERS` (which part
-   number is which model is data there, not a comment), and a part
-   you graded `inferred` to `KNOWN_INFERRED_PARTS`.
+   test fails if any shipped combination is not pinned.  A family's
+   deployment ports are pinned in `EXPECTED_DEPLOYMENT_PORTS`, by
+   family.  In the same file add each `(vendor, part number)` to
+   `EXPECTED_PART_NUMBERS` (which part number is which model is data
+   there, not a comment), and a part you graded `inferred` to
+   `KNOWN_INFERRED_PARTS`.
 4. **Add the capture claim**, if a committed capture of that exact
    model exists and names every port of it: in the family file, in
    `EXPECTED_CLAIMS` in the same test file (fixture, marker, mode and
@@ -202,10 +218,14 @@ are uplinks, and what speed each is, is not something a config shows.
    and `RESULTS.md` there, as for any real capture.
 5. **If a flat target profile describes the same device**, add the pair
    to `PROFILE_AGREES_WITH` (addressed by part number, never by key —
-   legacy keys are not consistent with each other).  The test finds
-   such profiles by the part number in their display name and fails
-   until the pair is listed.  Where both exist the family is
-   authoritative for port mapping.
+   legacy keys are not consistent with each other), with the module
+   the profile preselects.  The test finds such profiles by the part
+   number in their display name, or by a profile model that is a part
+   number a family models, and fails until the pair is listed.  The
+   two must list the same ports with the same roles, in the same order
+   within each role; a profile's management port may sit among its
+   chassis ports, and a family's comes after every member's.  Where
+   both exist the family is authoritative for port mapping.
 6. **Run** `pytest tests/unit/migration/test_device_models.py
    tests/unit/migration/test_device_models_shipped.py`.
 
@@ -269,8 +289,17 @@ not a numbered port, so the `aoss` rule names `access` and `uplink`
 only; a `mgmt` group counted into the panel would have been handed the
 next free number and become port 25 of a 24-port switch.
 
+A rule that names a port by its interface type also states the types
+it accepts (`prefixes`); every group of a family under that rule must
+state one of them, and a group under any other rule must state none.
+Ports that no rule names — a stack's one management interface — go
+under `deployment_ports:` by their literal names: each belongs to no
+member and comes after every member's ports.
+
 Test the rule against the vendor's own printed examples, including one
-whose member number is not 1.
+whose member number is not 1, and name the codec whose grammar it
+writes in `_CODEC_OF_RULE` in the shipped-data test, which classifies
+every compiled name back through that codec.
 
 ---
 
@@ -291,7 +320,11 @@ these are load errors, not surprises later:
 * a capture claim that leaves out a member id in a mode whose names
   carry one;
 * a bay that accepts a module the family does not define; a bay name
-  the naming rule refuses; a port named twice;
+  the naming rule refuses; a port named twice, a deployment port
+  included;
+* a group with no `prefix` under a rule that names a port by its type,
+  a `prefix` that rule does not take, or a `prefix` under a rule that
+  puts no type in a name;
 * a model key or part number another model already uses;
 * more port groups, ports in a group, or bay-and-module combinations
   than the loader will build (the limits are constants at the top of
@@ -315,10 +348,12 @@ and a capture claim in an operator's file grants no `capture` grade.
 Modular chassis (line cards in lettered or numbered slots — every
 bay-and-module combination of a model is compiled at load, which a
 many-bay chassis would make too many), breakout
-lanes, ports a stack consumes as links, ports that belong to a stack
-rather than to one member (a Catalyst's single management interface),
-and literal non-systematic names (a FortiGate's `wan1`, `dmz`).  The
-schema has room for each as an additive field; none has data or a
-consumer today.  A device of one of those kinds can still be declared
+lanes, ports a stack consumes as links, literal non-systematic names
+on one model's own panel (a FortiGate's `wan1`, `dmz`), and the names
+a Catalyst lists for the network modules that are NOT fitted (its
+config holds an interface for every port of every module the bay can
+take; the inventory has the fitted module's, so a job that uses the
+others asks what to do with each).  The schema has room for each as
+an additive field; none has data or a consumer today.  A device of one of those kinds can still be declared
 through its flat target profile, as one device in the one state that
 profile documents.

@@ -502,6 +502,51 @@ class TestManagementPorts:
         assert plan.unplaced == [] and plan.warnings == []
 
 
+class TestAPortOfTheWholeDeployment:
+    """A Catalyst stack has one management interface, which no member
+    owns: its rank is ``None``, as a flat profile's management port's
+    is.  Two such ports pair with each other, whatever the members on
+    either side."""
+
+    STACK = _inventory(
+        (0, "access", ["Gi1/0/1"]), (1, "access", ["Gi2/0/1"]),
+        (None, "mgmt", ["Gi0/0"]),
+        member_ids=[1, 2],
+    )
+
+    def test_it_pairs_with_the_targets(self):
+        target = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]),
+            (None, "mgmt", ["mgmt0"]),
+        )
+        plan = plan_port_mapping(self.STACK, target)
+        assert plan.rename_map == {"Gi1/0/1": "1/1", "Gi2/0/1": "2/1", "Gi0/0": "mgmt0"}
+        (pairing,) = [p for p in plan.pairings if p.role == "mgmt"]
+        assert pairing.member_rank is None
+        assert plan.unplaced == []
+
+    def test_a_member_rank_is_not_a_place_for_it(self):
+        """A management port listed as member 0's is a different
+        place: the two do not pair, and the port is left for a
+        decision, as one the target has no place for."""
+        target = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (0, "mgmt", ["mgmt0"]),
+        )
+        plan = plan_port_mapping(self.STACK, target)
+        (port,) = plan.unplaced
+        assert (port.source, port.member_rank) == ("Gi0/0", None)
+        assert "mgmt0" in plan.unused_target
+
+    def test_with_no_partner_it_has_no_position_and_is_not_dropped(self):
+        """No member is missing for it: the reason is ``no-position``,
+        and a management port is left to the name-shape translator."""
+        target = _inventory((0, "access", ["1/1"]), (1, "access", ["2/1"]))
+        plan = plan_port_mapping(self.STACK, target)
+        (port,) = plan.unplaced
+        assert (port.source, port.reason, port.dropped) == ("Gi0/0", "no-position", False)
+        assert plan.unresolved() == ["Gi0/0"]
+
+
 class TestUsedNames:
     def test_only_used_ports_are_problems(self):
         """A 48-port source that uses 20 ports fits a 24-port target."""
