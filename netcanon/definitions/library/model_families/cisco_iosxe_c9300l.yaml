@@ -81,8 +81,8 @@
 #   * Which interfaces a C9300L or C9300LM config holds besides its
 #     ports (a C9300 config lists every network module's names and an
 #     application-hosting port): no configuration of one was seen.
-#   * The C9300 (cisco_iosxe_c9300.yaml) and the C9300X (not modelled
-#     yet), whose uplinks are modules: DS stacks a C9300L or C9300LM
+#   * The C9300 and the C9300X (cisco_iosxe_c9300.yaml), whose uplinks
+#     are modules: DS stacks a C9300L or C9300LM
 #     only with another of the two, and says a fixed uplink model does
 #     not stack with a modular uplink one, so a deployment of a C9300L
 #     and a C9300 is refused.

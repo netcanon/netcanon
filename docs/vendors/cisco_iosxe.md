@@ -614,7 +614,13 @@ translate it again from `show running-config` as the device prints it.
   each with the network module in its bay (or none).  The
   higher-scale models (C9300-24UB, -48UB, -24UXB) are a family of
   their own, because Cisco's data sheet says they "need to be stacked
-  with other higher-scale models".  A port's name is its type, then
+  with other higher-scale models".  The Catalyst 9300X is in the C9300
+  family, because Cisco stacks it with a C9300 at StackWise-480
+  speeds; its bay takes the C9300X network modules only
+  (`HundredGigE1/1/1-2` on a C9300X-NM-2C), the C9300X-NM-4C only on
+  the C9300X-24Y, -48HX and -48TX, and the names of its own ports
+  (`TwentyFiveGigE1/0/N`, `TenGigabitEthernet1/0/N`) are `inferred`.
+  The C9300X-48HXN is not modelled.  A port's name is its type, then
   switch, module and port, with the type taken from Cisco's interface
   lists for each group of ports: a C9300-48UXM is
   `TwoGigabitEthernet1/0/1-36` and then `TenGigabitEthernet1/0/37-48`,
@@ -661,9 +667,8 @@ translate it again from `show running-config` as the device prints it.
   stack of up to eight whose uplinks are fixed and named as module 1;
   the Multigigabit ports of its UXG models and of the C9300LM-48UX,
   and the C9300LM's `TwentyFiveGigE1/1/1-4` uplinks, are `inferred`.
-  The C9300X and other Catalyst series are not modelled yet (the C9500
-  has target profiles), and a proposal names their type in
-  `unknown_parts`.  A C9300 config lists the
+  Other Catalyst series are not modelled yet (the C9500 has target
+  profiles), and a proposal names their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port; no configuration of
   another Catalyst was seen, so whether one does the same is not

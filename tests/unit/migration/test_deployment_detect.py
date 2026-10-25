@@ -2151,6 +2151,22 @@ class TestCatalystProposal:
         }
         assert proposal.consistent is True and proposal.used_port_count == 2
 
+    def test_a_c9300x_and_a_c9300_stack(self) -> None:
+        """Data sheet: a C9300X "Stacks with C9300 SKUs at StackWise-480
+        speeds", so the two are one family."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision c9300x-48hx", "switch 2 provision c9300-48p",
+            ports=("TenGigabitEthernet1/0/48", "GigabitEthernet2/0/1"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C9300" and proposal.mode == "stack"
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "C9300X-48HX", "id": 1, "modules": {}},
+                {"model": "C9300-48P", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
     def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
         """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
         with Cisco Catalyst 9200 Series Switches"."""

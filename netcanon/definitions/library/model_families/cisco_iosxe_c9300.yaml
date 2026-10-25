@@ -1,8 +1,12 @@
-# Cisco Catalyst 9300 switch series (IOS XE), StackWise-480 models
+# Cisco Catalyst 9300 and 9300X switch series (IOS XE), modular uplinks
 #
-# A fixed-port access switch with ONE network-module bay and a
-# StackWise-480 stack of up to eight members.  Three facts decide every
-# port name on it:
+# A fixed-port access switch with ONE network-module bay and a stack of
+# up to eight members: StackWise-480, or StackWise-1T where every member
+# is a C9300X.  DS says a C9300X "Stacks with C9300 SKUs at StackWise-480
+# speeds", so the two series are one family.  Their network modules are
+# not shared: HIG gives a C9300X C9300X-NM network modules only, and
+# says that "C9300X network modules are supported only on C9300X
+# switches".  Three facts decide every port name on it:
 #
 #   * Every name is `<type><switch>/<module>/<port>`, and the switch
 #     number is never absent: a switch that is in no stack is switch 1,
@@ -27,12 +31,14 @@
 # short tags below are used in the comments of this file only:
 #
 #   HIG   Cisco Catalyst 9300 Series Switches Hardware Installation
-#         Guide: "Product Overview" (Table 1, the C9300 models) and
+#         Guide: "Product Overview" (Table 1, the C9300 models; Table 4,
+#         the C9300X models; Table 5, the C9300X network modules;
+#         Table 6, those modules on a C9300X-48HXN) and
 #         "Installing a Network Module" ("Network Modules Overview";
-#         "Network Module Port Configurations", Tables 1-5).
+#         "Network Module Port Configurations", Tables 1-9).
 #   DS    Cisco Catalyst 9300 Series Switches Data Sheet, Table 2
-#         ("Cisco Catalyst 9300 Series switch configurations") and
-#         Table 3 (network modules).
+#         ("Cisco Catalyst 9300 Series switch configurations"), Table 3
+#         (network modules) and Table 5 (stacking).
 #   CR    Cisco IOS XE 17.12 Command Reference (Catalyst 9300
 #         Switches), "Interface and Hardware Commands", `interface`:
 #         the range of switch, module and port numbers per type.
@@ -47,7 +53,24 @@
 # 48UXM the 48UN's; the two rows are swapped there, and this file
 # follows DS and CR.  HIG Table 4 spells the C9300-NM-2Y's ports
 # "TwentyFiveGigabitEthernet1/1/1-2"; CR and device output spell the
-# type `TwentyFiveGigE`, which is what a config holds.
+# type `TwentyFiveGigE`, which is what a config holds.  HIG's Product
+# Overview says the C9300X-NM-4C "is supported only on C9300X-24Y"; its
+# network-module chapter and DS fit it to the C9300X-24Y, -48HX and
+# -48TX, and this file follows them.  HIG says each port of a
+# C9300X-NM-2C or -NM-4C is a 40 GE/100 GE slot "with a QSFP+
+# connector"; a cage that takes 100G is a QSFP28 one, and the cage here
+# says qsfp28.
+#
+# Inferred, and graded so, each with its reason in its caveat:
+#
+#   * The names of a C9300X's own ports.  No document read names them:
+#     CR names no C9300X, numbers TwentyFiveGigE ports in module 1 only
+#     (1 to 2), and numbers TenGigabitEthernet ports 1 to 24 and 37 to
+#     48 of module 0, which leaves out ports 25 to 36 of a 48-port
+#     C9300X.  They are taken as TwentyFiveGigE<n>/0/1-12 or -24 on a Y
+#     model and TenGigabitEthernet<n>/0/1-24 or -48 on an HX or TX
+#     model: the types a C9300 config gives a 25G port and a 10G
+#     Multigigabit one.
 #
 # Not modelled yet, and said here so that nobody adds it by guessing:
 #
@@ -73,24 +96,29 @@
 #   * The C9300L and C9300LM, whose uplinks are fixed: DS says a
 #     fixed uplink model does not stack with a C9300, so they are a
 #     family of their own (cisco_iosxe_c9300l.yaml).
-#   * The C9300X.  DS says it "Stacks with C9300 SKUs at StackWise-480
-#     speeds", and that its C9300X-NM modules fit only a C9300X; it is
-#     not modelled yet.
+#   * The C9300X-48HXN.  DS gives it "8x 10G Multigigabit ... + 40x 5G
+#     Multigigabit", and no document read says which eight are 10G; and
+#     HIG's Product Overview (Table 6) says that from 17.8.1 ports 7 and
+#     8 of a C9300X-NM-8Y or -NM-8M are "permanently disabled" on it,
+#     which a module of this file cannot say of one model.
+#   * A breakout of a C9300X-NM-2C's or -NM-4C's ports.
+#   * Which interfaces a C9300X config holds besides its ports: no
+#     configuration of one was seen.
 schema: 1
 vendor: cisco_iosxe
 family: C9300
-display_name: "Cisco Catalyst 9300"
+display_name: "Cisco Catalyst 9300 and 9300X"
 naming: catalyst
 default_mode: stack
 
 modes:
   stack:
-    label: "StackWise-480 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    label: "StackWise-480 stack, StackWise-1T where every member is a C9300X (`switch N provision`; a switch that is alone is a stack of one)"
     member_ids: [1, 8]
     naming:
       grade: vendor-doc
       ref: "Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (type, stack member number, module number and port number; switch ports are module 0 and uplink ports module 1; the default device number is 1); Cisco IOS XE 17.12 Command Reference (Catalyst 9300 Switches), interface (switch numbers 1 to 8)"
-    caveat: "Names carry the switch number even on a switch that is alone, and a switch keeps its number until another is assigned to it, so a lone switch can be switch 3. The stack's own lines (switch N provision, switch priorities, StackPower) describe the hardware and are not translated. A C9300 config holds an interface for every port of every network module the bay can take, fitted or not; the names of a module that is not fitted are not ports of this inventory, and a job that uses them asks what to do with each."
+    caveat: "Names carry the switch number even on a switch that is alone, and a switch keeps its number until another is assigned to it, so a lone switch can be switch 3. The stack's own lines (switch N provision, switch priorities, StackPower) describe the hardware and are not translated. A C9300 config holds an interface for every port of every network module the bay can take, fitted or not; the names of a module that is not fitted are not ports of this inventory, and a job that uses them asks what to do with each. Whether a C9300X config does the same is not established: no configuration of one was seen. A C9300X stacks with a C9300 at StackWise-480 speeds and only at the same license level (Cisco Catalyst 9300 Series Switches Data Sheet); the license is not checked here."
 
 modules:
   C9300-NM-4G:
@@ -119,6 +147,28 @@ modules:
     inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Installing a Network Module: Network Modules Overview (two 25 GE SFP28 ports) and Network Module Port Configurations, Table 4 (ports 1/1/1-2); Cisco IOS XE 17.12 Command Reference (Catalyst 9300 Switches), interface (TwentyFiveGigE, module 1, ports 1 to 2)"}
     ports:
       - {role: uplink, count: 2, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+  C9300X-NM-8M:
+    description: "8-port Multigigabit network module (C9300X only)"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Installing a Network Module: Network Modules Overview (eight Multigigabit Ethernet (mGig) module slots; supported only on Cisco Catalyst 9300X Series Switches) and Network Module Port Configurations, Table 8 (configure TenGigabitEthernet1/1/1-8); Cisco Catalyst 9300 Series Switches Data Sheet, Table 3 (Catalyst 9300X 8x 10G/1G Multigigabit Network Module)"}
+    ports:
+      - {role: uplink, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, notes: "Multigigabit"}
+  C9300X-NM-8Y:
+    description: "8-port 25G SFP28 network module (C9300X only)"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Installing a Network Module: Network Modules Overview (eight 25 GE/10 GE/1 GE slots with an SFP28 port in each slot; supported only on Cisco Catalyst 9300X Series Switches) and Network Module Port Configurations, Table 9 (configure TwentyFiveGigE1/1/1-8); Cisco Catalyst 9300 Series Switches Data Sheet, Table 3 (Catalyst 9300X 8x 25G/10G/1G Network Module)"}
+    ports:
+      - {role: uplink, count: 8, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+  C9300X-NM-2C:
+    description: "2-port 100G/40G network module (C9300X only)"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Installing a Network Module: Network Modules Overview (two 40 GE/100 GE slots with a QSFP+ connector in each slot; supported only on Cisco Catalyst 9300X Series Switches) and Network Module Port Configurations, Table 6 (configure HundredGigE1/1/1-2); Cisco Catalyst 9300 Series Switches Data Sheet, Table 3 (Catalyst 9300X 2x 100G/40G Network Module)"}
+    caveat: "The C9300X-NM-2C is modelled as two 100G ports; a breakout of them is not modelled."
+    ports:
+      - {role: uplink, count: 2, prefix: HundredGigE, speed: 100gig, cage: qsfp28}
+  C9300X-NM-4C:
+    description: "4-port 100G/40G network module (C9300X-24Y, -48HX and -48TX only)"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Installing a Network Module: Network Modules Overview (four 40 GE/100 GE slots with a QSFP+ connector in each slot; supported only on C9300X-24Y, C9300X-48HX, and C9300X-48TX models) and Network Module Port Configurations, Table 7 (configure HundredGigE1/1/1-4); Cisco Catalyst 9300 Series Switches Data Sheet, Table 3 (Catalyst 9300X 4x 100G/40G Network Module; compatible only with the C9300X-48HX, C9300X-48TX, and C9300X-24Y models)"}
+    caveat: "The C9300X-NM-4C is modelled as four 100G ports; a breakout of them is not modelled. The data sheet and the network-module chapter of Cisco's hardware installation guide fit it to a C9300X-24Y, -48HX or -48TX; the guide's Product Overview says it is supported only on the C9300X-24Y. The first is followed here."
+    ports:
+      - {role: uplink, count: 4, prefix: HundredGigE, speed: 100gig, cage: qsfp28}
 
 deployment_ports:
   - name: GigabitEthernet0/0
@@ -253,3 +303,69 @@ models:
       - {role: access, count: 48, prefix: FiveGigabitEthernet, speed: 5gig, cage: rj45, poe: true, notes: "Multigigabit"}
     bays:
       "1": {accepts: [C9300-NM-4G, C9300-NM-4M, C9300-NM-8X, C9300-NM-2Q, C9300-NM-2Y]}
+
+  # --- C9300X: C9300X-NM network modules only -----------------------------
+  C9300X-12Y:
+    skus: [C9300X-12Y]
+    display_name: "Cisco Catalyst C9300X-12Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 4 (C9300X-12Y: stackable 12 1/10/25 GE SFP28 downlink ports; supports StackPower+, StackWise-1T and C9300X-NM network modules); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (12 ports 25G/10G/1G SFP28; modular uplinks)"
+      caveat: "C9300X-12Y: no Cisco document read names this model's downlink ports. The command reference names no C9300X and numbers TwentyFiveGigE ports in module 1 only, ports 1 to 2; TwentyFiveGigE1/0/1-12 is inferred from the type a C9300 config gives a 25G port (a C9300-NM-2Y's) and the rule that a switch's own ports are module 0."
+    caveat: "C9300X-12Y: the port count is Cisco's for this model, but no configuration of a C9300X-12Y was seen."
+    ports:
+      - {role: access, count: 12, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+    bays:
+      "1": {accepts: [C9300X-NM-8M, C9300X-NM-8Y, C9300X-NM-2C]}
+
+  C9300X-24Y:
+    skus: [C9300X-24Y]
+    display_name: "Cisco Catalyst C9300X-24Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 4 (C9300X-24Y: stackable 24 1/10/25 GE SFP28 downlink ports; supports C9300X-NM network modules); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (24 ports 25G/10G/1G SFP28; modular uplinks)"
+      caveat: "C9300X-24Y: no Cisco document read names this model's downlink ports. The command reference names no C9300X and numbers TwentyFiveGigE ports in module 1 only, ports 1 to 2; TwentyFiveGigE1/0/1-24 is inferred from the type a C9300 config gives a 25G port (a C9300-NM-2Y's) and the rule that a switch's own ports are module 0."
+    caveat: "C9300X-24Y: the port count is Cisco's for this model, but no configuration of a C9300X-24Y was seen."
+    ports:
+      - {role: access, count: 24, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+    bays:
+      "1": {accepts: [C9300X-NM-8M, C9300X-NM-8Y, C9300X-NM-2C, C9300X-NM-4C]}
+
+  C9300X-24HX:
+    skus: [C9300X-24HX]
+    display_name: "Cisco Catalyst C9300X-24HX"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 4 (C9300X-24HX: stackable 24 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE+ ports; supports StackPower+, StackWise-1T, and C9300X-NM network modules); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (24 ports Cisco UPOE+, 24x 10G Multigigabit; modular uplinks)"
+      caveat: "C9300X-24HX: no Cisco document read names this model's downlink ports. The command reference names no C9300X, and its TenGigabitEthernet range (module 0, ports 1 to 24 and 37 to 48) leaves out ports 25 to 36 of a 48-port C9300X, so it was not written for one; TenGigabitEthernet1/0/1-24 is inferred from the type a C9300 config gives a 10G Multigigabit port (a C9300-24UX's)."
+    caveat: "C9300X-24HX: the port count is Cisco's for this model, but no configuration of a C9300X-24HX was seen."
+    ports:
+      - {role: access, count: 24, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C9300X-NM-8M, C9300X-NM-8Y, C9300X-NM-2C]}
+
+  C9300X-48HX:
+    skus: [C9300X-48HX]
+    display_name: "Cisco Catalyst C9300X-48HX"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 4 (C9300X-48HX: stackable 48 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE+ ports; supports StackPower+, StackWise-1T and C9300X-NM network modules); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48 ports Cisco UPOE+, 48x 10G Multigigabit; modular uplinks)"
+      caveat: "C9300X-48HX: no Cisco document read names this model's downlink ports. The command reference names no C9300X, and its TenGigabitEthernet range (module 0, ports 1 to 24 and 37 to 48) leaves out ports 25 to 36 of a 48-port C9300X, so it was not written for one; TenGigabitEthernet1/0/1-48 is inferred from the type a C9300 config gives a 10G Multigigabit port (a C9300-24UX's)."
+    caveat: "C9300X-48HX: the port count is Cisco's for this model, but no configuration of a C9300X-48HX was seen."
+    ports:
+      - {role: access, count: 48, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C9300X-NM-8M, C9300X-NM-8Y, C9300X-NM-2C, C9300X-NM-4C]}
+
+  C9300X-48TX:
+    skus: [C9300X-48TX]
+    display_name: "Cisco Catalyst C9300X-48TX"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 4 (C9300X-48TX: stackable 48 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) ports; supports StackPower+, StackWise-1T and C9300X-NM network modules); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48 ports data, 48x 10G Multigigabit; modular uplinks)"
+      caveat: "C9300X-48TX: no Cisco document read names this model's downlink ports. The command reference names no C9300X, and its TenGigabitEthernet range (module 0, ports 1 to 24 and 37 to 48) leaves out ports 25 to 36 of a 48-port C9300X, so it was not written for one; TenGigabitEthernet1/0/1-48 is inferred from the type a C9300 config gives a 10G Multigigabit port (a C9300-24UX's)."
+    caveat: "C9300X-48TX: the port count is Cisco's for this model, but no configuration of a C9300X-48TX was seen."
+    ports:
+      - {role: access, count: 48, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C9300X-NM-8M, C9300X-NM-8Y, C9300X-NM-2C, C9300X-NM-4C]}

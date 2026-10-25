@@ -2043,11 +2043,11 @@ nothing, as before.
 **Known limitations**
 
 * Model families ship for a first set of Aruba AOS-S switches and
-  for the Cisco Catalyst 9300, 9200, 9200L, 3850, 3650, 9300L and
-  9300LM; `GET /model-families` is the current list.  A part graded
-  `inferred` says why in its caveat.  Everything else goes through
-  target profiles, and a device with neither a family nor a profile
-  cannot be declared yet.  A
+  for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L
+  and 9300LM; `GET /model-families` is the current list.  A part
+  graded `inferred` says why in its caveat.  Everything else goes
+  through target profiles, and a device with neither a family nor a
+  profile cannot be declared yet.  A
   Catalyst stack has one management interface, `GigabitEthernet0/0`,
   which belongs to no member and pairs with the other side's
   management port, whether that is a family's or a profile's.  A

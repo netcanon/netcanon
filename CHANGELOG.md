@@ -473,7 +473,26 @@ timestamp if your timezone matters for an audit.
   configuration of a C9300L or C9300LM was seen.  The C9300 family's
   YAML said the C9300X stacks apart from a C9300; Cisco's data sheet
   says the two stack at StackWise-480 speeds, and the YAML says so now.
-  The C9300X is not modelled yet.
+- **The Cisco Catalyst 9300X can be declared as a source or target
+  device**, in the `C9300` family, since Cisco stacks a C9300X with a
+  C9300 at StackWise-480 speeds: the C9300X-12Y, -24Y, -24HX, -48HX and
+  -48TX, with the C9300X network modules -- `TenGigabitEthernet1/1/1-8`
+  on a C9300X-NM-8M, `TwentyFiveGigE1/1/1-8` on an -NM-8Y,
+  `HundredGigE1/1/1-2` on an -NM-2C and `HundredGigE1/1/1-4` on an
+  -NM-4C.  A C9300X takes no C9300 module and a C9300 no C9300X one,
+  and the -NM-4C fits only the 24Y, 48HX and 48TX (the data sheet and
+  the hardware guide's network-module chapter; its Product Overview
+  says the 24Y alone, and the module's caveat says so).  Graded
+  `inferred`, with the reason in each caveat: the names of a C9300X's
+  own ports, `TwentyFiveGigE1/0/1-12` or `-24` and
+  `TenGigabitEthernet1/0/1-24` or `-48`, which no Cisco document read
+  gives -- the command reference names no C9300X, and its
+  TenGigabitEthernet range leaves out ports 25 to 36.  Not modelled:
+  the C9300X-48HXN (no document read says which eight of its ports are
+  10G, and two ports of a module are disabled on it), and a breakout of
+  the 100G ports.  The license level is not checked.  No configuration
+  of a C9300X was seen.  `detect-deployment` reads `switch N provision
+  c9300x-48hx` beside a C9300's line as one stack.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both
