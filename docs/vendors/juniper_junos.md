@@ -220,8 +220,10 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   untagged is not established.  ⚠️ Up to 0.7.7 it was read as a
   trunk's native VLAN: IOS-XE wrote it as `switchport trunk native
   vlan` on a routed port, and EOS and NX-OS left it out, in jobs that
-  said `completed`.  `encapsulation flexible-ethernet-services` is not read.  A
-  unit with an address and no tag beside tagged units -- the address
+  said `completed`.  A port's `encapsulation`
+  (`flexible-ethernet-services` and the like) has no form in the
+  tree: it is not translated, and a row of the Tier-3 banner says so.
+  A unit with an address and no tag beside tagged units -- the address
   on the port of an IOS-XE router-on-a-stick -- is written as it
   stands with a `# review:` line: Juniper documents untagged frames on
   such a device through `native-vlan-id` and a unit of that id, and
@@ -421,7 +423,24 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   to 0.7.7 it was written with its own number (`unit 20000`), in a
   job that said `completed`.  A tagged unit 0 with
   `family ethernet-switching` has no form in the tree: it is left
-  out, its device kept, and a row of the Tier-3 banner says so.
+  out, its device kept, and a row of the Tier-3 banner says so.  So
+  is a unit of another kind: one that states a family other than
+  `inet`, `inet6`, `iso` and `mpls` -- `bridge`, `ccc`, `tcc`,
+  `vpls`, or `ethernet-switching` above unit 0, which a port takes
+  under `encapsulation flexible-ethernet-services` ("allows the
+  ethernet-switching family to be configured on any logical interface
+  unit number instead of only unit 0", Juniper, Flexible Ethernet
+  Services) -- or an `encapsulation` and no inet family (`vlan-bridge`,
+  `vlan-ccc`: "you can configure the `ccc` family only", Juniper,
+  `encapsulation (Logical Interface)`).  Unit 0 of such a kind leaves
+  its port with what the port's own lines state, and a routing
+  instance that names such a unit binds nothing.  A routed unit that
+  states an `encapsulation` (`ethernet` on a logical tunnel, whose
+  units then "behave as Ethernet interfaces", Juniper, Configuring
+  Logical Tunnel Interfaces) is kept, and its encapsulation is said.  ⚠️ Up to 0.7.7 each was read as a
+  routed sub-interface with its tag, or as an empty one, and an L2
+  sub-unit's VLANs had no member, in jobs that said `completed` with
+  nothing to report.
   ⚠️ Up to 0.7.7 a tagged unit 0 was read onto its device: its tag
   and its addresses were the port's own on every target
   (`encapsulation dot1Q 54` and the unit's address on the main

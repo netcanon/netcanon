@@ -214,8 +214,8 @@ def test_a_junos_native_vlan_that_names_no_unit_is_said() -> None:
     assert all(i.trunk_native_vlan is None for i in tree.interfaces)
     assert tree.dropped_tier3_sections == [
         "interfaces ge-0/0/1 native-vlan-id 300 -- no unit of that one "
-        "vlan-id takes the device's untagged frames, so the statement is "
-        "not translated"
+        "vlan-id is in the output to take the device's untagged frames, so "
+        "the statement is not translated"
     ]
 
 
