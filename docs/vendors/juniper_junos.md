@@ -207,13 +207,20 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   to Logical Interfaces") -- on a port, an `ae` bundle, a channel or a
   `reth`.  ⚠️ Up to 0.7.7 no such statement was written, from any
   source, Junos included; translate a config with tagged units again.
-  A routed port's `native-vlan-id` is written with
+  A routed port's `native-vlan-id` names the unit of that `vlan-id`
+  as the one that takes the port's untagged frames ("The logical
+  interface on which untagged packets are to be received must be
+  configured with the same native VLAN ID"), and is written with
   `flexible-vlan-tagging` ("To accept untagged packets, include the
   native-vlan-id statement and the flexible-vlan-tagging statement").
-  Onto another vendor it is read as a trunk's native VLAN: IOS-XE
-  writes it as `switchport trunk native vlan` on a routed port and
-  EOS drops it, with nothing said -- set the native sub-interface by
-  hand.  `encapsulation flexible-ethernet-services` is not read.  A
+  It reaches IOS-XE as `encapsulation dot1Q N native` on that
+  sub-interface; onto every other target the job is `partial`
+  (`/interfaces/interface/dot1q-native`).  One that names no unit of
+  one tag is not translated, with a row.  What such a unit sends
+  untagged is not established.  ⚠️ Up to 0.7.7 it was read as a
+  trunk's native VLAN: IOS-XE wrote it as `switchport trunk native
+  vlan` on a routed port, and EOS and NX-OS left it out, in jobs that
+  said `completed`.  `encapsulation flexible-ethernet-services` is not read.  A
   unit with an address and no tag beside tagged units -- the address
   on the port of an IOS-XE router-on-a-stick -- is written as it
   stands with a `# review:` line: Juniper documents untagged frames on

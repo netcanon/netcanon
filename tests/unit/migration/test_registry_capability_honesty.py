@@ -186,11 +186,16 @@ def _maximal_intent() -> CanonicalIntent:
         name="Ethernet2", enabled=True,
         interface_type="ianaift:ethernetCsmacd",
     )
+    # The sub-interface that takes its port's untagged frames walks
+    # ``dot1q-native`` (one tag; Ethernet1's Q-in-Q unit cannot say it).
+    native_unit = CanonicalInterface(
+        name="Ethernet2.30", enabled=True, dot1q_vlan=30, dot1q_native=True,
+    )
     return CanonicalIntent(
         hostname="h", domain="d.test", dns_servers=["10.0.0.53"],
         ntp_servers=["10.0.0.123"], timezone="UTC",
         syslog_servers=["10.0.5.14"],  # valid IPv4 (octets <=255); iosxe_cli/arista IP-guard reparse it
-        interfaces=[iface, iface2],
+        interfaces=[iface, iface2, native_unit],
         vlans=[CanonicalVlan(
             id=10, name="V", description="desc",
             tagged_ports=["Ethernet1"], untagged_ports=["Ethernet2"],

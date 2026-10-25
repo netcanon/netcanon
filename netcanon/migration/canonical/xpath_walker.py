@@ -166,6 +166,8 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             yield "/interfaces/interface/dot1q-vlan"
         if iface.dot1q_inner_vlan is not None:
             yield "/interfaces/interface/dot1q-inner-vlan"
+        if iface.dot1q_native:
+            yield "/interfaces/interface/dot1q-native"
         if iface.trunk_allowed_vlans:
             yield "/interfaces/interface/trunk-allowed-vlans"
         if iface.trunk_native_vlan is not None:

@@ -2010,11 +2010,12 @@ def second_dot1q_tags(statement: str) -> Tags | None:
     second-dot1q <inner>`` (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag
     Termination"; IOS XR, "Configuring 802.1Q VLAN Interfaces").  Every
     other form is ``None``: ``second-dot1q any``, a range or a list of
-    inner tags (an "ambiguous" sub-interface, in Cisco's word), and
-    ``native`` -- each a statement the tree has no form for.  Read for
-    its first value, an ambiguous sub-interface was a sub-interface of
-    the outer tag alone on every target, in jobs that said
-    ``completed``.
+    inner tags (an "ambiguous" sub-interface, in Cisco's word) -- a
+    statement the tree has no form for -- and ``native``, which is
+    one tag and more: the IOS-XE CLI parser reads it itself
+    (``dot1q_native``).  Read for its first value, an ambiguous
+    sub-interface was a sub-interface of the outer tag alone on every
+    target, in jobs that said ``completed``.
 
     Args:
         statement: The line, white space at its ends apart.

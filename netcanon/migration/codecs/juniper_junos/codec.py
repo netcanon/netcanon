@@ -161,6 +161,9 @@ class JunosCodec(CodecBase):
             # `unit N vlan-tags outer X inner Y`, under the parent's
             # `stacked-vlan-tagging` / `flexible-vlan-tagging`.
             "/interfaces/interface/dot1q-inner-vlan",
+            # The unit a routed device's `native-vlan-id` names, under
+            # `flexible-vlan-tagging`.
+            "/interfaces/interface/dot1q-native",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             # `set vlans <NAME> description`, read and written.  Where

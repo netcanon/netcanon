@@ -300,6 +300,18 @@ class CiscoIOSXRCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-native",
+                reason=(
+                    "Which routed sub-interface takes the untagged frames of "
+                    "its port (IOS-XE `encapsulation dot1Q N native`, Junos "
+                    "`native-vlan-id N` with the unit of that `vlan-id`): this "
+                    "codec writes no form for it, so the sub-interface is "
+                    "written for its tag alone and nothing in the output sends "
+                    "the port's untagged frames to it.  Declared so that it is "
+                    "reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group",
                 reason=(
                     "VRRP / FHRP redundancy groups are out of the v1 IOS-XR "
