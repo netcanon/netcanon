@@ -665,6 +665,14 @@ def _parse_interface_vlan(
     with them when the whole config has been read.  Read for its
     number, a ``vlan-id=0`` made a VLAN of id 0 and the whole config
     was refused.
+
+    A line with no ``vlan-id=`` is the default, 1: "vlan-id (integer:
+    1..4094; Default: 1)" (MikroTik, "VLAN"), and an export prints no
+    default ("By default, the export command writes only user-edited
+    configuration, RouterOS defaults are omitted", MikroTik,
+    "Configuration Management").  Such a line was passed over, and the
+    VLAN interface was in no output while its addresses were written
+    on its name, in a job that said ``completed``.
     """
     for line in ticked(lines):
         if not line.startswith("add"):
@@ -673,9 +681,12 @@ def _parse_interface_vlan(
         name = kv.get("name")
         if not name:
             continue
+        # No ``vlan-id=``: the default, 1 (the docstring).  One with
+        # nothing after it is stated and is no VLAN id, and is left out
+        # with the others.
         vlan_id_str = kv.get("vlan-id")
-        if not vlan_id_str:
-            continue
+        if vlan_id_str is None:
+            vlan_id_str = "" if _states_an_empty_vlan_id(line) else "1"
         vlan_id = a_tag(vlan_id_str)
         if vlan_id is None:
             no_id[name] = None
@@ -729,6 +740,17 @@ def _parse_interface_vlan(
         made = vlan_ifaces.setdefault(name, (vlan_id, []))[1]
         made.append(vlan)
         vlan_ifaces[name] = (vlan_id, made)
+
+
+def _states_an_empty_vlan_id(line: str) -> bool:
+    """Whether *line* holds ``vlan-id=`` with nothing after it.
+
+    :func:`_parse_kv` reads no empty value, so such a key is not in what
+    it returns.  The pairs it does read are taken out first, so that a
+    ``vlan-id=`` inside a quoted value (a comment) is not the line's
+    own.
+    """
+    return "vlan-id=" in _KV_RE.sub(" ", line).split()
 
 
 #: What a parent read as a port is typed, by its kind.
