@@ -695,6 +695,12 @@ translate it again from `show running-config` as the device prints it.
   and C3KX-NM-10GT ports, and of the SFP downlinks of the 12S and 24S,
   are `inferred`.  The Catalyst 3560-X, and a stack with a 3750-E or
   3750, are not modelled.
+  The Catalyst 2960-S LAN Base models are one family, `C2960S`, a
+  FlexStack stack of up to four named as a 2960-X's are; its
+  management port is `FastEthernet0`, and a D model's SFP+ uplinks,
+  `TenGigabitEthernet1/0/1-2`, are `inferred`.  The 2960-S LAN Lite
+  models, the 2960-SF, and a stack of a 2960-S with a 2960-X, are not
+  modelled.
   Other Catalyst series are not modelled yet (the C9500 has target
   profiles), and a proposal names their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever

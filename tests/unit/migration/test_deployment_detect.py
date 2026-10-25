@@ -2222,6 +2222,33 @@ class TestCatalystProposal:
         assert proposal.deployment is None
         assert proposal.notes[0].startswith("The members belong to different model families")
 
+    def test_a_2960s_stack(self) -> None:
+        """The 2960-S configuration guide: "For type, enter the model
+        number of the member"; switch numbers 1 to 4."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960s-48fpd-l", "switch 4 provision ws-c2960s-24ts-l",
+            ports=("TenGigabitEthernet1/0/2", "GigabitEthernet4/0/28"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C2960S" and proposal.mode == "stack"
+        # A 2960-S has no module bay, and no note says it has one empty.
+        assert not any("bay empty" in note for note in proposal.notes)
+        assert proposal.deployment.model_dump() == {
+            "mode": "stack", "members": [
+                {"model": "WS-C2960S-48FPD-L", "id": 1, "modules": {}},
+                {"model": "WS-C2960S-24TS-L", "id": 4, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
+    def test_a_2960s_and_a_2960x_are_two_families(self) -> None:
+        """Cisco stacks the two, four at most; a deployment is one
+        family, so the stack is not proposed."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision ws-c2960s-48ts-l", "switch 2 provision ws-c2960x-48ts-l",
+        ), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
+
     def test_a_3750x_stack(self) -> None:
         """The 3750-X command reference: "Specify the switch type of the
         new switch before it joins the stack", the model number its

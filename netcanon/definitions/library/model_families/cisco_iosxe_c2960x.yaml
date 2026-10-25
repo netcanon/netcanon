@@ -73,9 +73,10 @@
 #     and 2 10/100/1000BASE-T uplinks; it does not stack, FAQ): no
 #     document read says which eight ports have PoE, nor which two
 #     uplinks are SFP.
-#   * The Catalyst 2960-S and 2960-SF, with which a 2960-X LAN Base
-#     switch stacks, four at most (DS, SCG): a stack that holds one
-#     cannot be declared.
+#   * A stack with a Catalyst 2960-S or 2960-SF, which Cisco builds of
+#     four at most (DS, SCG): the 2960-S LAN Base models are a family of
+#     their own (cisco_iosxe_c2960s.yaml), the 2960-SF is not modelled,
+#     and a deployment is one family.
 #   * Whether a D model's config also holds GigabitEthernet interfaces
 #     numbered after its downlinks (GigabitEthernet1/0/49-50 beside
 #     TenGigabitEthernet1/0/1-2): no config of a 2960-X was seen.
@@ -96,7 +97,7 @@ modes:
     naming:
       grade: vendor-doc
       ref: "Interface and Hardware Component Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Configuring Interface Characteristics (interface type, stack member number, module number and port number; the module or slot number on the switch is always 0; the 10/100/1000 port numbers always begin at 1, starting with the far left port, for example gigabitethernet1/0/1; SFP module ports are numbered consecutively following the 10/100/1000 ports; the default switch number, before it is integrated into a switch stack, is 1); Security Configuration Guide, Cisco IOS Release 15.2(2)E (Catalyst 2960-X Switch), Managing Switch Stacks (switch stack-member-number provision type, the type being the model number of a supported switch; a homogenous stack can have up to 8 stack members); Catalyst 2960-X and 2960-XR Switch Hardware Installation Guide, Product Overview (up to eight switches can be members of a stack)"
-    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a 2960-X LAN Base switch with a Catalyst 2960-S or 2960-SF in a stack of at most four (Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet); the 2960-S is not modelled, so such a stack cannot be declared. A 2960-X stacks with neither a 2960-XR nor a 2960-X LAN Lite switch (Cisco Catalyst 2960-X Series FAQ). The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 2960-X was seen: whether one with SFP+ uplinks also holds GigabitEthernet interfaces numbered after its downlinks is not established."
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a 2960-X LAN Base switch with a Catalyst 2960-S or 2960-SF in a stack of at most four (Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet); the 2960-S is a family of its own, so such a stack cannot be declared. A 2960-X stacks with neither a 2960-XR nor a 2960-X LAN Lite switch (Cisco Catalyst 2960-X Series FAQ). The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 2960-X was seen: whether one with SFP+ uplinks also holds GigabitEthernet interfaces numbered after its downlinks is not established."
 
 deployment_ports:
   - name: FastEthernet0

@@ -2048,12 +2048,12 @@ nothing, as before.
 
 * Model families ship for a first set of Aruba AOS-S switches and
   for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
-  9300LM, 2960-X, 2960-XR and 3750-X; `GET /model-families` is the
-  current list.  A part graded `inferred` says why in its caveat.  Everything
+  9300LM, 2960-X, 2960-XR, 2960-S and 3750-X; `GET /model-families`
+  is the current list.  A part graded `inferred` says why in its caveat.  Everything
   else goes through target profiles, and a device with neither a
   family nor a profile cannot be declared yet.  A Catalyst stack has
   one management interface (`GigabitEthernet0/0`; `FastEthernet0` on
-  a 2960-X, 2960-XR or 3750-X), which belongs to no member and pairs with the
+  a 2960-X, 2960-XR, 2960-S or 3750-X), which belongs to no member and pairs with the
   other side's management port, whether that is a family's or a
   profile's.  A
   Catalyst's source switches are read from its `switch N provision`

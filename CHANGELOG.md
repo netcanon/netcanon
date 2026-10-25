@@ -545,6 +545,24 @@ timestamp if your timezone matters for an audit.
   and which type word its `switch N provision` line prints is not
   established: `detect-deployment` reads `switch N provision
   ws-c3750x-48p` as a WS-C3750X-48P.
+- **The Cisco Catalyst 2960-S can be declared as a source or target
+  device.**  One model family, `C2960S`: the ten LAN Base models of the
+  hardware guide's table, a FlexStack stack of up to four ("A switch
+  stack is a set of up to four Catalyst 2960-S switches"), named as a
+  2960-X's are -- every port module 0 of the switch, the SFP uplinks
+  numbered on from the downlinks (`GigabitEthernet1/0/49-52` on a
+  WS-C2960S-48TS-L, which the hardware guide labels "49, 50, 51, and
+  52").  The stack's one management port is `FastEthernet0`.  Graded
+  `inferred`: the two SFP+ uplinks of a D model,
+  `TenGigabitEthernet1/0/1-2`, which the configuration guide names
+  nowhere and the hardware guide labels 1 and 2.  Not modelled: the
+  LAN Lite models, whose names Cisco gives with no switch number
+  (`gigabitethernet0/4`); the 2960-SF, whose downlinks are 10/100
+  ports, so that the guide's rule for SFP ports numbered after
+  10/100/1000 ports does not say what its SFP ports are named; the
+  WS-C2960S-48TS-J1; and a stack with a 2960-X, which Cisco builds of
+  up to four.  No configuration of a 2960-S was seen; `detect-deployment` reads
+  `switch N provision ws-c2960s-48fpd-l` as a WS-C2960S-48FPD-L.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both
