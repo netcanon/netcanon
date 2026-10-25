@@ -592,6 +592,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos unit the tree has no form for is left out, and said.**  A
+  unit is not always a routed sub-interface.  Under `encapsulation
+  flexible-ethernet-services` a port takes units of several kinds
+  ("allows the ethernet-switching family to be configured on any
+  logical interface unit number instead of only unit 0", Juniper,
+  Flexible Ethernet Services); a `vlan-bridge` unit is a bridge
+  domain's, a `vlan-ccc` unit a cross-connect's ("you can configure
+  the `ccc` family only", Juniper, `encapsulation (Logical
+  Interface)`), a `vlan-vpls` unit a VPLS circuit's, a `family
+  bridge` unit 0 a bridge domain's port.  The parser read each as a
+  routed sub-interface with its tag (`TenGigabitEthernet0/0/1.100`,
+  `encapsulation dot1Q 100`, on IOS-XE), or as an empty one, and the
+  VLANs of an L2 sub-unit had no member, in jobs that said
+  `completed` with nothing to report; and a port's own
+  `encapsulation` was not read at all, so a Junos config translated
+  to Junos lost it unsaid.  A unit that states a family other than
+  `inet`, `inet6`, `iso` and `mpls` (`ethernet-switching` above unit 0
+  among them; a family word nobody knows as well), or an
+  `encapsulation` and no inet family, is now left out with a row of
+  the Tier-3 banner; unit 0 of such a kind leaves its port with what
+  the port's own lines state, and a routing instance that names such
+  a unit binds nothing.  A routed unit that states an `encapsulation`
+  (`ethernet` on a logical tunnel, whose units then "behave as
+  Ethernet interfaces", Juniper, Configuring Logical Tunnel
+  Interfaces) is kept, and its encapsulation is said in another row
+  with every port's.  No
+  committed capture holds such a unit or such a statement.  A
+  `native-vlan-id` whose unit is left out is said, as one that names
+  no unit was (its row now reads "no unit of that one vlan-id is in
+  the output").  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_unit_the_tree_does_not_hold.py`.
 - **A sub-interface Junos cannot number goes by its tag.**  Juniper's
   `unit` statement gives "Range: 0 through 16,384".  A sub-interface
   of another vendor went to Junos after its port with its own number:
@@ -4650,18 +4681,6 @@ timestamp if your timezone matters for an audit.
   job's report says so.  The IP MTU an IOS-XE or Junos config leaves
   unstated under a raised `mtu` is taken to be the payload, which no
   vendor page read says.
-
-- **A Junos routed port's native VLAN reaches Junos alone.**  `set
-  interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units
-  is read into the field a trunk's native VLAN is kept in, so the
-  IOS-XE renderer writes it as `switchport trunk native vlan 100` on
-  a routed port and EOS drops it, with nothing said.
-  `encapsulation flexible-ethernet-services` on a Junos port is not
-  read, and is not written, with nothing said either.  Nor is the
-  `family ethernet-switching` of a tagged unit above 0 (an L2
-  sub-unit): the unit is written as a sub-interface with its tag and
-  no VLAN, with nothing said.  A tagged unit 0 that switches is left
-  out and said.
 
 - **A RADIUS key stored in a platform's own form is not decoded, and
   goes only to its own platform.**  Cisco type 7 is a reversible

@@ -28,6 +28,13 @@ handler or not, makes the bare name (``_Found.stated``).  A name
 the classifier reads as a port or an ``ae`` has its record whatever
 the lines say (``_HAS_A_RECORD_UNSTATED``).
 
+A unit the tree has no form for -- one that states a family other
+than ``inet``, ``inet6``, ``iso`` and ``mpls`` (``ethernet-switching``
+above unit 0 among them), or an ``encapsulation`` and no inet family:
+a bridge, a cross-connect, a VPLS circuit, a switching unit -- is
+left out, and said; an ``encapsulation`` the output keeps no form of
+is said as well (:func:`_a_unit_the_tree_holds`).
+
 Handles VXLAN switch-options globals (``set switch-options
 vtep-source-interface`` / ``vxlan-port``) by stashing on intent
 scratch attributes during dispatch and back-patching every
@@ -494,7 +501,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if gname in group_lines
     }
 
-    # A unit 0 that carries a tag, made a record of its own.
+    # A unit 0 the tree has no form for, left out; a unit 0 that
+    # carries a tag, made a record of its own.
+    units_not_held = _units_0_the_tree_does_not_hold(iface_state)
     tagged_units_0 = _tagged_units_0(iface_state, found.stated)
 
     # Structural collapse: before materialising, fold each
@@ -610,9 +619,15 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # said (:func:`_tags_of_unit`); a routing instance that names it
     # makes no record of it either.
     unread_tags: list[str] = []
-    # A unit 0 left out for switching under a tag is a unit that names
-    # nothing in the tree as well: no instance binds its port instead.
-    left_out_units: set[str] = {f"{name}.0" for name in tagged_units_0}
+    # A unit 0 left out for switching under a tag, or as a unit the
+    # tree has no form for, is a unit that names nothing in the tree
+    # as well: no instance binds its port instead.
+    left_out_units: set[str] = {
+        *(f"{name}.0" for name in tagged_units_0), *units_not_held,
+    }
+    # Each ``encapsulation`` not translated: the devices' own, then
+    # each routed unit's, as the records are made.
+    encapsulated: list[str] = list(found.encapsulated)
     # How many 802.1Q tags each device's frames carry, which its media
     # MTU counts as well as the Ethernet header.
     device_tags = _tags_of_devices(iface_state, found.tagging)
@@ -654,6 +669,15 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # ``xe-0/0/6:2``, ``so-0/0/0``, ``reth0`` -- is a name
             # like any other here.)
             continue
+        if "." in name and not _a_unit_the_tree_holds(state, unit_0=False):
+            # A unit above 0 (or a tagged unit 0, a record of its own)
+            # of a kind the tree has no form for, before its tags are
+            # read: one row says what it is.
+            units_not_held.append(name)
+            left_out_units.add(name)
+            continue
+        if _ENCAPSULATION in state:
+            encapsulated.append(name if "." in name else f"{name}.0")
         tags: Tags | None = None
         if state.get("tag_statements"):
             read = _tags_of_unit(state["tag_statements"])
@@ -1226,6 +1250,8 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         ),
         *unread_tags,
         *_switching_units_0_row(tagged_units_0),
+        *_units_not_held_row(units_not_held),
+        *_encapsulation_row(encapsulated),
         *_in_several_vlans_row(in_several),
         *_no_native_unit_row(no_native_unit),
         *_older_native_rows(older_native),
@@ -1995,6 +2021,9 @@ class _Found:
         self.once = Uniques()
         self.stated: set[str] = set()
         self.tagging: dict[str, str] = {}
+        # Each device that states an ``encapsulation`` of its own, in
+        # the order read (:func:`_encapsulation_row`).
+        self.encapsulated: dict[str, None] = {}
         # A VLAN's description, by the VLAN's name: a set-form config
         # may state it ahead of ``vlan-id``, so the record it belongs
         # to may not be made yet when the line is read.
@@ -2312,6 +2341,15 @@ def _apply_interfaces(  # noqa: C901
             found.tagging[name] = second
         return
 
+    # ``interfaces <name> encapsulation <type>``: the device's own
+    # encapsulation (``flexible-ethernet-services``, ``ethernet-ccc``,
+    # ``ethernet-bridge`` and the like), which the tree has no form
+    # for: said (:func:`_encapsulation_row`).
+    if second == "encapsulation" and len(tokens) >= 3:
+        if found is not None:
+            found.encapsulated[name] = None
+        return
+
     # ``interfaces <name> mtu <N>`` — shared attribute the
     # structural-collapse render auto-detects.
     if second == "mtu" and len(tokens) >= 3:
@@ -2440,6 +2478,14 @@ def _apply_interfaces(  # noqa: C901
             stated.add(sub_name)
         if len(tokens) < 4:
             return
+        # ``unit <N> family <F>`` and ``unit <N> encapsulation <type>``:
+        # what the unit carries, which decides whether the tree has a
+        # form for it (:func:`_a_unit_the_tree_holds`).  A set of the
+        # unit's own: each line adds one word.
+        if tokens[3] == "family" and len(tokens) >= 5:
+            target_state.setdefault(_FAMILIES, set()).add(tokens[4])
+        elif tokens[3] == "encapsulation" and len(tokens) >= 5:
+            target_state[_ENCAPSULATION] = True
         # ``unit <N> family inet|inet6 mtu <M>``: the largest packet of
         # the family, which Junos sets per family.  ``family inet``'s
         # is the record's IP MTU, on any unit.  ``family inet6``'s is
@@ -2958,6 +3004,88 @@ _DEVICE_KEYS = ("mtu", "lag_member_of", "trunk_native_vlan")
 #: What a unit's ``family ethernet-switching`` lines put in its state.
 _SWITCHING_KEYS = ("switchport_mode", "l2_vlan_member_names", "unit_native_vlan")
 
+#: Where a unit's state keeps the families it states, and that it
+#: states an ``encapsulation`` (:func:`_a_unit_the_tree_holds`).
+_FAMILIES = "families"
+_ENCAPSULATION = "encapsulation"
+
+#: The families a routed unit states.  A unit that states another is
+#: no sub-interface the tree holds.
+_ROUTED_FAMILIES = frozenset({"inet", "inet6", "iso", "mpls"})
+
+#: Of those, the families that carry addresses: a unit that states an
+#: ``encapsulation`` and neither routes nothing the tree can hold.
+_INET_FAMILIES = frozenset({"inet", "inet6"})
+
+
+def _a_unit_the_tree_holds(state: dict[str, Any], *, unit_0: bool) -> bool:
+    """Whether the tree has a form for the unit whose state is *state*.
+
+    The tree holds a unit as a routed sub-interface, and unit 0 as its
+    device's own record, a switchport included (``family
+    ethernet-switching``).  A unit that states any other family is a
+    unit of another kind: ``bridge`` and ``vpls`` units are a bridge
+    domain's and a VPLS instance's, ``ccc`` and ``tcc`` a
+    cross-connect's, and ``ethernet-switching`` above unit 0 is a
+    switching unit, which a port takes under ``encapsulation
+    flexible-ethernet-services`` ("allows the ethernet-switching family
+    to be configured on any logical interface unit number instead of
+    only unit 0", Juniper, Flexible Ethernet Services).  And a unit
+    that states an ``encapsulation`` and no inet family routes nothing
+    the tree can hold: such a unit's encapsulation is often all it
+    states (``vlan-bridge``, ``vlan-ccc``, ``vlan-vpls``: "you can
+    configure the ``ccc`` family only", Juniper, ``encapsulation
+    (Logical Interface)``).  Each was read as a routed sub-interface
+    with its tag, or as an empty one, in a job that said
+    ``completed``.
+
+    Such a unit is left out, and said.  A routed unit that states an
+    ``encapsulation`` (``ethernet`` on a logical tunnel: "The logical
+    tunnel interfaces are configured to behave as Ethernet interfaces
+    with the encapsulation ethernet statement", Juniper, Configuring
+    Logical Tunnel Interfaces) is kept, and its encapsulation is said
+    (:func:`_encapsulation_row`): the tree has no form for it.  A
+    family word is compared as it was written: one this list does not
+    know is a family of a unit the tree does not hold.
+
+    Args:
+        state: The unit's state.
+        unit_0: The unit is unit 0, whose ``ethernet-switching`` is
+            its device's switchport.
+    """
+    families = state.get(_FAMILIES, set())
+    for family in families:
+        if family not in _ROUTED_FAMILIES and not (
+            unit_0 and family == "ethernet-switching"
+        ):
+            return False
+    return _ENCAPSULATION not in state or bool(families & _INET_FAMILIES)
+
+
+def _units_0_the_tree_does_not_hold(
+    iface_state: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Leave out each unit 0 the tree has no form for
+    (:func:`_a_unit_the_tree_holds`), and return their names
+    (``<device>.0``), in the order read.
+
+    Unit 0's lines are read onto its device's record as well as into
+    the unit's bucket (``_UNIT_0``); the device keeps what its own
+    lines state (``_DEVICE_KEYS``, and ``_OWN``), as it does when a
+    tagged unit 0 is a record of its own (:func:`_tagged_units_0`),
+    and the port is there with nothing of the unit on it.
+    """
+    left_out: list[str] = []
+    for name, state in ticked(list(iface_state.items())):
+        unit = state.get(_UNIT_0)
+        if not unit or _a_unit_the_tree_holds(unit, unit_0=True):
+            continue
+        device = {key: state[key] for key in _DEVICE_KEYS if key in state}
+        device.update(state.get(_OWN, {}))
+        iface_state[name] = device
+        left_out.append(f"{name}.0")
+    return left_out
+
 
 def _tagged_units_0(
     iface_state: dict[str, dict[str, Any]], stated: set[str],
@@ -3035,6 +3163,42 @@ def _switching_units_0_row(names: list[str]) -> list[str]:
         f"interfaces {shown}: unit 0 with a tag and family "
         f"ethernet-switching -- a tagged unit that switches has no form "
         f"in the tree, so the unit is not translated"
+    ]
+
+
+def _units_not_held_row(names: list[str]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for every unit the tree
+    has no form for (:func:`_a_unit_the_tree_holds`), a few named and
+    the rest counted."""
+    if not names:
+        return []
+    shown = ", ".join(names[:IN_SEVERAL_SHOWN])
+    rest = len(names) - IN_SEVERAL_SHOWN
+    if rest > 0:
+        shown += f" and {rest} more"
+    return [
+        f"interfaces {shown}: a unit that states a family other than "
+        f"inet, inet6, iso and mpls (ethernet-switching above unit 0 "
+        f"among them), or an encapsulation and no inet family -- a "
+        f"bridge, a cross-connect, a VPLS circuit or a switching unit, "
+        f"which the tree has no form for, so the unit is not translated"
+    ]
+
+
+def _encapsulation_row(names: list[str]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for every ``encapsulation``
+    that is not translated -- a device's own, and a routed unit's
+    (:func:`_a_unit_the_tree_holds`) -- a few named and the rest
+    counted.  A unit left out is in its own row, and not here."""
+    if not names:
+        return []
+    shown = ", ".join(names[:IN_SEVERAL_SHOWN])
+    rest = len(names) - IN_SEVERAL_SHOWN
+    if rest > 0:
+        shown += f" and {rest} more"
+    return [
+        f"interfaces {shown}: encapsulation -- the tree has no form for "
+        f"an interface's encapsulation, so the statement is not translated"
     ]
 
 
@@ -3222,8 +3386,9 @@ def _no_native_unit_row(statements: list[str]) -> list[str]:
     if rest > 0:
         shown += f" and {rest} more"
     return [
-        f"interfaces {shown} -- no unit of that one vlan-id takes the "
-        f"device's untagged frames, so the statement is not translated"
+        f"interfaces {shown} -- no unit of that one vlan-id is in the "
+        f"output to take the device's untagged frames, so the statement is "
+        f"not translated"
     ]
 
 
