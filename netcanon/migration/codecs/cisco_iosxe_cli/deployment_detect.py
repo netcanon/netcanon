@@ -26,8 +26,9 @@ says in its notes:
 
 * a ``switch N provision`` line shows what the stack is PROVISIONED
   for; the switch need not be in the stack;
-* no line read here states a network module, so each switch is
-  proposed with its module bay empty.  A C9300 config holds an
+* no line read here states a network module, so no switch is
+  proposed with one fitted (whether a switch has a bay at all is the
+  model registry's to say: a 2960-X has none).  A C9300 config holds an
   interface for every port of every module the bay can take, fitted or
   not, and the proposal's check then lists those names as names the
   proposed device does not have;
@@ -77,10 +78,11 @@ _NOTE_MEMBER = (
     "the stack."
 )
 _NOTE_MODULE = (
-    "No line of the config states a network module, so each switch is "
-    "proposed with its module bay empty.  A Catalyst config can hold an "
-    "interface for every port of every module the bay takes, fitted or "
-    "not (a C9300's does): declare the module that is fitted."
+    "No line of the config states a network module, so no switch is "
+    "proposed with one fitted.  A Catalyst config can hold an interface "
+    "for every port of every module a switch's bay takes, fitted or not "
+    "(a C9300's does): where a switch has a bay, declare the module that "
+    "is fitted."
 )
 _NOTE_XML = (
     "The config is XML.  The lines that state a Catalyst's hardware are "
@@ -122,8 +124,8 @@ def detect_deployment(raw_text: str) -> DetectedDeployment | None:
         left margin).  A detection may have NO members: the text is
         XML, or every such line could not be read.  Its FIRST note then
         says why.  ``fabric`` is ``"switch"``, the word each line
-        begins with; the members are in number order, each with its
-        bay empty (no line states a module).
+        begins with; the members are in number order, each with no
+        module (no line states one).
 
     Raises:
         ParseError: A banner, or another body of text, cannot be told

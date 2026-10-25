@@ -385,10 +385,12 @@ timestamp if your timezone matters for an audit.
   line for each switch of its stack (a switch that is alone too), and
   `detect-deployment` -- and with it the source picker of the
   Interface rename modal -- now reads them: the members by switch
-  number, in the family's `stack` mode, each line quoted as evidence.
-  The notes say that the line is what the stack is provisioned for,
-  and that no line states a network module, so each switch's bay is
-  proposed empty; a C9300 config, which holds the interfaces of every
+  number, in the family's mode that numbers its switches (`stack`;
+  `standalone` for a 2960-X LAN Lite switch), each line quoted as
+  evidence.  The notes say that the line is what the stack is
+  provisioned for, and that no line states a network module, so no
+  switch is proposed with one fitted (a 2960-X, a 3650, a C9200L and a
+  C9300L have no bay); a C9300 config, which holds the interfaces of every
   module the bay takes, is then `consistent: false` and lists them.
   Lines in a banner or a stanza are not read;
   a line that sets out to state a switch and cannot be read is

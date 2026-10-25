@@ -2112,7 +2112,7 @@ class TestDetectDeployment:
         # and the config does not say which is fitted.
         assert proposal["consistent"] is False
         assert "TenGigabitEthernet1/1/1" in proposal["missing_ports"]
-        assert any("module bay empty" in note for note in proposal["notes"])
+        assert any("no switch is proposed with one fitted" in note for note in proposal["notes"])
 
     def test_a_vendor_without_a_detector_says_so(self, client: TestClient) -> None:
         resp = client.post(self.URL, json={

@@ -1764,8 +1764,8 @@ Three things it cannot show, which its notes say.  The line is what
 the stack is *provisioned* for;
 Cisco's guide says the stack keeps it "whether or not the provisioned
 switch is part of the stack".  No line states a network module, so
-each switch is proposed with its bay empty: declare the module that is
-fitted.  A C9300 config holds an interface for every port of every
+no switch is proposed with one fitted: where a switch has a bay,
+declare the module that is fitted.  A C9300 config holds an interface for every port of every
 module the bay takes, fitted or not, so a proposal from one is
 `consistent: false` and lists those names, with
 `AppGigabitEthernet1/0/1` (the application-hosting interface): a

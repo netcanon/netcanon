@@ -449,7 +449,7 @@ class TestSourceDeviceIsReadFromTheConfig:
         )
         expect(page.locator(_tid("migrate-device-source-mode-select"))).to_have_value("stack")
         expect(page.locator(_tid("migrate-device-source-member-0-id"))).to_have_value("2")
-        expect(_source_note(page)).to_contain_text("module bay empty")
+        expect(_source_note(page)).to_contain_text("no switch is proposed with one fitted")
         lines = page.locator(_tid("migrate-device-source-note-read-from"))
         lines.locator("summary").click()
         expect(lines).to_contain_text("switch 2 provision c9300-24p")

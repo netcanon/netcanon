@@ -637,8 +637,8 @@ translate it again from `show running-config` as the device prints it.
   Availability Configuration Guide, IOS XE 17.12.x, Catalyst 9300,
   "Offline Configuration to Provision a Stack Member") -- so it states
   what the stack is provisioned for.  No line of the config states a
-  network module, so a switch is proposed with its bay empty; declare
-  the module that is fitted.  The XML of the NETCONF codec is not
+  network module, so no switch is proposed with one fitted; where a
+  switch has a bay, declare the module that is fitted.  The XML of the NETCONF codec is not
   read.  The Catalyst 9200 is three families, because Cisco stacks
   none of them with another: `C9200`, `C9200-PB` (the C9200-24PB and
   -48PB) and `C9200L`, whose uplinks are fixed and named as module 1

@@ -1922,6 +1922,7 @@ class TestCatalystDetector:
         assert notes[0].startswith("A `switch <number> provision` line shows what the stack is provisioned for")
         assert "whether or not that switch is in the stack" in notes[0]
         assert notes[1].startswith("No line of the config states a network module")
+        assert "no switch is proposed with one fitted" in notes[1]
         assert "declare the module that is fitted" in notes[1]
         assert len(notes) == 2
 
@@ -2204,6 +2205,8 @@ class TestCatalystProposal:
             "switch 1 provision ws-c2960x-24ts-ll", ports=("GigabitEthernet1/0/26",),
         ), REGISTRY)
         assert proposal.family == "cisco_iosxe/C2960X-LL" and proposal.mode == "standalone"
+        # A 2960-X has no module bay, and no note says it has one empty.
+        assert not any("bay empty" in note for note in proposal.notes)
         assert proposal.deployment.model_dump() == {
             "mode": "standalone", "members": [
                 {"model": "WS-C2960X-24TS-LL", "id": 1, "modules": {}},
