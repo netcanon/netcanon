@@ -884,6 +884,32 @@ for _model, _access_names in _C3750X_PANELS.items():
             list(_access_names), list(_uplinks),
         )
 
+#: Catalyst 9500 (UADP 2.0), from the hardware guide's Product Overview
+#: (Table 1 and the network modules' Table 9) and the 17.12 configuration
+#: guide's breakout tables, which name the 40G ports of a C9500-12Q and
+#: of a C9500-NM-2Q.  Inferred (see KNOWN_INFERRED_PARTS): the
+#: TenGigabitEthernet ports of a C9500-16X, a C9500-40X and a
+#: C9500-NM-8X, which no page read names.  Only the C9500-16X and -40X
+#: take a module, either one.
+_C9500_PANELS: dict[str, list[str]] = {
+    "C9500-12Q": _run(1, 12, "FortyGigabitEthernet1/0/"),
+    "C9500-24Q": _run(1, 24, "FortyGigabitEthernet1/0/"),
+    "C9500-16X": _run(1, 16, "TenGigabitEthernet1/0/"),
+    "C9500-40X": _run(1, 40, "TenGigabitEthernet1/0/"),
+}
+_C9500_BAY_1: dict[tuple, list[str]] = {
+    (): [],
+    (("1", "C9500-NM-8X"),): _run(1, 8, "TenGigabitEthernet1/1/"),
+    (("1", "C9500-NM-2Q"),): _run(1, 2, "FortyGigabitEthernet1/1/"),
+}
+for _model, _access_names in _C9500_PANELS.items():
+    for _fitted, _uplinks in _C9500_BAY_1.items():
+        if _fitted and _model.endswith("Q"):
+            continue
+        EXPECTED_INVENTORIES[(_C, _model, "stackwise-virtual", _fitted)] = (
+            list(_access_names), list(_uplinks),
+        )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -901,6 +927,7 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C2960S": ["FastEthernet0"],
     "cisco_iosxe/C2960XR": ["FastEthernet0"],
     "cisco_iosxe/C3750X": ["FastEthernet0"],
+    "cisco_iosxe/C9500": ["GigabitEthernet0/0"],
 }
 
 
@@ -984,7 +1011,9 @@ class TestExactInventories:
         2960-XR's or 2960-S's letter after its PoE letters is its fixed
         uplinks, as the hardware guides' Product Overviews give them: D
         two SFP+ (10G), S four SFP (1G), or two on a LAN Lite (``-LL``)
-        switch."""
+        switch.  A 9500's ``-12Q`` is twelve 40G ports and its ``-40X``
+        forty 10G ones, as the hardware guide's Table 1 gives them, and
+        none is a fixed uplink."""
         sku = model.skus[0]
         fixed = [(g.count, g.speed) for g in model.ports if g.role == "uplink"]
         if sku.startswith("WS-C3650-"):
@@ -994,6 +1023,12 @@ class TestExactInventories:
                 "S": [(4, "gig")], "D": [(2, "gig"), (2, "10gig")],
                 "Q": [(4, "10gig")], "R": [(8, "10gig")],
             }[count.group(2)], sku
+        elif sku.startswith("C9500-"):
+            count = re.fullmatch(r"C9500-(\d+)([QX])", sku)
+            assert count, sku
+            assert not fixed, sku
+            speed = {"Q": "40gig", "X": "10gig"}[count.group(2)]
+            assert {g.speed for g in model.ports if g.role == "access"} == {speed}, sku
         elif sku.startswith(("WS-C2960X", "WS-C2960S")):
             count = re.fullmatch(r"WS-C2960(?:XR?|S)-(\d+)(?:FP|LP|P|T)([DS])-(LL|L|I)", sku)
             assert count, sku
@@ -1529,14 +1564,15 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
         )
     },
     # Cisco Catalyst 9200, 9200L, 3850, 3650, 9300L, 9300LM, 2960-X,
-    # 2960-XR, 2960-S and 3750-X: the PID is the model key (a 3850's,
-    # 3650's or 3750-X's without its license suffix; a 2960-X's or
-    # 2960-S's with it, since it is part of the PID).
+    # 2960-XR, 2960-S, 3750-X and 9500: the PID is the model key (a
+    # 3850's, 3650's, 3750-X's or 9500's without its license suffix; a
+    # 2960-X's or 2960-S's with it, since it is part of the PID).
     **{
         ("cisco_iosxe", pid): pid
         for pid in (
             *_C9200_PANELS, *_C9200L, *_C3850_PANELS, *_C3650, *_C9300L,
             *_C2960X, *_C2960X_LL, *_C2960XR, *_C2960S, *_C3750X_PANELS,
+            *_C9500_PANELS,
         )
     },
 }
@@ -1609,6 +1645,13 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "cisco_iosxe/C3750X / module / C3KX-NM-10GT",
     "cisco_iosxe/C3750X / panel / WS-C3750X-12S",
     "cisco_iosxe/C3750X / panel / WS-C3750X-24S",
+    # A 9500's 10G ports that no page read names: the front panel of a
+    # C9500-16X or -40X, and a C9500-NM-8X.  Their configuration guide
+    # gives a 10G port of module 0 or 1 the type TenGigabitEthernet only
+    # as a breakout port.
+    "cisco_iosxe/C9500 / panel / C9500-16X",
+    "cisco_iosxe/C9500 / panel / C9500-40X",
+    "cisco_iosxe/C9500 / module / C9500-NM-8X",
 }
 
 
@@ -2539,6 +2582,131 @@ class TestCiscoC3750X:
         for key, model in self.FAMILY.models.items():
             powered = re.search(r"-\d+(?:PF|P|U)$", key) is not None
             assert {g.poe for g in model.ports} == {powered}, key
+        for module in self.FAMILY.modules.values():
+            assert not any(g.poe for g in module.ports)
+
+
+_C9500_INFERRED = ("C9500-16X", "C9500-40X")
+#: Part numbers of a Catalyst 9500 that no family models: the bundles of
+#: the hardware guide's Table 2 (a base model with a module fitted), and
+#: the High Performance models of its Table 1.
+_C9500_NOT_MODELLED = (
+    "C9500-16X-2Q", "C9500-40X-2Q", "C9500-24X", "C9500-48X",
+    "C9500-32C", "C9500-32QC", "C9500-48Y4C", "C9500-24Y4C",
+)
+
+
+class TestCiscoC9500:
+    """A Catalyst 9500 (UADP 2.0) is alone or one of a StackWise Virtual
+    pair, switch 1 or 2, of one model, with one management port,
+    GigabitEthernet0/0.  The 40G ports of a C9500-12Q, -24Q and
+    C9500-NM-2Q are Cisco's own names; the 10G ports of a C9500-16X,
+    -40X and C9500-NM-8X are inferred and say so; a breakout is not
+    modelled, and says so."""
+
+    FAMILY = REGISTRY.families["cisco_iosxe/C9500"]
+    MODE = "stackwise-virtual"
+
+    def test_the_models(self) -> None:
+        """The hardware guide's Installing a Network Module: the
+        C9500-NM-8X and C9500-NM-2Q are supported on the C9500-16X and
+        C9500-40X; the 12Q and 24Q take none."""
+        assert sorted(self.FAMILY.models) == sorted(_C9500_PANELS)
+        assert list(self.FAMILY.modules) == ["C9500-NM-8X", "C9500-NM-2Q"]
+        for key, model in self.FAMILY.models.items():
+            if key.endswith("X"):
+                assert list(model.bays) == ["1"], key
+                assert model.bays["1"].accepts == ["C9500-NM-8X", "C9500-NM-2Q"], key
+            else:
+                assert not model.bays, key
+
+    @pytest.mark.parametrize("pid", _C9500_NOT_MODELLED)
+    def test_what_is_not_modelled_is_not_resolved(self, pid: str) -> None:
+        assert REGISTRY.resolve("cisco_iosxe", pid) is None
+
+    def test_what_is_not_modelled_is_said(self) -> None:
+        text = (FAMILIES_DIR / "cisco_iosxe_c9500.yaml").read_text(encoding="utf-8")
+        for pid in _C9500_NOT_MODELLED:
+            assert pid in text, pid
+        assert "A breakout" in text and "declare the base model and the module" in text
+
+    def test_a_pair_of_two(self) -> None:
+        """HA: "The valid values for the new switch number are 1 and 2",
+        and a switch that is alone is switch 1."""
+        assert list(self.FAMILY.modes) == [self.MODE]
+        assert self.FAMILY.modes[self.MODE].member_ids == (1, 2)
+        alone = _compile("cisco_iosxe", None, {"model": "C9500-24Q"})
+        assert (alone.mode, alone.mode_defaulted) == (self.MODE, True)
+        assert alone.names()[0] == "FortyGigabitEthernet1/0/1"
+        pair = _compile("cisco_iosxe", self.MODE, {"model": "C9500-24Q"}, {"model": "C9500-24Q"})
+        assert pair.names(role="access")[24] == "FortyGigabitEthernet2/0/1"
+        with pytest.raises(Exception, match="outside 1-2"):
+            _compile("cisco_iosxe", self.MODE, {"model": "C9500-24Q", "id": 3})
+
+    @pytest.mark.parametrize("other", ["C9300-48P", "WS-C3850-24P", "WS-C2960X-48TS-L"])
+    def test_a_9500_pairs_with_no_other_family(self, other: str) -> None:
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("cisco_iosxe", self.MODE, {"model": "C9500-40X"}, {"model": other})
+
+    def test_the_modules(self) -> None:
+        inventory = _compile(
+            "cisco_iosxe", self.MODE,
+            {"model": "C9500-40X", "modules": {"1": "C9500-NM-8X"}},
+            {"model": "C9500-40X", "modules": {"1": "C9500-NM-2Q"}},
+        )
+        uplinks = [(p.name, p.speed, p.cage, p.evidence) for p in inventory.ports if p.role == "uplink"]
+        assert uplinks == [
+            *((f"TenGigabitEthernet1/1/{n}", "10gig", "sfp+", "inferred") for n in range(1, 9)),
+            *((f"FortyGigabitEthernet2/1/{n}", "40gig", "qsfp+", "vendor-doc") for n in (1, 2)),
+        ]
+        assert inventory.names(role="mgmt") == ["GigabitEthernet0/0"]
+        with pytest.raises(Exception, match="does not take 'C9300-NM-8X'"):
+            _compile("cisco_iosxe", self.MODE, {"model": "C9500-16X", "modules": {"1": "C9300-NM-8X"}})
+
+    @pytest.mark.parametrize("pid", _C9500_INFERRED)
+    def test_what_is_inferred_says_so(self, pid: str) -> None:
+        inventory = _compile("cisco_iosxe", self.MODE, {"model": pid})
+        assert {p.evidence for p in inventory.ports if p.member_rank is not None} == {"inferred"}
+        caveat = next(c for c in inventory.caveats if c.startswith(f"{pid}: "))
+        assert "no page of Cisco's read names its ports" in caveat and "It is inferred" in caveat
+        assert "1-Gigabit SFP module" in caveat
+        module = self.FAMILY.modules["C9500-NM-8X"].inventory
+        assert module.grade == "inferred" and "no page of Cisco's read names its ports" in module.caveat
+
+    def test_what_is_not_inferred_says_nothing_of_it(self) -> None:
+        for pid in ("C9500-12Q", "C9500-24Q"):
+            inventory = _compile("cisco_iosxe", self.MODE, {"model": pid})
+            assert {p.evidence for p in inventory.ports} == {"vendor-doc"}, pid
+            assert not any("inferred" in c for c in inventory.caveats), pid
+        nm_2q = self.FAMILY.modules["C9500-NM-2Q"]
+        assert nm_2q.inventory.grade == "vendor-doc" and "inferred" not in nm_2q.caveat
+
+    def test_a_breakout_is_not_modelled_and_says_so(self) -> None:
+        """CG: with only 40G QSFP modules, configure the 40G ports and
+        "disregard" the TenGigabitEthernet names of their breakout."""
+        for pid in ("C9500-12Q", "C9500-24Q"):
+            assert "a breakout of them is not modelled" in self.FAMILY.models[pid].panel.caveat, pid
+        assert "a breakout of them" in self.FAMILY.modules["C9500-NM-2Q"].caveat
+        caveat = self.FAMILY.modes[self.MODE].caveat
+        assert "disregard" in caveat and "TenGigabitEthernet1/0/1-48 on a C9500-12Q" in caveat
+        assert "those names are not ports of this inventory" in caveat
+
+    def test_the_management_port(self) -> None:
+        """MGMT: the switches of a pair "use a single management plane"."""
+        assert [(p.name, p.role, p.speed, p.cage) for p in self.FAMILY.deployment_ports] == [
+            ("GigabitEthernet0/0", "mgmt", "gig", "rj45"),
+        ]
+        pair = _compile("cisco_iosxe", self.MODE, {"model": "C9500-16X"}, {"model": "C9500-16X"})
+        assert [p.name for p in pair.ports if p.role == "mgmt"] == ["GigabitEthernet0/0"]
+
+    def test_what_is_not_checked_is_said(self) -> None:
+        caveat = self.FAMILY.modes[self.MODE].caveat
+        assert "must be of the same switch model" in caveat and "neither is checked here" in caveat
+        assert "No configuration of a Catalyst 9500 was seen" in caveat
+
+    def test_no_poe(self) -> None:
+        for model in self.FAMILY.models.values():
+            assert not any(g.poe for g in model.ports)
         for module in self.FAMILY.modules.values():
             assert not any(g.poe for g in module.ports)
 

@@ -561,8 +561,33 @@ timestamp if your timezone matters for an audit.
   ports, so that the guide's rule for SFP ports numbered after
   10/100/1000 ports does not say what its SFP ports are named; the
   WS-C2960S-48TS-J1; and a stack with a 2960-X, which Cisco builds of
-  up to four.  No configuration of a 2960-S was seen; `detect-deployment` reads
-  `switch N provision ws-c2960s-48fpd-l` as a WS-C2960S-48FPD-L.
+  up to four.  No configuration of a 2960-S was seen;
+  `detect-deployment` reads `switch N provision ws-c2960s-48fpd-l` as a
+  WS-C2960S-48FPD-L.
+- **The Cisco Catalyst 9500 (UADP 2.0) can be declared as a source or
+  target device.**  One model family, `C9500`: the four base models of
+  the hardware guide's table, C9500-12Q, -24Q, -16X and -40X, alone or
+  one of a StackWise Virtual pair (mode `stackwise-virtual`; "The valid
+  values for the new switch number are 1 and 2"), a switch that is
+  alone being switch 1.  The pair's one management port is
+  `GigabitEthernet0/0`.  A C9500-16X or -40X takes one network module,
+  the C9500-NM-8X or C9500-NM-2Q, whose ports are module 1.  The 40G
+  ports of a C9500-12Q, -24Q and C9500-NM-2Q are named as Cisco's
+  breakout tables name them (`FortyGigabitEthernet1/0/1-12`,
+  `FortyGigabitEthernet1/1/1-2`).  Graded `inferred`, each with its
+  reason: the 10G ports of a C9500-16X, -40X and C9500-NM-8X
+  (`TenGigabitEthernet1/0/1-40`, `TenGigabitEthernet1/1/1-8`), which no
+  page read names.  Not modelled: a breakout, whose
+  `TenGigabitEthernet` names Cisco tells an operator to disregard while
+  the 40G ports are in use; the bundle part numbers (C9500-16X-2Q,
+  C9500-40X-2Q, C9500-24X, C9500-48X), declared as the base model with
+  its module; the High Performance models and the 9500X, of which the
+  C9500-48Y4C and C9500-24Y4C keep their target profiles; and a check
+  that both switches of a pair are one model at one license level, as
+  Cisco requires.  No configuration of a Catalyst 9500 was seen, and
+  whether one prints a `switch N provision` line is not established:
+  `detect-deployment` reads `switch N provision c9500-40x` as a
+  C9500-40X.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

@@ -1,0 +1,155 @@
+# Cisco Catalyst 9500 (UADP 2.0): C9500-12Q, C9500-24Q, C9500-16X, C9500-40X
+#
+# A fixed-port switch, alone or one of a StackWise Virtual pair of two
+# ("The valid values for the new switch number are 1 and 2", HA).  Not
+# a stack: the two switches of a pair are joined through front-panel
+# ports (`stackwise-virtual link 1` under an interface, HA).  How a name
+# is made, from CG's "Interface Configuration Mode" and HA:
+#
+#   * `<type><switch>/<module>/<port>`.  "By default in standalone mode,
+#     the switches are identified as Switch 1 unless explicitly
+#     changed" (HA): a switch that is alone is switch 1, and a pair is
+#     switches 1 and 2.
+#   * "switch (downlink) ports are 0, and uplink ports are 1": the front
+#     panel is module 0, numbered from 1 "starting with the far left
+#     port when facing the front of the device"; a C9500-16X's or
+#     -40X's network module is module 1, whose numbers restart.  CG's
+#     examples are FortyGigabitEthernet1/0/1 and FortyGigabitEthernet1/0/8.
+#   * CG's breakout tables name a C9500-12Q's twelve 40G ports
+#     FortyGigabitEthernet1/0/1-12 and a C9500-NM-2Q's two
+#     FortyGigabitEthernet1/1/1-2.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# A pair has ONE management interface, GigabitEthernet0/0 ("The
+# Ethernet management port, also referred to as the Gi0/0 or
+# GigabitEthernet0/0 port", HIG; "the switches in a Cisco StackWise
+# Virtual solution use a single management plane", MGMT): each switch
+# has the jack and the active switch's carries the link.  It is
+# declared once, under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Cisco Catalyst 9500 Series Switches Hardware Installation
+#         Guide, "Product Overview" (Table 1, the base PIDs; Table 2,
+#         the bundle PIDs; Table 9, the network modules; the Ethernet
+#         management port).
+#   HIGNM The same guide, "Installing a Network Module" (which models
+#         take one; the blank module).
+#   CG    Cisco IOS XE 17.12 Interface and Hardware Components
+#         Configuration Guide (Catalyst 9500 Switches), "Configuring
+#         Interface Characteristics" (Interface Configuration Mode;
+#         Network Modules; Configuring a Breakout Interface, with a
+#         table of the names to configure and to disregard for each
+#         model and module).
+#   CG169 The 16.9 release of the same guide (its example of SFP uplink
+#         ports, tengigabitethernet1/1/1 through tengigabitethernet1/1/4).
+#   MGMT  CG, "Configuring Ethernet Management Port".
+#   HA    Cisco IOS XE 17.12 High Availability Configuration Guide
+#         (Catalyst 9500 Switches), "Configuring Cisco StackWise
+#         Virtual" (switch numbers 1 and 2; one model and one license
+#         level in a pair).
+#   DS    Cisco Catalyst 9500 Series Switches Data Sheet (Tables 3 to 5;
+#         it no longer lists the C9500-12Q, -24Q or -40X, which are end
+#         of sale).
+#
+# Where the sources are silent: no page read names a port of a
+# C9500-16X or -40X, or of a C9500-NM-8X.  Their names follow CG's
+# numbering and the type word CG gives a 10-Gigabit port of the same
+# module (TenGigabitEthernet1/0/1 and TenGigabitEthernet1/1/1, as
+# breakout ports), and each is graded inferred and says so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A breakout: of a C9500-12Q's or -24Q's 40G ports, or of a
+#     C9500-NM-2Q's.  CG tells an operator to disregard the
+#     TenGigabitEthernet names of a breakout while the 40G ports are in
+#     use (TenGigabitEthernet1/0/1-48 on a C9500-12Q); those names are
+#     not ports of this inventory.
+#   * The bundle part numbers (HIG Table 2: C9500-16X-2Q, C9500-40X-2Q,
+#     C9500-24X, C9500-48X), each a base model with a network module
+#     fitted: declare the base model and the module.
+#   * The Catalyst 9500 High Performance models (C9500-32C,
+#     C9500-32QC, C9500-48Y4C, C9500-24Y4C), whose module number is
+#     always 0 (CG), and the Catalyst 9500X.  Target profiles describe
+#     the C9500-48Y4C and C9500-24Y4C.
+#   * That both switches of a pair are one model at one license level
+#     (HA): a deployment of two models is not refused.
+#   * Whether a Catalyst 9500 config prints a `switch N provision` line,
+#     and with which type word.  detect-deployment reads one if it does.
+schema: 1
+vendor: cisco_iosxe
+family: C9500
+display_name: "Cisco Catalyst 9500 (UADP 2.0)"
+naming: catalyst
+default_mode: stackwise-virtual
+
+modes:
+  stackwise-virtual:
+    label: "StackWise Virtual pair of two switches of one model (`stackwise-virtual`; a switch that is alone is switch 1)"
+    member_ids: [1, 2]
+    naming:
+      grade: vendor-doc
+      ref: "Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (a physical interface is identified by its type, switch number, module number and port number; the module or slot number on the device: switch (downlink) ports are 0, and uplink ports are 1; Cisco Catalyst 9500 Series Switches - High Performance have their module number as 0 always; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the device, for example FortyGigabitEthernet1/0/1 or FortyGigabitEthernet1/0/8; on a device with SFP uplink ports, the module number is 1 and the port numbers restart); Cisco IOS XE 17.12 High Availability Configuration Guide (Catalyst 9500 Switches), Configuring Cisco StackWise Virtual (by default in standalone mode, the switches are identified as switch 1 unless explicitly changed; the valid values for the new switch number are 1 and 2; both switches in the Cisco StackWise Virtual pair must be of the same switch model and running the same license level)"
+    caveat: "Names carry the switch number even on a switch that is alone: switch 1, unless it was renumbered. Both switches of a StackWise Virtual pair must be of the same switch model and run the same license level (Cisco's StackWise Virtual configuration guide); neither is checked here. The pair's own lines (stackwise-virtual and its domain, and the stackwise-virtual link and dual-active-detection lines under an interface) describe the hardware and are not translated. Cisco's configuration guide tells an operator to disregard the TenGigabitEthernet names of a breakout while the 40G ports are in use (TenGigabitEthernet1/0/1-48 on a C9500-12Q, TenGigabitEthernet1/1/1-8 beside a C9500-NM-2Q): those names are not ports of this inventory, and a job that uses them asks what to do with each. A breakout is not modelled. No configuration of a Catalyst 9500 was seen."
+
+modules:
+  C9500-NM-8X:
+    description: "8-port 1/10G SFP/SFP+ network module (C9500-16X and C9500-40X)"
+    inventory: {grade: inferred, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 9 (C9500-NM-8X: this module has eight 10G SFP ports); Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Installing a Network Module (the C9500-NM-8X has eight 10G SFP module ports; it is supported on the C9500-16X and C9500-40X); Cisco Catalyst 9500 Series Switches Data Sheet, Table 4 (C9500-NM-8X: Network Module 8-port 1/10 Gigabit Ethernet with SFP/SFP+); Cisco IOS XE 16.9 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports, the module number is 1 and the port numbers restart: the SFP module ports are gigabitethernet1/1/1 through gigabitethernet1/1/4 or tengigabitethernet1/1/1 through tengigabitethernet1/1/4); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-NM-2Q Network Module, Table 3 (with two 4x10G breakout cables, configure TenGigabitEthernet1/1/1 through TenGigabitEthernet1/1/8)", caveat: "C9500-NM-8X: no page of Cisco's read names its ports. TenGigabitEthernet1/1/1-8 on switch 1 follows the configuration guide's uplink numbering (module 1, the port numbers restarting at 1, its example of SFP uplink ports tengigabitethernet1/1/1) and the names it gives the 10G breakout ports of a C9500-NM-2Q in the same bay. It is inferred; whether a port that holds a 1-Gigabit SFP module keeps that name is not established, and no configuration of a Catalyst 9500 was seen."}
+    ports:
+      - {role: uplink, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+  C9500-NM-2Q:
+    description: "2-port 40G QSFP+ network module (C9500-16X and C9500-40X)"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 9 (C9500-NM-2Q: this module has two 40G QSFP ports); Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Installing a Network Module (the C9500-NM-2Q has two 40G QSFP module ports; it is supported on the C9500-16X and C9500-40X); Cisco Catalyst 9500 Series Switches Data Sheet, Table 4 (C9500-NM-2Q: Network Module 2-port 40 Gigabit Ethernet with QSFP+); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-NM-2Q Network Module, Table 2 (with two 40G QSFP modules, configure FortyGigabitEthernet1/1/1 and FortyGigabitEthernet1/1/2, and disregard TenGigabitEthernet1/1/1 through TenGigabitEthernet1/1/8)"}
+    caveat: "The C9500-NM-2Q is modelled as two 40G ports; a breakout of them (TenGigabitEthernet1/1/1-8 on switch 1) is not modelled."
+    ports:
+      - {role: uplink, count: 2, prefix: FortyGigabitEthernet, speed: 40gig, cage: qsfp+}
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per StackWise Virtual pair: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; it supports speeds up to 10/100/1000 Mbps); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Ethernet Management Port (the switches in a Cisco StackWise Virtual solution use a single management plane, and the same IP address is applicable to both active and standby switches; after a stateful switchover, the Ethernet management port on the active (previously standby) switch links up); Cisco Catalyst 9500 Series Switches Data Sheet, Table 1 (out-of-band device management: RJ-45 and USB-mini type B)"}
+
+models:
+  # --- 40G QSFP+: FortyGigabitEthernet<n>/0/1-12 or -24, no module bay --
+  C9500-12Q:
+    skus: [C9500-12Q]
+    display_name: "Cisco Catalyst C9500-12Q"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 1, Base PIDs (C9500-12Q: 12x40 Gigabit Ethernet QSFP+ ports and 2 power supply slots); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-12Q, Table 4 (with only 40G QSFP modules installed, configure FortyGigabitEthernet1/0/1 through FortyGigabitEthernet1/0/12, and disregard TenGigabitEthernet1/0/1 through TenGigabitEthernet1/0/48); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (a physical interface is identified by its type, switch number, module number and port number; the module or slot number on the device: switch (downlink) ports are 0, and uplink ports are 1; Cisco Catalyst 9500 Series Switches - High Performance have their module number as 0 always; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the device, for example FortyGigabitEthernet1/0/1 or FortyGigabitEthernet1/0/8; on a device with SFP uplink ports, the module number is 1 and the port numbers restart)", caveat: "C9500-12Q: modelled as 12 ports at 40G; a breakout of them is not modelled."}
+    ports:
+      - {role: access, count: 12, prefix: FortyGigabitEthernet, speed: 40gig, cage: qsfp+}
+
+  C9500-24Q:
+    skus: [C9500-24Q]
+    display_name: "Cisco Catalyst C9500-24Q"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 1, Base PIDs (C9500-24Q: 24x40 Gigabit Ethernet QSFP+ ports and 2 power supply slots); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-24Q, Table 6 (with only 40G QSFP modules installed, configure FortyGigabitEthernet1/0/1 through FortyGigabitEthernet1/0/24, and disregard the TenGigabitEthernet names of their breakout); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (a physical interface is identified by its type, switch number, module number and port number; the module or slot number on the device: switch (downlink) ports are 0, and uplink ports are 1; Cisco Catalyst 9500 Series Switches - High Performance have their module number as 0 always; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the device, for example FortyGigabitEthernet1/0/1 or FortyGigabitEthernet1/0/8; on a device with SFP uplink ports, the module number is 1 and the port numbers restart)", caveat: "C9500-24Q: modelled as 24 ports at 40G; a breakout of them is not modelled."}
+    ports:
+      - {role: access, count: 24, prefix: FortyGigabitEthernet, speed: 40gig, cage: qsfp+}
+
+  # --- 1/10G SFP+: TenGigabitEthernet<n>/0/1-16 or -40 (inferred), bay 1 -
+  C9500-16X:
+    skus: [C9500-16X]
+    display_name: "Cisco Catalyst C9500-16X"
+    panel: {grade: inferred, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 1, Base PIDs (C9500-16X: 16x10 Gigabit Ethernet SFP/SFP+ ports and 2 power supply slots; supports optional network modules on uplink ports, 8x10 Gigabit Ethernet (SFP/SFP+) and 2x40 Gigabit Ethernet (QSFP+)); Cisco Catalyst 9500 Series Switches Data Sheet, Table 3 (C9500-16X: 16-port 1/10 Gigabit Ethernet switch with SFP/SFP+); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (a physical interface is identified by its type, switch number, module number and port number; the module or slot number on the device: switch (downlink) ports are 0, and uplink ports are 1; Cisco Catalyst 9500 Series Switches - High Performance have their module number as 0 always; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the device, for example FortyGigabitEthernet1/0/1 or FortyGigabitEthernet1/0/8; on a device with SFP uplink ports, the module number is 1 and the port numbers restart); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-12Q (the starting port in the first set of 10G breakout ports is TenGigabitEthernet1/0/1)", caveat: "C9500-16X: no page of Cisco's read names its ports. TenGigabitEthernet1/0/1-16 on switch 1 follows the configuration guide's numbering (switch ports in module 0, from 1 at the far left) and the type word it gives a 10-Gigabit port of module 0 (TenGigabitEthernet1/0/1, a breakout port of a C9500-12Q). It is inferred; whether a port that holds a 1-Gigabit SFP module keeps that name is not established, and no configuration of a Catalyst 9500 was seen."}
+    ports:
+      - {role: access, count: 16, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+    bays:
+      "1": {accepts: [C9500-NM-8X, C9500-NM-2Q]}
+
+  C9500-40X:
+    skus: [C9500-40X]
+    display_name: "Cisco Catalyst C9500-40X"
+    panel: {grade: inferred, ref: "Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Product Overview, Table 1, Base PIDs (C9500-40X: 40x10 Gigabit Ethernet SFP/SFP+ ports and 2 power supply slots; supports optional network modules on uplink ports, 8x10 Gigabit Ethernet (SFP/SFP+) and 2x40 Gigabit Ethernet (QSFP+)); Cisco Catalyst 9500 Series Switches Hardware Installation Guide, Installing a Network Module (the C9500-NM-8X and C9500-NM-2Q are supported on the C9500-16X and C9500-40X); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring Interface Characteristics, Interface Configuration Mode (a physical interface is identified by its type, switch number, module number and port number; the module or slot number on the device: switch (downlink) ports are 0, and uplink ports are 1; Cisco Catalyst 9500 Series Switches - High Performance have their module number as 0 always; the 10/100/1000 port numbers always begin at 1, starting with the far left port when facing the front of the device, for example FortyGigabitEthernet1/0/1 or FortyGigabitEthernet1/0/8; on a device with SFP uplink ports, the module number is 1 and the port numbers restart); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9500 Switches), Configuring a Breakout Interface, C9500-12Q (the starting port in the first set of 10G breakout ports is TenGigabitEthernet1/0/1)", caveat: "C9500-40X: no page of Cisco's read names its ports. TenGigabitEthernet1/0/1-40 on switch 1 follows the configuration guide's numbering (switch ports in module 0, from 1 at the far left) and the type word it gives a 10-Gigabit port of module 0 (TenGigabitEthernet1/0/1, a breakout port of a C9500-12Q). It is inferred; whether a port that holds a 1-Gigabit SFP module keeps that name is not established, and no configuration of a Catalyst 9500 was seen."}
+    ports:
+      - {role: access, count: 40, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+    bays:
+      "1": {accepts: [C9500-NM-8X, C9500-NM-2Q]}

@@ -701,8 +701,21 @@ translate it again from `show running-config` as the device prints it.
   `TenGigabitEthernet1/0/1-2`, are `inferred`.  The 2960-S LAN Lite
   models, the 2960-SF, and a stack of a 2960-S with a 2960-X, are not
   modelled.
-  Other Catalyst series are not modelled yet (the C9500 has target
-  profiles), and a proposal names their type in `unknown_parts`.  A C9300 config lists the
+  The Catalyst 9500 (UADP 2.0) is one family, `C9500`: the C9500-12Q,
+  -24Q, -16X and -40X, alone or one of a StackWise Virtual pair (mode
+  `stackwise-virtual`, switches 1 and 2; a switch that is alone is
+  switch 1), with one management port, `GigabitEthernet0/0`.  A
+  C9500-16X or -40X takes a C9500-NM-8X or C9500-NM-2Q as module 1.
+  The 10G ports of the C9500-16X, -40X and C9500-NM-8X are `inferred`.
+  A breakout is not modelled: the `TenGigabitEthernet` names of a
+  40G port broken out are not ports of the inventory, and come back as
+  off-inventory.  A bundle part number (C9500-16X-2Q, C9500-40X-2Q,
+  C9500-24X, C9500-48X) is declared as its base model with its module.
+  The Catalyst 9500 High Performance models (C9500-32C, C9500-32QC,
+  C9500-48Y4C, C9500-24Y4C) and the 9500X are not modelled; target
+  profiles describe the C9500-48Y4C and C9500-24Y4C.
+  Other Catalyst series are not modelled yet, and a proposal names
+  their type in `unknown_parts`.  A C9300 config lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port; no configuration of
   another Catalyst was seen, so whether one does the same is not

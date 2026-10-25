@@ -2048,20 +2048,23 @@ nothing, as before.
 
 * Model families ship for a first set of Aruba AOS-S switches and
   for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
-  9300LM, 2960-X, 2960-XR, 2960-S and 3750-X; `GET /model-families`
-  is the current list.  A part graded `inferred` says why in its caveat.  Everything
-  else goes through target profiles, and a device with neither a
-  family nor a profile cannot be declared yet.  A Catalyst stack has
-  one management interface (`GigabitEthernet0/0`; `FastEthernet0` on
-  a 2960-X, 2960-XR, 2960-S or 3750-X), which belongs to no member and pairs with the
-  other side's management port, whether that is a family's or a
-  profile's.  A
+  9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0);
+  `GET /model-families` is the current list.  A part graded `inferred`
+  says why in its caveat.  Everything else goes through target
+  profiles, and a device with neither a family nor a profile cannot be
+  declared yet.  A Catalyst stack, or a 9500's StackWise Virtual pair,
+  has one management interface (`GigabitEthernet0/0`; `FastEthernet0`
+  on a 2960-X, 2960-XR, 2960-S or 3750-X), which belongs to no member
+  and pairs with the other side's management port, whether that is a
+  family's or a profile's.  A
   Catalyst's source switches are read from its `switch N provision`
   lines, but not its network modules: declare the module that is
   fitted.  A 3750-X's C3KX-NM-10G and C3KX-SM-10G are described with
   an SFP+ in each 10G slot, the names Cisco gives their ports at 10G;
   a port that holds a 1G SFP has another name, so with 1G SFP modules
-  fitted, declare the bay empty.
+  fitted, declare the bay empty.  A 9500's 40G port broken out into 10G
+  ports is not modelled: the `TenGigabitEthernet` names of a breakout
+  come back as off-inventory.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

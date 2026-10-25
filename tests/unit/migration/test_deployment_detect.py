@@ -2279,6 +2279,24 @@ class TestCatalystProposal:
         assert proposal.deployment is None
         assert proposal.notes[0].startswith("The members belong to different model families")
 
+    def test_a_9500_pair(self) -> None:
+        """Whether a Catalyst 9500 prints a `switch N provision` line is
+        not established; one that does is read, in the family's one mode
+        with switch numbers, and the label holds the stanza's word."""
+        proposal = propose_deployment(IOSXE_CLI, _catalyst(
+            "switch 1 provision c9500-40x", "switch 2 provision c9500-40x",
+            ports=("TenGigabitEthernet1/0/40", "TenGigabitEthernet2/0/1"),
+        ), REGISTRY)
+        assert proposal.family == "cisco_iosxe/C9500" and proposal.mode == "stackwise-virtual"
+        assert not any("which is not called that" in note for note in proposal.notes)
+        assert proposal.deployment.model_dump() == {
+            "mode": "stackwise-virtual", "members": [
+                {"model": "C9500-40X", "id": 1, "modules": {}},
+                {"model": "C9500-40X", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
     def test_a_c9200l_and_a_c9200_are_two_families(self) -> None:
         """Cisco: "Do not stack Cisco Catalyst 9200L Series Switches
         with Cisco Catalyst 9200 Series Switches"."""
