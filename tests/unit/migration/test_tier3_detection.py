@@ -732,7 +732,7 @@ class TestRowsForStatementsLeftOut:
     _KINDS = sorted(_tier3_detection._LEFT_OUT)
 
     def test_the_kinds(self) -> None:
-        assert self._KINDS == ["delete", "inactive", "preconfigure"]
+        assert self._KINDS == ["delete", "inactive", "preconfigure", "untagged"]
 
     @pytest.mark.parametrize("kind", _KINDS)
     def test_a_row_of_each_kind_is_told_apart(self, kind: str) -> None:

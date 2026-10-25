@@ -436,6 +436,10 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "preconfigure: ",
         "held for an interface the source does not have; not translated",
     ),
+    "untagged": (
+        "untagged: ",
+        "states no 802.1Q tag, so the source passes no traffic on it; not translated",
+    ),
 }
 
 #: A word of a path that names a secret.  What follows it is the
@@ -474,7 +478,9 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
         kind: ``"inactive"`` (deactivated in the source),
             ``"delete"`` (under a load file's ``delete:``) or
             ``"preconfigure"`` (an IOS XR ``interface preconfigure``
-            stanza: configuration for an interface that is not there).
+            stanza: configuration for an interface that is not there)
+            or ``"untagged"`` (an IOS XR or EOS sub-interface that
+            states no tag, which passes no traffic there).
         path: The words of the statement's path, outermost first.
 
     Returns:

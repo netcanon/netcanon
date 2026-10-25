@@ -592,6 +592,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS XR or EOS sub-interface that states no tag is left out, and
+  said.**  "An 802.1Q VLAN subinterface must have a configured VLAN ID
+  to send and receive traffic; without a VLAN ID, the subinterface
+  remains in the down state" (Cisco, "IOS XR Interface and Hardware
+  Component Command Reference", `dot1q vlan`), and on EOS "a VLAN must
+  be configured on the subinterface" for it to be operational
+  (Arista, EOS User Manual, "Ethernet Ports").  The two parsers kept
+  such a sub-interface, with no tag: VyOS wrote it as `vif <its
+  number>`, the number taken for a tag, and RouterOS, FortiOS and
+  OPNsense put its address on an interface the output defines
+  nowhere, in jobs that said `completed`.  A sub-interface of a port
+  or a bundle that states no `encapsulation` is now left out, under a
+  row of its own, `untagged: interface <name> (...)`: a statement the
+  source held and did not run, which the migrate page lists beside
+  the sections with a sentence of its own and does not count, and a
+  text of nothing else is not `completed`.  IOS XR's older tag
+  statement, `dot1q vlan <id> [<inner>]`, is read as a tag (it was
+  none).  A stanza that states another encapsulation, or a
+  sub-interface of a serial line, is read as before; an IOS-XE or
+  NX-OS sub-interface with no tag as well (Known limitations).
+  Guarded by `tests/unit/migration/test_a_sub_interface_with_no_tag.py`.
 - **A RouterOS VLAN interface that states no `vlan-id=` is VLAN 1.**
   "vlan-id (integer: 1..4094; Default: 1)" (MikroTik, "VLAN"), and an
   export prints no default ("By default, the export command writes
@@ -4648,6 +4669,13 @@ timestamp if your timezone matters for an audit.
   any source: what range each numbers is not established here, so a
   number the target does not take is written as it stands.  Read the
   target's own reference for its range before you load such a unit.
+- **An IOS-XE or NX-OS sub-interface that states no tag is carried
+  with none.**  What either platform does with such a sub-interface
+  is not established here (Cisco's IOS-XE guide to Layer 3
+  subinterfaces does not say), so the two parsers keep it, and a
+  target that names a sub-interface by its tag writes its number for
+  one: VyOS `vif <number>`.  Read the source for sub-interfaces with
+  no `encapsulation dot1Q` before you load the output.
 - **A shut VLAN interface arrives up on AOS-S.**  AOS-S states a
   VLAN's address on the VLAN and holds no admin state for it, so an
   AOS-CX `interface vlan N` that says `shutdown` (or another

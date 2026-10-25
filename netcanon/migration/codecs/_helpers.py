@@ -2062,10 +2062,34 @@ def a_few_named(names: Sequence[str]) -> str:
     return f"{shown} and {rest} more" if rest > 0 else shown
 
 
+#: The kind of left-out row (``_tier3_detection.left_out_rows``) for
+#: a sub-interface that states no tag where such a one passes no
+#: traffic.
+_UNTAGGED = "untagged"
+
+
+def _states_an_encapsulation(statement: str) -> bool:
+    """Whether *statement* is an ``encapsulation`` line of any form."""
+    return statement.split(None, 1)[0].lower() == "encapsulation"
+
+
+def _a_sub_interface_needing_a_tag(
+    header: str, needs_a_tag: Callable[[str], bool] | None,
+) -> str:
+    """The name an ``interface`` *header* line opens, where
+    *needs_a_tag* says it passes no traffic without a tag; else ``""``."""
+    words = header.split()
+    if needs_a_tag is None or len(words) < 2:
+        return ""
+    name = spaced_port_name(words[1], words[2] if len(words) > 2 else None)
+    return name if needs_a_tag(name) else ""
+
+
 def without_unread_tags(
     raw: str,
     is_tag_statement: Callable[[str], bool],
     tags_of: Callable[[str], Tags | None],
+    needs_a_tag: Callable[[str], bool] | None = None,
 ) -> tuple[str, list[str]]:
     """*raw* without each ``interface`` stanza whose tag statement is
     not read whole, and a row for each.
@@ -2080,6 +2104,17 @@ def without_unread_tags(
     written with fewer tags than it matches is another sub-interface --
     and :func:`unread_tags_row` says which.
 
+    And where *needs_a_tag* is given, without each stanza of a
+    sub-interface it names that states no tag at all: no tag statement
+    and no other ``encapsulation`` line among its own lines.  On such
+    a platform a sub-interface passes no traffic until it has a tag, so
+    the stanza is one the device holds and does not run, and its row is
+    a left-out row (``untagged: interface <name> (...)``, from
+    ``_tier3_detection.left_out_rows``): bounded, and not taken for a
+    sign that the text was read.  Kept, it was a sub-interface of no tag
+    on every target, and a target that names a sub-interface by its tag
+    (VyOS ``vif``) wrote its number as the tag.
+
     A stanza ends where :func:`without_keyword_stanzas` ends one.  Its
     own lines are at the indent of its first body line; a line indented
     deeper is a submode's (an IOS-XE ``service instance`` has an
@@ -2090,19 +2125,29 @@ def without_unread_tags(
         is_tag_statement: Whether a line, white space at its ends apart,
             is a tag statement of the platform.
         tags_of: Its tags, read whole, or ``None``.
+        needs_a_tag: Whether the interface a header line opens, its
+            name as :func:`spaced_port_name` reads it, is a
+            sub-interface that passes no traffic without a tag.  When
+            ``None`` no stanza is taken out for stating none.
 
     Returns:
-        ``(text, rows)``: *raw* itself when no stanza is taken out.
+        ``(text, rows)``: *raw* itself when no stanza is taken out; the
+        left-out rows come first.
     """
     kept: list[str] = []
     rows: list[str] = []
+    held: list[tuple[str, list[str]]] = []
     stanza: list[str] = []
     depth: int | None = None
     unread = ""
+    untagged = ""
+    stated = False
 
     def close() -> None:
         if unread:
             rows.append(unread_tags_row(stanza[0], unread))
+        elif untagged and not stated:
+            held.append((_UNTAGGED, ["interface", untagged]))
         else:
             kept.extend(stanza)
 
@@ -2115,22 +2160,25 @@ def without_unread_tags(
             width = len(line) - len(line.lstrip())
             if depth is None:
                 depth = width
-            if (
-                width == depth
-                and is_tag_statement(statement)
-                and tags_of(statement) is None
-            ):
-                unread = statement
+            if width != depth:
+                continue
+            if is_tag_statement(statement):
+                stated = True
+                if tags_of(statement) is None:
+                    unread = statement
+            elif _states_an_encapsulation(statement):
+                stated = True
             continue
         if stanza:
             close()
-            stanza, depth, unread = [], None, ""
+            stanza, depth, unread, untagged, stated = [], None, "", "", False
         if _HEADER_WORD_RE.match(line):
             stanza = [line]
+            untagged = _a_sub_interface_needing_a_tag(line, needs_a_tag)
         else:
             kept.append(line)
     if stanza:
         close()
-    if not rows:
+    if not rows and not held:
         return raw, []
-    return "".join(kept), rows
+    return "".join(kept), [*left_out_rows(held, rest=_UNTAGGED), *rows]

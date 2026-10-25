@@ -1053,7 +1053,8 @@ class CanonicalIntent(BaseModel):
             may also put here a row for a statement it read and
             left out on purpose -- the Junos parser, for one the
             source had deactivated; the IOS XR parser, for an
-            ``interface preconfigure`` stanza -- made by
+            ``interface preconfigure`` stanza; the IOS XR and EOS
+            parsers, for a sub-interface that states no tag -- made by
             ``_tier3_detection.left_out_row``.  Such a row is not a
             section header, names no secret, and is told apart with
             ``is_left_out_row``.  A parser may likewise add a

@@ -53,6 +53,12 @@ and is left out for that reason.  **Action:** none, unless the
 target is to hold configuration for the same hardware — then write
 it there by hand.
 
+A row that begins `untagged:` is an IOS XR or EOS sub-interface that
+states no 802.1Q tag: the device does not bring such a sub-interface
+up, so it was not in force there either, and is left out for that
+reason.  **Action:** none, unless it is to carry traffic on the
+target — then write it there by hand, with the tag it is to carry.
+
 Some rows are sections the parser itself took out, and are in no
 output: an `interface range ...` header in a text read as IOS-XE or
 IOS XR (configure the ports it covers by hand), an `interface
@@ -65,7 +71,8 @@ target by hand).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"
-and rows that all begin `inactive:`, `delete:` or `preconfigure:`
+and rows that all begin `inactive:`, `delete:`, `preconfigure:` or
+`untagged:`
 read nothing else: every statement it understood was one the
 source held and did not run, or the text is not a config of the
 vendor chosen.

@@ -580,9 +580,11 @@ class MigrationJob(BaseModel):
             A parser may also list a statement it read and left out
             on purpose (a Junos statement the source had
             deactivated, an IOS XR stanza held for an interface the
-            router does not have): a row that begins ``inactive: ``,
-            ``delete: `` or ``preconfigure: `` is one, and is not a
-            section (``_tier3_detection.is_left_out_row``).  And a
+            router does not have, an IOS XR or EOS sub-interface that
+            states no tag): a row that begins ``inactive: ``,
+            ``delete: ``, ``preconfigure: `` or ``untagged: `` is one,
+            and is not a section
+            (``_tier3_detection.is_left_out_row``).  And a
             parser may add a section of its own: an ``interface
             range`` or ``interface breakout`` header in a text
             read as IOS-XE or IOS XR, an OPNsense DHCP pool left

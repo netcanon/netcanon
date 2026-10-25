@@ -81,6 +81,7 @@ from .._helpers import (
 from .._input_shape import detect_input_shape
 from .._scanner import LINE_END_MESSAGE, first_flat_stanza, scan_stanzas
 from ..base import ParseError
+from . import port_names as _port_names
 
 logger = logging.getLogger(__name__)
 
@@ -776,10 +777,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     )
     # A sub-interface whose tag statement is not read whole (a range,
     # a FlexEncap ``encapsulation vlan`` block) is taken out before
-    # any reader sees it, and its row says the statement.  The codec's
-    # ``parse()`` keeps the rows beside the Tier-3 ones.
+    # any reader sees it, and its row says the statement; and so is
+    # one that states no tag, which the switch does not bring up
+    # (``a_sub_interface_needs_a_tag``), under a left-out row.  The
+    # codec's ``parse()`` keeps the rows beside the Tier-3 ones.
     raw, intent.dropped_tier3_sections = without_unread_tags(
         raw, _is_tag_statement, _tags_of,
+        _port_names.a_sub_interface_needs_a_tag,
     )
 
     # --- Top-level scalar fields (regex-based, single-pass) ---

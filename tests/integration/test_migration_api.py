@@ -2083,6 +2083,14 @@ class TestDroppedTier3SectionsWireThrough:
             "interface range GigabitEthernet0/1 - 2", "typed-as-a-range",
         ),
         (
+            "arista_eos", "cisco_iosxe_cli",
+            "hostname r1\ninterface Ethernet1\n   no switchport\n   ip address 10.0.0.1/24\n!\n"
+            "interface Ethernet1.7\n   description no-tag-here\n   ip address 10.0.7.1/24\n!\nend\n",
+            "untagged: interface Ethernet1.7 "
+            "(states no 802.1Q tag, so the source passes no traffic on it; not translated)",
+            "no-tag-here",
+        ),
+        (
             "opnsense", "juniper_junos",
             "<opnsense><system><hostname>fw1</hostname></system>"
             "<interfaces><lan><if>em1</if><enable/><ipaddr>10.0.0.1</ipaddr><subnet>24</subnet></lan></interfaces>"
