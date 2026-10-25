@@ -334,6 +334,12 @@ class TestRunTranslation:
 
         monkeypatch.setattr(_migration_helpers, "run_plan_with_checked_names", checked)
         monkeypatch.setattr(_migration_helpers, "run_plan_with_models", models)
+        # The codecs here are stand-ins with no vendor; which vendors
+        # have a device is asked of the registries in the
+        # integration tier.
+        monkeypatch.setattr(
+            _migration_helpers, "a_device_is_described", lambda request, codec: True,
+        )
         return calls
 
     def test_no_devices_reach_the_checked_entry(self, monkeypatch):
@@ -347,7 +353,10 @@ class TestRunTranslation:
         )
         assert job == "a job"
         assert calls["checked"] == [
-            {"port_rename_map": {}, "vlan_rename_map": {1: 2}, "force": True},
+            {
+                "port_rename_map": {}, "vlan_rename_map": {1: 2}, "force": True,
+                "devices_known": True,
+            },
         ]
         assert calls["models"] == []
         assert not hasattr(_migration_helpers, "run_plan_with_overrides")
@@ -365,7 +374,9 @@ class TestRunTranslation:
         )
         job = run_translation(_request(), body, object(), object(), "x", force=False)
         assert job == "a job"
-        assert calls["checked"] == [{"port_rename_map": {}, "force": False}]
+        assert calls["checked"] == [
+            {"port_rename_map": {}, "force": False, "devices_known": True},
+        ]
         assert calls["models"] == []
 
     def test_the_port_map_is_the_bodys(self, monkeypatch):
@@ -380,7 +391,7 @@ class TestRunTranslation:
             _request(), body, object(), object(), "x", port_rename_map={},
         )
         assert calls["checked"] == [
-            {"port_rename_map": {"mgmt0": None, "1/A1": "Ethernet49"}},
+            {"port_rename_map": {"mgmt0": None, "1/A1": "Ethernet49"}, "devices_known": True},
         ]
         # A copy: the pipeline is not handed the request's own dict.
         assert calls["checked"][0]["port_rename_map"] is not body.port_rename_map
@@ -399,6 +410,34 @@ class TestRunTranslation:
         assert calls["models"] == [{"port_rename_map": {"49": None}, "force": False}]
         assert calls["checked"] == []
 
+    @pytest.mark.parametrize(
+        ("source", "target", "known"),
+        [
+            ("described", "described", True),
+            ("described", "none", False),
+            ("none", "described", False),
+            ("none", "none", False),
+        ],
+    )
+    def test_devices_are_offered_where_both_can_be_declared(
+        self, monkeypatch, source, target, known,
+    ):
+        """The sentence of a job with no devices offers the pairing
+        only where a device can be declared of each side's vendor:
+        an offer needs something to choose."""
+        calls = self._spies(monkeypatch)
+        asked: list[str] = []
+
+        def described(request, codec):
+            asked.append(codec)
+            return codec == "described"
+
+        monkeypatch.setattr(_migration_helpers, "a_device_is_described", described)
+        body = MigrationPlanRequest(source="mock", target="mock", raw_text="x")
+        run_translation(_request(), body, source, target, "x")
+        assert calls["checked"] == [{"port_rename_map": {}, "devices_known": known}]
+        assert asked[0] == source
+
     def test_either_entry_runs_in_the_servers_scope(self, monkeypatch):
         """The limits this server is set to and the request's one
         deadline are opened here, round whichever entry the request
@@ -413,6 +452,9 @@ class TestRunTranslation:
 
         monkeypatch.setattr(_migration_helpers, "run_plan_with_checked_names", entry)
         monkeypatch.setattr(_migration_helpers, "run_plan_with_models", entry)
+        monkeypatch.setattr(
+            _migration_helpers, "a_device_is_described", lambda request, codec: True,
+        )
         body = MigrationPlanRequest(source="mock", target="mock", raw_text="x")
         run_translation(_request("large"), body, object(), object(), "x")
         monkeypatch.setattr(

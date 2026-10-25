@@ -1199,6 +1199,8 @@ def _names_message(
     dropped: list[str],
     untranslated: list[str],
     hardware: Iterable[str] = (),
+    *,
+    devices_known: bool = True,
 ) -> str:
     """The sentence a job's ``error`` carries when the port translator
     left names unsettled and no devices were declared, or ``""``.
@@ -1217,7 +1219,9 @@ def _names_message(
     hold for them, so sending an operator there for them would be
     sending them to a status that says less.  Where some of what is
     listed is a hardware port and some is not, the sentence says
-    which the devices decide.
+    which the devices decide.  And an offer needs something to
+    choose: where no device is described for the source's vendor
+    or for the target's, the devices are not offered at all.
 
     Args:
         fused: ``MigrationJob.fused_ports``.
@@ -1225,6 +1229,8 @@ def _names_message(
         untranslated: ``MigrationJob.untranslated_ports``.
         hardware: ``MigrationJob.source_ports`` -- which of the
             names are hardware ports.
+        devices_known: A device can be declared of the source's
+            vendor and of the target's.
     """
     from ..migration.canonical.port_names import split_unit
 
@@ -1286,7 +1292,7 @@ def _names_message(
         "An entry in port_rename_map settles each: " + "; ".join(settled_by) + "."
     )
     # What a pair of declared devices would decide, and what it would not.
-    for_devices = (
+    for_devices = devices_known and (
         any(paired_apart(names) for names in fused.values())
         or bool(dropped_ports)
         or bool(ports.intersection(untranslated))
@@ -1318,6 +1324,8 @@ def run_plan_with_checked_names(
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
+    *,
+    devices_known: bool = True,
 ) -> MigrationJob:
     """:func:`run_plan_with_overrides`, and then a look at what the
     port translator made of the names, read from the finished run.
@@ -1401,6 +1409,11 @@ def run_plan_with_checked_names(
         transforms: Applied after every override transform.
         transform_specs: Serialisable transform record.
         force: Skip the cross-device-class guard.
+        devices_known: A device can be declared of the source's
+            vendor and of the target's.  Where not, the sentence
+            offers no devices (:func:`_names_message`); the API
+            asks its registries
+            (:func:`~netcanon.api.routes._migration_helpers.run_translation`).
 
     Returns:
         The :class:`MigrationJob` of :func:`run_plan_with_overrides`,
@@ -1471,7 +1484,10 @@ def run_plan_with_checked_names(
     untranslated = _left_under_a_source_name(
         job._untranslated, kinds, source, target,
     )
-    message = _names_message(fused, dropped, untranslated, job.source_ports)
+    message = _names_message(
+        fused, dropped, untranslated, job.source_ports,
+        devices_known=devices_known,
+    )
     if not message:
         return job
     job.fused_ports = fused
