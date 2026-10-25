@@ -622,6 +622,24 @@ timestamp if your timezone matters for an audit.
   same misreading: none of the sixteen is shut.  A VLAN interface
   that IS shut still arrives up on AOS-S (Known limitations).
 
+- **FortiOS wrote a switch's VLANs on its loopback or its
+  management port.**  A VLAN that states no parent is written on
+  the port the renderer chooses, and its scorer ranked a private
+  address above a trunk: a loopback with a private /32 out-scored
+  every trunk, and so did a management port.  Every VLAN of a
+  fabric switch came out `set interface "loopback0"` (thirteen
+  committed captures: AOS-CX, EOS, NX-OS, IOS-XE, IOS XR, OS10,
+  Junos) or `set interface "mgmt1"` (eleven more, the source's
+  out-of-band port) -- a loopback carries no frames, and a
+  management port is not where the data VLANs came in -- in jobs
+  that said nothing of it.  A loopback or a tunnel is now no
+  VLAN's parent, a management port is chosen only where the
+  output has no other, and a VLAN left with no parent says so in a
+  `# review:` line instead of being written with no `set
+  interface`.  The scorer's other rule stands: a port with a
+  private address is still chosen before a trunk, so a switch's
+  routed uplink can carry its VLANs.
+
 - **A sub-interface of another vendor was written onto OPNsense as a
   zone of a device the output did not have.**  IOS-XE `interface
   GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
