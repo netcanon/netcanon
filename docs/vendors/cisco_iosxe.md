@@ -87,8 +87,10 @@ paths `unsupported` (matrix-only declaration; matches the existing
 ### Classic VRRP
 
 Single-line per-attribute form, the broadly-supported surface across
-every IOS-XE release from 15.x onward.  This is the form real
-captures emit (see `tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt`).
+every IOS-XE release from 15.x onward.  This is the form a real
+capture prints (`tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt`
+has `vrrp 12 ip` and `vrrp 12 priority`); the example below adds the
+other sub-commands the parser reads.
 
 ```text
 interface GigabitEthernet0/2
@@ -109,6 +111,15 @@ Sub-commands handled: `vrrp N ip X` / `vrrp N ipv6 X` (VRRPv3),
 `authentication md5 key-string <key>` (→ `md5:<key>`), `track <obj>
 decrement <D>` (the object name surfaces; decrement is lossy).
 Multiple VRIDs on the same interface produce multiple records.
+
+The renderer writes `vrrp N preempt` for a group that preempts, the
+default included, and `no vrrp N preempt` for one that does not.
+Cisco's [Configuring VRRP](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipapp_fhrp/configuration/xe-16/fhp-xe-16-book/fhp-vrrp.html)
+(IOS XE 16) says "By default, a preemptive scheme is enabled" and
+gives the command as `vrrp group preempt [delay minimum seconds]`, so
+the line is valid at the default.  A device leaves it out of its own
+printout at the default (the capture above has none), so an output
+can hold a `preempt` line its source did not.
 
 ### SD-Access anycast-gateway
 
