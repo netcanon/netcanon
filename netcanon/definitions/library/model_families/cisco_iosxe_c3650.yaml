@@ -98,7 +98,7 @@ modes:
     naming:
       grade: vendor-doc
       ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3650 Switches), Configuring Interface Characteristics, Interface Configuration Mode (the device number range is 1 to 9; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart); Catalyst 3650 Switch Hardware Installation Guide, Overview (up to nine switches can be members of a stack)"
-    caveat: "Names carry the switch number even on a switch that is alone. Cisco does not stack a LAN Base switch with an IP Base or IP Services one (Cisco Catalyst 3650 Series Switches Data Sheet); that is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 3650 was seen: whether one holds a GigabitEthernet name, a TenGigabitEthernet name or both for an uplink port is not established."
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco does not stack a LAN Base switch with an IP Base or IP Services one (Cisco Catalyst 3650 Series Switches Data Sheet); that is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated (the job lists each among the sections it did not translate). No configuration of a Catalyst 3650 was seen: whether one holds a GigabitEthernet name, a TenGigabitEthernet name or both for an uplink port is not established."
 
 deployment_ports:
   - name: GigabitEthernet0/0

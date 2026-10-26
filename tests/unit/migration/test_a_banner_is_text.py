@@ -1023,8 +1023,11 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
-    "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "a4e275c2c670",
-    "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "fa27e0f87457",
+    # Moved on purpose, by a row each and nothing else: the `oobm` and
+    # `stacking` stanzas are listed among the sections not translated
+    # (TestArubaAOSSStack): were "a4e275c2c670" and "fa27e0f87457".
+    "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "f9c207ff3706",
+    "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "9287eeaca4b7",
     "synthetic/aruba_aoss/kitchen_sink.cfg": "0b36d8988e79",
     "aruba_aoss/show_run_simple.txt": "8a4bc3fe9e9d",
     "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
@@ -1042,7 +1045,10 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
     "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "454f509eaaf8",
-    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
+    # Moved on purpose, by a row and nothing else: `switch 1 provision
+    # c9300-24ux` is listed among the sections not translated
+    # (TestCatalystStack): was "7192fbc5fd5e".
+    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "f0e87651085e",
     # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
     "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
     "iosxe/show_run_simple.txt": "fba5436f7b17",

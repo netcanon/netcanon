@@ -850,7 +850,7 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
-- **An AOS-CX config's `vsf` lines are listed among the sections not
+- **A stack's own lines are listed among the sections not
   translated.**  A CX 6200's or 6300's stack lines (`vsf member N`
   with its `type` and `link` lines, `vsf secondary-member`, `vsf
   split-detect`) have no canonical surface, and the parser read
@@ -859,10 +859,16 @@ timestamp if your timezone matters for an audit.
   Each such line is a row of `dropped_tier3_sections` now (`vsf
   member 1`), so the page's "detected but not translated" banner
   names it; the status is as it was, a row being a section to apply
-  by hand.  A banner's lines are not read for it.  AOS-S `stacking`
-  and `vsf` lines and a Catalyst's `switch N provision` are still
-  not listed (`docs/CAPABILITIES.md` § G says so).  Guarded by
-  `TestArubaAOSCXVSF` in `tests/unit/migration/test_tier3_detection.py`.
+  by hand.  A banner's lines are not read for it.  The other stacks'
+  lines were dropped the same way, and are rows too: a Catalyst's
+  `switch N provision` and `switch N priority`, StackPower
+  (`stack-power`) and StackWise Virtual (`stackwise-virtual`, and
+  the `stackwise-virtual link` and `dual-active-detection` lines
+  under an interface), each kept whole; and an AOS-S `stacking`,
+  `vsf` or `oobm` stanza, by its word alone, since a member's lines
+  in it carry the member's MAC address.  The model families' caveats
+  say so.  Guarded by `TestArubaAOSCXVSF`, `TestArubaAOSSStack` and
+  `TestCatalystStack` in `tests/unit/migration/test_tier3_detection.py`.
 - **What goes with a dropped name is said, where no devices are
   declared.**  The port translator removes, with a name it drops, a
   static route out of it, a DHCP pool on it, a VRRP track entry of

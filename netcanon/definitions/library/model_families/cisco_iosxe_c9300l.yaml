@@ -100,7 +100,7 @@ modes:
     naming:
       grade: vendor-doc
       ref: "Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (the device number range is 1 to 8; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart); Stacking and High Availability Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), Managing Switch Stacks (up to eight stacking-capable switches; Cisco Catalyst 9300L series switches connect through their StackWise-320 ports)"
-    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a C9300L or C9300LM only with a C9300L or C9300LM, and only at the same license level (Cisco Catalyst 9300 Series Switches Data Sheet); the license is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 9300L or 9300LM was seen: which interfaces one holds besides its ports is not established."
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a C9300L or C9300LM only with a C9300L or C9300LM, and only at the same license level (Cisco Catalyst 9300 Series Switches Data Sheet); the license is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated (the job lists each among the sections it did not translate). No configuration of a Catalyst 9300L or 9300LM was seen: which interfaces one holds besides its ports is not established."
 
 deployment_ports:
   - name: GigabitEthernet0/0

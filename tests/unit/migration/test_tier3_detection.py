@@ -17,6 +17,7 @@ from netcanon.migration import _tier3_detection
 from netcanon.migration._tier3_detection import (
     LEFT_OUT_ROWS_SHOWN,
     detect_tier3_sections_aoscx,
+    detect_tier3_sections_aoss,
     detect_tier3_sections_dellos10,
     detect_tier3_sections_fortios,
     detect_tier3_sections_iosxe_cli,
@@ -812,6 +813,281 @@ class TestArubaAOSCXVSF:
             line for line in job.rendered.splitlines()
             if line.strip().startswith("vsf")
         ]
+
+
+def _job(source: str, target: str, text: str):
+    from netcanon.migration.codecs.registry import get_codec
+    from netcanon.services.migration_pipeline import run_plan
+
+    return run_plan(get_codec(source), get_codec(target), text)
+
+
+def _only_in(with_lines, without_lines) -> list[str]:
+    """The rows of the job *with_lines* has that the job *without_lines*
+    has not, in order."""
+    return [r for r in with_lines.dropped_tier3_sections if r not in without_lines.dropped_tier3_sections]
+
+
+class TestCatalystStack:
+    """A Catalyst stack's own lines were dropped with no row, as the
+    AOS-CX ``vsf`` lines were: ``switch N provision`` (which a switch
+    that is alone prints too), ``switch N priority``, StackPower and
+    StackWise Virtual.  Each is a row now, kept whole; the job is
+    otherwise as it was without them."""
+
+    _HEAD = "hostname sw\n"
+    _STACK_LINES = (
+        "switch 1 provision c9300-24ux\n"
+        "switch 2 provision c9300-48p\n"
+        "switch 2 priority 14\n"
+        "stack-power stack Powerstack-1\n"
+        " mode redundant\n"
+        "stack-power switch 1\n"
+        " stack Powerstack-1\n"
+        "!\n"
+    )
+    _BODY = (
+        "vlan 10\n"
+        "!\n"
+        "interface GigabitEthernet1/0/1\n"
+        " switchport access vlan 10\n"
+        " switchport mode access\n"
+        "!\n"
+    )
+    _ROWS = [
+        "switch 1 provision c9300-24ux",
+        "switch 2 provision c9300-48p",
+        "switch 2 priority 14",
+        "stack-power stack Powerstack-1",
+        "stack-power switch 1",
+    ]
+
+    #: A StackWise Virtual pair: the block at the top, and a link and
+    #: the dual-active detection under the interfaces that carry them.
+    _PAIR = (
+        "hostname core\n"
+        "stackwise-virtual\n"
+        " domain 1\n"
+        "!\n"
+        "vlan 10\n"
+        "!\n"
+        "interface FortyGigabitEthernet1/0/1\n"
+        " stackwise-virtual link 1\n"
+        "!\n"
+        "interface FortyGigabitEthernet2/0/1\n"
+        " stackwise-virtual link 1\n"
+        "!\n"
+        "interface FortyGigabitEthernet1/0/2\n"
+        " stackwise-virtual dual-active-detection\n"
+        "!\n"
+        "interface FortyGigabitEthernet1/0/3\n"
+        " switchport access vlan 10\n"
+        " switchport mode access\n"
+        "!\n"
+    )
+    _PAIR_ROWS = [
+        "stackwise-virtual",
+        "stackwise-virtual link 1",
+        "stackwise-virtual dual-active-detection",
+    ]
+
+    def _pair_without(self) -> str:
+        return "".join(
+            line for line in self._PAIR.splitlines(keepends=True)
+            if "stackwise-virtual" not in line and line != " domain 1\n"
+        )
+
+    def test_each_stack_line_is_a_row(self) -> None:
+        text = self._HEAD + self._STACK_LINES + self._BODY
+        assert detect_tier3_sections_iosxe_cli(text) == self._ROWS
+
+    def test_each_line_of_a_pair_is_a_row(self) -> None:
+        assert detect_tier3_sections_iosxe_cli(self._PAIR) == self._PAIR_ROWS
+
+    def test_crlf_text(self) -> None:
+        text = (self._HEAD + self._STACK_LINES + self._BODY).replace("\n", "\r\n")
+        assert detect_tier3_sections_iosxe_cli(text) == self._ROWS
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "interface GigabitEthernet1/0/1\n description switch 1 provision c9300-48p\n!\n",
+            "interface GigabitEthernet1/0/1\n description stackwise-virtual link 1\n!\n",
+            "interface GigabitEthernet1/0/1\n switchport mode trunk\n!\n",
+            "switch provision\n",
+            "spanning-tree mode rapid-pvst\n",
+        ],
+        ids=["a provision line in a description", "a link line in a description", "switchport",
+             "no switch number", "another top line"],
+    )
+    def test_what_is_not_a_stack_line(self, text: str) -> None:
+        assert detect_tier3_sections_iosxe_cli(text) == []
+
+    def test_the_codec_lists_them_and_not_a_banners(self) -> None:
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import CiscoIOSXECLICodec
+
+        text = self._HEAD + "banner motd ^C\nswitch 3 provision c9300-48p\n^C\n" + self._STACK_LINES + self._BODY
+        assert CiscoIOSXECLICodec().parse(text).dropped_tier3_sections == self._ROWS
+
+    @pytest.mark.parametrize("target", ["cisco_iosxe_cli", "aruba_aoss"])
+    def test_the_lines_change_nothing_but_the_rows(self, target: str) -> None:
+        """The output is the same as without the lines, onto the
+        Catalyst's own codec as onto another vendor's; so is the status;
+        and the job says which lines it left out."""
+        with_lines = _job("cisco_iosxe_cli", target, self._HEAD + self._STACK_LINES + self._BODY)
+        without = _job("cisco_iosxe_cli", target, self._HEAD + self._BODY)
+        assert with_lines.status == without.status, with_lines.error
+        assert with_lines.rendered == without.rendered
+        assert _only_in(with_lines, without) == self._ROWS
+
+    @pytest.mark.parametrize("target", ["cisco_iosxe_cli", "arista_eos"])
+    def test_a_pairs_lines_change_nothing_but_the_rows(self, target: str) -> None:
+        with_lines = _job("cisco_iosxe_cli", target, self._PAIR)
+        without = _job("cisco_iosxe_cli", target, self._pair_without())
+        assert with_lines.status == without.status, with_lines.error
+        assert with_lines.rendered == without.rendered
+        assert _only_in(with_lines, without) == self._PAIR_ROWS
+
+    def test_the_committed_captures(self) -> None:
+        """Every ``switch N provision`` line of a committed IOS-XE capture
+        is a row of its parse -- found by reading each line, not by the
+        pattern under test."""
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import CiscoIOSXECLICodec
+
+        corpus = Path(__file__).resolve().parents[2] / "fixtures" / "real" / "cisco_iosxe"
+        checked = 0
+        for path in sorted(corpus.glob("*.txt")):
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            lines = [
+                line.strip() for line in raw.splitlines()
+                if line[:1] not in (" ", "\t") and line.split()[:1] == ["switch"]
+                and line.split()[2:3] == ["provision"]
+            ]
+            if not lines:
+                continue
+            checked += 1
+            rows = CiscoIOSXECLICodec().parse(raw).dropped_tier3_sections
+            assert [line for line in lines if line not in rows] == [], path.name
+        assert checked, "no committed IOS-XE capture has a `switch N provision` line"
+
+
+class TestArubaAOSSStack:
+    """An AOS-S stack's stanza (``stacking``, a 2930M's; ``vsf``, a
+    2930F's) and the ``oobm`` stanza were dropped with no row: the
+    parser reads nothing of them.  Each is a row now, by its word: a
+    member's lines in it carry the member's MAC address, which a row
+    -- painted on a page and returned to every client -- does not
+    show."""
+
+    _HEAD = 'hostname "sw"\n'
+    _STACK = (
+        "stacking\n"
+        '   member 1 type "JL323A" mac-address 000000-000001\n'
+        "   member 1 priority 255\n"
+        "   member 1 flexible-module A type JL083A\n"
+        "   exit\n"
+    )
+    _OOBM = (
+        "oobm\n"
+        "   ip address dhcp-bootp\n"
+        "   member 1\n"
+        "      ip address dhcp-bootp\n"
+        "      exit\n"
+        "   exit\n"
+    )
+    _FABRIC = (
+        "vsf\n"
+        "   enable domain 1\n"
+        "   member 1\n"
+        '      type "JL259A" mac-address 000000-000002\n'
+        "      priority 255\n"
+        "      exit\n"
+        "   exit\n"
+    )
+    _BODY = (
+        "vlan 1\n"
+        '   name "DEFAULT_VLAN"\n'
+        "   untagged 1/1-1/4\n"
+        "   exit\n"
+    )
+
+    @staticmethod
+    def _flat(text: str) -> str:
+        return "".join(line.lstrip(" ") for line in text.splitlines(keepends=True))
+
+    def test_a_stack_and_its_oobm(self) -> None:
+        text = self._HEAD + self._STACK + self._OOBM + self._BODY
+        assert detect_tier3_sections_aoss(text) == ["stacking", "oobm"]
+
+    def test_a_fabric(self) -> None:
+        assert detect_tier3_sections_aoss(self._HEAD + self._FABRIC + self._BODY) == ["vsf"]
+
+    def test_without_its_indentation(self) -> None:
+        """The device takes a context by its commands, not by its
+        indentation; a member's line at the margin is still no row."""
+        text = self._flat(self._HEAD + self._STACK + self._OOBM + self._FABRIC + self._BODY)
+        assert detect_tier3_sections_aoss(text) == ["stacking", "oobm", "vsf"]
+
+    def test_crlf_text(self) -> None:
+        text = (self._HEAD + self._STACK + self._OOBM + self._BODY).replace("\n", "\r\n")
+        assert detect_tier3_sections_aoss(text) == ["stacking", "oobm"]
+
+    def test_the_iosxe_sections_still_come_first(self) -> None:
+        text = self._HEAD + "ip access-list extended LOCK\n" + self._OOBM + self._BODY
+        assert detect_tier3_sections_aoss(text) == ["ip access-list extended LOCK", "oobm"]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            'vlan 10\n   name "vsf"\n   exit\n',
+            'snmp-server community "stacking"\n',
+            'interface 1/1\n   name "oobm link"\n   exit\n',
+            "stacking-port 1\n",
+        ],
+        ids=["a VLAN's name", "a community", "a port's name", "another word"],
+    )
+    def test_what_is_not_a_stack_stanza(self, text: str) -> None:
+        assert detect_tier3_sections_aoss(text) == []
+
+    def test_the_codec_lists_them_and_not_a_banners(self) -> None:
+        from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+
+        text = (
+            self._HEAD + 'banner motd "Welcome\nvsf\noobm\n"\n'
+            + self._STACK + self._OOBM + self._BODY
+        )
+        rows = ArubaAOSSCodec().parse(text).dropped_tier3_sections
+        assert rows == ["stacking", "oobm"]
+
+    @pytest.mark.parametrize("target", ["aruba_aoss", "aruba_aoscx", "cisco_iosxe_cli"])
+    def test_the_stanzas_change_nothing_but_the_rows(self, target: str) -> None:
+        with_lines = _job("aruba_aoss", target, self._HEAD + self._STACK + self._OOBM + self._BODY)
+        without = _job("aruba_aoss", target, self._HEAD + self._BODY)
+        assert with_lines.status == without.status, with_lines.error
+        assert with_lines.rendered == without.rendered
+        assert _only_in(with_lines, without) == ["stacking", "oobm"]
+
+    def test_the_committed_captures(self) -> None:
+        """Each stanza a committed AOS-S capture opens at the margin is a
+        row of its parse, found by reading each line; and no row shows a
+        member's line."""
+        from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+
+        corpus = Path(__file__).resolve().parents[2] / "fixtures" / "real" / "aruba_aoss"
+        checked = 0
+        for path in sorted(corpus.glob("*.cfg")):
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            words = {
+                line.split()[0].lower() for line in raw.splitlines()
+                if line[:1] not in (" ", "\t", "") and line.split()[0].lower() in ("stacking", "vsf", "oobm")
+            }
+            if not words:
+                continue
+            checked += 1
+            rows = ArubaAOSSCodec().parse(raw).dropped_tier3_sections
+            assert sorted(words - set(rows)) == [], path.name
+            assert not [row for row in rows if "mac-address" in row or "member" in row], path.name
+        assert checked >= 2, "fewer committed AOS-S captures than expected open such a stanza"
 
 
 # ---------------------------------------------------------------------------

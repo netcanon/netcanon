@@ -556,16 +556,17 @@ class ArubaAOSSCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        from ..._tier3_detection import detect_tier3_sections_iosxe_cli
+        from ..._tier3_detection import detect_tier3_sections_aoss
 
         intent = parse_intent(raw)
         # Aruba AOS-S uses Cisco-derived ACL grammar (`access-list extended`,
-        # `policy-map`, etc.); reuse the IOS-XE CLI detector.  Notification-only.
+        # `policy-map`, etc.), so the IOS-XE CLI detector's patterns, and
+        # its own contexts (`stacking`, `vsf`, `oobm`).  Notification-only.
         # The parser's own rows (a port's VLAN line that names a VLAN no
         # stanza declares) follow.  Read from the text the parser read:
         # a banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = [
-            *detect_tier3_sections_iosxe_cli(without_banner_bodies(raw)),
+            *detect_tier3_sections_aoss(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,
         ]
         return intent

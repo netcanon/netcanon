@@ -147,6 +147,9 @@ surface.
 - **Routing protocols** (OSPF / RIP / static routes parse, but
   protocol stanzas informational)
 - **PoE policy detail** beyond per-port `power-over-ethernet enable`
+- **The stack and the OOBM port** — the `stacking`, `vsf` and `oobm`
+  stanzas, each listed among the sections not translated by its word
+  alone (a member's lines carry its MAC address)
 
 ## Real-world fixtures we've validated against
 
@@ -253,7 +256,8 @@ or at a line in column 0 that enters another context or that the top
 of the config reads and is no word of the context (`hostname ...`,
 `ip route ...`): an `oobm` with no `exit` keeps its gateway and loses
 no line of the switch's after it.  The management port's settings are
-not carried into the output (below).
+not carried into the output (below), and the job lists the stanza
+(`oobm`) among the sections it did not translate.
 
 **A port's VLANs can be stated from the port's side.**  In an
 `interface` stanza -- `tagged vlan 10,20`, `untagged vlan 5`, `no
@@ -640,8 +644,9 @@ have.
   `stacking` stanza itself — which switches the stack is made of,
   their priorities, the ports a fabric uses as its links — and the
   `oobm` block, per-member addresses included, are not carried into
-  the output; set the target stack up as its own.  The job has no
-  warning for this: it is said here, and in the plan's `caveats`
+  the output; set the target stack up as its own.  The job lists
+  each stanza by its word (`stacking`, `vsf`, `oobm`) among the
+  sections it did not translate, and the plan's `caveats` say so
   where the 2930F fabric or 2930M stack is declared from a model
   family.  The source switch is read from the config: an AOS-S
   config states its part number, the modules it is provisioned for
