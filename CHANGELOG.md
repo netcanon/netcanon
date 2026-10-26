@@ -592,6 +592,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **What goes with a dropped name is said, where no devices are
+  declared.**  The port translator removes, with a name it drops, a
+  static route out of it, a DHCP pool on it, a VRRP track entry of
+  it, a VXLAN source interface that is it and its place in a LAG
+  (`_strip_dropped_ports`).  The job listed the name and none of
+  that: with both devices declared the plan said it, from a reading
+  of its own; with none -- what every plan endpoint runs by default
+  -- nothing did, and the output, which no longer holds it, could
+  not.  The Cisco Live EVPN leaf's `Loopback2` is its VTEP source;
+  onto Junos it has no place, and the VTEP was left with no source
+  in a job that said why `Loopback2` went and nothing of the
+  overlay.  Over the committed captures onto every public codec,
+  with no port map, such drops took VTEP sources, routes, DHCP pools
+  and every member of LAGs, unsaid.  The translator now records what
+  it removes, where it removes it and by the tests that remove it
+  (`PortRenameResult.taken`), for an operator's drop as for its own,
+  and `run_plan_with_checked_names` writes a warning line for each
+  kind in the plan's own words (`port_mapping.what_went_lines`, the
+  plan's lines unchanged): `port_rename: the VXLAN source interface
+  was dropped (Loopback2), so the VTEP is left without the source it
+  was bound to — give it one`.  A line and not a status: a name the
+  translator dropped holds the job already, and one an entry dropped
+  was the operator's to decide.  Guarded by
+  `tests/unit/migration/test_what_goes_with_a_dropped_name.py`: the
+  record held to what is gone from the tree, by identity, on every
+  committed capture onto every public codec (how many jobs record
+  something pinned by source codec); the lines from configs of each
+  kind; once, and not twice where devices are declared; each check
+  handed the defect it is for.  The guard that holds the no-devices
+  job to `run_plan_with_overrides`'s now takes the lines into
+  account, last.  (#544 follow-up.)
 - **A run of more digits than a number is read from is refused in
   words, not failed as a fault.**  Python converts a string of digits
   to a number only up to a limit (`sys.get_int_max_str_digits()`,
@@ -4728,16 +4759,6 @@ timestamp if your timezone matters for an audit.
   vendor's shut SVI) is written as the VLAN's address, live, in a
   job that says `completed`.  Read the source for shut VLAN
   interfaces before you load the output.
-- **What goes with a name the translator drops is not said.**  A
-  static route out of the name, a DHCP pool on it, a VRRP group's
-  track of it and a VXLAN source interface (VTEP) that is the name
-  are removed with it, and the job lists the name
-  (`unresolved_ports`, so it is `partial`) but not those lines.  A
-  loopback that has no place on Junos is such a name: the Cisco Live
-  EVPN leaf's `Loopback2` is its VTEP source, and the Junos output
-  has no `vtep-source-interface` line.  Read the source config for
-  what referred to each name in `unresolved_ports` before you settle
-  it.
 - **An MTU is converted only where the codec reads the interface's
   name.**  A name its classifier does not read -- a Junos `reth0` or
   channelised `xe-0/0/6:2`, a wildcard `interface-range` member, an

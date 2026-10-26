@@ -850,6 +850,9 @@ def run_plan_with_overrides(  # noqa: C901
         # Not a field of the job: whichever entry reads the finished
         # run decides what a name left as it was means for the status.
         job._untranslated = list(rename_result.untranslated)
+        # Nor is what went with the names dropped: the plan says it
+        # where devices are declared, the job's warnings where not.
+        job._taken_with_drops = rename_result.taken
 
     if vlan_result is not None:
         if vlan_result.applied:
@@ -1415,6 +1418,17 @@ def run_plan_with_checked_names(
     question of its own, about hardware ports, and this one is not
     asked there.
 
+    **What went with a dropped name is said.**  The translator
+    removes a static route out of a name it drops, a DHCP pool on it,
+    a VRRP track entry of it, a VXLAN source that is it and its place
+    in a LAG; the job lists the name, and the output cannot show what
+    is not in it.  A warning line says each kind, from the
+    translator's own record (``PortRenameResult.taken``), in the
+    plan's words (:func:`~netcanon.migration.port_mapping.what_went_lines`),
+    for an operator's drop as for the translator's.  It is a warning
+    and not a status: a name the translator dropped holds the job
+    already, and one an entry dropped was the operator's to decide.
+
     Nothing is renamed or dropped here.  The output is the one
     :func:`run_plan_with_overrides` rendered, and every other field
     of the job is as that function left it.
@@ -1451,7 +1465,7 @@ def run_plan_with_checked_names(
         ``untranslated_ports`` filled, and its status and ``error``
         changed as above, where the run left port names unsettled.
     """
-    from ..migration.port_mapping import name_key
+    from ..migration.port_mapping import name_key, what_went_lines
 
     if port_rename_map is None:
         return run_plan_with_overrides(
@@ -1506,6 +1520,12 @@ def run_plan_with_checked_names(
     )
     if job.rendered is None:
         return job
+
+    if job._taken_with_drops is not None:
+        job.warnings.extend(what_went_lines(
+            "port_rename", dropped="interface",
+            **job._taken_with_drops.model_dump(),
+        ))
 
     fused = _shared_final_names(job, rendered, fold_source, fold_target)
     dropped = _undecided_drops(job, port_rename_map, fold_source)

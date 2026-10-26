@@ -48,6 +48,11 @@ This module defines the **vendor-agnostic bridge**:
    interface, ``lo0``, and places a unit of it in each routing
    instance, so its name for a loopback depends on the config's
    other loopbacks, which no name formatted one at a time can know.
+9. :class:`TakenWithDrops` — what the translator removed with the
+   names it dropped: a route out of one, a DHCP pool on one, a VRRP
+   track entry, a VXLAN source, a LAG's members.  Recorded where they
+   are removed, so that what the job says is what was done
+   (``PortRenameResult.taken``).
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -95,7 +100,7 @@ from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from ..codecs.base import CodecBase
-    from .intent import CanonicalIntent, CanonicalStaticRoute
+    from .intent import CanonicalDHCPPool, CanonicalIntent, CanonicalStaticRoute
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +286,48 @@ class LoopbackToPlace(NamedTuple):
     instance: str
 
 
+class TakenWithDrops(BaseModel):
+    """What :func:`_strip_dropped_ports` removed with the names it was
+    given, by kind, in the order the tree holds it -- the lists
+    :func:`~netcanon.migration.port_mapping.settle_plan` takes under
+    the same names.  The names are the SOURCE config's: a name is
+    dropped before anything is renamed."""
+
+    #: LAGs every member of which was dropped (a LAG that is itself
+    #: dropped is not here: it is gone, not empty).
+    emptied_lags: list[str] = Field(default_factory=list)
+    #: LAGs that lost some members and kept others.
+    shrunk_lags: list[str] = Field(default_factory=list)
+    #: The destination of each static route removed: its interface,
+    #: or the interface its next hop names, was dropped.
+    lost_routes: list[str] = Field(default_factory=list)
+    #: Each DHCP pool removed, by its network (or its interface where
+    #: it states none): the interface it serves was dropped.
+    lost_dhcp_pools: list[str] = Field(default_factory=list)
+    #: Interfaces kept whose VRRP group lost a track entry.
+    lost_tracking: list[str] = Field(default_factory=list)
+    #: The dropped names a VXLAN VNI had as its source interface.
+    lost_vtep_sources: list[str] = Field(default_factory=list)
+
+    def add(self, other: TakenWithDrops) -> None:
+        """Add *other*'s entries, and keep a LAG that another drop
+        emptied out of :attr:`shrunk_lags`.  A route or a pool is an
+        entry for each record removed -- two routes to one destination
+        are two -- and a name is entered once."""
+        for field in type(self).model_fields:
+            kept = getattr(self, field)
+            if field in ("lost_routes", "lost_dhcp_pools"):
+                kept.extend(getattr(other, field))
+                continue
+            seen = set(kept)
+            for name in getattr(other, field):
+                if name not in seen:
+                    kept.append(name)
+                    seen.add(name)
+        emptied = set(self.emptied_lags)
+        self.shrunk_lags = [lag for lag in self.shrunk_lags if lag not in emptied]
+
+
 class PortRenameResult(BaseModel):
     """Outcome of :func:`translate_port_names`.
 
@@ -355,6 +402,14 @@ class PortRenameResult(BaseModel):
     Kept apart so that a caller can hold a job for a port left under
     another vendor's name without holding one for every route to
     ``Null0``."""
+
+    taken: TakenWithDrops = Field(default_factory=TakenWithDrops)
+    """What went with the names dropped -- an operator's drops and the
+    translator's alike: the routes, pools, track entries, VTEP sources
+    and LAG members removed with them (:func:`_strip_dropped_ports`).
+    A warning about the name does not say these, and the output does
+    not show them, so they are said from here
+    (:func:`~netcanon.migration.port_mapping.what_went_lines`)."""
 
 
 # ---------------------------------------------------------------------------
@@ -1645,9 +1700,10 @@ def translate_port_names(  # noqa: C901
 
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
+    taken = TakenWithDrops()
     if user_dropped:
         warnings.extend(_parents_gone(intent, user_dropped, stated_ports))
-        _strip_dropped_ports(intent, user_dropped)
+        _strip_dropped_ports(intent, user_dropped, taken)
 
     # Resolve every name BEFORE anything is rewritten, in the order the
     # sweep visits them (so warnings come out in the order they always
@@ -1662,7 +1718,7 @@ def translate_port_names(  # noqa: C901
         resolve(name)
     if auto_dropped:
         warnings.extend(_parents_gone(intent, auto_dropped, stated_ports))
-        _strip_dropped_ports(intent, auto_dropped)
+        _strip_dropped_ports(intent, auto_dropped, taken)
 
     # Rewrite everywhere a port name might be referenced.  Order doesn't
     # matter — memoisation keeps us idempotent.  ``default_name`` is not
@@ -1893,6 +1949,7 @@ def translate_port_names(  # noqa: C901
         untranslated_references=[
             name for name in untranslated if name in referred_only
         ],
+        taken=taken,
     )
 
 
@@ -1917,7 +1974,9 @@ def _parents_gone(
 
 
 def _strip_dropped_ports(
-    intent: CanonicalIntent, dropped: set[str]
+    intent: CanonicalIntent,
+    dropped: set[str],
+    taken: TakenWithDrops | None = None,
 ) -> None:
     """Remove every reference to *dropped* port names from *intent*.
 
@@ -1945,8 +2004,15 @@ def _strip_dropped_ports(
 
     Mutates *intent* in place.  Idempotent: subsequent calls with the
     same *dropped* set are no-ops.
+
+    What is removed beyond the names themselves is added to *taken*,
+    where given, by the same tests that remove it: a route, a pool, a
+    track entry, a VTEP source, a LAG's members.  The job says them
+    from there; the output cannot, since they are not in it.
     """
     named = {iface.name for iface in intent.interfaces}
+    if taken is not None:
+        taken.add(_what_goes(intent, dropped, named))
     intent.interfaces = [
         i for i in intent.interfaces if i.name not in dropped
     ]
@@ -1970,26 +2036,82 @@ def _strip_dropped_ports(
     intent.lags = [lag for lag in intent.lags if lag.name not in dropped]
     for lag in intent.lags:
         lag.members = [m for m in lag.members if m not in dropped]
-    # (#19) Guard on a truthy interface: a gateway-only route / unbound pool
-    # has ``interface == ''`` and must never be matched by a drop set (an
-    # empty-string drop key would otherwise delete every one of them).
-    def next_hop_dropped(route: CanonicalStaticRoute) -> bool:
-        reference = route_port_reference(route, named)
-        return reference is not None and reference[0] in dropped
-
     intent.static_routes = [
-        r for r in intent.static_routes
-        if not (r.interface and r.interface in dropped)
-        and not next_hop_dropped(r)
+        r for r in intent.static_routes if not _route_goes(r, dropped, named)
     ]
     intent.dhcp_servers = [
-        p for p in intent.dhcp_servers
-        if not (p.interface and p.interface in dropped)
+        p for p in intent.dhcp_servers if not _pool_goes(p, dropped)
     ]
     # (#3) Clear dangling VXLAN VTEP source-interface references.
     for vx in intent.vxlan_vnis:
         if vx.source_interface in dropped:
             vx.source_interface = ""
+
+
+def _route_goes(
+    route: CanonicalStaticRoute, dropped: set[str], named: set[str],
+) -> bool:
+    """A static route goes with a dropped name: its interface, or the
+    interface its next hop names (:func:`route_port_reference`).
+
+    (#19) Guard on a truthy interface: a gateway-only route has
+    ``interface == ''`` and must never be matched by a drop set (an
+    empty-string drop key would otherwise delete every one of them)."""
+    if route.interface and route.interface in dropped:
+        return True
+    reference = route_port_reference(route, named)
+    return reference is not None and reference[0] in dropped
+
+
+def _pool_goes(pool: CanonicalDHCPPool, dropped: set[str]) -> bool:
+    """A DHCP pool goes with the dropped interface it serves.  An
+    unbound pool (``interface == ''``) is matched by no drop set."""
+    return bool(pool.interface) and pool.interface in dropped
+
+
+def _what_goes(
+    intent: CanonicalIntent, dropped: set[str], named: set[str],
+) -> TakenWithDrops:
+    """What :func:`_strip_dropped_ports` is about to remove with
+    *dropped*, beyond the names: read before anything is removed, by
+    the tests that remove it.  Each list is read in one pass."""
+    taken = TakenWithDrops()
+    # The interfaces that say they belong to each LAG, read once.
+    belongs: dict[str, set[str]] = {}
+    for iface in intent.interfaces:
+        if iface.lag_member_of:
+            belongs.setdefault(iface.lag_member_of, set()).add(iface.name)
+    for lag in intent.lags:
+        if lag.name in dropped:
+            continue
+        members = {member for member in lag.members if member}
+        members.update(belongs.get(lag.name, ()))
+        lost = members & dropped
+        if members and lost == members:
+            taken.emptied_lags.append(lag.name)
+        elif lost:
+            taken.shrunk_lags.append(lag.name)
+    taken.lost_routes = [
+        route.destination for route in intent.static_routes
+        if _route_goes(route, dropped, named)
+    ]
+    taken.lost_dhcp_pools = [
+        pool.network or pool.interface for pool in intent.dhcp_servers
+        if _pool_goes(pool, dropped)
+    ]
+    taken.lost_tracking = [
+        iface.name for iface in intent.interfaces
+        if iface.name not in dropped and any(
+            tracked in dropped
+            for group in iface.vrrp_groups
+            for tracked in group.track_interfaces
+        )
+    ]
+    taken.lost_vtep_sources = list(dict.fromkeys(
+        vx.source_interface for vx in intent.vxlan_vnis
+        if vx.source_interface and vx.source_interface in dropped
+    ))
+    return taken
 
 
 def build_port_rename_transform(
@@ -2074,6 +2196,7 @@ def build_port_rename_transform(
                 if name not in seen:
                     kept.append(name)
                     seen.add(name)
+        result.taken.add(outcome.taken)
         return intent
 
     return transform, result

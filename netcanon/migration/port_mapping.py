@@ -28,6 +28,11 @@ Two stages:
   ``rename_map`` stay the pairing as made; ``overridden`` says which
   of them the operator replaced.
 
+What a drop took with it -- a route, a DHCP pool, a track entry, a
+VTEP source, a LAG's members -- is said in one wording,
+:func:`what_went_lines`: by the plan here, and where no devices are
+declared by the job, from the translator's own record.
+
 Policy, in order:
 
 1. Members pair by rank — first with first, in the order each
@@ -75,7 +80,7 @@ Pure functions — no I/O, no global state.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
 from ..models.port_inventory import (
     Inventory,
@@ -712,48 +717,93 @@ def settle_plan(
         )
 
 
+def what_went_lines(
+    prefix: str,
+    *,
+    emptied_lags: Sequence[str] = (),
+    shrunk_lags: Sequence[str] = (),
+    lost_routes: Sequence[str] = (),
+    lost_dhcp_pools: Sequence[str] = (),
+    lost_tracking: Sequence[str] = (),
+    lost_vtep_sources: Sequence[str] = (),
+    dropped: str = "port",
+) -> list[str]:
+    """A line for each kind of thing that went with a dropped name.
+
+    One wording for the plan (``port mapping``, where what is dropped
+    is a port of a declared device) and for a job with no devices
+    (``port_rename``, from the translator's record,
+    ``PortRenameResult.taken``, where it can be any interface).  The
+    names in a line are not quoted: the migrate page reads a quoted
+    name out of a warning as a row of its rename table.
+
+    Args:
+        prefix: What the line begins with, before ``": "``.
+        emptied_lags: LAGs every member of which was dropped.
+        shrunk_lags: LAGs that lost some members.
+        lost_routes: The destinations of the static routes removed.
+        lost_dhcp_pools: The DHCP pools removed.
+        lost_tracking: Interfaces whose VRRP group lost a track entry.
+        lost_vtep_sources: The VXLAN source interfaces dropped.
+        dropped: What the dropped names are called in the lines.
+
+    Returns:
+        The lines, in that order; none for an empty list.
+    """
+    lines: list[str] = []
+    if emptied_lags:
+        lines.append(
+            f"{prefix}: every member port of {len(emptied_lags)} "
+            f"LAG(s) was dropped, so the LAG has no port on the target "
+            f"({_summary(emptied_lags)}); review it and the VLANs "
+            f"that reference it"
+        )
+    if shrunk_lags:
+        lines.append(
+            f"{prefix}: {len(shrunk_lags)} LAG(s) lost a member "
+            f"port to a drop and have fewer members on the target: "
+            f"{_summary(shrunk_lags)}"
+        )
+    if lost_routes:
+        lines.append(
+            f"{prefix}: {len(lost_routes)} static route(s) that "
+            f"named a dropped {dropped} were removed with it: "
+            f"{_summary(lost_routes)}"
+        )
+    if lost_dhcp_pools:
+        lines.append(
+            f"{prefix}: {len(lost_dhcp_pools)} DHCP pool(s) bound "
+            f"to a dropped {dropped} were removed with it: "
+            f"{_summary(lost_dhcp_pools)}"
+        )
+    if lost_tracking:
+        lines.append(
+            f"{prefix}: {len(lost_tracking)} interface(s) lost a "
+            f"VRRP track entry with what it named (a dropped {dropped}, or a "
+            f"track object number read as one), so failover no longer "
+            f"follows it: {_summary(lost_tracking)}"
+        )
+    if lost_vtep_sources:
+        lines.append(
+            f"{prefix}: the VXLAN source interface was dropped "
+            f"({_summary(lost_vtep_sources)}), so the VTEP is left "
+            f"without the source it was bound to — give it one"
+        )
+    return lines
+
+
 def _loss_lines(plan: MappingPlan) -> list[str]:
     """Lines for what went with a dropped port, and for a route
     left naming a port that moved."""
-    lines: list[str] = []
-    if plan.emptied_lags:
-        lines.append(
-            f"port mapping: every member port of {len(plan.emptied_lags)} "
-            f"LAG(s) was dropped, so the LAG has no port on the target "
-            f"({_summary(plan.emptied_lags)}); review it and the VLANs "
-            f"that reference it"
-        )
-    if plan.shrunk_lags:
-        lines.append(
-            f"port mapping: {len(plan.shrunk_lags)} LAG(s) lost a member "
-            f"port to a drop and have fewer members on the target: "
-            f"{_summary(plan.shrunk_lags)}"
-        )
-    if plan.lost_routes:
-        lines.append(
-            f"port mapping: {len(plan.lost_routes)} static route(s) that "
-            f"named a dropped port were removed with it: "
-            f"{_summary(plan.lost_routes)}"
-        )
-    if plan.lost_dhcp_pools:
-        lines.append(
-            f"port mapping: {len(plan.lost_dhcp_pools)} DHCP pool(s) bound "
-            f"to a dropped port were removed with it: "
-            f"{_summary(plan.lost_dhcp_pools)}"
-        )
-    if plan.lost_tracking:
-        lines.append(
-            f"port mapping: {len(plan.lost_tracking)} interface(s) lost a "
-            f"VRRP track entry with what it named (a dropped port, or a "
-            f"track object number read as one), so failover no longer "
-            f"follows it: {_summary(plan.lost_tracking)}"
-        )
-    if plan.lost_vtep_sources:
-        lines.append(
-            f"port mapping: the VXLAN source interface was dropped "
-            f"({_summary(plan.lost_vtep_sources)}), so the VTEP is left "
-            f"without the source it was bound to — give it one"
-        )
+    lines = what_went_lines(
+        "port mapping",
+        emptied_lags=plan.emptied_lags,
+        shrunk_lags=plan.shrunk_lags,
+        lost_routes=plan.lost_routes,
+        lost_dhcp_pools=plan.lost_dhcp_pools,
+        lost_tracking=plan.lost_tracking,
+        lost_vtep_sources=plan.lost_vtep_sources,
+    )
     if plan.stale_next_hops:
         lines.append(
             f"port mapping: {len(plan.stale_next_hops)} static route(s) "

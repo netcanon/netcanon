@@ -668,9 +668,13 @@ which each routing instance takes a unit of its own, so a second
 loopback of the global table, or one of two in a routing instance,
 is dropped, and its warning says which loopback took the place.
 What was configured on the name is not in the output — and neither
-is what referred to it: a route out of it, a DHCP pool on it, a
-VXLAN that used it as its source.  A sub-interface that went with
-its port is listed with it.
+is what referred to it: a route out of it, a DHCP pool on it, a VRRP
+track entry of it, a VXLAN that used it as its source, its place in
+a LAG.  A warning line says each kind, with what went (`port_rename:
+1 static route(s) that named a dropped interface were removed with
+it: 10.50.0.0/16`; with both devices declared the line begins `port
+mapping:`), for a name an entry dropped as for one the translator
+did.  A sub-interface that went with its port is listed with it.
 
 *To settle it:* say what is to happen to the name.  In the rename
 modal the row is marked with a `?`: **keep verbatim** opens its

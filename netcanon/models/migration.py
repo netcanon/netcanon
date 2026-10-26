@@ -926,6 +926,13 @@ class MigrationJob(BaseModel):
     #: the schema.  :attr:`untranslated_ports` is what a client reads.
     _untranslated: list[str] = PrivateAttr(default_factory=list)
 
+    #: What went with the names the port translator dropped
+    #: (``PortRenameResult.taken``), handed over the same way and said
+    #: as warning lines where no devices are declared
+    #: (:func:`run_plan_with_checked_names`); with both devices the
+    #: plan says it.  ``None`` where the translator did not run.
+    _taken_with_drops: Any = PrivateAttr(default=None)
+
     #: The positional port pairing made when the request declared both
     #: device models (:func:`run_plan_with_models`): every pair, every
     #: source port that had no place on the target, every name that is

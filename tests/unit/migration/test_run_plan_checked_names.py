@@ -19,7 +19,8 @@ run.  Three things are read here.
   port map: how many jobs move from ``completed`` to ``partial`` is
   pinned by source codec and by reason, no job moves any other way,
   none moves between two configs of one codec, and nothing but the
-  status, its sentence and the three fields differs from what
+  status, its sentence, the three fields and the lines that say what
+  went with a dropped name differs from what
   ``run_plan_with_overrides`` returns.
 * **The rendered output** of every job that is still ``completed``,
   read back with the target's own parser (``read_back``): no interface
@@ -55,6 +56,7 @@ from netcanon.migration.canonical.port_names import names_a_target
 from netcanon.migration.codecs.base import CodecBase, RenderError
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
+from netcanon.migration.port_mapping import what_went_lines
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services import migration_pipeline
 from netcanon.services.migration_pipeline import (
@@ -94,15 +96,36 @@ def _unchecked(
     )
 
 
-def _rest(job: MigrationJob) -> dict:
+def _what_went(job: MigrationJob) -> list[str]:
+    """The lines the check adds for what went with a dropped name,
+    from the translator's record: none where nothing rendered.  What
+    the record holds is held to the tree it was read from in
+    ``test_what_goes_with_a_dropped_name.py``."""
+    if job.rendered is None or job._taken_with_drops is None:
+        return []
+    return what_went_lines(
+        "port_rename", dropped="interface", **job._taken_with_drops.model_dump(),
+    )
+
+
+def _rest(job: MigrationJob, *, checked: bool = False) -> dict:
     """Everything of a job but what the check may change, and what
-    differs between any two runs."""
+    differs between any two runs.
+
+    A *checked* job is one of the check, whose warnings end in the
+    lines it adds for what went with a dropped name: they are asserted
+    to be there, last, and then taken out."""
     data = job.model_dump(mode="json")
     for key in (
         "id", "created_at", "completed_at", "status", "error",
         "fused_ports", "unresolved_ports", "untranslated_ports",
     ):
         data.pop(key)
+    if checked:
+        added = _what_went(job)
+        kept = len(data["warnings"]) - len(added)
+        assert data["warnings"][kept:] == added
+        del data["warnings"][kept:]
     return data
 
 
@@ -1461,7 +1484,7 @@ class TestWhatTheJobSays:
         assert job.status == FAILED and job.rendered is None
         assert job.error == before.error
         assert (job.fused_ports, job.unresolved_ports, job.untranslated_ports) == ({}, [], [])
-        assert _rest(job) == _rest(before)
+        assert _rest(job, checked=True) == _rest(before)
 
     def test_a_job_that_did_not_render(self, monkeypatch) -> None:
         """The translator ran, and dropped a port, before the render
@@ -1510,7 +1533,7 @@ class TestWhatTheJobSays:
         assert (job.port_renames, job.port_drops) == ({}, [])
         assert (job.fused_ports, job.unresolved_ports, job.untranslated_ports) == ({}, [], [])
         assert (job.status, job.error) == (before.status, before.error)
-        assert _rest(job) == _rest(before)
+        assert _rest(job, checked=True) == _rest(before)
         # With the translator run, the same config is not settled.
         assert _checked(source_name, target_name, text).status == PARTIAL
 
@@ -1520,7 +1543,7 @@ class TestWhatTheJobSays:
         before = _unchecked("juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH)
         job = _checked("juniper_junos", "cisco_iosxe_cli", _JUNOS_BOTH)
         assert job.rendered == before.rendered
-        assert _rest(job) == _rest(before)
+        assert _rest(job, checked=True) == _rest(before)
 
     def test_a_callers_transform_still_runs(self) -> None:
         def rename_host(tree):
@@ -1971,8 +1994,9 @@ class TestEveryCommittedCapture:
                 where = f"{path.parent.name}/{path.name} -> {target_name}"
                 before = run_plan_with_overrides(source, target, text, port_rename_map={})
                 job = run_plan_with_checked_names(source, target, text, port_rename_map={})
-                # Nothing but the status, its sentence and the fields.
-                assert _rest(job) == _rest(before), where
+                # Nothing but the status, its sentence and the fields
+                # -- and what went with a name dropped, said last.
+                assert _rest(job, checked=True) == _rest(before), where
                 assert job.rendered == before.rendered, where
                 said = bool(
                     job.fused_ports or job.unresolved_ports or job.untranslated_ports

@@ -381,6 +381,19 @@ only where a hardware port is among what it lists: for logical names
 the path with devices holds nothing, and would call the same output
 `completed`.
 
+What went with a dropped name is said on both paths, in one wording
+(`port_mapping.what_went_lines`).  The translator removes a static
+route out of a name it drops, a DHCP pool on it, a VRRP track entry
+of it, a VXLAN source that is it and its place in a LAG
+(`_strip_dropped_ports`), and none of that is in the output to be
+seen.  It records each where it removes it, by the tests that remove
+it (`PortRenameResult.taken`); with no devices declared
+`run_plan_with_checked_names` writes a `port_rename:` line for each
+kind, and with both the plan writes its `port mapping:` lines from a
+reading of its own.  A line and not a status: a name the translator
+dropped holds the job already, and one an entry dropped was the
+operator's to decide.
+
 ---
 
 ## Config limits (what one request may make, and for how long)

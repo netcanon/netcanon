@@ -1093,8 +1093,11 @@ capability matrix has no path for:
   tunnel the target has no form for, a FortiGate hardware switch
   (`internal`) that holds the LAN address, a RouterOS bridge or an
   IOS-XE `VirtualPortGroup` (an interface only its own platform
-  has).  What was configured on it is not in the output.  A sub-interface that went with its port
-  is listed with it.
+  has).  What was configured on it is not in the output.  What
+  referred to it went with it — a static route out of it, a DHCP
+  pool on it, a VRRP track entry, a VXLAN source, its place in a
+  LAG — and a warning line says each.  A sub-interface that went
+  with its port is listed with it.
 * **A name is left as the source config has it**, because the
   translator could not read it as any kind of port (`could not
   classify port name ...; left verbatim`).  Whatever the output has
