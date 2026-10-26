@@ -592,6 +592,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A run of more digits than a number is read from is refused in
+  words, not failed as a fault.**  Python converts a string of digits
+  to a number only up to a limit (`sys.get_int_max_str_digits()`,
+  4,300 digits by default), and every parser reads numbers from the
+  runs of digits its patterns take.  A config that held a run of 4,400
+  digits failed the parse of seven of the public codecs (on one
+  capture of each), at some two dozen places, as `unexpected error in
+  stage parsing: Exceeds the limit (4300 digits) for integer string
+  conversion ... use sys.set_int_max_str_digits() to increase the
+  limit` -- words about
+  the server, and advice no operator can take; an entry of a port map
+  whose target held such a run failed seven of the targets the same
+  way at render.  Nothing was written wrong.  `CodecBase.parse` now
+  refuses such a text before any parser reads it -- `parse failed:
+  <codec>: line <n> holds a run of more than 4,300 digits, more than a
+  number is read from, so the text is not read`, naming the line and
+  quoting nothing -- and `CodecBase.render` a tree whose value holds
+  one, naming the field (`render failed: <codec>: a value of the tree
+  (interfaces[].name) holds ...`), on every target: one rule at the
+  two boundaries every caller crosses
+  (`netcanon/migration/_long_numbers.py`).  The limit is read when the
+  check is made, so a server that sets another is held to its own; no
+  committed input holds a run anywhere near it.  Guarded by
+  `tests/unit/migration/test_a_number_too_long_to_read.py`: every line
+  of a capture of each public codec that holds a number, made too
+  long; a port an entry names so onto every target; and each check
+  taken out, to show the texts reach the failure it is for.
 - **An IOS XR sub-interface whose encapsulation is no 802.1Q tag is
   left out, and said.**  `encapsulation untagged` defines "the
   matching criteria to map untagged frames on an interface" (Cisco,

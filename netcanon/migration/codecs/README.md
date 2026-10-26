@@ -655,6 +655,15 @@ the policy locally:
   character is left out before either mend (`secrets_left_out`): a
   renderer is never handed one with a space in its place.
 
+* **`netcanon/migration/_long_numbers.py`** — a number is read only
+  where Python reads one.  Public API: `first_long_run_line(text)`
+  (the check `CodecBase.parse` makes: a text that holds a run of more
+  digits than `sys.get_int_max_str_digits()` is a `ParseError` naming
+  the line) and `first_long_run(tree)` (the check `CodecBase.render`
+  makes, naming the field).  A codec needs to do nothing: a parser may
+  convert any run of digits its patterns take, and a renderer any run
+  in a name it is handed.
+
 * **`netcanon/migration/_vlan_labels.py`** — a VLAN's label as its
   name.  Public API: `vlan_labels_as_names(tree)`,
   `label_is_its_name(vlan, interface_names)`, `vlan_labels(tree)`,

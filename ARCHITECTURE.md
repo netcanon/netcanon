@@ -942,6 +942,19 @@ secret, so one that holds a line break or a control character is left
 out first, with what it composes (`secrets_left_out`, over the table
 `SECRETS`), and the job is `partial`.
 
+**A number is read only where Python reads one**
+(`netcanon/migration/_long_numbers.py`).  Python converts a string of
+digits to a number only up to a limit (`sys.get_int_max_str_digits()`),
+and every parser and renderer reads numbers from runs of digits -- a
+port's number, a VLAN id, a unit -- so a run past the limit failed a
+job as a fault, wherever its first `int()` happened to be.  The check
+is made once, at the two boundaries every caller crosses:
+`CodecBase.parse` refuses a text that holds such a run (a `ParseError`
+naming the line), and `CodecBase.render` a tree whose value holds one
+(a `RenderError` naming the field), since an operator's map puts values
+into the tree too.  A codec needs to do nothing: under either, every
+run of digits it reads is one Python converts.
+
 **A VLAN's label as its name** (`netcanon/migration/_vlan_labels.py`).
 OPNsense and RouterOS have no name for a VLAN of its own: the tree
 names it after its interface (`vlan0.10`, `vlan10`) and holds the

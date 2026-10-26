@@ -173,13 +173,22 @@ def test_an_id_int_cannot_read_ends_no_job(codec: str, ids: str) -> None:
     """A token that reads as digits and that ``int`` refuses -- a
     superscript digit, a run longer than ``int`` converts -- is not a
     VLAN id.  It used to end the job with "unexpected error in stage
-    parsing", for every parser that reads its lists with the helper."""
+    parsing", for every parser that reads its lists with the helper.
+    A run longer than ``int`` converts is now refused at parse, in
+    words, before the helper sees it (``_long_numbers``); the helper
+    still reads none as an id (below)."""
+    from netcanon.migration import _long_numbers
     from netcanon.migration.codecs.registry import get_codec
     from netcanon.services.migration_pipeline import run_plan_with_checked_names
 
     own = get_codec(codec)
-    job = run_plan_with_checked_names(own, own, _READS_THE_LIST[codec].format(ids=ids), port_rename_map={})
-    assert job.status != "failed", (job.status, job.error)
+    text = _READS_THE_LIST[codec].format(ids=ids)
+    job = run_plan_with_checked_names(own, own, text, port_rename_map={})
+    line = _long_numbers.first_long_run_line(text)
+    if line is None:
+        assert job.status != "failed", (job.status, job.error)
+    else:
+        assert job.error == "parse failed: " + _long_numbers.parse_refused(codec, line)
 
 
 @pytest.mark.unit
