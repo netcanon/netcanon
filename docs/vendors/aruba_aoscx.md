@@ -145,6 +145,11 @@ Deliberately deferred to [Tier
   `dropped_tier3_sections` banner; not auto-rendered)
 - **ACLs** — standard / extended
 - **QoS** — `class` / `policy` / `apply qos`
+- **VSF** — a CX 6200's or 6300's stack lines (`vsf member` with
+  its `type` and `link` lines, `vsf secondary-member`, `vsf
+  split-detect`): each line is a row of the
+  `dropped_tier3_sections` banner.  The stack itself is declared as
+  the deployment of a model family, which makes its port names right
 - **NAT** — AOS-CX does not host typical edge NAT
 
 If your migration involves these surfaces, plan to hand-translate
@@ -382,9 +387,10 @@ translate it again from `show running-config` as the switch prints it.
   line under each is "The part number of the member being
   provisioned", HPE's VSF guide for the 6200 and 6300), and a switch
   that is alone prints the block too.  The `vsf` lines themselves are
-  not translated, and the job does not list them: onto any target,
-  AOS-CX included, the output has no `vsf` line and the job can say
-  `completed`.  Another AOS-CX switch (a 6400, an 8xxx) is declared
+  not translated: onto any target, AOS-CX included, the output has no
+  `vsf` line, and the job lists each among the sections it did not
+  translate (`vsf member 1`, `vsf split-detect mgmt`).  Another AOS-CX
+  switch (a 6400, an 8xxx) is declared
   through a target profile.  The shipped 6300M profile lists `mgmt`,
   and is graded `inferred` for the reason its family's JL661A is.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.

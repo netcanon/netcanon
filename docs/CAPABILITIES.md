@@ -2261,8 +2261,10 @@ nothing, as before.
   different mix of port types, needs a human look.
 * **The stack's own configuration** (`stacking`, `vsf`, member
   provisioning, and the `oobm` block, per-member addresses included)
-  is not translated.  Only the port names are made right.  The job
-  has no warning for it; with a 2930F fabric or a 2930M stack
+  is not translated.  Only the port names are made right.  From
+  AOS-CX the job lists each `vsf` line among the sections it did not
+  translate (`dropped_tier3_sections`); from AOS-S or a Catalyst it
+  has no warning for it, and with a 2930F fabric or a 2930M stack
   declared from a model family, the plan's `caveats` say so.
 * An AOS-S config defines a LAG as `trk1` and lists it in a VLAN as
   `Trk1`.  That is one LAG and one name, `trk1`, as a key of a rename

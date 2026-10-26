@@ -16,6 +16,7 @@ import pytest
 from netcanon.migration import _tier3_detection
 from netcanon.migration._tier3_detection import (
     LEFT_OUT_ROWS_SHOWN,
+    detect_tier3_sections_aoscx,
     detect_tier3_sections_dellos10,
     detect_tier3_sections_fortios,
     detect_tier3_sections_iosxe_cli,
@@ -716,6 +717,101 @@ class TestAristaMLAG:
             "guard would pass vacuously"
         )
         assert not missed, f"MLAG silently dropped, no banner, in: {missed}"
+
+
+# ---------------------------------------------------------------------------
+# Aruba AOS-CX detector -- VSF
+# ---------------------------------------------------------------------------
+
+
+class TestArubaAOSCXVSF:
+    """A CX 6200's or 6300's stack lines are not translated, and were
+    not listed: onto any target, AOS-CX included, the output had no
+    ``vsf`` line and the job said ``completed`` with no row for them.
+    Each line is a row now; the job's status is as it was, since a
+    row is a section to apply by hand.
+
+    The text is the shape of HPE's VSF guide for the 6200 and 6300
+    (AOS-CX 10.18): a ``vsf member`` block with its ``type`` and
+    ``link`` lines, and the two other lines it prints."""
+
+    _STACK = (
+        "hostname sw\n"
+        "vsf member 1\n"
+        "    type jl661a\n"
+        "    link 1 1/1/49\n"
+        "vsf member 2 \n"
+        "    type jl662a\n"
+        "    link 1 2/1/50\n"
+        "vsf secondary-member 2\n"
+        "vsf split-detect mgmt\n"
+        "vlan 10\n"
+        "interface 1/1/1\n"
+        "    no shutdown\n"
+        "    vlan access 10\n"
+    )
+
+    _ROWS = [
+        "vsf member 1",
+        "vsf member 2",
+        "vsf secondary-member 2",
+        "vsf split-detect mgmt",
+    ]
+
+    def test_each_vsf_line_is_a_row(self) -> None:
+        """Exact: the indented ``type`` and ``link`` lines are under
+        their member's row, and nothing else in the text is a row."""
+        assert detect_tier3_sections_aoscx(self._STACK) == self._ROWS
+
+    def test_crlf_text(self) -> None:
+        text = self._STACK.replace("\n", "\r\n")
+        assert detect_tier3_sections_aoscx(text) == self._ROWS
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "interface 1/1/49\n    description vsf link\n",
+            "no vsf member 3\n",
+            "vsx\n    inter-switch-link lag 256\n",
+        ],
+        ids=["a word in a description", "a no form", "vsx"],
+    )
+    def test_what_is_not_a_vsf_line(self, text: str) -> None:
+        assert detect_tier3_sections_aoscx(text) == []
+
+    def test_the_codec_lists_them(self) -> None:
+        from netcanon.migration.codecs.aruba_aoscx.codec import ArubaAOSCXCodec
+
+        intent = ArubaAOSCXCodec().parse(self._STACK)
+        assert intent.dropped_tier3_sections == self._ROWS
+
+    def test_a_banners_line_is_text(self) -> None:
+        from netcanon.migration.codecs.aruba_aoscx.codec import ArubaAOSCXCodec
+
+        text = "banner motd !\nvsf member 9\n!\n" + self._STACK
+        intent = ArubaAOSCXCodec().parse(text)
+        assert intent.dropped_tier3_sections == self._ROWS
+
+    @pytest.mark.parametrize(
+        "target", ["aruba_aoscx", "cisco_iosxe_cli"],
+    )
+    def test_a_job_lists_them(self, target: str) -> None:
+        """The output has no ``vsf`` line, onto AOS-CX itself as onto
+        another vendor, and the job says which it left out.  The
+        status is the validation report's: a section to apply by
+        hand does not hold the job."""
+        from netcanon.migration.codecs.registry import get_codec
+        from netcanon.models.migration import MigrationJobStatus
+        from netcanon.services.migration_pipeline import run_plan
+
+        job = run_plan(get_codec("aruba_aoscx"), get_codec(target), self._STACK)
+        assert job.status == MigrationJobStatus.completed, job.error
+        assert job.dropped_tier3_sections == self._ROWS
+        assert job.rendered is not None
+        assert not [
+            line for line in job.rendered.splitlines()
+            if line.strip().startswith("vsf")
+        ]
 
 
 # ---------------------------------------------------------------------------

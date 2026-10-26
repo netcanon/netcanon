@@ -227,12 +227,21 @@ _IOSXR_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
 # `interface`, `vlan`, `vrf`, `ip route`, `hostname` (parsed) and the
 # deferred Tier-2 `evpn` / `vsx` / `interface vxlan` blocks (which have
 # planned canonical surfaces, so flagging them as Tier-3 would mislead).
+#
+# `vsf` is a CX 6200's or 6300's stack (`vsf member N`, with the
+# `type` and `link` lines indented under it, `vsf secondary-member`,
+# `vsf split-detect`).  It has no canonical surface -- a stack is
+# declared as the deployment of a model family, and its port names
+# are made right; its own lines are not written -- so each line is a
+# row, kept whole: the member number says which block was left out.
+# The indented lines are under their header's row.
 _AOSCX_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^router (?:bgp|ospf|ospfv3|rip|pim)\b.*$", re.MULTILINE),
     re.compile(r"^access-list (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
     re.compile(r"^route-map\s+\S+", re.MULTILINE),
     re.compile(r"^class (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
     re.compile(r"^policy\s+\S+", re.MULTILINE),
+    re.compile(r"^vsf\b.*$", re.MULTILINE),
 )
 
 # VyOS curly-brace shape — block openers for the routing-protocol / NAT /
