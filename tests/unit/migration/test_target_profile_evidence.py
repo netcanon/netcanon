@@ -106,7 +106,6 @@ EXPECTED_VENDOR_DOC_GRADED = {
     "arista_eos/DCS-7050SX-64",
     "arista_eos/DCS-7060CX-32S",
     "arista_eos/DCS-7280CR3-32P4",
-    "aruba_aoscx/6300M-48G-PoE4-SFP56",
     "aruba_aoss/2930F-24G",
     "aruba_aoss/2930F-24G-PoEP",
     "aruba_aoss/2930F-48G-PoEP",
@@ -124,11 +123,16 @@ EXPECTED_VENDOR_DOC_GRADED = {
 
 #: Profiles whose port names cannot be vouched for on the target they
 #: are filed under — so they are flagged to the operator rather than
-#: quietly offered.  EMPTY today, and meant to be.  The two profiles
-#: that used to be here (Netgate SG-1100 / SG-3100, filed under
-#: OPNsense) were deleted rather than left flagged: they are pfSense
-#: Plus hardware and OPNsense has no image for either board, so no
-#: target existed for the names to be right on.
+#: quietly offered.  The two profiles that used to be here (Netgate
+#: SG-1100 / SG-3100, filed under OPNsense) were deleted rather than
+#: left flagged: they are pfSense Plus hardware and OPNsense has no
+#: image for either board, so no target existed for the names to be
+#: right on.
+#:
+#: The CX 6300M is here because no HPE text read numbers its RJ45
+#: ports: HPE numbers its four SFP56 uplinks 49-52, and that the 48
+#: RJ45 ports before them are 1-48 is inferred -- as the `6300` model
+#: family grades its JL661A, the same switch.
 #:
 #: Rot-fail by design.  Whoever finds a shipped profile that is wrong
 #: without an established replacement flags it (``evidence: inferred``
@@ -137,7 +141,7 @@ EXPECTED_VENDOR_DOC_GRADED = {
 #: state the 2026-10 audit found.  Whoever resolves one (re-files it,
 #: deletes it, or establishes the names) changes the YAML and this set
 #: in the same PR.
-KNOWN_DOUBTFUL: set[str] = set()
+KNOWN_DOUBTFUL: set[str] = {"aruba_aoscx/6300M-48G-PoE4-SFP56"}
 
 
 def _inferred_without_a_caveat(profiles: dict[str, TargetProfile]) -> list[str]:
@@ -204,10 +208,10 @@ class TestGradesCarryWhatTheyPromise:
         )
 
     def test_the_caveat_check_is_not_vacuous(self) -> None:
-        """No shipped profile is graded ``inferred`` today, so the test
-        above passes over an empty set.  Prove the check itself on the
-        synthetic profile the UI tests use for the amber notice: it must
-        pass as written and fail the moment its caveat is removed."""
+        """Prove the check itself, not only the shipped profiles it
+        passes over, on the synthetic profile the UI tests use for the
+        amber notice: it must pass as written and fail the moment its
+        caveat is removed."""
         fixture = load_profile_file(UNVERIFIED_PROFILE_YAML)
         assert fixture.key == UNVERIFIED_PROFILE_KEY
         assert fixture.evidence == "inferred"

@@ -73,14 +73,20 @@ class TestTargetProfilesList:
         assert body["evidence"] == "inferred"
         assert body["caveat"] == UNVERIFIED_PROFILE_CAVEAT
 
-    def test_no_shipped_profile_is_flagged_unverified(self, client: TestClient):
+    def test_the_shipped_profiles_flagged_unverified_say_why(
+        self, client: TestClient,
+    ):
+        """The shipped profiles graded ``inferred`` are KNOWN_DOUBTFUL in
+        ``tests/unit/migration/test_target_profile_evidence.py``; each
+        reaches the client with its caveat."""
         data = client.get("/api/v1/migration/target-profiles").json()
         assert data, "no profiles loaded"
-        flagged = [
-            f"{p['vendor']}/{p['model']}" for p in data
+        flagged = {
+            f"{p['vendor']}/{p['model']}": p["caveat"] for p in data
             if p["evidence"] == "inferred"
-        ]
-        assert flagged == []
+        }
+        assert set(flagged) == {"aruba_aoscx/6300M-48G-PoE4-SFP56"}
+        assert all(caveat.strip() for caveat in flagged.values()), flagged
 
     def test_missing_profile_returns_404(self, client: TestClient):
         resp = client.get(

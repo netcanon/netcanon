@@ -615,7 +615,10 @@ timestamp if your timezone matters for an audit.
   the switch is in the stack, and the notes say so.  No configuration
   of a 6200 or 6300 was seen.  The 6300M target profile
   (`aruba_aoscx/6300M-48G-PoE4-SFP56`) lists `mgmt` now, so the
-  `interface mgmt` of a config is no longer reported as off-inventory.
+  `interface mgmt` of a config is no longer reported as off-inventory,
+  and is graded `inferred` (it was `vendor-doc`), as the family grades
+  its JL661A: HPE numbers its SFP56 uplinks, and no HPE text read
+  numbers its RJ45 ports.  Its notice is amber.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

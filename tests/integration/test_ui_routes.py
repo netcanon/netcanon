@@ -407,14 +407,11 @@ class TestDefinitionsPageEnriched:
         assert 'data-testid="profile-caveat"' in resp.text
         # `ungraded` is a state the page must show too: an unchecked
         # profile says so rather than saying nothing.
-        for grade in ("capture", "vendor-doc", "ungraded"):
+        for grade in ("capture", "vendor-doc", "inferred", "ungraded"):
             assert (
                 f'data-testid="profile-evidence" data-evidence="{grade}"'
                 in resp.text
             ), grade
-        # No shipped profile is flagged as unverified (the set is pinned
-        # empty in tests/unit/migration/test_target_profile_evidence.py).
-        assert 'data-evidence="inferred"' not in resp.text
         # The CX 6300M is grouped under its real OS.
         assert 'data-vendor="aruba_aoscx"' in resp.text
 
@@ -424,7 +421,7 @@ class TestDefinitionsPageEnriched:
     ) -> None:
         """A profile graded ``inferred`` is listed as such, with the
         caveat that says what is unverified.  Exercised on a synthetic
-        profile, since none ships with that grade."""
+        profile, whose caveat the test knows."""
         from tests.fixtures.target_profiles import UNVERIFIED_PROFILE_CAVEAT
 
         resp = client.get("/definitions")

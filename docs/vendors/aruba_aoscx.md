@@ -385,7 +385,8 @@ translate it again from `show running-config` as the switch prints it.
   not translated, and the job does not list them: onto any target,
   AOS-CX included, the output has no `vsf` line and the job can say
   `completed`.  Another AOS-CX switch (a 6400, an 8xxx) is declared
-  through a target profile; the shipped 6300M profile lists `mgmt`.
+  through a target profile.  The shipped 6300M profile lists `mgmt`,
+  and is graded `inferred` for the reason its family's JL661A is.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **A routed sub-interface loses its tag.**  A stanza named
   `interface 1/1/1.54` is read as an interface of that name; its
