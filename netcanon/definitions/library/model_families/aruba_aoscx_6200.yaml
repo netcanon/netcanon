@@ -1,0 +1,232 @@
+# Aruba CX 6200 (6200M and 6200F): the models with 24 or 48 RJ45 ports
+# and four SFP+ or SFP uplinks
+#
+# A fixed-port switch, alone or one of a VSF stack of up to eight.  How
+# a name is made is the 6300's (VSF, "Identifying switch ports and
+# interfaces"): `<member>/1/<port>`, member 1 for a switch that is
+# alone, a 6200's member 1 to 8.  Aruba's own configuration of a
+# standalone JL728A has `vsf member 1`, `type jl728a`, `interface mgmt`
+# and an interface for each of 1/1/1 to 1/1/52.
+#
+# A stack has ONE management interface, `mgmt` (VSF, "Management
+# interface"), declared once under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   VSF   HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300
+#         Switch Series (sd00007849en_us): Identifying switch ports and
+#         interfaces; Interoperation; Management interface; Applicable
+#         products (the 6200 Switch Series: the 6200M's R8Q67A to
+#         R8Q71A among them).
+#   IG62  HPE Aruba Networking CX 6200F/M Switch Series Installation and
+#         Getting Started Guide, Edition 1: Table 2 (each 6200F part
+#         number and its description, the A and B revisions together);
+#         the 10/100/1000 Mbps out-of-band management port.
+#   JP62  HPE Japan, System Configuration Guide for HPE Aruba Networking
+#         CX 6200: each model's uplink port numbers, and each 6200M part
+#         number with its description.
+#   GH    Aruba's central-python-workflows repository on GitHub, the
+#         onboarding template of a standalone JL728A.
+#
+# Where the sources are silent: no HPE text read numbers the RJ45 ports
+# of a 6200.  JP62 numbers the four uplinks of every model here (25-28
+# on a 24-port model, 49-52 on a 48-port one); that the RJ45 ports are
+# 1-24 or 1-48 is graded inferred and says so.  JP62 lists the 6200F's
+# B revisions only: an A revision's uplink numbers are the B
+# revision's, and say so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * R8Q71A (36 1G and 12 Smart Rate ports, with no stated numbering)
+#     and R8Q72A (the 12-port model, whose two RJ45 ports without PoE
+#     are not numbered by any text read, and which stacks only with its
+#     own kind).
+#   * The TAA-compliant twins (R8V08A to R8V13A, S0M86A to S0M90A,
+#     S0G13A to S0G17A).
+#   * Whether a 6200M stacks with a 6200F: VSF's Interoperation names
+#     the 6200F as a family whose models stack in any combination, and
+#     its Applicable products list the 6200M in the 6200 series.  A
+#     deployment that mixes them is not refused.
+schema: 1
+vendor: aruba_aoscx
+family: "6200"
+display_name: "Aruba CX 6200 (6200M and 6200F)"
+naming: aoscx
+default_mode: vsf
+
+modes:
+  vsf:
+    label: "VSF stack of up to eight members (`vsf member`; a switch that is alone is member 1)"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Identifying switch ports and interfaces (a port is identified using the format member/slot/port; on a 6200 the member ranges from 1 to 8; if the switch is not a member of a VSF stack, then member is 1; the slot is always 1, as the switch is not modular; the port is the physical number of a port on the switch: the logical interface 1/1/4 is associated with physical port 4 on member 1); HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Applicable products (the 6200 Switch Series, the 6200M R8Q67A to R8Q71A and the 6200F among them); HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Interoperation (a VSF stack can include any combination of models within one supported switch family, among them the 6200F; stacking is not supported across switch families)"
+    caveat: "Names carry the member number even on a switch that is alone: member 1, unless it was renumbered. Whether a 6200M stacks with a 6200F is not established by the HPE text read; a deployment that mixes them is not refused, nor is one that mixes models in any other way. The stack lines (vsf member, with its type and link lines, and vsf secondary-member) describe the hardware, and the parser does not read them. No configuration of a CX 6200 was seen."
+
+deployment_ports:
+  - name: mgmt
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port, one interface per VSF stack: only the conductor's is given an address"
+    naming: {grade: vendor-doc, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Management interface (only the management interface on the conductor switch will be assigned an IP address; the management interface is applicable only for 6200 and 6300 devices); HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Switch and Port LEDs: Labels and Description (label 9: 10/100/1000 Mbps Out-of-Band Management port); Aruba's central-python-workflows repository on GitHub (aruba/central-python-workflows, branch v2), Classic-Central/device_onboarding/device_templates/cx/template.txt (the configuration of a standalone JL728A, !Version ArubaOS-CX ML.10.07.0010) (interface mgmt)"}
+
+models:
+  # --- 6200M, 24 or 48 ports and four SFP+ uplinks ---------------------------
+  R8Q67A:
+    skus: [R8Q67A]
+    display_name: "Aruba CX 6200M 24G 4SFP+ Switch (R8Q67A)"
+    panel: {grade: inferred, ref: "HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (R8Q67A: HPE Aruba Networking CX 6200M 24G 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28)", caveat: "R8Q67A: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a R8Q67A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  R8Q68A:
+    skus: [R8Q68A]
+    display_name: "Aruba CX 6200M 24G Class4 PoE 4SFP+ Switch (R8Q68A)"
+    panel: {grade: inferred, ref: "HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (R8Q68A: HPE Aruba Networking CX 6200M 24G Class4 PoE 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28)", caveat: "R8Q68A: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a R8Q68A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  R8Q69A:
+    skus: [R8Q69A]
+    display_name: "Aruba CX 6200M 48G 4SFP+ Switch (R8Q69A)"
+    panel: {grade: inferred, ref: "HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (R8Q69A: HPE Aruba Networking CX 6200M 48G 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52)", caveat: "R8Q69A: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a R8Q69A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  R8Q70A:
+    skus: [R8Q70A]
+    display_name: "Aruba CX 6200M 48G Class4 PoE 4SFP+ Switch (R8Q70A)"
+    panel: {grade: inferred, ref: "HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (R8Q70A: HPE Aruba Networking CX 6200M 48G Class4 PoE 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52)", caveat: "R8Q70A: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a R8Q70A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  # --- 6200F, 24 or 48 ports and four SFP+ uplinks ---------------------------
+  JL724A:
+    skus: [JL724A]
+    display_name: "Aruba CX 6200F 24G 4SFP+ Switch (JL724A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL724A: Aruba 6200F 24G 4SFP+ Switch; the B revision, JL724B, is described the same way); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28; it lists the B revision, not the A)", caveat: "JL724A: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  JL724A is the A revision of JL724B: its uplink numbers are those HPE's series guide gives a 24-port 6200, which lists the B revision only.  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL724A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL724B:
+    skus: [JL724B]
+    display_name: "Aruba CX 6200F 24G 4SFP+ Switch (JL724B)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL724B: HPE Aruba Networking CX 6200F 24G 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28)", caveat: "JL724B: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL724B was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL725A:
+    skus: [JL725A]
+    display_name: "Aruba CX 6200F 24G Class 4 PoE 4SFP+ 370W Switch (JL725A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL725A: Aruba 6200F 24G Class 4 PoE 4SFP+ 370W Switch; the B revision, JL725B, is described the same way); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28; it lists the B revision, not the A)", caveat: "JL725A: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  JL725A is the A revision of JL725B: its uplink numbers are those HPE's series guide gives a 24-port 6200, which lists the B revision only.  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL725A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL725B:
+    skus: [JL725B]
+    display_name: "Aruba CX 6200F 24G Class 4 PoE 4SFP+ 370W Switch (JL725B)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL725B: HPE Aruba Networking CX 6200F 24G Class 4 PoE 4SFP+ 370W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four SFP+ ports 25 to 28)", caveat: "JL725B: HPE numbers the four SFP+ ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL725B was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL726A:
+    skus: [JL726A]
+    display_name: "Aruba CX 6200F 48G 4SFP+ Switch (JL726A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL726A: Aruba 6200F 48G 4SFP+ Switch; the B revision, JL726B, is described the same way); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52; it lists the B revision, not the A)", caveat: "JL726A: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  JL726A is the A revision of JL726B: its uplink numbers are those HPE's series guide gives a 48-port 6200, which lists the B revision only.  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL726A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL726B:
+    skus: [JL726B]
+    display_name: "Aruba CX 6200F 48G 4SFP+ Switch (JL726B)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL726B: HPE Aruba Networking CX 6200F 48G 4SFP+ Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52)", caveat: "JL726B: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL726B was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL727A:
+    skus: [JL727A]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP+ 370W Switch (JL727A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL727A: Aruba 6200F 48G Class 4 PoE 4SFP+ 370W Switch; the B revision, JL727B, is described the same way); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52; it lists the B revision, not the A)", caveat: "JL727A: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  JL727A is the A revision of JL727B: its uplink numbers are those HPE's series guide gives a 48-port 6200, which lists the B revision only.  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL727A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL727B:
+    skus: [JL727B]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP+ 370W Switch (JL727B)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL727B: HPE Aruba Networking CX 6200F 48G Class 4 PoE 4SFP+ 370W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52)", caveat: "JL727B: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL727B was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL728A:
+    skus: [JL728A]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP+ 740W Switch (JL728A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL728A: Aruba 6200F 48G Class 4 PoE 4SFP+ 740W Switch; the B revision, JL728B, is described the same way); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52; it lists the B revision, not the A); Aruba's central-python-workflows repository on GitHub (aruba/central-python-workflows, branch v2), Classic-Central/device_onboarding/device_templates/cx/template.txt (the configuration of a standalone JL728A, !Version ArubaOS-CX ML.10.07.0010) (interface mgmt and interfaces 1/1/1 to 1/1/52, each named in the configuration)", caveat: "JL728A: Aruba's own configuration of a standalone JL728A has an interface for each of 1/1/1-1/1/52, so the names are printed by the vendor.  That 49-52 are its four SFP+ ports is inferred: HPE's series guide numbers them so for a 48-port 6200 and lists the B revision (JL728B) only."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  JL728B:
+    skus: [JL728B]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP+ 740W Switch (JL728B)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (JL728B: HPE Aruba Networking CX 6200F 48G Class 4 PoE 4SFP+ 740W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four SFP+ ports 49 to 52)", caveat: "JL728B: HPE numbers the four SFP+ ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a JL728B was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  # --- 6200F, 24 or 48 ports and four 1G SFP uplinks -------------------------
+  S0M81A:
+    skus: [S0M81A]
+    display_name: "Aruba CX 6200F 24G 4SFP Switch (S0M81A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (S0M81A: HPE Aruba Networking CX 6200F 24G 4SFP Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four 1G SFP ports 25 to 28)", caveat: "S0M81A: HPE numbers the four 1G SFP ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a S0M81A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  S0M82A:
+    skus: [S0M82A]
+    display_name: "Aruba CX 6200F 24G Class 4 PoE 4SFP 370W Switch (S0M82A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (S0M82A: HPE Aruba Networking CX 6200F 24G Class 4 PoE 4SFP 370W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 24-port 6200 numbers its four 1G SFP ports 25 to 28)", caveat: "S0M82A: HPE numbers the four 1G SFP ports of a 24-port 6200 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a S0M82A was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  S0M83A:
+    skus: [S0M83A]
+    display_name: "Aruba CX 6200F 48G 4SFP Switch (S0M83A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (S0M83A: HPE Aruba Networking CX 6200F 48G 4SFP Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four 1G SFP ports 49 to 52)", caveat: "S0M83A: HPE numbers the four 1G SFP ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a S0M83A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  S0M84A:
+    skus: [S0M84A]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP 370W Switch (S0M84A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (S0M84A: HPE Aruba Networking CX 6200F 48G Class 4 PoE 4SFP 370W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four 1G SFP ports 49 to 52)", caveat: "S0M84A: HPE numbers the four 1G SFP ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a S0M84A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  S0M85A:
+    skus: [S0M85A]
+    display_name: "Aruba CX 6200F 48G Class 4 PoE 4SFP 740W Switch (S0M85A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking CX 6200F/M Switch Series Installation and Getting Started Guide, Edition 1, Table 2, Front of all the 6200F switches (S0M85A: HPE Aruba Networking CX 6200F 48G Class 4 PoE 4SFP 740W Switch); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6200 (systemconfig-cx-6200) (a 48-port 6200 numbers its four 1G SFP ports 49 to 52)", caveat: "S0M85A: HPE numbers the four 1G SFP ports of a 48-port 6200 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a S0M85A was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}

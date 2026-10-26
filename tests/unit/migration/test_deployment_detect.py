@@ -28,6 +28,7 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import deployment_detect
+from netcanon.migration.codecs.aruba_aoscx import deployment_detect as aoscx_detect
 from netcanon.migration.codecs.aruba_aoss import deployment_detect as aoss_deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
 from netcanon.migration.codecs.base import ParseError
@@ -127,11 +128,17 @@ vlan 1
 #: Which codec reads a vendor's configs.  A vendor that gains a
 #: detector has to be named here: the tests that walk every detector
 #: fail until it is.
-_CODEC_OF = {"aruba_aoss": "aruba_aoss", "cisco_iosxe": "cisco_iosxe_cli"}
+_CODEC_OF = {
+    "aruba_aoss": "aruba_aoss", "aruba_aoscx": "aruba_aoscx",
+    "cisco_iosxe": "cisco_iosxe_cli",
+}
 
 #: The words a vendor's detector reports as ``fabric``: its configs'
 #: own names for the stanza a stack's members are in.
-_STANZA_WORDS = {"aruba_aoss": ("stacking", "vsf"), "cisco_iosxe": ("switch",)}
+_STANZA_WORDS = {
+    "aruba_aoss": ("stacking", "vsf"), "aruba_aoscx": ("vsf",),
+    "cisco_iosxe": ("switch",),
+}
 
 _T = TypeVar("_T")
 
@@ -1098,6 +1105,7 @@ class TestEveryDetector:
         "a word again and again": "module " * 60_000,
         "a line of bays": "flexible-module " + "A " * 100_000,
         "tabs then a word": ("\t" * 2_000 + "member\n") * 100,
+        "member blocks with no number": "vsf member\n    type\n" * 100_000,
         "control characters": "\x00\x0b\x0c\x1c\x85\u2028" * 50_000,
     }
 
@@ -2366,6 +2374,306 @@ class TestTheCatalystDetectorOnTextMadeToBeSlow:
     def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
         text = self.PREFIXES[prefix] + self.TAILS[tail]
         detected = _within(5.0, lambda: catalyst_detect.detect_deployment(text))
+        if detected is not None:
+            assert sum(map(len, detected.notes)) < 4_000
+            assert max(map(len, detected.evidence), default=0) < 64
+
+
+# ---------------------------------------------------------------------------
+# The AOS-CX detector (CX 6200 and CX 6300)
+# ---------------------------------------------------------------------------
+
+AOSCX = get_codec("aruba_aoscx")
+
+#: HPE's AOS-CX 10.18 VSF Guide for the 6200 and 6300, the `type`
+#: command's example running-config, as printed: an `exit` after each
+#: member's block.
+AOSCX_TYPE_EXAMPLE = (
+    "vlan 1\n"
+    "vsf member 1\n"
+    "    type jl661a\n"
+    "exit\n"
+    "vsf member 2\n"
+    "    type jl662a\n"
+    "exit\n"
+)
+
+#: The same guide's "One Virtual Device" example: two JL666A, each
+#: block with its `link` lines and no `exit`.
+AOSCX_ONE_VIRTUAL_DEVICE = (
+    "vsf member 1\n"
+    "    type jl666a\n"
+    "    link 1 1/1/26\n"
+    "    link 2 1/1/25\n"
+    "vsf member 2\n"
+    "    type jl666a\n"
+    "    link 1 2/1/25\n"
+    "    link 2 2/1/26\n"
+    "vlan 1\n"
+)
+
+#: Aruba's onboarding template for a standalone JL728A (aruba/
+#: central-python-workflows on GitHub): a space after the member
+#: number, and no `exit`.
+AOSCX_STANDALONE = "vsf member 1 \n    type jl728a\n"
+
+
+def _aoscx(*blocks: str, ports: tuple[str, ...] = ()) -> str:
+    """An AOS-CX config: *blocks* at the top, then an interface stanza
+    for each of *ports*."""
+    body = "".join(f"interface {port}\n    no shutdown\n" for port in ports)
+    return "hostname sw\n" + "".join(blocks) + body
+
+
+class TestAoscxDetector:
+    def test_the_type_commands_example(self) -> None:
+        detected = aoscx_detect.detect_deployment(AOSCX_TYPE_EXAMPLE)
+        assert detected.fabric == "vsf"
+        assert _members(detected) == [(1, "JL661A", {}), (2, "JL662A", {})]
+        assert detected.evidence == ["vsf member 1 / type jl661a", "vsf member 2 / type jl662a"]
+        assert len(detected.notes) == 1
+
+    def test_the_one_virtual_device_example(self) -> None:
+        detected = aoscx_detect.detect_deployment(AOSCX_ONE_VIRTUAL_DEVICE)
+        assert _members(detected) == [(1, "JL666A", {}), (2, "JL666A", {})]
+
+    def test_a_switch_that_is_alone_as_arubas_template_prints_it(self) -> None:
+        detected = aoscx_detect.detect_deployment(AOSCX_STANDALONE)
+        assert _members(detected) == [(1, "JL728A", {})]
+        assert detected.evidence == ["vsf member 1 / type jl728a"]
+
+    def test_members_come_back_in_number_order(self) -> None:
+        text = "vsf member 3\n    type jl663a\nvsf member 1\n    type jl661a\n"
+        assert _members(aoscx_detect.detect_deployment(text)) == [(1, "JL661A", {}), (3, "JL663A", {})]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "hostname sw\n",
+            "vsf secondary-member 2\n",
+            "no vsf member 1\n",
+            "vsf split-detect mgmt\n",
+            # A line of a stanza, not of the top of the config.
+            "interface 1/1/1\n    vsf member 1\n    type jl661a\n",
+            "\tvsf member 1\n\ttype jl661a\n",
+        ],
+        ids=["empty", "no hardware line", "a secondary member", "a no form", "another vsf line",
+             "indented by spaces", "indented by a tab"],
+    )
+    def test_text_that_states_no_member(self, text: str) -> None:
+        assert aoscx_detect.detect_deployment(text) is None
+
+    @pytest.mark.parametrize(
+        "name", sorted(p.name for p in (REPO_ROOT / "tests/fixtures/real/aruba_aoscx").glob("*.cfg")),
+    )
+    def test_no_committed_capture_states_a_member(self, name: str) -> None:
+        """Every committed AOS-CX capture is of a switch that prints no
+        `vsf member` block (none is a 6200 or a 6300)."""
+        raw = (REPO_ROOT / "tests/fixtures/real/aruba_aoscx" / name).read_text(encoding="utf-8")
+        assert aoscx_detect.detect_deployment(raw) is None
+        proposal = propose_deployment(AOSCX, raw, REGISTRY)
+        assert proposal.deployment is None and proposal.notes
+
+    def test_the_notes_say_what_the_lines_do_not_prove(self) -> None:
+        notes = aoscx_detect.detect_deployment(AOSCX_TYPE_EXAMPLE).notes
+        assert notes[0].startswith("A `type` line under `vsf member <number>` shows the part number")
+        assert "\"The part number of the member being provisioned\"" in notes[0]
+        assert "it does not show that the switch is in the stack" in notes[0]
+
+    def test_windows_line_endings(self) -> None:
+        detected = aoscx_detect.detect_deployment(AOSCX_TYPE_EXAMPLE.replace("\n", "\r\n"))
+        assert _members(detected) == [(1, "JL661A", {}), (2, "JL662A", {})]
+        assert detected.evidence == ["vsf member 1 / type jl661a", "vsf member 2 / type jl662a"]
+
+    def test_a_type_at_the_margin_is_no_members(self) -> None:
+        """The parser reads a block by its indentation; a `type` line at
+        the margin is not under the member before it."""
+        detected = aoscx_detect.detect_deployment("vsf member 1\ntype jl661a\n")
+        assert detected.members == []
+        assert detected.notes[0].startswith("The config has `vsf member` lines, but none could be read")
+        assert "The block of member 1 has no `type` line" in detected.notes[1]
+
+    def test_a_type_line_after_the_block_has_ended_is_not_the_members(self) -> None:
+        text = "vsf member 1\n    type jl661a\nvlan 1\n    type jl662a\n"
+        detected = aoscx_detect.detect_deployment(text)
+        assert _members(detected) == [(1, "JL661A", {})] and len(detected.notes) == 1
+
+    def test_a_blank_line_does_not_end_the_block(self) -> None:
+        detected = aoscx_detect.detect_deployment("vsf member 2\n\n    type jl661a\n")
+        assert _members(detected) == [(2, "JL661A", {})]
+
+    def test_a_banners_line_is_text(self) -> None:
+        text = "banner motd !\nvsf member 2\n    type jl662a\n!\n" + AOSCX_STANDALONE
+        detected = aoscx_detect.detect_deployment(text)
+        assert _members(detected) == [(1, "JL728A", {})]
+
+    def test_a_banner_with_no_end_is_not_read_past(self) -> None:
+        with pytest.raises(ParseError):
+            aoscx_detect.detect_deployment("banner motd !\nno end\n" + AOSCX_STANDALONE)
+
+    @pytest.mark.parametrize(
+        "line",
+        ["vsf member", "vsf member x", "vsf member 1x", "vsf member 1234567", "vsf member 1 2"],
+    )
+    def test_a_member_line_no_switch_prints_is_counted_and_left_out(self, line: str) -> None:
+        detected = aoscx_detect.detect_deployment(f"{line}\n    type jl661a\n" + AOSCX_STANDALONE)
+        assert _members(detected) == [(1, "JL728A", {})]
+        assert any(note.startswith("1 line(s) begin `vsf member`") for note in detected.notes)
+
+    @pytest.mark.parametrize(
+        "type_line",
+        ['    type "jl661a"', "    type jl661a x", "    type " + "j" * 33, "    type -jl661a"],
+    )
+    def test_a_type_line_no_switch_prints_is_said(self, type_line: str) -> None:
+        detected = aoscx_detect.detect_deployment(f"vsf member 2\n{type_line}\n" + AOSCX_STANDALONE)
+        assert _members(detected) == [(1, "JL728A", {})]
+        assert any("The block of member 2 has no `type` line" in note for note in detected.notes)
+
+    @pytest.mark.parametrize(
+        ("number", "part"), [(999_999, "JL661A"), (1, "J" + "1" * 31)],
+    )
+    def test_the_bounds_are_read_up_to(self, number: int, part: str) -> None:
+        detected = aoscx_detect.detect_deployment(f"vsf member {number}\n    type {part.lower()}\n")
+        assert _members(detected) == [(number, part, {})]
+
+    def test_a_member_stated_twice_is_what_its_last_line_says(self) -> None:
+        text = AOSCX_TYPE_EXAMPLE + "vsf member 2\n    type jl663a\n"
+        detected = aoscx_detect.detect_deployment(text)
+        assert _members(detected) == [(1, "JL661A", {}), (2, "JL663A", {})]
+        assert detected.notes[-1] == (
+            "More than one line states member 2 with different part numbers; the last was used."
+        )
+
+    def test_stated_twice_the_same_is_not_a_contradiction(self) -> None:
+        detected = aoscx_detect.detect_deployment(AOSCX_STANDALONE + AOSCX_STANDALONE)
+        assert _members(detected) == [(1, "JL728A", {})] and len(detected.notes) == 1
+
+    def test_a_member_headed_twice_and_typed_once_has_a_type(self) -> None:
+        detected = aoscx_detect.detect_deployment("vsf member 1\n" + AOSCX_STANDALONE)
+        assert _members(detected) == [(1, "JL728A", {})] and len(detected.notes) == 1
+
+    def test_a_few_member_numbers_are_named_and_the_rest_counted(self) -> None:
+        text = "".join(f"vsf member {n}\nexit\n" for n in range(1, 13)) + AOSCX_STANDALONE
+        notes = aoscx_detect.detect_deployment(text).notes
+        assert "The block of member 2, 3, 4, 5, 6, 7, 8, 9 and 3 more has no `type` line" in notes[1]
+
+
+class TestAoscxProposal:
+    def test_the_type_commands_example_is_a_6300_stack(self) -> None:
+        text = _aoscx(AOSCX_TYPE_EXAMPLE, ports=("mgmt", "1/1/1", "1/1/52", "2/1/24", "2/1/28"))
+        proposal = propose_deployment(AOSCX, text, REGISTRY)
+        assert proposal.family == "aruba_aoscx/6300" and proposal.mode == "vsf"
+        assert proposal.fabric == "vsf"
+        assert not any("which is not called that" in note for note in proposal.notes)
+        assert proposal.deployment.model_dump() == {
+            "mode": "vsf", "members": [
+                {"model": "JL661A", "id": 1, "modules": {}},
+                {"model": "JL662A", "id": 2, "modules": {}},
+            ],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 5
+        # 52 + 28 ports, and the stack's one management interface.
+        assert proposal.inventory.port_count == 81
+
+    def test_a_port_the_member_does_not_have(self) -> None:
+        text = _aoscx(AOSCX_TYPE_EXAMPLE, ports=("2/1/29", "3/1/1"))
+        proposal = propose_deployment(AOSCX, text, REGISTRY)
+        assert proposal.consistent is False
+        assert proposal.missing_ports == ["2/1/29", "3/1/1"]
+
+    def test_the_one_virtual_device_example(self) -> None:
+        proposal = propose_deployment(
+            AOSCX, _aoscx(AOSCX_ONE_VIRTUAL_DEVICE, ports=("2/1/1", "2/1/25")), REGISTRY,
+        )
+        assert proposal.family == "aruba_aoscx/6300"
+        assert [(m.model, m.id) for m in proposal.deployment.members] == [("JL666A", 1), ("JL666A", 2)]
+        assert proposal.consistent is True
+
+    def test_a_standalone_jl728a_as_arubas_template_names_its_ports(self) -> None:
+        """Aruba's template configures `interface mgmt` and every one of
+        1/1/1 to 1/1/52, typed here by hand."""
+        ports = ("mgmt", *(f"1/1/{n}" for n in range(1, 53)))
+        proposal = propose_deployment(AOSCX, _aoscx(AOSCX_STANDALONE, ports=ports), REGISTRY)
+        assert proposal.family == "aruba_aoscx/6200" and proposal.mode == "vsf"
+        assert proposal.deployment.model_dump() == {
+            "mode": "vsf", "members": [{"model": "JL728A", "id": 1, "modules": {}}],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 53
+        assert proposal.inventory.port_count == 53
+
+    def test_the_proposal_is_accepted_as_a_source_deployment(self) -> None:
+        proposal = propose_deployment(AOSCX, _aoscx(AOSCX_STANDALONE, ports=("1/1/5",)), REGISTRY)
+        inventory = compile_deployment(
+            Deployment(vendor="aruba_aoscx", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        assert inventory.family == "aruba_aoscx/6200"
+
+    def test_a_6200_and_a_6300_are_two_families(self) -> None:
+        """HPE's VSF guide, Interoperation: stacking is not supported
+        across switch families."""
+        text = _aoscx("vsf member 1\n    type jl728a\nvsf member 2\n    type jl661a\n")
+        proposal = propose_deployment(AOSCX, text, REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("The members belong to different model families")
+
+    @pytest.mark.parametrize(("part", "number"), [("jl661a", 11), ("jl728a", 9)])
+    def test_a_member_number_the_stack_does_not_have(self, part: str, number: int) -> None:
+        proposal = propose_deployment(AOSCX, _aoscx(f"vsf member {number}\n    type {part}\n"), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.notes[0].startswith("What the config states does not compile as a deployment of")
+
+    @pytest.mark.parametrize("part", ["s3l75a", "r8s89a", "s0g06a", "r8q72a", "s0m86a"])
+    def test_a_part_no_family_describes(self, part: str) -> None:
+        """The 6300L, a 6300 with two kinds of uplink, a TAA twin of a
+        6300 and of a 6200, and the 12-port 6200 are not modelled."""
+        proposal = propose_deployment(AOSCX, _aoscx(f"vsf member 1\n    type {part}\n"), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.unknown_parts == [part.upper()]
+        assert f"No model family describes {part.upper()}" in proposal.notes[0]
+
+    def test_nothing_shaped_like_a_mac_address_or_a_serial_is_in_the_proposal(self) -> None:
+        dumped = propose_deployment(AOSCX, _aoscx(AOSCX_ONE_VIRTUAL_DEVICE), REGISTRY).model_dump_json()
+        assert not re.search(r"(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}", dumped, re.IGNORECASE)
+
+
+class TestTheAoscxDetectorOnTextMadeToBeSlow:
+    """Each tail is built to make a pattern go back over a run it has
+    already crossed, or to make a note grow with the text.  The detector
+    is called by itself: the parser's cost is not what this pins."""
+
+    PREFIXES = {
+        "nothing stated": "",
+        "a member": AOSCX_STANDALONE,
+        "an open block": "vsf member 2\n",
+    }
+    TAILS = {
+        "the word and spaces": "vsf" + " " * 300_000 + "x",
+        "the keyword and spaces": "vsf member" + " " * 300_000,
+        "a long number": "vsf member " + "1" * 300_000,
+        "a number and spaces": "vsf member 1" + " " * 300_000 + "x",
+        "a type and spaces": "    type" + " " * 300_000 + "x",
+        "a long type": "    type " + "j" * 300_000,
+        "a type of hyphens": "    type j" + "-" * 300_000 + " x",
+        "a type then spaces": "    type jl661a" + " " * 300_000 + "x",
+        "lines that trail off": ("vsf member 1" + " " * 3000 + "x\n") * 100,
+        "type lines no pattern reads": "    type jl661a x\n" * 50_000,
+        "more members than any stack": "".join(f"vsf member {n}\n    type jl661a\n" for n in range(50_000)),
+        "every member stated twice": "".join(
+            f"vsf member {n}\n    type jl661a\n    type jl662a\n" for n in range(25_000)
+        ),
+        "members with no type": "".join(f"vsf member {n}\n" for n in range(50_000)),
+        "blank lines": "\n" * 300_000,
+        "lines of spaces": "   \n" * 100_000,
+        "tabs then the word": ("\t" * 3000 + "type\n") * 100,
+        "the word again and again": "vsf member " * 60_000,
+    }
+
+    @pytest.mark.parametrize("prefix", sorted(PREFIXES))
+    @pytest.mark.parametrize("tail", sorted(TAILS))
+    def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
+        text = self.PREFIXES[prefix] + self.TAILS[tail]
+        detected = _within(5.0, lambda: aoscx_detect.detect_deployment(text))
         if detected is not None:
             assert sum(map(len, detected.notes)) < 4_000
             assert max(map(len, detected.evidence), default=0) < 64

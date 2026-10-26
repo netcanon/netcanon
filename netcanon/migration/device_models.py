@@ -896,6 +896,24 @@ def _catalyst_rule(request: PortNameRequest) -> str:
     )
 
 
+def _aoscx_rule(request: PortNameRequest) -> str:
+    from .codecs.aruba_aoscx.port_names import vsf_switch_port_name
+
+    if request.member_id is None:
+        raise ValueError(
+            "an AOS-CX port name always carries the member number; "
+            "the mode must state `member_ids`"
+        )
+    # The 6200 and 6300 are not modular: their slot is always 1, and a
+    # bay of a family under this rule would be a slot no switch has.
+    if request.slot:
+        raise ValueError(
+            f"a CX 6200 or 6300 has no slot but 1, which is its own "
+            f"panel; bay {request.slot!r} is not one"
+        )
+    return vsf_switch_port_name(member=request.member_id, port=request.index0 + 1)
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -920,6 +938,15 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "stated under `deployment_ports`"
             ),
             prefixes=_catalyst_port_types(),
+        ),
+        "aoscx": NamingRuleSpec(
+            render=_aoscx_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an AOS-CX stack has one management interface, `mgmt`, "
+                "which no member owns; it is stated under "
+                "`deployment_ports`"
+            ),
         ),
     }
 

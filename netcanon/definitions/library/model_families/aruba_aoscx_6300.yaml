@@ -1,0 +1,181 @@
+# Aruba CX 6300 (6300M and 6300F): the twelve models HPE's VSF guide
+# lists for `type` -- JL658A to JL668A and JL762A
+#
+# A fixed-port switch, alone or one of a VSF stack of up to ten.  Every
+# 6300 is VSF-capable, and its configuration prints a `vsf member` block
+# whether it is alone or not (Aruba's own template for a standalone
+# switch has `vsf member 1`).  How a name is made, from VSF's
+# "Identifying switch ports and interfaces":
+#
+#   * `<member>/<slot>/<port>`.  "If the switch is not a member of a VSF
+#     stack, then member is 1"; a 6300's member is 1 to 10.
+#   * The slot is "Always 1": the switch is not modular.
+#   * The port is the "Physical number of a port on the switch": "the
+#     logical interface 1/1/4 in software is associated with physical
+#     port 4 on member 1".
+#
+# A stack has ONE management interface, `mgmt` (VSF, "Management
+# interface": only the conductor's management interface is given an IP
+# address).  Each member has the jack.  It is declared once, under
+# `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   VSF   HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300
+#         Switch Series (sd00007849en_us): Identifying switch ports and
+#         interfaces; `type` (the part numbers, as the switch lists
+#         them); Interoperation; Management interface; Applicable
+#         products.
+#   IG63  Aruba 6300F/M Switch Series Installation and Getting Started
+#         Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (the
+#         count of each kind of port, per model; no port numbers).
+#   JP63  HPE Japan, System Configuration Guide for HPE Aruba Networking
+#         CX 6300 (dated 2026-09-11): each model's uplink port numbers,
+#         and the access port numbers of a model whose access ports are
+#         SFP cages.
+#
+# Where the sources are silent: no HPE text read numbers the RJ45 ports
+# of a 6300.  JP63 numbers the four SFP56 ports of every model here
+# (25-28 on a 24-port model, 49-52 on a 48-port one), and IG63 counts
+# the RJ45 ports; that they are 1-24 or 1-48 is graded inferred and
+# says so.  JL658A's SFP+ ports are numbered by JP63 (1-24).
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 6300L (S3L75A, S3L76A, S3L77A), which stacks only with
+#     another 6300L (VSF, Interoperation).
+#   * The models whose ports are of two kinds with no stated numbering
+#     (S4P41A, S4P42A, R8S91A, S6X58A), the models with two SFP56 and
+#     two SFP28 or SFP+ uplinks (R8S89A, R8S90A, R8S92A, S4P43A,
+#     S4P44A, S6X59A, S6X60A), the QSFP28 models (S0E91A, S0E92A),
+#     S4P45A to S4P49A, and the R9F63A bundle.
+#   * The TAA-compliant twins (S0F99A, S0G00A to S0G06A, S0G95A to
+#     S0G98A, S0X44A): a twin is a part number of its own, and nothing
+#     here is inherited from a sibling.
+#   * Which ports a VSF link uses, or which ports auto-stacking
+#     reserves.
+schema: 1
+vendor: aruba_aoscx
+family: "6300"
+display_name: "Aruba CX 6300 (6300M and 6300F)"
+naming: aoscx
+default_mode: vsf
+
+modes:
+  vsf:
+    label: "VSF stack of up to ten members (`vsf member`; a switch that is alone is member 1)"
+    member_ids: [1, 10]
+    naming:
+      grade: vendor-doc
+      ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Identifying switch ports and interfaces (a port is identified using the format member/slot/port; on a 6300 the member ranges from 1 to 10; if the switch is not a member of a VSF stack, then member is 1; the slot is always 1, as the switch is not modular; the port is the physical number of a port on the switch: the logical interface 1/1/4 is associated with physical port 4 on member 1); HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Interoperation (a VSF stack can include any combination of models within one supported switch family, among them the 6300 (6300L, 6300M and 6300F); the 6300L's S3L75A, S3L76A and S3L77A stack only with one another; stacking is not supported across switch families)"
+    caveat: "Names carry the member number even on a switch that is alone: member 1, unless it was renumbered. HPE's VSF guide lets a stack mix 6300M and 6300F models; which models a stack mixes is not checked here. The stack lines (vsf member, with its type and link lines, and vsf secondary-member) describe the hardware, and the parser does not read them. No configuration of a CX 6300 was seen."
+
+deployment_ports:
+  - name: mgmt
+    role: mgmt
+    cage: rj45
+    notes: "Out-of-band management port, one interface per VSF stack: only the conductor's is given an address"
+    naming: {grade: vendor-doc, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), Management interface (only the management interface on the conductor switch will be assigned an IP address; the management interface is applicable only for 6200 and 6300 devices); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Out-of-band management port (this RJ-45 port is used to connect a dedicated management network to the switch)"}
+
+models:
+  # --- 6300M, 24 or 48 ports and four SFP56 uplinks --------------------------
+  JL658A:
+    skus: [JL658A]
+    display_name: "Aruba CX 6300M 24SFP+ /4SFP56 Switch (JL658A)"
+    panel: {grade: vendor-doc, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl658a, 6300M 24SFP+ /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL658: 24 SFP+ ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28; JL658A's 24 SFP+ ports are ports 1 to 24)"}
+    ports:
+      - {role: access, count: 24, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL659A:
+    skus: [JL659A]
+    display_name: "Aruba CX 6300M 48SR PoE CLS 6 /4SFP56 Switch (JL659A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl659a, 6300M 48SR PoE CLS 6 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL659: 48 Smart Rate 100M/1G/2.5G/5G PoE Class 6 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL659A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: 5gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL660A:
+    skus: [JL660A]
+    display_name: "Aruba CX 6300M 24SR PoE CLS 6 /4SFP56 Switch (JL660A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl660a, 6300M 24SR PoE CLS 6 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL660: 24 Smart Rate 100M/1G/2.5G/5G PoE Class 6 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28)", caveat: "JL660A: HPE numbers its four SFP56 ports 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 24, speed: 5gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL661A:
+    skus: [JL661A]
+    display_name: "Aruba CX 6300M 48G PoE CLS 4 /4SFP56 Switch (JL661A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl661a, 6300M 48G PoE CLS 4 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL661: 48 10/100/1000 BaseT PoE Class 4 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL661A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL662A:
+    skus: [JL662A]
+    display_name: "Aruba CX 6300M 24G PoE CLS 4 /4SFP56 Switch (JL662A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl662a, 6300M 24G PoE CLS 4 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL662: 24 10/100/1000 BaseT PoE Class 4 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28)", caveat: "JL662A: HPE numbers its four SFP56 ports 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL663A:
+    skus: [JL663A]
+    display_name: "Aruba CX 6300M 48G /4SFP56 Switch (JL663A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl663a, 6300M 48G /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL663: 48 10/100/1000 BaseT ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL663A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL664A:
+    skus: [JL664A]
+    display_name: "Aruba CX 6300M 24G /4SFP56 Switch (JL664A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl664a, 6300M 24G /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL664: 24 10/100/1000 BaseT ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28)", caveat: "JL664A: HPE numbers its four SFP56 ports 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL762A:
+    skus: [JL762A]
+    display_name: "Aruba CX 6300M 48G 4SFP56 Pwr2Prt Switch (JL762A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl762a, 6300M 48G 4SFP56 Pwr2Prt Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL762: 48 10/100/1000 BaseT ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL762A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  # --- 6300F, 24 or 48 ports and four SFP56 uplinks --------------------------
+  JL665A:
+    skus: [JL665A]
+    display_name: "Aruba CX 6300F 48G PoE CLS 4 /4SFP56 Switch (JL665A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl665a, 6300F 48G PoE CLS 4 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL665: 48 10/100/1000 BaseT PoE Class 4 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL665A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL666A:
+    skus: [JL666A]
+    display_name: "Aruba CX 6300F 24G PoE CLS 4 /4SFP56 Switch (JL666A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl666a, 6300F 24G PoE CLS 4 /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL666: 24 10/100/1000 BaseT PoE Class 4 ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28)", caveat: "JL666A: HPE numbers its four SFP56 ports 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL667A:
+    skus: [JL667A]
+    display_name: "Aruba CX 6300F 48G /4SFP56 Switch (JL667A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl667a, 6300F 48G /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL667: 48 10/100/1000 BaseT ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 48-port 6300 numbers its four SFP56 ports 49 to 52)", caveat: "JL667A: HPE numbers its four SFP56 ports 49-52 (1/1/49-1/1/52 on member 1).  That its 48 RJ45 ports are 1-48 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}
+
+  JL668A:
+    skus: [JL668A]
+    display_name: "Aruba CX 6300F 24G /4SFP56 Switch (JL668A)"
+    panel: {grade: inferred, ref: "HPE Aruba Networking AOS-CX 10.18 VSF Guide, 6200 and 6300 Switch Series (sd00007849en_us), type (the part number of the member being provisioned: jl668a, 6300F 24G /4SFP56 Switch); Aruba 6300F/M Switch Series Installation and Getting Started Guide, Edition 5 (a00092469en_us), Table 3, Network Ports (JL668: 24 10/100/1000 BaseT ports and 4 1/10/25/50GbE SFP ports); HPE Japan, System Configuration Guide for HPE Aruba Networking CX 6300 (systemconfig-cx-6300, dated 2026-09-11) (a 24-port 6300 numbers its four SFP56 ports 25 to 28)", caveat: "JL668A: HPE numbers its four SFP56 ports 25-28 (1/1/25-1/1/28 on member 1).  That its 24 RJ45 ports are 1-24 is inferred: no HPE text read numbers them, and the front-panel figure of the installation guide was not read.  No configuration of a CX 6300 was seen."}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 50gig, cage: sfp56}

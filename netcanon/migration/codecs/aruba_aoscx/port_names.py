@@ -134,3 +134,44 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     # IOS-XE VirtualPortGroup is no loopback, and the LAN address of
     # one was written on ``loopback 0``.
     return None
+
+
+def vsf_switch_port_name(*, member: int, port: int) -> str:
+    """Compose the name a CX 6200 or CX 6300 gives a physical port.
+
+    This is the naming GRAMMAR of those two series, written down once:
+    ``<member>/1/<port>``.  It is used by
+    :mod:`netcanon.migration.device_models` to render a model's port
+    inventory, and is deliberately separate from
+    :func:`format_port_identity`, which guesses a name from the shape
+    of another vendor's name and does not know the model.
+
+    HPE's VSF guide for the 6200 and 6300 (AOS-CX 10.18, "Identifying
+    switch ports and interfaces") states it: a port is "identified
+    using the format: member/slot/port"; "If the switch is not a member
+    of a VSF stack, then member is 1"; the slot is "Always 1", since
+    the switch is not modular; and the port is the "Physical number of
+    a port on the switch" -- "the logical interface 1/1/4 in software
+    is associated with physical port 4 on member 1".
+
+    * ``member`` is the VSF member number.  A switch that is in no
+      stack is member 1, so the segment is never absent.
+    * The slot is always 1.  A modular AOS-CX switch is not described
+      here.
+    * ``port`` is 1-based.
+
+    Args:
+        member: The VSF member number.
+        port: The 1-based port number.
+
+    Returns:
+        The port name, e.g. ``1/1/4``, ``2/1/25``.
+
+    Raises:
+        ValueError: *member* or *port* is below 1.
+    """
+    if member < 1:
+        raise ValueError(f"AOS-CX member numbers are 1-based; got {member}")
+    if port < 1:
+        raise ValueError(f"AOS-CX port numbers are 1-based; got {port}")
+    return f"{member}/1/{port}"

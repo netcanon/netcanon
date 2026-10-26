@@ -1898,9 +1898,11 @@ detection, an Apply — is dropped.
 
 **Reading the source device from the config**
 (`netcanon/migration/deployment_detect.py`).  An AOS-S `show
-running-config` usually states its own hardware, and a Catalyst's
-states the type of each switch of its stack (`switch N provision`);
-no other vendor has a detector yet.  Detection is split the way
+running-config` usually states its own hardware, a Catalyst's
+states the type of each switch of its stack (`switch N provision`),
+and a CX 6200's or 6300's the part number of each VSF member (`vsf
+member N` and the `type` line under it); no other vendor has a
+detector yet.  Detection is split the way
 naming is: a small *detector* beside the vendor's codec reads the lines that state the device and
 returns the part numbers, member numbers and bays they state — it has
 no table of models — and `propose_deployment` resolves what was read
