@@ -647,9 +647,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 body.append(f" vrrp {gid} ipv6 {vip6}")
             if group.priority != 100:
                 body.append(f" vrrp {gid} priority {group.priority}")
-            # IOS-XE default is ``preempt`` enabled — only emit the
-            # explicit form when the canonical state disagrees with the
-            # default (preempt=False rare; surface ``no vrrp N preempt``).
+            # Preemption is written either way, the default included:
+            # Cisco's VRRP guide says "By default, a preemptive scheme
+            # is enabled" and gives ``vrrp group preempt [delay minimum
+            # seconds]``, so the line is valid at the default, and it
+            # puts the setting in the output where a reader sees it.
+            # The device's own printout leaves it out at the default
+            # (the BR1 capture has no preempt line), so a round trip of
+            # a capture gains it.  Pinned by
+            # ``test_preempt_default_round_trips``.
             if group.preempt:
                 body.append(f" vrrp {gid} preempt")
             else:
