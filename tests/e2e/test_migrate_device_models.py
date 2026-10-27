@@ -69,6 +69,30 @@ interface GigabitEthernet2/0/1
 end
 """
 
+_ARISTA_SRC = """hostname test-sw
+!
+interface Ethernet1
+   description user
+   switchport access vlan 10
+!
+end
+"""
+
+_ARISTA_7060 = """! Command: show running-config
+! device: test-sw (DCS-7060CX-32S, EOS-4.23.1F)
+!
+hostname test-sw
+!
+interface Ethernet1/1
+   description user
+   switchport access vlan 10
+!
+interface Ethernet33
+   description uplink
+!
+end
+"""
+
 _JUNOS_SRC = """set system host-name test-sw
 set interfaces ge-0/0/1 description user
 set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members v10
@@ -450,6 +474,44 @@ class TestSourceDeviceIsReadFromTheConfig:
         lines = page.locator(_tid("migrate-device-source-note-read-from"))
         lines.locator("summary").click()
         expect(lines).to_contain_text("switch 2 provision c9300-24p")
+
+    def test_an_arista_is_read_from_its_device_line(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """``! device: test-sw (DCS-7060CX-32S, EOS-4.23.1F)``: the model
+        and its one mode are filled in, and the line is quoted without
+        the switch's host name."""
+        _translate(page, live_server_url, "arista_eos", "aruba_aoss", _ARISTA_7060)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(_source_note(page)).to_be_visible()
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            "fam:7060X:DCS-7060CX-32S"
+        )
+        expect(page.locator(_tid("migrate-device-source-mode-select"))).to_have_value("standalone")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_contain_text(
+            "The `! device:` line is a comment"
+        )
+        lines = page.locator(_tid("migrate-device-source-note-read-from"))
+        lines.locator("summary").click()
+        expect(lines).to_contain_text("! device: \u2026 (DCS-7060CX-32S, EOS-4.23.1F)")
+        expect(lines).not_to_contain_text("test-sw")
+
+    def test_an_arista_config_that_states_no_switch_says_so(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A paste with no ``! device:`` line: the picker stays empty,
+        lists the Arista families and profiles, and says why."""
+        _translate(page, live_server_url, "arista_eos", "aruba_aoss", _ARISTA_SRC)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        select = page.locator(_tid("migrate-device-source-model-select"))
+        expect(select).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_have_text(
+            "The config does not say which device it came from; declare the "
+            "device yourself."
+        )
+        values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
+        assert "profile:DCS-7050SX-64" in values
+        assert "fam:7050X:DCS-7050SX-64" in values
 
     def test_a_cisco_config_that_states_no_switch_says_so(
         self, page: Page, live_server_url: str,

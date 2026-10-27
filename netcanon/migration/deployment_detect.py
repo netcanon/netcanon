@@ -128,6 +128,12 @@ def _cisco_iosxe(raw_text: str) -> DetectedDeployment | None:
     return detect_deployment(raw_text)
 
 
+def _arista_eos(raw_text: str) -> DetectedDeployment | None:
+    from .codecs.arista_eos.deployment_detect import detect_deployment
+
+    return detect_deployment(raw_text)
+
+
 def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     """Vendor id to detector.
 
@@ -137,7 +143,10 @@ def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     number of the port names — that is the guess this feature exists
     to replace.
     """
-    return {"aruba_aoss": _aoss, "aruba_aoscx": _aoscx, "cisco_iosxe": _cisco_iosxe}
+    return {
+        "aruba_aoss": _aoss, "aruba_aoscx": _aoscx, "cisco_iosxe": _cisco_iosxe,
+        "arista_eos": _arista_eos,
+    }
 
 
 def detection_vendors() -> list[str]:

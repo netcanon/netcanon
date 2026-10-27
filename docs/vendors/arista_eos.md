@@ -468,7 +468,11 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   management port is `Management1`.  The models not described (the
   2RU and MXP 7050X models, the 7050CX3-32C, the 7280CR3-36S family,
   the 7260QX-64 and others) are listed, with the reason, in each
-  family's file.
+  family's file.  The source switch is read from the config's `!
+  device:` comment line (`! device: leaf1 (DCS-7050SX3-48YC8,
+  EOS-4.32.1F)`); a line that names a vEOS or a model no family
+  describes is answered with a note, and the device is declared by
+  hand.
 
 ## See also
 

@@ -648,6 +648,18 @@ timestamp if your timezone matters for an audit.
   runs at 40G only), which are `inferred` and say why.  The
   7060CX-32S, 7050CX3-32S, 7050SX-64 and 7280CR3-32P4 target profiles
   describe the same ports as their families.  No capture claim is made.
+- **`detect-deployment` reads an Arista config's `! device:` line.**
+  An EOS `show running-config` opens with `! device: <host> (<model>,
+  EOS-<release>)`, and detection -- and with it the source picker of
+  the Interface rename modal -- now reads it: one switch, with no
+  member number, in the mode `standalone`.  The evidence is the line
+  without its host name.  The notes say that the line is a comment,
+  which nothing in the configuration depends on, and that no Arista
+  text read describes it; lines that name two models are text from
+  more than one switch and propose nothing, and a line that begins `!
+  device:` and cannot be read is counted.  Lines in a banner or another
+  body that runs to `EOF` are not read.  The detector is
+  `codecs/arista_eos/deployment_detect.py`.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

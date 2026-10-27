@@ -1751,8 +1751,8 @@ not take, a member number outside the mode's range, more members than
 the mode allows; and when the vendor has no detector yet.  The first
 of `notes` says which.  None of these is an error: the answer is a 200
 either way.
-Detection reads Aruba AOS-S, Aruba AOS-CX and Cisco Catalyst (IOS-XE)
-configs today; no other vendor has a detector yet.
+Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
+and Arista EOS configs today; no other vendor has a detector yet.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -1768,6 +1768,23 @@ block with no `type` line that can be read is left out, and a note
 names its member.
 An AOS-CX switch that is not a 6200 or 6300 prints no such block, and
 the proposal says the config states no device.
+
+**An EOS config names the switch that printed it.**  An Arista
+`show running-config` opens with a comment line that names the
+switch, its model and its release, `! device: leaf1
+(DCS-7050SX3-48YC8, EOS-4.32.1F)`, and detection reads that line: one
+switch, with no member number, in the family's mode `standalone`.  A
+model with `-F` or `-R` after its part number is that part.  What it
+cannot show, which its notes say: the line is a comment, which nothing
+in the configuration depends on and a file can be edited, and no
+Arista text read describes it.  The host name is not handed back; the
+evidence is the line without it.  Lines that name two models are text
+from more than one switch, and nothing is proposed.  The two switches
+of an MLAG pair are two devices: each config proposes its own switch.
+A virtual EOS (`vEOS`, `cEOS`) and a model no family describes are
+answered with a note.  On a 7050X whose QSFP+ ports still run as four
+10G interfaces, the default, a proposal is `consistent: false` and
+lists the names of lanes 2 to 4.
 
 **A Catalyst config states each switch of its stack.**  A `show
 running-config` from a Catalyst has a `switch N provision <type>` line

@@ -313,8 +313,9 @@ slow; and a vendor whose ports keep a factory name is refused until the
 check in `propose_deployment` does for it what a translation does.
 Those slow texts state no device, so they stop at the detector's first
 patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`,
-`TestTheCatalystDetectorOnTextMadeToBeSlow` and
-`TestTheAoscxDetectorOnTextMadeToBeSlow` do) with a device stated and
+`TestTheCatalystDetectorOnTextMadeToBeSlow`,
+`TestTheAoscxDetectorOnTextMadeToBeSlow` and
+`TestTheAristaDetectorOnTextMadeToBeSlow` do) with a device stated and
 a tail made for each pattern.
 
 ### A new naming grammar
