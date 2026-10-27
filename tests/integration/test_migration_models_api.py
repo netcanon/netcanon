@@ -93,9 +93,11 @@ class TestModelFamilies:
         ]
         assert model["ports"] == [
             {"role": "access", "count": 48, "slot": "", "prefix": "",
-             "speed": "gig", "cage": "rj45", "poe": False, "notes": ""},
+             "multi_lane": False, "speed": "gig", "cage": "rj45", "poe": False,
+             "notes": ""},
             {"role": "uplink", "count": 4, "slot": "", "prefix": "",
-             "speed": "gig", "cage": "sfp", "poe": False, "notes": ""},
+             "multi_lane": False, "speed": "gig", "cage": "sfp", "poe": False,
+             "notes": ""},
         ]
 
     def test_filter_by_vendor(self, client: TestClient) -> None:

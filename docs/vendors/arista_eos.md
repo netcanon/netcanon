@@ -452,6 +452,23 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   Renumber or drop the VLAN on the VLANs pane, which takes its
   interface with it.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+- **Declaring an Arista switch as the source or target device** --
+  the 7050X, 7050X3, 7060X, 7260X and 7280R3 are model families with
+  one mode, `standalone`: a switch on its own.  The two switches of an
+  MLAG pair are two devices; declare each, and translate each config
+  on its own.  A single-lane port is `Ethernet<port>` and a QSFP+,
+  QSFP100, OSFP or QSFP-DD port is listed as one interface, its first
+  lane (`Ethernet49/1`), as EOS names a multi-lane port configured as
+  one interface.  A port broken out into lanes is not modelled: the
+  names of its other lanes (`Ethernet49/2`) come back as
+  off-inventory, and so do those of a 7050X's QSFP+ port that still
+  runs as four 10G interfaces, its default.  A 7050QX-32's ports 25-32
+  run at 40G only and have no lane (`Ethernet25`); that is `inferred`,
+  from two public running-configs, as is a 7050SX3-48C8's panel.  The
+  management port is `Management1`.  The models not described (the
+  2RU and MXP 7050X models, the 7050CX3-32C, the 7280CR3-36S family,
+  the 7260QX-64 and others) are listed, with the reason, in each
+  family's file.
 
 ## See also
 

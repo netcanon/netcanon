@@ -9,7 +9,9 @@ Recognised port-name forms::
 
     Ethernet<N>              — standalone physical (no speed prefix,
                                speed comes from SFP/transceiver)
-    Ethernet<N>/<M>          — QSFP breakout child (M = lane 1-4)
+    Ethernet<N>/<M>          — lane M of a multi-lane port (QSFP,
+                               OSFP, QSFP-DD); a port configured as
+                               one interface is its lane 1
     Management<N>            — management
     Loopback<N>              — loopback
     Vlan<N>                  — SVI
@@ -78,6 +80,29 @@ def a_sub_interface_needs_a_tag(name: str) -> bool:
         and number.isdigit()
         and classify_port_name(parent).kind in ("physical", "breakout", "lag")
     )
+
+
+def fixed_switch_port_name(*, port: int, multi_lane: bool) -> str:
+    """The name EOS gives front-panel port *port* of a fixed switch,
+    the port configured as one interface.
+
+    A single-lane port is "Ethernet <port #>" and a multi-lane port
+    "Ethernet port #/lane #" on a fixed switch (Arista, EOS User
+    Manual, "Ethernet Ports", Referencing Multi-lane Ports).  A
+    multi-lane port configured as one interface -- 100G or 40G on a
+    QSFP port, 400G on an OSFP or QSFP-DD port -- is its primary lane,
+    ``/1``: "In high-speed mode, only the primary lane(s) are displayed
+    as active" (the same section).  Which ports of a model are
+    multi-lane is the model's to say
+    (:attr:`netcanon.migration.device_models.PortGroup.multi_lane`); a
+    port broken out into lanes is not named here.
+
+    Raises:
+        ValueError: *port* is not a port number (EOS counts from 1).
+    """
+    if port < 1:
+        raise ValueError(f"an EOS port number counts from 1, not {port}")
+    return f"Ethernet{port}/1" if multi_lane else f"Ethernet{port}"
 
 
 def classify_port_name(name: str) -> PortIdentity:

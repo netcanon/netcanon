@@ -1,0 +1,149 @@
+# Arista 7050X: the fixed switches of SFP+ or 10GBASE-T ports and QSFP+
+# uplinks, and the 7050QX-32
+#
+# A fixed switch that stands alone: two switches of an MLAG pair are two
+# devices, and neither puts a member number in a name.  How a name is
+# made is the EOS User Manual's (UM, "Ethernet Ports", Referencing
+# Multi-lane Ports): a single-lane port (SFP+, RJ45) is `Ethernet<port>`,
+# and a multi-lane port is `Ethernet<port>/<lane>`.  A 7050X QSFP+ port
+# that can be broken out is multi-lane: as four 10G interfaces it is
+# `/1` to `/4`, and as one 40G interface its first lane, `/1`.  This file
+# describes every such port configured as ONE 40G interface: that is the
+# mode's label.  A port broken out is not modelled yet -- and on these
+# switches four 10G interfaces is the DEFAULT (QA), so a switch nobody
+# has set to 40G prints `/1` to `/4` of each.
+#
+# The management port is `Management1` (UM, "Ethernet Ports", Management
+# Interfaces), declared once under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink` and
+# which `access` follows the flat target profiles of these switches: a
+# QSFP+ port is an uplink and an SFP+ or RJ45 port an access port.  It
+# says nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UM     Arista EOS User Manual 4.36.2F, "Ethernet Ports".
+#   QA     Arista 7050X: Q&A Document (04-0005-01, December 27, 2016):
+#          the table of which ports take which speeds, and the 4x10
+#          default.
+#   DSX    Arista 7050SX Series Data Sheet (03-0008-09, December 10,
+#          2020): the specifications table and the ordering list.
+#   DTX    Arista 7050TX Series Data Sheet (9/2015).
+#   DQX    Arista 7050QX-32/32S Data Sheet (6/2015).
+#   G50    Arista Quick Start Guide, 7050 Series 1RU (Gen 3)
+#          (DOC-00141-08): the front-panel figures.
+#   G2     Arista Quick Start Guide, 7000 Series 1RU (Gen 2)
+#          (PDOC-00019-14): the front-panel figure of the 7050QX-32.
+#
+# Public running-configs not committed here, read as a cross-check of
+# the names: saparikh/arista-demo, snapshot0 (DCS-7050SX-64 and
+# DCS-7050SX-72Q, EOS 4.21 and 4.23: a QSFP+ port set to 40G at `/1`
+# alone, one left at the default at `/1` to `/4`); and two of a
+# DCS-7050QX-32 (lwa-project/ng_digital_processor, config/switch/
+# dr-config, EOS-4.18.11M; vtluug/construct, EOS-4.24.11M), which
+# print ports 1-24 by lane and ports 25-32 with none.
+#
+# Part numbers.  The key of each model is the name the switch prints on
+# its `! device:` line.  Each model's `skus:` also lists the ordering
+# variants of it that the data sheet's ordering list gives with a
+# suffix (`-F`, `-R`), since a switch can print one: a public
+# running-config of a 7050TX-64 prints `DCS-7050TX-64-F` (see the 7060X
+# family file).
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 2RU 7050SX-128, 7050SX2-128, 7050TX-128 and 7050TX2-128: two
+#     management ports, and QSFP+ ports 97-104 run at 40G only (QA), a
+#     port whose name no Arista text read shows.
+#   * The MXP models (7050SX-72, 7050SX-96, 7050TX-72, 7050TX-96): a
+#     port of twelve lanes whose default set of interfaces no Arista
+#     text read settles.
+#   * The 7050QX-32S and 7050QX2-32S: SFP+ ports 1-4 share their lanes
+#     with QSFP+ port 5, so which names a switch has depends on a
+#     `hardware port-group` setting.
+#   * The SSD variants and the spares (`-D#`, `#`).
+schema: 1
+vendor: arista_eos
+family: "7050X"
+display_name: "Arista 7050X"
+naming: eos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, each QSFP+ port that can be broken out configured as one 40G interface (its first lane, /1)"
+    naming:
+      grade: vendor-doc
+      ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Referencing Multi-lane Ports (single-lane or fixed-lane ports are always modeled as a single interface, named Ethernet <port #> on a fixed switch; a multi-lane port is named Ethernet port #/lane #); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), how to change the multi-purpose QSFP+ ports between 10GbE and 40GbE modes (by default they operate in 4x10 mode, Et3/1 to Et3/4; speed forced 40gfull on lane 1 makes one 40GbE interface, and lanes 2-4 then show as err-disabled)"
+    caveat: "Each QSFP+ port that can be broken out is listed as one 40G interface, by its first lane (Ethernet49/1). By default these ports run as four 10G interfaces (Ethernet49/1 to Ethernet49/4) until lane 1 is set to 40G, and a port broken out is not modelled: a source port Ethernet49/2 is not on this inventory. Two switches of an MLAG pair are two devices: declare each."
+
+deployment_ports:
+  - name: Management1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Management Interfaces (each switch has one or two management interfaces, configured with interface management <number>; the manual's examples configure interface management 1); Arista 7050SX Series Data Sheet (03-0008-09, December 10, 2020), Arista 7050TX Series Data Sheet (9/2015) and Arista 7050QX-32/32S Data Sheet (6/2015), specifications (one 10/100/1000 management port on each model listed here)", caveat: "That a switch with one management port names it Management1 rests on the manual's examples; no Arista text read pairs the port's label with the name."}
+
+models:
+  # --- 48 SFP+ and 4 or 6 QSFP+ -----------------------------------------------
+  DCS-7050SX-64:
+    skus: [DCS-7050SX-64, DCS-7050SX-64-F, DCS-7050SX-64-R]
+    display_name: "Arista 7050SX-64, 48 SFP+ and 4 QSFP+ (DCS-7050SX-64)"
+    panel: {grade: vendor-doc, ref: "Arista 7050SX Series Data Sheet (03-0008-09, December 10, 2020), specifications (7050SX-64: 48 x SFP+, 4 x QSFP+; one management port) and ordering list (DCS-7050SX-64-F, DCS-7050SX-64-R); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050SX-64: ports 1-48 1/10G only, ports 49-52 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-5, front panel of the DCS-7050SX-64"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  DCS-7050SX-72Q:
+    skus: [DCS-7050SX-72Q, DCS-7050SX-72Q-F, DCS-7050SX-72Q-R]
+    display_name: "Arista 7050SX-72Q, 48 SFP+ and 6 QSFP+ (DCS-7050SX-72Q)"
+    panel: {grade: vendor-doc, ref: "Arista 7050SX Series Data Sheet (03-0008-09, December 10, 2020), specifications (7050SX-72Q: 48 x SFP+, 6x QSFP+; one management port) and ordering list (DCS-7050SX-72Q-F, DCS-7050SX-72Q-R); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050SX-72Q: ports 1-48 1/10G only, ports 49-54 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-9, front panel of the DCS-7050SX-72Q"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  DCS-7050SX2-72Q:
+    skus: [DCS-7050SX2-72Q, DCS-7050SX2-72Q-F, DCS-7050SX2-72Q-R]
+    display_name: "Arista 7050SX2-72Q, 48 SFP+ and 6 QSFP+ (DCS-7050SX2-72Q)"
+    panel: {grade: vendor-doc, ref: "Arista 7050SX Series Data Sheet (03-0008-09, December 10, 2020), specifications (7050SX2-72Q: 48 x SFP+, 6x QSFP+; one management port) and ordering list (DCS-7050SX2-72Q-F, DCS-7050SX2-72Q-R); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050SX2-72Q: ports 1-48 1/10G only, ports 49-54 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-11, front panel of the DCS-7050SX2-72Q"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  # --- 32 or 48 10GBASE-T and 4 or 6 QSFP+ ------------------------------------
+  DCS-7050TX-48:
+    skus: [DCS-7050TX-48, DCS-7050TX-48-F, DCS-7050TX-48-R]
+    display_name: "Arista 7050TX-48, 32 10GBASE-T and 4 QSFP+ (DCS-7050TX-48)"
+    panel: {grade: vendor-doc, ref: "Arista 7050TX Series Data Sheet (9/2015), specifications (7050TX-48: 32 x 10G-T, 4 x QSFP+; one management port) and ordering list (DCS-7050TX-48-F, DCS-7050TX-48-R: 32xRJ45 (1/10GBASE-T) & 4xQSFP+); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050TX-48: ports 1-32 1/10G only, ports 33-36 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-2, front panel of the DCS-7050TX-48"}
+    ports:
+      - {role: access, count: 32, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  DCS-7050TX-64:
+    skus: [DCS-7050TX-64, DCS-7050TX-64-F, DCS-7050TX-64-R]
+    display_name: "Arista 7050TX-64, 48 10GBASE-T and 4 QSFP+ (DCS-7050TX-64)"
+    panel: {grade: vendor-doc, ref: "Arista 7050TX Series Data Sheet (9/2015), specifications (7050TX-64: 48 x 10G-T, 4 x QSFP+; one management port) and ordering list (DCS-7050TX-64-F, DCS-7050TX-64-R: 48xRJ45 (1/10GBASE-T) & 4xQSFP+); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050TX-64: ports 1-48 1/10G only, ports 49-52 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-4, front panel of the DCS-7050TX-64"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  DCS-7050TX-72Q:
+    skus: [DCS-7050TX-72Q, DCS-7050TX-72Q-F, DCS-7050TX-72Q-R]
+    display_name: "Arista 7050TX-72Q, 48 10GBASE-T and 6 QSFP+ (DCS-7050TX-72Q)"
+    panel: {grade: vendor-doc, ref: "Arista 7050TX Series Data Sheet (9/2015), specifications (7050TX-72Q: 48 x 10G-T, 6 x QSFP+; one management port) and ordering list (DCS-7050TX-72Q-F, DCS-7050TX-72Q-R: 48x10GbE (1/10GBASE-T) & 6x40GbE QSFP+); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050TX-72Q: ports 1-48 1/10G only, ports 49-54 4 x 10G or 1 x 40G); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-8, front panel of the DCS-7050TX-72Q"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+, multi_lane: true}
+
+  # --- 32 QSFP+, eight of them 40G only ----------------------------------------
+  DCS-7050QX-32:
+    skus: [DCS-7050QX-32, DCS-7050QX-32-F, DCS-7050QX-32-R]
+    display_name: "Arista 7050QX-32, 32 QSFP+ (DCS-7050QX-32)"
+    panel: {grade: inferred, ref: "Arista 7050QX-32/32S Data Sheet (6/2015), specifications (7050QX-32: 32 x QSFP+; one management port) and ordering list (DCS-7050QX-32-F, DCS-7050QX-32-R); Arista 7050X: Q&A Document (04-0005-01, December 27, 2016), speeds table (7050QX-32: ports 1-24 4 x 10G or 1 x 40G, ports 25-32 40G only); Arista Quick Start Guide, 7000 Series 1RU (Gen 2) (PDOC-00019-14), Figure C-3, DCS-7050QX-32 front panel (ports 1-32)", caveat: "Ports 25-32 run at 40G only, and are listed with no lane (Ethernet25 to Ethernet32). No Arista text read shows the name of a port that runs at 40G only; this is what two public running-configs of a DCS-7050QX-32, on EOS 4.18 and 4.24, print, beside Ethernet1/1 to Ethernet24/4 for the ports that can be broken out."}
+    ports:
+      - {role: uplink, count: 24, speed: 40gig, cage: qsfp+, multi_lane: true}
+      - {role: uplink, count: 8, speed: 40gig, cage: qsfp+}

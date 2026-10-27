@@ -1,0 +1,148 @@
+# Arista 7050X3: the fixed switches of SFP25, SFP+ or 10GBASE-T ports
+# and QSFP100 uplinks, and the 7050CX3-32S
+#
+# A fixed switch that stands alone: two switches of an MLAG pair are two
+# devices, and neither puts a member number in a name.  How a name is
+# made is the EOS User Manual's (UM, "Ethernet Ports", Referencing
+# Multi-lane Ports): a single-lane port (SFP25, SFP+, RJ45) is
+# `Ethernet<port>`, and a multi-lane port (QSFP100) is
+# `Ethernet<port>/<lane>`.  A QSFP100 port configured as one interface
+# (100G or 40G) is its first lane, `/1`; one broken out has an interface
+# for each lane in use.  This file describes every QSFP100 port
+# configured as ONE interface: that is the mode's label.  A port broken
+# out is not modelled yet.
+#
+# The management port is `Management1` (UM, "Ethernet Ports", Management
+# Interfaces), declared once under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order, which is not left to right:
+# on a 7050SX3-48YC8 the QSFP100 ports 49-56 sit between SFP ports 24
+# and 25.  Which ports are `uplink` and which `access` follows the flat
+# target profiles of these switches: a QSFP100 port is an uplink and an
+# SFP or RJ45 port an access port.  It says nothing about how a switch
+# is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UM     Arista EOS User Manual 4.36.2F, "Ethernet Ports".
+#   D50X3  Arista 7050X3 Series Data Sheet (03-0040-46, September 4,
+#          2026): the specifications tables and the ordering list.
+#   G50    Arista Quick Start Guide, 7050 Series 1RU (Gen 3)
+#          (DOC-00141-08): the front-panel figures.
+#   G2RU   Arista Quick Start Guide, 7000 Series 2RU, the HTML edition
+#          (its front-panel figures).
+#
+# Public running-configs not committed here, read as a cross-check of
+# the names: rucus0101/DTN_SDWAN,
+# DTN_WAN/DTN_SDWAN/config_backup (a DCS-7050SX3-48YC12 and a
+# DCS-7050SX3-48YC8, EOS-4.32.1F: every SFP port flat, every QSFP100
+# port at `/1` alone, and `Management1`).
+#
+# Part numbers.  The key of each model is the name the switch prints on
+# its `! device:` line.  Each model's `skus:` also lists the ordering
+# variants of it that the data sheet's ordering list gives with a
+# suffix (`-F`, `-R`), since a switch can print one (see the 7060X
+# family file).
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 7050CX3-32C and the 7050SX3-48C8C: D50X3 gives their port
+#     counts, and no figure or table read numbers their ports.
+#   * The 7050CX3M-32S: G50's figure of it is the 7050CX3-32S's drawing,
+#     and D50X3 does not list it.
+#   * The DC-powered and spare variants of each part (`-D`, `-DC`, `#`).
+schema: 1
+vendor: arista_eos
+family: "7050X3"
+display_name: "Arista 7050X3"
+naming: eos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, each QSFP100 port configured as one interface (its first lane, /1)"
+    naming:
+      grade: vendor-doc
+      ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Referencing Multi-lane Ports (single-lane or fixed-lane ports are always modeled as a single interface, named Ethernet <port #> on a fixed switch; a multi-lane port is named Ethernet port #/lane #; in high-speed mode only the primary lanes are displayed as active, the remaining lanes showing as errdisabled); Arista EOS User Manual 4.36.2F, Ethernet Ports, QSFP100 and QSFP+ ports (configuring a QSFP28 port for 100GbE makes its /2, /3 and /4 interfaces inactive; 40GbE runs on the port's /1 lane, the primary lane)"
+    caveat: "Each QSFP100 port is listed as one interface, by its first lane (Ethernet49/1). A port broken out into lanes (4x25G, 4x10G or 2x50G) has an interface for each lane in use, and those are not modelled: a source port Ethernet49/2 is not on this inventory. Whether an inactive lane appears in show running-config is not established by any Arista text read. Two switches of an MLAG pair are two devices: declare each."
+
+deployment_ports:
+  - name: Management1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Management Interfaces (each switch has one or two management interfaces, configured with interface management <number>; the manual's examples configure interface management 1); Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (one management port on every model)", caveat: "That a switch with one management port names it Management1 rests on the manual's examples; no Arista text read pairs the port's label with the name."}
+
+models:
+  # --- 32 QSFP100 and 2 SFP+ --------------------------------------------------
+  DCS-7050CX3-32S:
+    skus: [DCS-7050CX3-32S, DCS-7050CX3-32S-F, DCS-7050CX3-32S-R]
+    display_name: "Arista 7050CX3-32S, 32 QSFP100 and 2 SFP+ (DCS-7050CX3-32S)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050CX3-32S: 32x QSFP100, 2x SFP+) and ordering list (DCS-7050CX3-32S-F, DCS-7050CX3-32S-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-13, front panel of the DCS-7050CX3-32S (QSFP100 ports 1-32, SFP+ ports 33 and 34 at the far left)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 48 SFP25 and 12 or 8 QSFP100 ------------------------------------------
+  DCS-7050SX3-48YC12:
+    skus: [DCS-7050SX3-48YC12, DCS-7050SX3-48YC12-F]
+    display_name: "Arista 7050SX3-48YC12, 48 SFP25 and 12 QSFP100 (DCS-7050SX3-48YC12)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-48YC12: 48x SFP25, 12x QSFP100) and ordering list (DCS-7050SX3-48YC12-F); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-14, front panel of the DCS-7050SX3-48YC12 (SFP ports 1-48 on either side, QSFP100 ports 49-60 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 12, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7050SX3-48YC8:
+    skus: [DCS-7050SX3-48YC8, DCS-7050SX3-48YC8-F, DCS-7050SX3-48YC8-R]
+    display_name: "Arista 7050SX3-48YC8, 48 SFP25 and 8 QSFP100 (DCS-7050SX3-48YC8)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-48YC8: 48x SFP25, 8x QSFP100) and ordering list (DCS-7050SX3-48YC8-F, DCS-7050SX3-48YC8-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-15, front panel of the DCS-7050SX3-48YC8 (SFP ports 1-24 at the left and 25-48 at the right, QSFP100 ports 49-56 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7050SX3-48YC8C:
+    skus: [DCS-7050SX3-48YC8C, DCS-7050SX3-48YC8C-F, DCS-7050SX3-48YC8C-R]
+    display_name: "Arista 7050SX3-48YC8C, 48 SFP25 and 8 QSFP100 (DCS-7050SX3-48YC8C)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-48YC8C: 48x SFP25, 8x QSFP100) and ordering list (DCS-7050SX3-48YC8C-F, DCS-7050SX3-48YC8C-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-20, front panel of the DCS-7050SX3-48YC8C (SFP ports 1-48, QSFP100 ports 49-56)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 48 SFP+ or 10GBASE-T and 8 QSFP100 -------------------------------------
+  DCS-7050SX3-48C8:
+    skus: [DCS-7050SX3-48C8, DCS-7050SX3-48C8-F, DCS-7050SX3-48C8-R]
+    display_name: "Arista 7050SX3-48C8, 48 SFP+ and 8 QSFP100 (DCS-7050SX3-48C8)"
+    panel: {grade: inferred, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-48C8: 48x SFP+, 8x QSFP100) and ordering list (DCS-7050SX3-48C8-F, DCS-7050SX3-48C8-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-18, captioned DCS-7050SX3-48C8, which is the drawing of the 7050SX3-48YC8 (SFP ports 1-48, QSFP100 ports 49-56)", caveat: "The data sheet gives the 7050SX3-48C8 48 SFP+ and 8 QSFP100 ports. That they are numbered 1-48 and 49-56 is inferred: the Quick Start Guide's figure of it is the 7050SX3-48YC8's drawing, and no other Arista text read numbers its ports."}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7050TX3-48C8:
+    skus: [DCS-7050TX3-48C8, DCS-7050TX3-48C8-F, DCS-7050TX3-48C8-R]
+    display_name: "Arista 7050TX3-48C8, 48 10GBASE-T and 8 QSFP100 (DCS-7050TX3-48C8)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050TX3-48C8: 48x 1/2.5/5/10G-T, 8x QSFP100) and ordering list (DCS-7050TX3-48C8-F, DCS-7050TX3-48C8-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-17, front panel of the DCS-7050TX3-48C8 (RJ45 ports 1-24 at the left and 25-48 at the right, QSFP100 ports 49-56 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 24 SFP25 and 4 QSFP100 -------------------------------------------------
+  DCS-7050SX3-24YC4C-S:
+    skus: [DCS-7050SX3-24YC4C-S, DCS-7050SX3-24YC4C-S-F, DCS-7050SX3-24YC4C-S-R]
+    display_name: "Arista 7050SX3-24YC4C, 24 SFP25 and 4 QSFP100 (DCS-7050SX3-24YC4C-S)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-24YC4C: 24x SFP25, 4x QSFP100) and ordering list (DCS-7050SX3-24YC4C-S-F, DCS-7050SX3-24YC4C-S-R); Arista Quick Start Guide, 7050 Series 1RU (Gen 3) (DOC-00141-08), Figure C-19, front panel of the DCS-7050SX3-24YC4C-S (SFP ports 1-12 at the left and 13-24 at the right, QSFP100 ports 25-28 in the centre)", caveat: "The ordering list and the figure name this model DCS-7050SX3-24YC4C-S; whether the switch prints the -S on its device line is not established."}
+    ports:
+      - {role: access, count: 24, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 4, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 96 SFP25, 8 QSFP100 and 2 SFP+ (2RU) -----------------------------------
+  DCS-7050SX3-96YC8:
+    skus: [DCS-7050SX3-96YC8, DCS-7050SX3-96YC8-F, DCS-7050SX3-96YC8-R]
+    display_name: "Arista 7050SX3-96YC8, 96 SFP25, 8 QSFP100 and 2 SFP+ (DCS-7050SX3-96YC8)"
+    panel: {grade: vendor-doc, ref: "Arista 7050X3 Series Data Sheet (03-0040-46, September 4, 2026), specifications (7050SX3-96YC8: 96x SFP25, 8x QSFP100, 2 SFP+) and ordering list (DCS-7050SX3-96YC8-F, DCS-7050SX3-96YC8-R); Arista Quick Start Guide, 7000 Series 2RU, HTML edition, Figure 16, front panel of the DCS-7050SX3-96YC8 (SFP ports 1-96 in four blocks, QSFP100 ports 97-104 in the centre, SFP+ ports 105 and 106 at the right; one Ethernet management port)", caveat: "The ordering list's description of this model leaves out the two SFP+ ports that its specifications table and the Quick Start Guide's figure show."}
+    ports:
+      - {role: access, count: 96, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

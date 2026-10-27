@@ -619,6 +619,35 @@ timestamp if your timezone matters for an audit.
   and is graded `inferred` (it was `vendor-doc`), as the family grades
   its JL661A: HPE numbers its SFP56 uplinks, and no HPE text read
   numbers its RJ45 ports.  Its notice is amber.
+- **Arista 7050X, 7050X3, 7060X, 7260X and 7280R3 switches can be
+  declared as a source or target device.**  Four model families, each
+  with one mode, `standalone` -- a switch on its own; the two switches
+  of an MLAG pair are two devices, each declared: `7060X` (the
+  7060CX-32S, 7060CX2-32S, 7060SX2-48YC6, 7060PX4-32, 7060DX4-32 and
+  7260CX-64), `7050X3` (the 7050CX3-32S, six 7050SX3 models and the
+  7050TX3-48C8), `7280R3` (17 models; a K or A part is a model of its
+  own) and `7050X` (the 7050SX-64, SX-72Q, SX2-72Q, TX-48, TX-64,
+  TX-72Q and QX-32).  Names come from a new `eos` naming rule: a
+  single-lane port is `Ethernet<port>`, and a multi-lane port -- a
+  QSFP+, QSFP100, OSFP or QSFP-DD cage -- configured as one interface
+  is its first lane, `Ethernet<port>/1` (EOS User Manual, "Ethernet
+  Ports", Referencing Multi-lane Ports).  Which ports are multi-lane
+  is stated on each group of ports (`multi_lane: true`), never derived
+  from a cage: a 7050QX-32's ports 25-32 run at 40G only, and two
+  public running-configs print them with no lane.  A port broken out
+  into lanes is not modelled, and each family's mode says so; on a
+  7050X a QSFP+ port runs as four 10G interfaces until lane 1 is set
+  to 40G ("By default they will operate in 4x10 mode", Arista's 7050X
+  Q&A), so the names of a switch nobody has set come back as
+  off-inventory.  The management port is `Management1`, which belongs
+  to no member.  A model's key is the part number the switch prints
+  (`DCS-7060CX-32S`), and its `-F` and `-R` ordering variants resolve
+  to it.  Every name is graded `vendor-doc` but the 7050SX3-48C8's
+  (Arista's quick start guide figure of it is the 7050SX3-48YC8's
+  drawing) and the 7050QX-32's (no Arista text read names a port that
+  runs at 40G only), which are `inferred` and say why.  The
+  7060CX-32S, 7050CX3-32S, 7050SX-64 and 7280CR3-32P4 target profiles
+  describe the same ports as their families.  No capture claim is made.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

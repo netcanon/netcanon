@@ -1,0 +1,221 @@
+# Arista 7280R3: the fixed routers and switches of QSFP100, OSFP and
+# QSFP-DD ports, and of SFP25 ports and QSFP100 uplinks
+#
+# A fixed switch that stands alone: two switches of an MLAG pair are two
+# devices, and neither puts a member number in a name.  How a name is
+# made is the EOS User Manual's (UM, "Ethernet Ports", Referencing
+# Multi-lane Ports): a single-lane port (SFP25) is `Ethernet<port>`, and
+# a multi-lane port (QSFP100 of four lanes, OSFP or QSFP-DD of eight) is
+# `Ethernet<port>/<lane>`.  A multi-lane port configured as one
+# interface (100G or 40G on a QSFP100 port, 400G on an OSFP or QSFP-DD
+# port) is its first lane, `/1`; one broken out has an interface for
+# each lane in use.  This file describes every multi-lane port
+# configured as ONE interface: that is the mode's label.  A port broken
+# out is not modelled yet.
+#
+# The management port is `Management1` (UM, "Ethernet Ports", Management
+# Interfaces), declared once under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order, which is not left to right:
+# on a 7280CR3-32P4 the OSFP ports 33-36 sit between QSFP100 ports 16
+# and 17.  Which ports are `uplink` and which `access` follows the flat
+# target profiles of these switches: a QSFP100, OSFP or QSFP-DD port is
+# an uplink and an SFP port an access port.  It says nothing about how
+# a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UM     Arista EOS User Manual 4.36.2F, "Ethernet Ports".
+#   D80R3  Arista 7280R3 Series Data Sheet (03-0045-59, August 11,
+#          2025): the specifications tables and the ordering list.
+#   G80R3  Arista Quick Start Guide, 7280R3 (DOC-07041-01): the
+#          front-panel figures.
+#
+# Public running-configs not committed here, read as a cross-check of
+# the names: rucus0101/DTN_SDWAN, DTN_WAN/DTN_SDWAN/config_backup (a
+# DCS-7280SR3K-48YC8, EOS-4.32.1F: every SFP port flat, every QSFP100
+# port at `/1` alone, and `Management1`); and
+# arista-netdevops-community/avd-mpls-example, config_backup (a
+# DCS-7280CR3-32D4, a DCS-7280CR3K-32D4 and a DCS-7280SR3K-48YC8: the
+# same shape, the QSFP-DD ports 33-36 at `/1` alone).  A third, of a
+# DCS-7280SR3K-48YC8A on EOS-4.35.2F (gathering/tgmanage, examples/tg26),
+# prints `/2`-`/4` of every QSFP100 port as well, each shut down: which
+# lanes a running-config prints is not a function of the model alone.
+#
+# Part numbers.  The key of each model is the name the switch prints on
+# its `! device:` line.  The `K` and `A` parts are models of their own
+# (they print their own names), with the panel of the part they follow.
+# Each model's `skus:` also lists the ordering variants of it that the
+# data sheet's ordering list gives with a suffix (`-F`, `-R`), since a
+# switch can print one (see the 7060X family file).
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 7280CR3-36S family (CR3-36S, CR3K-36S, CR3K-36A): D80R3 gives
+#     28 QSFP100, 6 QSFP200 and 2 QSFP-DD ports, and no text read says
+#     which cage ports 29-36 are.
+#   * The 7280TR3-40C6: D80R3 gives its counts, and G80R3 has no figure.
+#   * The 7280DR3-40: in neither D80R3 nor G80R3.
+#   * The `-M` parts other than the 7280SR3E-40YC6-M, which D80R3 lists
+#     as spares only (`-M#`), and the spares (`#`).
+schema: 1
+vendor: arista_eos
+family: "7280R3"
+display_name: "Arista 7280R3"
+naming: eos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, each QSFP100, OSFP or QSFP-DD port configured as one interface (its first lane, /1)"
+    naming:
+      grade: vendor-doc
+      ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Referencing Multi-lane Ports (single-lane or fixed-lane ports are always modeled as a single interface, named Ethernet <port #> on a fixed switch; a multi-lane port is named Ethernet port #/lane #; in high-speed mode only the primary lanes are displayed as active); Arista EOS User Manual 4.36.2F, Ethernet Ports, QSFP100 ports (configuring a QSFP28 port for 100GbE makes its /2, /3 and /4 interfaces inactive) and Displaying Interface Interactions (for speed 400G-8, Ethernet1/2-8 become inactive)"
+    caveat: "Each QSFP100, OSFP or QSFP-DD port is listed as one interface, by its first lane (Ethernet33/1). A port broken out into lanes has an interface for each lane in use, and those are not modelled: a source port Ethernet33/5 is not on this inventory. Whether an inactive lane appears in show running-config is not established by any Arista text read, and public running-configs differ: most print a port's /1 alone, one prints /2-/4 of every QSFP100 port as well, each shut down. Two switches of an MLAG pair are two devices: declare each."
+
+deployment_ports:
+  - name: Management1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Management Interfaces (each switch has one or two management interfaces, configured with interface management <number>; the manual's examples configure interface management 1); Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (one 100/1000 management port on every model); Arista Quick Start Guide, 7280R3 (DOC-07041-01), initial configuration (interface management 1)", caveat: "That a switch with one management port names it Management1 rests on the manual's examples; no Arista text read pairs the port's label with the name."}
+
+models:
+  # --- 24 OSFP or 24 QSFP-DD (400G) -------------------------------------------
+  DCS-7280PR3-24:
+    skus: [DCS-7280PR3-24, DCS-7280PR3-24-F]
+    display_name: "Arista 7280PR3-24, 24 OSFP 400G (DCS-7280PR3-24)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280PR3-24: 24 x OSFP) and ordering list (DCS-7280PR3-24-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-1, front panel of the DCS-7280PR3-24 and DCS-7280PR3K-24 (OSFP ports 1-24, odd numbers on the top row and even on the bottom)"}
+    ports:
+      - {role: uplink, count: 24, speed: 400gig, cage: osfp, multi_lane: true}
+
+  DCS-7280PR3K-24:
+    skus: [DCS-7280PR3K-24, DCS-7280PR3K-24-F]
+    display_name: "Arista 7280PR3K-24, 24 OSFP 400G (DCS-7280PR3K-24)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280PR3K-24: 24 x OSFP) and ordering list (DCS-7280PR3K-24-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-1, front panel of the DCS-7280PR3-24 and DCS-7280PR3K-24 (OSFP ports 1-24, odd numbers on the top row and even on the bottom)"}
+    ports:
+      - {role: uplink, count: 24, speed: 400gig, cage: osfp, multi_lane: true}
+
+  DCS-7280DR3-24:
+    skus: [DCS-7280DR3-24, DCS-7280DR3-24-F]
+    display_name: "Arista 7280DR3-24, 24 QSFP-DD 400G (DCS-7280DR3-24)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280DR3-24: 24 x QSFP-DD) and ordering list (DCS-7280DR3-24-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-2, front panel of the DCS-7280DR3-24 and DCS-7280DR3K-24 (QSFP-DD ports 1-24, odd numbers on the top row and even on the bottom)"}
+    ports:
+      - {role: uplink, count: 24, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+
+  DCS-7280DR3K-24:
+    skus: [DCS-7280DR3K-24, DCS-7280DR3K-24-F]
+    display_name: "Arista 7280DR3K-24, 24 QSFP-DD 400G (DCS-7280DR3K-24)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280DR3K-24: 24 x QSFP-DD) and ordering list (DCS-7280DR3K-24-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-2, front panel of the DCS-7280DR3-24 and DCS-7280DR3K-24 (QSFP-DD ports 1-24, odd numbers on the top row and even on the bottom)"}
+    ports:
+      - {role: uplink, count: 24, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+
+  # --- 32 QSFP100 and 4 OSFP 400G ---------------------------------------------
+  DCS-7280CR3-32P4:
+    skus: [DCS-7280CR3-32P4, DCS-7280CR3-32P4-F, DCS-7280CR3-32P4-R]
+    display_name: "Arista 7280CR3-32P4, 32 QSFP100 and 4 OSFP 400G (DCS-7280CR3-32P4)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3-32P4: 32 x QSFP100, 4 x OSFP) and ordering list (DCS-7280CR3-32P4-F, DCS-7280CR3-32P4-R: 32x100GbE QSFP and 4x400GbE OSFP); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-3, front panel of the DCS-7280CR3-32P4, DCS-7280CR3K-32P4 and DCS-7280CR3K-32P4A (QSFP100 ports 1-16 at the left and 17-32 at the right, OSFP ports 33-36 in the centre); Arista EOS User Manual 4.36.2F, Ethernet Ports (its example output of a DCS-7280CR3-32P4 names Ethernet35/1)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: osfp, multi_lane: true}
+
+  DCS-7280CR3K-32P4:
+    skus: [DCS-7280CR3K-32P4, DCS-7280CR3K-32P4-F, DCS-7280CR3K-32P4-R]
+    display_name: "Arista 7280CR3K-32P4, 32 QSFP100 and 4 OSFP 400G (DCS-7280CR3K-32P4)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3K-32P4: 32 x QSFP100, 4 x OSFP) and ordering list (DCS-7280CR3K-32P4-F, DCS-7280CR3K-32P4-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-3, front panel of the DCS-7280CR3-32P4, DCS-7280CR3K-32P4 and DCS-7280CR3K-32P4A (QSFP100 ports 1-16 at the left and 17-32 at the right, OSFP ports 33-36 in the centre)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: osfp, multi_lane: true}
+
+  DCS-7280CR3K-32P4A:
+    skus: [DCS-7280CR3K-32P4A, DCS-7280CR3K-32P4A-F, DCS-7280CR3K-32P4A-R]
+    display_name: "Arista 7280CR3K-32P4A, 32 QSFP100 and 4 OSFP 400G (DCS-7280CR3K-32P4A)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3K-32P4A: 32 x QSFP100, 4 x OSFP) and ordering list (DCS-7280CR3K-32P4A-F, DCS-7280CR3K-32P4A-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-3, front panel of the DCS-7280CR3-32P4, DCS-7280CR3K-32P4 and DCS-7280CR3K-32P4A (QSFP100 ports 1-16 at the left and 17-32 at the right, OSFP ports 33-36 in the centre)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: osfp, multi_lane: true}
+
+  # --- 32 QSFP100 and 4 QSFP-DD 400G ------------------------------------------
+  DCS-7280CR3-32D4:
+    skus: [DCS-7280CR3-32D4, DCS-7280CR3-32D4-F, DCS-7280CR3-32D4-R]
+    display_name: "Arista 7280CR3-32D4, 32 QSFP100 and 4 QSFP-DD 400G (DCS-7280CR3-32D4)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3-32D4: 32 x QSFP100, 4 x QSFP-DD) and ordering list (DCS-7280CR3-32D4-F, DCS-7280CR3-32D4-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-4, front panel of the DCS-7280CR3-32D4, 7280CR3K-32D4 and DCS-7280CR3K-32D4A (QSFP100 ports 1-16 at the left and 17-32 at the right, QSFP-DD ports 33-36 in the centre)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+
+  DCS-7280CR3K-32D4:
+    skus: [DCS-7280CR3K-32D4, DCS-7280CR3K-32D4-F, DCS-7280CR3K-32D4-R]
+    display_name: "Arista 7280CR3K-32D4, 32 QSFP100 and 4 QSFP-DD 400G (DCS-7280CR3K-32D4)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3K-32D4: 32 x QSFP100, 4 x QSFP-DD) and ordering list (DCS-7280CR3K-32D4-F, DCS-7280CR3K-32D4-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-4, front panel of the DCS-7280CR3-32D4, 7280CR3K-32D4 and DCS-7280CR3K-32D4A (QSFP100 ports 1-16 at the left and 17-32 at the right, QSFP-DD ports 33-36 in the centre)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+
+  DCS-7280CR3K-32D4A:
+    skus: [DCS-7280CR3K-32D4A, DCS-7280CR3K-32D4A-F, DCS-7280CR3K-32D4A-R]
+    display_name: "Arista 7280CR3K-32D4A, 32 QSFP100 and 4 QSFP-DD 400G (DCS-7280CR3K-32D4A)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3K-32D4A: 32 x QSFP100, 4 x QSFP-DD) and ordering list (DCS-7280CR3K-32D4A-F, DCS-7280CR3K-32D4A-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-4, front panel of the DCS-7280CR3-32D4, 7280CR3K-32D4 and DCS-7280CR3K-32D4A (QSFP100 ports 1-16 at the left and 17-32 at the right, QSFP-DD ports 33-36 in the centre)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: uplink, count: 4, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+
+  # --- 96 QSFP100 (2RU) --------------------------------------------------------
+  DCS-7280CR3-96:
+    skus: [DCS-7280CR3-96, DCS-7280CR3-96-F]
+    display_name: "Arista 7280CR3-96, 96 QSFP100 (DCS-7280CR3-96)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3-96: 96 x QSFP100) and ordering list (DCS-7280CR3-96-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-8, front panel of the DCS-7280CR3-96 and DCS-7280CR3K-96 (QSFP100 ports 1-96: 81-96 in the top row, 1-80 in two-row groups below; one Ethernet management port)"}
+    ports:
+      - {role: uplink, count: 96, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7280CR3K-96:
+    skus: [DCS-7280CR3K-96, DCS-7280CR3K-96-F]
+    display_name: "Arista 7280CR3K-96, 96 QSFP100 (DCS-7280CR3K-96)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280CR3K-96: 96 x QSFP100) and ordering list (DCS-7280CR3K-96-F); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-8, front panel of the DCS-7280CR3-96 and DCS-7280CR3K-96 (QSFP100 ports 1-96: 81-96 in the top row, 1-80 in two-row groups below; one Ethernet management port)"}
+    ports:
+      - {role: uplink, count: 96, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 48 SFP25 and 8 QSFP100 -------------------------------------------------
+  DCS-7280SR3-48YC8:
+    skus: [DCS-7280SR3-48YC8, DCS-7280SR3-48YC8-F, DCS-7280SR3-48YC8-R]
+    display_name: "Arista 7280SR3-48YC8, 48 SFP25 and 8 QSFP100 (DCS-7280SR3-48YC8)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280SR3-48YC8: 48 x SFP 1/10/25G, 8 x QSFP100) and ordering list (DCS-7280SR3-48YC8-F, DCS-7280SR3-48YC8-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-6, front panel of the DCS-7280SR3-48YC8, DCS-7280SR3K-48YC8 and DCS-7280SR3K-48YC8A (SFP ports 1-24 at the left and 25-48 at the right, QSFP100 ports 49-56 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7280SR3K-48YC8:
+    skus: [DCS-7280SR3K-48YC8, DCS-7280SR3K-48YC8-F, DCS-7280SR3K-48YC8-R]
+    display_name: "Arista 7280SR3K-48YC8, 48 SFP25 and 8 QSFP100 (DCS-7280SR3K-48YC8)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280SR3K-48YC8: 48 x SFP 1/10/25G, 8 x QSFP100) and ordering list (DCS-7280SR3K-48YC8-F, DCS-7280SR3K-48YC8-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-6, front panel of the DCS-7280SR3-48YC8, DCS-7280SR3K-48YC8 and DCS-7280SR3K-48YC8A (SFP ports 1-24 at the left and 25-48 at the right, QSFP100 ports 49-56 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7280SR3K-48YC8A:
+    skus: [DCS-7280SR3K-48YC8A, DCS-7280SR3K-48YC8A-F, DCS-7280SR3K-48YC8A-R]
+    display_name: "Arista 7280SR3K-48YC8A, 48 SFP25 and 8 QSFP100 (DCS-7280SR3K-48YC8A)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280SR3K-48YC8A: 48 x SFP 1/10/25G, 8 x QSFP100) and ordering list (DCS-7280SR3K-48YC8A-F, DCS-7280SR3K-48YC8A-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-6, front panel of the DCS-7280SR3-48YC8, DCS-7280SR3K-48YC8 and DCS-7280SR3K-48YC8A (SFP ports 1-24 at the left and 25-48 at the right, QSFP100 ports 49-56 in the centre)"}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 40 SFP25 and 6 QSFP100 -------------------------------------------------
+  DCS-7280SR3-40YC6:
+    skus: [DCS-7280SR3-40YC6, DCS-7280SR3-40YC6-F, DCS-7280SR3-40YC6-R]
+    display_name: "Arista 7280SR3-40YC6, 40 SFP25 and 6 QSFP100 (DCS-7280SR3-40YC6)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280SR3-40YC6: 40 x SFP 1/10/25G, 6 x QSFP100) and ordering list (DCS-7280SR3-40YC6-F, DCS-7280SR3-40YC6-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-7, front panel of the DCS-7280SR3-40YC6 and DCS-7280SR3E-40YC6-M (25G SFP ports 1-40, 100G QSFP ports 41, 43 and 45 on the top row and 42, 44 and 46 on the bottom)"}
+    ports:
+      - {role: access, count: 40, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 6, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  DCS-7280SR3E-40YC6-M:
+    skus: [DCS-7280SR3E-40YC6-M, DCS-7280SR3E-40YC6-M-F, DCS-7280SR3E-40YC6-M-R]
+    display_name: "Arista 7280SR3E-40YC6, 40 SFP25 and 6 QSFP100 (DCS-7280SR3E-40YC6-M)"
+    panel: {grade: vendor-doc, ref: "Arista 7280R3 Series Data Sheet (03-0045-59, August 11, 2025), specifications (7280SR3E-40YC6: 40 x SFP 1/10/25G, 6 x QSFP100) and ordering list (DCS-7280SR3E-40YC6-M-F, DCS-7280SR3E-40YC6-M-R); Arista Quick Start Guide, 7280R3 (DOC-07041-01), Figure C-7, front panel of the DCS-7280SR3-40YC6 and DCS-7280SR3E-40YC6-M (25G SFP ports 1-40, 100G QSFP ports 41, 43 and 45 on the top row and 42, 44 and 46 on the bottom)", caveat: "The ordering list names this model DCS-7280SR3E-40YC6-M; whether the switch prints the -M on its device line is not established."}
+    ports:
+      - {role: access, count: 40, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 6, speed: 100gig, cage: qsfp28, multi_lane: true}

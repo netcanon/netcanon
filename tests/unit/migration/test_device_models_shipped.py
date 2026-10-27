@@ -942,6 +942,87 @@ for _access, _parts in _AOSCX_ACCESS_PORTS.items():
             _run(1, _access, "1/1/"), _run(_access + 1, 4, "1/1/"),
         )
 
+# Arista EOS fixed switches, typed from Arista's data sheets, the 7050X
+# and 7060X Q&As and the quick start guides' front-panel figures: each
+# model's port groups in PORT-NUMBER order, as (first port, count,
+# named by lane?, role).  A port named by lane is its first lane
+# (`Ethernet49/1`); any other port is its number (`Ethernet3`).  Every
+# model is one switch with nothing fitted.
+_E = "arista_eos"
+_UP, _ACC = "uplink", "access"
+
+
+def _eos(*groups: tuple[int, int, bool, str]) -> tuple[list[str], list[str]]:
+    access: list[str] = []
+    uplinks: list[str] = []
+    for first, count, by_lane, role in groups:
+        names = _run(first, count, "Ethernet")
+        if by_lane:
+            names = [f"{name}/1" for name in names]
+        (access if role == _ACC else uplinks).extend(names)
+    return access, uplinks
+
+
+_EOS_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # 7060X, 7060X2, 7060X4 and 7260X
+    "DCS-7060CX-32S": _eos((1, 32, True, _UP), (33, 2, False, _ACC)),
+    "DCS-7060CX2-32S": _eos((1, 32, True, _UP), (33, 2, False, _ACC)),
+    "DCS-7060SX2-48YC6": _eos((1, 48, False, _ACC), (49, 6, True, _UP)),
+    "DCS-7060PX4-32": _eos((1, 32, True, _UP), (33, 2, False, _ACC)),
+    "DCS-7060DX4-32": _eos((1, 32, True, _UP), (33, 2, False, _ACC)),
+    "DCS-7260CX-64": _eos((1, 64, True, _UP), (65, 2, False, _ACC)),
+    # 7050X3
+    "DCS-7050CX3-32S": _eos((1, 32, True, _UP), (33, 2, False, _ACC)),
+    "DCS-7050SX3-48YC12": _eos((1, 48, False, _ACC), (49, 12, True, _UP)),
+    "DCS-7050SX3-48YC8": _eos((1, 48, False, _ACC), (49, 8, True, _UP)),
+    "DCS-7050SX3-48YC8C": _eos((1, 48, False, _ACC), (49, 8, True, _UP)),
+    "DCS-7050SX3-48C8": _eos((1, 48, False, _ACC), (49, 8, True, _UP)),
+    "DCS-7050TX3-48C8": _eos((1, 48, False, _ACC), (49, 8, True, _UP)),
+    "DCS-7050SX3-24YC4C-S": _eos((1, 24, False, _ACC), (25, 4, True, _UP)),
+    "DCS-7050SX3-96YC8": _eos(
+        (1, 96, False, _ACC), (97, 8, True, _UP), (105, 2, False, _ACC),
+    ),
+    # 7280R3
+    **{
+        model: _eos((1, 24, True, _UP))
+        for model in ("DCS-7280PR3-24", "DCS-7280PR3K-24", "DCS-7280DR3-24", "DCS-7280DR3K-24")
+    },
+    **{
+        model: _eos((1, 32, True, _UP), (33, 4, True, _UP))
+        for model in (
+            "DCS-7280CR3-32P4", "DCS-7280CR3K-32P4", "DCS-7280CR3K-32P4A",
+            "DCS-7280CR3-32D4", "DCS-7280CR3K-32D4", "DCS-7280CR3K-32D4A",
+        )
+    },
+    "DCS-7280CR3-96": _eos((1, 96, True, _UP)),
+    "DCS-7280CR3K-96": _eos((1, 96, True, _UP)),
+    **{
+        model: _eos((1, 48, False, _ACC), (49, 8, True, _UP))
+        for model in ("DCS-7280SR3-48YC8", "DCS-7280SR3K-48YC8", "DCS-7280SR3K-48YC8A")
+    },
+    "DCS-7280SR3-40YC6": _eos((1, 40, False, _ACC), (41, 6, True, _UP)),
+    "DCS-7280SR3E-40YC6-M": _eos((1, 40, False, _ACC), (41, 6, True, _UP)),
+    # 7050X: the QSFP+ ports that break out, as one 40G interface; the
+    # 7050QX-32's ports 25-32 run at 40G only, and have no lane.
+    "DCS-7050SX-64": _eos((1, 48, False, _ACC), (49, 4, True, _UP)),
+    "DCS-7050SX-72Q": _eos((1, 48, False, _ACC), (49, 6, True, _UP)),
+    "DCS-7050SX2-72Q": _eos((1, 48, False, _ACC), (49, 6, True, _UP)),
+    "DCS-7050TX-48": _eos((1, 32, False, _ACC), (33, 4, True, _UP)),
+    "DCS-7050TX-64": _eos((1, 48, False, _ACC), (49, 4, True, _UP)),
+    "DCS-7050TX-72Q": _eos((1, 48, False, _ACC), (49, 6, True, _UP)),
+    "DCS-7050QX-32": _eos((1, 24, True, _UP), (25, 8, False, _UP)),
+}
+for _model, _ports in _EOS_PANELS.items():
+    EXPECTED_INVENTORIES[(_E, _model, "standalone", ())] = _ports
+
+_EOS_PORT = re.compile(r"^Ethernet(\d+)(?:/1)?$")
+
+
+def _eos_port_number(name: str) -> int:
+    match = _EOS_PORT.match(name)
+    assert match, name
+    return int(match.group(1))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -962,6 +1043,10 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C9500": ["GigabitEthernet0/0"],
     "aruba_aoscx/6300": ["mgmt"],
     "aruba_aoscx/6200": ["mgmt"],
+    "arista_eos/7060X": ["Management1"],
+    "arista_eos/7050X3": ["Management1"],
+    "arista_eos/7280R3": ["Management1"],
+    "arista_eos/7050X": ["Management1"],
 }
 
 
@@ -995,7 +1080,16 @@ class TestExactInventories:
         assert inventory.names(role="access") == access
         assert inventory.names(role="uplink") == uplinks
         assert inventory.names(role="mgmt") == mgmt
-        assert inventory.names() == access + uplinks + mgmt
+        if vendor == _E:
+            # An EOS switch numbers its ports in one run, and on some
+            # models the uplinks come first, or between two runs of
+            # access ports: the list is in port-NUMBER order, whatever
+            # the role.
+            assert inventory.names() == (
+                sorted(access + uplinks, key=_eos_port_number) + mgmt
+            )
+        else:
+            assert inventory.names() == access + uplinks + mgmt
 
     def test_every_deployment_port_is_pinned(self) -> None:
         assert {
@@ -1147,6 +1241,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "aoss": "aruba_aoss",
     "catalyst": "cisco_iosxe_cli",
     "aoscx": "aruba_aoscx",
+    "eos": "arista_eos",
 }
 
 
@@ -1184,6 +1279,17 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     assert port.member_id is None and (
                         _UNCLASSIFIED_BARE_LETTER.match(port.name)
                     ), where
+                    continue
+                if family.naming == "eos":
+                    # The classifier reads a port named by its first
+                    # lane as lane 1 of that port; whether the port is
+                    # named so is read from the family file's group.
+                    by_lane = [g.multi_lane for g in model.ports for _ in range(g.count)]
+                    expected = ("breakout", 1) if by_lane[port.index] else ("physical", None)
+                    assert (identity.kind, identity.breakout_lane) == expected, where
+                    assert (identity.stack, port.member_id, port.slot) == (None, None, ""), where
+                    assert identity.port == port.index + 1, where
+                    checked += 1
                     continue
                 assert identity.kind == "physical", (*where, identity.kind)
                 assert identity.stack == port.member_id, where
@@ -1234,6 +1340,12 @@ PROFILE_AGREES_WITH: dict[str, dict] = {
         )
     },
     "aruba_aoscx/6300M-48G-PoE4-SFP56": {"mode": "vsf", "members": [{"model": "JL661A", "id": 1}]},
+    **{
+        f"arista_eos/{model}": {"mode": "standalone", "members": [{"model": model}]}
+        for model in (
+            "DCS-7060CX-32S", "DCS-7050CX3-32S", "DCS-7050SX-64", "DCS-7280CR3-32P4",
+        )
+    },
 }
 
 _PART_NUMBER = re.compile(r"\(([A-Z0-9-]+)\)")
@@ -1616,6 +1728,9 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     },
     # Aruba CX 6300 and 6200: the part number is the model key.
     **{(_X, part): part for part in (*_CX6300_PARTS, *_CX6200_PARTS)},
+    # Arista: the name a switch prints on its `! device:` line is the
+    # model key.
+    **{(_E, model): model for model in _EOS_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -1698,6 +1813,13 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # themselves.  A JL658A's SFP+ ports are numbered (1-24).
     *(f"aruba_aoscx/6300 / panel / {part}" for part in _CX6300_PARTS if part != "JL658A"),
     *(f"aruba_aoscx/6200 / panel / {part}" for part in _CX6200_PARTS),
+    # An Arista 7050SX3-48C8's ports, numbered only by a quick start
+    # guide figure that is the 7050SX3-48YC8's drawing.
+    "arista_eos/7050X3 / panel / DCS-7050SX3-48C8",
+    # A 7050QX-32's ports 25-32, which run at 40G only: no Arista text
+    # read names such a port, and two public running-configs print
+    # them with no lane.
+    "arista_eos/7050X / panel / DCS-7050QX-32",
 }
 
 
@@ -2981,3 +3103,85 @@ class TestArubaCX6300And6200:
         )
         mgmt = [p for p in inventory.ports if p.role == "mgmt"]
         assert [(p.name, p.member_id, p.cage) for p in mgmt] == [("mgmt", None, "rj45")]
+
+
+class TestAristaEos:
+    """The Arista fixed switches: each one switch, its ports numbered in
+    one run, a multi-lane port named by its first lane."""
+
+    FAMILIES = [f for f in REGISTRY.families.values() if f.vendor == _E]
+
+    def test_the_families(self) -> None:
+        assert sorted(f.family for f in self.FAMILIES) == ["7050X", "7050X3", "7060X", "7280R3"]
+
+    def test_every_switch_stands_alone(self) -> None:
+        for family in self.FAMILIES:
+            assert (family.naming, list(family.modes)) == ("eos", ["standalone"]), family.key
+            assert family.modes["standalone"].member_ids is None, family.key
+            assert not family.modules, family.key
+            for key, model in family.models.items():
+                assert not model.bays, key
+
+    def test_a_member_number_is_refused(self) -> None:
+        """Two switches of an MLAG pair are two devices: declare each."""
+        with pytest.raises(dm.DeploymentError):
+            _compile(_E, "standalone", {"model": "DCS-7060CX-32S", "id": 1})
+        with pytest.raises(dm.DeploymentError):
+            _compile(_E, "standalone", {"model": "DCS-7060CX-32S"}, {"model": "DCS-7060CX-32S"})
+
+    def test_an_ordering_variant_is_the_same_switch(self) -> None:
+        """A part's -F or -R is another ordering variant of the same
+        part, and a switch can print it (a public running-config of a
+        7050TX-64 prints DCS-7050TX-64-F)."""
+        for family in self.FAMILIES:
+            for key, model in family.models.items():
+                assert model.skus[0] == key
+                for sku in model.skus[1:]:
+                    assert sku in (f"{key}-F", f"{key}-R"), (key, sku)
+                    assert REGISTRY.resolve(_E, sku)[1].model == key
+        assert REGISTRY.resolve(_E, "DCS-7050TX-64-F")[1].model == "DCS-7050TX-64"
+
+    def test_speed_follows_the_cage(self) -> None:
+        """A cage holds one speed in these files: the port's speed as
+        one interface."""
+        speed_of = {
+            "sfp+": "10gig", "rj45": "10gig", "sfp28": "25gig", "qsfp+": "40gig",
+            "qsfp28": "100gig", "osfp": "400gig", "qsfp-dd": "400gig",
+        }
+        for family in self.FAMILIES:
+            for key, model in family.models.items():
+                for group in model.ports:
+                    assert group.speed == speed_of[group.cage], (key, group)
+                    assert not group.poe, (key, group)
+
+    def test_only_a_wide_cage_is_named_by_lane(self) -> None:
+        """Every multi-lane group is a QSFP+, QSFP100, OSFP or QSFP-DD
+        cage, and every other group a single-lane cage, but the
+        7050QX-32's eight QSFP+ ports that run at 40G only."""
+        wide = {"qsfp+", "qsfp28", "osfp", "qsfp-dd"}
+        for family in self.FAMILIES:
+            for key, model in family.models.items():
+                for group in model.ports:
+                    if group.multi_lane:
+                        assert group.cage in wide, (key, group)
+                    elif group.cage in wide:
+                        assert (key, group.count) == ("DCS-7050QX-32", 8), (key, group)
+
+    def test_the_40g_only_ports_have_no_lane(self) -> None:
+        names = _compile(_E, None, {"model": "DCS-7050QX-32"}).names()
+        assert names[22:26] == ["Ethernet23/1", "Ethernet24/1", "Ethernet25", "Ethernet26"]
+
+    def test_the_96yc8s_sfp_plus_ports_follow_its_uplinks(self) -> None:
+        inventory = _compile(_E, None, {"model": "DCS-7050SX3-96YC8"})
+        assert [(p.name, p.role, p.cage) for p in inventory.ports[-4:]] == [
+            ("Ethernet104/1", "uplink", "qsfp28"),
+            ("Ethernet105", "access", "sfp+"),
+            ("Ethernet106", "access", "sfp+"),
+            ("Management1", "mgmt", "rj45"),
+        ]
+
+    def test_the_mode_says_what_is_not_modelled(self) -> None:
+        for family in self.FAMILIES:
+            mode = family.modes["standalone"]
+            assert "first lane" in mode.label, family.key
+            assert "broken out" in mode.caveat and "MLAG" in mode.caveat, family.key

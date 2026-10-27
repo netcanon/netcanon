@@ -80,6 +80,14 @@ their literal names: a Catalyst stack has one management interface,
 belongs to no member (``member_rank`` ``None``) and comes after every
 member's (:class:`DeploymentPortDef`).
 
+One more serves a grammar that names a port by its LANES (``eos``:
+``Ethernet49/1``).  A group of multi-lane ports states
+``multi_lane: true``, and the rule names each such port by its first
+lane: the state every family under that rule describes is each
+multi-lane port configured as one interface.  A rule that names no
+lane refuses the field (:attr:`NamingRuleSpec.lanes`); a port broken
+out into several interfaces is not modelled yet.
+
 Evidence.  How well a port's name is established is graded with the
 vocabulary of :data:`~netcanon.migration.target_profiles.ProfileEvidence`,
 but not per model: a name is the product of separately evidenced
@@ -136,6 +144,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StrictInt,
     ValidationError,
     field_validator,
@@ -364,6 +373,18 @@ class PortGroup(BaseModel):
     :attr:`speed` — the word is a fact about the NAME, and a speed is
     a fact about the port.  Required by a naming rule that takes one
     (:attr:`NamingRuleSpec.prefixes`), refused by one that does not."""
+
+    multi_lane: StrictBool = False
+    """The port is one of a grammar's MULTI-LANE ports, whose
+    interfaces are named by port and lane: Arista's "Ethernet port
+    #/lane #" (EOS User Manual, "Ethernet Ports").  A family under such
+    a rule describes each multi-lane port configured as ONE interface,
+    which is named by its first lane (``Ethernet49/1``); the lanes of a
+    port broken out are not modelled.  Stated by hand from the vendor's
+    port list, never derived from :attr:`cage`: a QSFP+ port that runs
+    at 40G only is a cage of four lanes with one name and no lane in
+    it.  Refused by a rule that names no lane
+    (:attr:`NamingRuleSpec.lanes`)."""
 
     speed: PortSpeed = ""
     cage: PortCage = ""
@@ -667,6 +688,11 @@ class FamilyDef(BaseModel):
                         f"`prefix`, one of {sorted(rule.prefixes)}; this "
                         f"one states {stated}"
                     )
+                if group.multi_lane and not rule.lanes:
+                    raise ValueError(
+                        f"{owner}: naming rule {self.naming!r} puts no lane "
+                        f"in a name, so a group cannot state `multi_lane`"
+                    )
 
         for sku, module in self.modules.items():
             check_roles(f"module {sku!r}", module.ports)
@@ -863,6 +889,12 @@ class NamingRuleSpec:
     group that states a :attr:`PortGroup.prefix` is refused at load;
     otherwise every group states one of these."""
 
+    lanes: bool = False
+    """Whether this grammar names a multi-lane port by its lane
+    (EOS: ``Ethernet49/1``).  A group that states
+    :attr:`PortGroup.multi_lane` is refused at load by a rule that
+    does not."""
+
 
 def _aoss_rule(request: PortNameRequest) -> str:
     from .codecs.aruba_aoss.port_names import physical_port_name
@@ -914,6 +946,26 @@ def _aoscx_rule(request: PortNameRequest) -> str:
     return vsf_switch_port_name(member=request.member_id, port=request.index0 + 1)
 
 
+def _eos_rule(request: PortNameRequest) -> str:
+    from .codecs.arista_eos.port_names import fixed_switch_port_name
+
+    # An Arista fixed switch stands alone: two of them in an MLAG pair
+    # are two devices, each naming its ports without a member number.
+    if request.member_id is not None:
+        raise ValueError(
+            "an EOS fixed switch names a port without a member number; "
+            "the mode must not state `member_ids`"
+        )
+    if request.slot:
+        raise ValueError(
+            f"an EOS fixed switch has no module; its ports are numbered "
+            f"in one run, and bay {request.slot!r} is not one"
+        )
+    return fixed_switch_port_name(
+        port=request.index0 + 1, multi_lane=request.group.multi_lane,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -947,6 +999,16 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "which no member owns; it is stated under "
                 "`deployment_ports`"
             ),
+        ),
+        "eos": NamingRuleSpec(
+            render=_eos_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an EOS switch's management interface, `Management1`, is "
+                "not one of its numbered Ethernet ports; it is stated "
+                "under `deployment_ports`"
+            ),
+            lanes=True,
         ),
     }
 

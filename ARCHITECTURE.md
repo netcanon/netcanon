@@ -1480,7 +1480,13 @@ which types it accepts.  Where the type is the optic's and not the
 port's (a 3750-X's C3KX-NM-10G names a slot `GigabitEthernet1/1/2`
 with a 1G SFP in it and `TenGigabitEthernet1/1/1` with an SFP+), the
 module is described in one state, and its caveat, which the inventory
-carries, says which.  A port of the WHOLE deployment — a C9300
+carries, says which.  A grammar that names a multi-lane port by port
+and lane (Arista's `Ethernet49/1`) takes which ports those are from
+the data too, stated on each group (`multi_lane`), never from a cage
+— a 7050QX-32's 40G-only QSFP+ ports have no lane in their name —
+and a family describes each such port as one interface, its first
+lane; a port broken out into lanes is not modelled.
+A port of the WHOLE deployment — a C9300
 stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under
 `deployment_ports`, belongs to no member (rank `None`) and comes after

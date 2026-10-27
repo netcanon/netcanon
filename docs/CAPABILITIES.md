@@ -2063,8 +2063,9 @@ nothing, as before.
 
 * Model families ship for a first set of Aruba AOS-S switches and
   for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
-  9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), and
-  for the Aruba CX 6300 and 6200; `GET /model-families` is the
+  9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), for
+  the Aruba CX 6300 and 6200, and for the Arista 7050X, 7050X3,
+  7060X, 7260X and 7280R3; `GET /model-families` is the
   current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
@@ -2080,7 +2081,12 @@ nothing, as before.
   a port that holds a 1G SFP has another name, so with 1G SFP modules
   fitted, declare the bay empty.  A 9500's 40G port broken out into 10G
   ports is not modelled: the `TenGigabitEthernet` names of a breakout
-  come back as off-inventory.
+  come back as off-inventory.  Nor is an Arista port broken out into
+  lanes: a multi-lane port is listed as one interface, its first lane
+  (`Ethernet49/1`), and the names of its other lanes come back as
+  off-inventory -- on a 7050X a QSFP+ port runs as four 10G
+  interfaces until it is set to 40G.  An MLAG pair is two devices:
+  declare each.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

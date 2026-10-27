@@ -69,13 +69,10 @@ interface GigabitEthernet2/0/1
 end
 """
 
-_ARISTA_SRC = """hostname test-sw
-!
-interface Ethernet1
-   description user
-   switchport access vlan 10
-!
-end
+_JUNOS_SRC = """set system host-name test-sw
+set interfaces ge-0/0/1 description user
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members v10
+set vlans v10 vlan-id 10
 """
 
 _CISCO_SRC = """hostname test-sw
@@ -419,9 +416,9 @@ class TestSourceDeviceIsReadFromTheConfig:
     def test_a_vendor_with_no_detector_says_so(
         self, page: Page, live_server_url: str,
     ) -> None:
-        """Nothing reads the hardware lines of an Arista config yet: the
+        """Nothing reads the hardware lines of a Junos config yet: the
         picker stays empty, lists that vendor's profiles, and says why."""
-        _translate(page, live_server_url, "arista_eos", "aruba_aoss", _ARISTA_SRC)
+        _translate(page, live_server_url, "juniper_junos", "aruba_aoss", _JUNOS_SRC)
         page.locator(_tid("migrate-rename-open-btn")).click()
         select = page.locator(_tid("migrate-device-source-model-select"))
         expect(select).to_have_value("")
@@ -429,11 +426,11 @@ class TestSourceDeviceIsReadFromTheConfig:
         # The whole reason: it names the codec the config was asked
         # about as, and that is the SOURCE's.
         expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_have_text(
-            "No detector reads the hardware lines of arista_eos configurations yet; "
+            "No detector reads the hardware lines of juniper_junos configurations yet; "
             "declare the device yourself."
         )
         values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
-        assert "profile:DCS-7050SX-64" in values
+        assert "profile:EX4300-48T" in values
         assert not [v for v in values if v.startswith("fam:")]
 
     def test_a_catalyst_is_read_from_its_provision_line(
