@@ -1279,6 +1279,101 @@ class TestLoader:
         assert len(registry) == 0
 
 
+class TestATextIsReadOnce:
+    """Each start of the application loads every shipped family, and
+    the integration tier starts one for each test: read anew each
+    time, the shipped library ran that tier past its time limit.  The
+    YAML of a text is read once; nothing else about a load changes."""
+
+    @staticmethod
+    def _counting(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        dm._read_family_yaml.cache_clear()
+        reads: list[str] = []
+        real = dm.yaml.compose
+
+        def compose(raw, *args, **kwargs):
+            reads.append(raw)
+            return real(raw, *args, **kwargs)
+
+        monkeypatch.setattr(dm.yaml, "compose", compose)
+        return reads
+
+    def test_the_same_text_is_read_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ):
+        reads = self._counting(monkeypatch)
+        (tmp_path / "a.yaml").write_text(FAMILY_YAML, encoding="utf-8")
+        (tmp_path / "b").mkdir()
+        (tmp_path / "b" / "same.yaml").write_text(FAMILY_YAML, encoding="utf-8")
+        first = load_family_file(tmp_path / "a.yaml")
+        again = load_family_file(tmp_path / "a.yaml")
+        elsewhere = load_family_file(tmp_path / "b" / "same.yaml")
+        assert reads == [FAMILY_YAML]
+        assert first == again == elsewhere
+
+    def test_a_changed_text_is_read_again(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Keyed by the text, not the path or its time: a file
+        rewritten within one tick of the clock is not served stale."""
+        reads = self._counting(monkeypatch)
+        path = tmp_path / "testbox.yaml"
+        path.write_text(FAMILY_YAML, encoding="utf-8")
+        before = load_family_file(path)
+        changed = FAMILY_YAML.replace("count: 8,", "count: 6,", 1)
+        assert changed != FAMILY_YAML
+        path.write_text(changed, encoding="utf-8")
+        after = load_family_file(path)
+        assert reads == [FAMILY_YAML, changed]
+        assert before != after
+
+    def test_no_load_shares_data_with_another(self, tmp_path: Path):
+        """The kept data is copied before it is changed: what one load
+        is given, another is not."""
+        dm._read_family_yaml.cache_clear()
+        path = tmp_path / "testbox.yaml"
+        path.write_text(FAMILY_YAML, encoding="utf-8")
+        load_family_file(path)
+        load_family_file(path)
+        # The loader writes each model's key into its entry; on the
+        # kept data itself, that would be seen here.
+        assert dm._read_family_yaml(FAMILY_YAML)[1] == yaml.safe_load(FAMILY_YAML)
+
+    @pytest.mark.parametrize(
+        ("content", "needle"),
+        [
+            ("models: &m {x: *m}\n", "aliases"),
+            ("vendor: [unclosed", "YAML parse error"),
+            (FAMILY_YAML.replace("captures:", "  TB-8: {}\ncaptures:"), "duplicate key"),
+        ],
+    )
+    def test_a_bad_text_is_refused_every_time(
+        self, tmp_path: Path, content: str, needle: str,
+    ):
+        """Nothing is kept for a text that fails, and the second load
+        is refused as the first was, with its own path."""
+        dm._read_family_yaml.cache_clear()
+        for name in ("one.yaml", "two.yaml"):
+            path = tmp_path / name
+            path.write_text(content, encoding="utf-8")
+            with pytest.raises(DeviceModelLoadError, match=needle) as caught:
+                load_family_file(path)
+            assert name in str(caught.value)
+
+    def test_the_shipped_library_is_read_once_a_process(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ):
+        """What the integration tier needs: a second registry costs no
+        YAML reading at all."""
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        reads = self._counting(monkeypatch)
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        first = len(reads)
+        assert first > 0
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        assert len(reads) == first
+
+
 class TestOverlay:
     """An operator's own families are laid over the shipped ones.  An
     overlay can ADD; it can never silently replace."""

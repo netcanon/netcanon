@@ -119,6 +119,8 @@ same :class:`Inventory` shape) and ``docs/adding-a-device-model.md``.
 
 from __future__ import annotations
 
+import copy
+import functools
 import logging
 import re
 from collections import Counter
@@ -1560,6 +1562,42 @@ def _repeated_key(node: yaml.Node | None) -> tuple[str, int] | None:
     return None
 
 
+class _AliasInFile(Exception):
+    """The text of a family file uses a YAML alias."""
+
+
+@functools.lru_cache(maxsize=1024)
+def _read_family_yaml(raw: str) -> tuple[tuple[str, int] | None, Any]:
+    """The first repeated key in *raw*, and the data *raw* holds.
+
+    Both are a function of the text alone, so they are kept.  Every
+    start of the application loads every shipped family file, and the
+    pure-Python YAML reader takes tens of milliseconds a file: with a
+    library of families that was most of a second for each start, and
+    the integration tier, which starts an application for each test,
+    ran several times as long and past its time limit.  The key is the
+    whole text, never a path or a time, so a file that has changed is
+    read again.  The data is shared: :func:`load_family_file` copies it
+    before changing it.  Nothing is kept for a text that fails.
+
+    Raises:
+        _AliasInFile: the text uses a YAML alias.
+        yaml.YAMLError, RecursionError: as the YAML reader raises them.
+    """
+    # An alias makes one node reachable from two places.  No family
+    # file needs one, and refusing them removes a self-referential
+    # document (unbounded recursion) and an alias bomb (exponential
+    # work) in a single rule.  RecursionError is for a file that is
+    # merely nested very deeply.
+    if any(
+        isinstance(event, yaml.AliasEvent)
+        for event in yaml.parse(raw, Loader=yaml.SafeLoader)
+    ):
+        raise _AliasInFile
+    repeated = _repeated_key(yaml.compose(raw, Loader=yaml.SafeLoader))
+    return repeated, yaml.safe_load(raw)
+
+
 def load_family_file(path: Path) -> FamilyDef:
     """Load and validate one family YAML file.
 
@@ -1583,21 +1621,14 @@ def load_family_file(path: Path) -> FamilyDef:
             f"{path}: cannot be read as UTF-8 text: {exc}"
         ) from exc
     try:
-        # An alias makes one node reachable from two places.  No family
-        # file needs one, and refusing them removes a self-referential
-        # document (unbounded recursion) and an alias bomb (exponential
-        # work) in a single rule.  RecursionError below is for a file
-        # that is merely nested very deeply.
-        if any(
-            isinstance(event, yaml.AliasEvent)
-            for event in yaml.parse(raw, Loader=yaml.SafeLoader)
-        ):
-            raise DeviceModelLoadError(
-                f"{path}: YAML aliases (`*name`) are not allowed in a "
-                f"family file; write the value out"
-            )
-        repeated = _repeated_key(yaml.compose(raw, Loader=yaml.SafeLoader))
-        data: Any = yaml.safe_load(raw)
+        repeated, kept = _read_family_yaml(raw)
+        # The kept data is shared with every later load of this text.
+        data: Any = copy.deepcopy(kept)
+    except _AliasInFile:
+        raise DeviceModelLoadError(
+            f"{path}: YAML aliases (`*name`) are not allowed in a "
+            f"family file; write the value out"
+        ) from None
     except (yaml.YAMLError, RecursionError) as exc:
         raise DeviceModelLoadError(f"{path}: YAML parse error: {exc}") from exc
     if repeated is not None:
