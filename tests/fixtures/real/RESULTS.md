@@ -679,7 +679,7 @@ designed to catch.
 
 **Codec:** `netcanon.migration.codecs.arista_eos.AristaEOSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `certified` ✅ — four real captures across four EOS majors (4.21 + 4.22 + 4.23 + 4.26), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
+**Certainty:** `certified` ✅ — real captures across six EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
 
 ### Coverage matrix
 
@@ -689,6 +689,8 @@ designed to catch.
 | `batfish_labval_dc1_leaf2a_eos4230.txt` | 429 | 1 | 0 | 40 | 15 | 0 | 0 | 0 | Real **DC1-LEAF2A** (vEOS EVPN leaf, from Arista's EVPN L3 Design Guide lab validation) on **EOS-4.23.0.1F**.  DC-fabric kitchen-sink: MLAG peer-link + MLAG across 5 Port-Channels (`channel-group` 3/6/7/10/11), VXLAN1 overlay (`interface Vxlan1` + `vxlan source-interface Loopback0` + per-VNI bindings — currently parse-and-ignore pending GAP 1 codec wire-up), 15 tenant VLANs (zones 110-4094), `router bgp 65102` + EVPN address-family (parse-and-ignore), VRF definitions (`Tenant_A_OP_Zone` + `WEB_Zone`), `interface Vlan3009` with VARP virtual-router MAC, 40 interfaces spanning Ethernet1-11 + Port-Channel3/6/7/10/11 + Loopback0/1 + Management1. |
 | `batfish_duplicateprivate_eos4211.txt` | 64 | 1 | 0 | 17 | 0 | 0 | 1 | 0 | Real **DuplicatePrivate** (vEOS BGP fixture from Batfish's Arista private-ASN snapshot) on **EOS-4.21.1.1F**.  Third EOS major in the corpus.  Light grammar: 1× `username admin secret sha512 $6$...`, 1× routed `interface Ethernet1` with `/24`, Ethernet2-16 + Loopback123 stubs, `router bgp 65001` with duplicate-private-ASN neighbours (parse-and-ignore).  Value: oldest EOS major we cover — regression surface against pre-4.22 grammar quirks. |
 | `karneliuk_a_eos1_eos4260.txt` | 82 | 1 | 0 | 4 | 1 | 1 | 1 | 0 | Real **A-EOS1** vEOS fixture on **EOS-4.26.0.1F** from Anton Karneliuk's Batfish MVP demo (BSD-3-Clause).  **Fourth EOS major** covering the post-GAP-6 canonical surface: `service routing protocols model multi-agent`, VLAN 100 + `Vxlan1 vni 100` (populates CanonicalVxlan), Management1 with IPv4+IPv6, router bgp 65033 with two eBGP neighbours + `address-family evpn` + `evpn redistribute-learned`, route-maps permit+deny, ip prefix-list.  The 4.26 grammar is recent enough to exercise the EVPN-signal grammar GAP 6 targets while staying within the Arista-canonical surface our codec models; any not-yet-modeled stanzas (route-maps, prefix-lists) parse-and-ignore cleanly. |
+| `lwa_dcs_7060cx_32s_eos42014.txt` | 148 | 1 | 0 | 36 | 1 | 0 | 1 | 0 | Real **DCS-7060CX-32S** on **EOS-4.20.14M** (Apache-2.0).  The first capture of a switch an Arista model family describes, and the `capture` claim of the `7060X` family's DCS-7060CX-32S: `Ethernet1/1`-`Ethernet32/1` (every QSFP100 cage at lane `/1` alone), `Ethernet33`-`Ethernet34`, `Management1`.  `speed forced` on most QSFP ports, flow control, an IGMP snooping querier on VLAN 1 and PIM on its SVI. |
+| `dtn_dcs_7050sx3_48yc8_eos4321.txt` | 859 | 1 | 1 | 101 | 15 | 1 | 2 | 0 | Real **DCS-7050SX3-48YC8** on **EOS-4.32.1F** (Apache-2.0), an EVPN-VXLAN leaf.  The `capture` claim of the `7050X3` family's DCS-7050SX3-48YC8: `Ethernet1`-`Ethernet48`, `Ethernet49/1`-`Ethernet56/1`, `Management1`; its 28 routed dot1q sub-interfaces count as their ports.  15 VRFs, 14 VXLAN VNIs bound to VLANs and VRFs, `router bgp` with per-VRF RD and route-targets. |
 
 ### Findings
 
@@ -891,13 +893,13 @@ re-parsing with **zero errors**.
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **arista_eos** | **5** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
+| **arista_eos** | **7** real | **6** (EOS 4.20.14M + 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F + 4.32.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — |
 | **juniper_junos** | **7** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
 | **cisco_nxos** | **6** real | **1** (NX-OS 9.2(3)) | 0 | **certified** ✅ | — (nice-to-have: newer NX-OS 10.x major + a 2nd source) |
 | **cisco_iosxr** | **10** real | **2 sources** (batfish/lab-validation + ios-xr/xrd-tools) | 0 | **certified** ✅ | — (nice-to-have: flex-algo / L2VPN bridge-groups / QoS) |
 | **aruba_aoscx** | **4** real | **2** (AOS-CX 10.04 + 10.13) | 0 | **certified** ✅ | — (nice-to-have: non-Aruba-published source; L3VNI / VSX / VRRP) |
 | **vyos** | **10** real | **3** (VyOS 1.3 + 1.4 + 1.5) | 0 | **certified** ✅ | — (VRF round-trip remains synthetic-validated; real `vrf name` capture wanted) |
-| **TOTAL** | **75** | — | **17** | — | — |
+| **TOTAL** | **77** | — | **17** | — | — |
 
 > **Note (2026-05-21 docs-audit):** the per-codec **Coverage matrix
 > tables above** in this file are pending a row-level refresh for 5

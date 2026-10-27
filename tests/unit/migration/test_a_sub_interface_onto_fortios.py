@@ -500,8 +500,12 @@ def _captures() -> list[tuple[str, Path]]:
 #: The captures whose output onto FortiOS has a VLAN id twice on one
 #: parent, and how many blocks repeat one.  The IOS-XE carrier capture's
 #: six Q-in-Q units of `GigabitEthernet2/0/4` are read with their outer
-#: tag alone (2234), so five of them repeat the first.
-_REPEATS = {"ntc_carrier_interfaces.txt": 5}
+#: tag alone (2234), so five of them repeat the first.  The Arista
+#: 7050SX3 capture's VLAN interfaces `Vlan2`-`Vlan14` and `Vlan254`
+#: are carried by `Ethernet49/1`, a breakout lane to the classifier
+#: and dropped onto FortiOS; the scorer puts each on `port2`, whose
+#: routed sub-interfaces have the same fourteen tags.
+_REPEATS = {"ntc_carrier_interfaces.txt": 5, "dtn_dcs_7050sx3_48yc8_eos4321.txt": 14}
 
 
 def test_every_capture_says_each_repeat() -> None:

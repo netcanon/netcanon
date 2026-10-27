@@ -1828,7 +1828,17 @@ CAPTURES = _captures()
 #: the corpus, or a change to a classifier or a formatter, moves a
 #: number here and says which.
 _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
-    "arista_eos": (0, 0, 9, 1, 0, 0),
+    # From (0, 0, 9, 1, 0, 0): the 7060CX-32S and 7050SX3-48YC8
+    # captures name their QSFP ports by the first lane
+    # (`Ethernet5/1`), which the classifier reads as a breakout lane
+    # and nine targets have no name for.  Every target but the two
+    # IOS-XE codecs and RouterOS lists the 7060CX's, and NX-OS and
+    # Junos the 7050SX3's uplinks; and IOS-XE CLI, which has no name
+    # for `Management1`, lists it from each (+10: seven jobs of the
+    # 7060CX, the other three were `partial` already, and three
+    # more).  Onto IOS-XR the 7060CX's `Vlan1` and onto Junos the
+    # 7050SX3's VTEP source `Loopback1` go as well (+2 several).
+    "arista_eos": (0, 0, 19, 1, 0, 2),
     # From (0, 0, 6, 0, 0, 0): onto Junos the global table has one
     # loopback, unit 0 of lo0.  The two arch3 leafs have `loopback 0`
     # and `loopback 1` there; `loopback 1` was written `lo1`, an
@@ -1975,8 +1985,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 62, 5, 66, 47]
-        assert sum(by_reason) == 220
+        assert by_reason == [40, 0, 72, 5, 66, 49]
+        assert sum(by_reason) == 232
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

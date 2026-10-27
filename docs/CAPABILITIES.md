@@ -1733,7 +1733,9 @@ confirm, never applied by itself, and it tells you how far to trust it:
 * `missing_ports` / `consistent` — the check against the config itself:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
-  paste.  `missing_ports` holds the first few hundred and
+  paste.  A sub-interface (`Ethernet1.2`) is a name of the port it rides
+  on: it is missing only where that port is, and `used_port_count`
+  counts ports, not units.  `missing_ports` holds the first few hundred and
   `missing_port_count` the whole number; a name longer than 128
   characters is cut to that, ending `…`.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was

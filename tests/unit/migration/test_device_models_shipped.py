@@ -244,6 +244,14 @@ EXPECTED_CLAIMS: dict[str, tuple[str, str, str, list[tuple]]] = {
         "aruba_aoss/2930M", "stacked", 'member 1 type "jl323a"',
         [("2930M-40G-8SR-PoEP", 1, {"A": "JL083A"})],
     ),
+    "tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt": (
+        "arista_eos/7060X", "standalone", "! device: arista (dcs-7060cx-32s, eos-4.20.14m)",
+        [("DCS-7060CX-32S", None, {})],
+    ),
+    "tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt": (
+        "arista_eos/7050X3", "standalone", "! device: r2-site1-leaf1 (dcs-7050sx3-48yc8, eos-4.32.1f)",
+        [("DCS-7050SX3-48YC8", None, {})],
+    ),
 }
 
 

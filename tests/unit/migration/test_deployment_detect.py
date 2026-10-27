@@ -2701,6 +2701,18 @@ def _eos(model: str, *ports: str, release: str = "EOS-4.32.1F") -> str:
     )
 
 
+def _eos_units(model: str, *units: str, port: str = "") -> str:
+    """:func:`_eos` with a routed dot1q sub-interface for each of
+    *units* (the parser keeps one that states its encapsulation), and
+    a stanza for *port* if one is given."""
+    text = _eos(model, *([port] if port else []))
+    body = "".join(
+        f"interface {unit}\n   encapsulation dot1q vlan {n}\n   ip address 10.0.{n}.1/30\n!\n"
+        for n, unit in enumerate(units, start=2)
+    )
+    return text.replace("end\n", body + "end\n")
+
+
 _EOS_READ = "! device: sw (DCS-7280CR3-32P4, EOS-4.30.1F)\n"
 
 
@@ -2825,10 +2837,15 @@ class TestAristaDetector:
         assert len(detected.members) == 1 and len(detected.notes) == 1
 
     @pytest.mark.parametrize(
-        "name", sorted(p.name for p in (REPO_ROOT / "tests/fixtures/real/arista_eos").glob("*.txt")),
+        "name",
+        sorted(
+            p.name for p in (REPO_ROOT / "tests/fixtures/real/arista_eos").glob("*.txt")
+            if not p.name.startswith(("lwa_", "dtn_"))
+        ),
     )
-    def test_every_committed_capture_names_a_switch_no_family_describes(self, name: str) -> None:
-        """Every committed EOS capture is of a vEOS or a 7150S-64-CL."""
+    def test_a_committed_capture_of_a_switch_no_family_describes(self, name: str) -> None:
+        """Every committed EOS capture but the two a claim cites (which
+        the test of every claim reads) is of a vEOS or a 7150S-64-CL."""
         raw = (REPO_ROOT / "tests/fixtures/real/arista_eos" / name).read_text(encoding="utf-8")
         (member,) = eos_detect.detect_deployment(raw).members
         assert member.part in ("VEOS", "DCS-7150S-64-CL")
@@ -2888,6 +2905,31 @@ class TestAristaProposal:
         job = run_plan_with_models(EOS, EOS, body, declared, declared)
         off_inventory = job.port_mapping_plan.off_inventory
         assert sorted(proposal.missing_ports) == sorted(off_inventory) == ["Ethernet49/2", "Ethernet53"]
+
+    def test_a_sub_interface_is_a_unit_of_its_port(self) -> None:
+        """``Ethernet1.2`` rides on ``Ethernet1``: the switch has it
+        where it has the port, and it is no port of its own.  One whose
+        port the switch lacks is missing by the name the config uses,
+        as the plan's ``off_inventory`` lists it."""
+        body = _eos_units("DCS-7050SX-64", "Ethernet1.2", "Ethernet60.4", port="Ethernet1")
+        proposal = propose_deployment(EOS, body, REGISTRY)
+        assert proposal.used_port_count == 2
+        assert proposal.missing_ports == ["Ethernet60.4"]
+        declared = compile_deployment(
+            Deployment(vendor="arista_eos", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        job = run_plan_with_models(EOS, EOS, body, declared, declared)
+        assert job.port_mapping_plan.off_inventory == proposal.missing_ports
+
+    def test_sub_interfaces_of_its_own_ports_leave_a_proposal_consistent(self) -> None:
+        """Even where the port has no stanza of its own: the switch
+        has it.  (A plan with devices declared lists such a unit as
+        off-inventory, since the port is in no pairing for it to
+        follow; EOS prints a stanza for every port, so a config as the
+        switch prints it does not meet that.)"""
+        body = _eos_units("DCS-7050SX-64", "Ethernet1.2", "Ethernet49/1.3")
+        proposal = propose_deployment(EOS, body, REGISTRY)
+        assert proposal.consistent is True and proposal.used_port_count == 2
 
     @pytest.mark.parametrize("model", ["vEOS", "cEOSLab", "DCS-7504", "DCS-7050QX-32S", "CCS-720XP-48Y6"])
     def test_a_model_no_family_describes(self, model: str) -> None:

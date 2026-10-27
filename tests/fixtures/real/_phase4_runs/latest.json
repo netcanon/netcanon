@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-10-22T20:15:17+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261022T201515Z.json",
-  "mesh_run_started_utc": "2026-10-22T20:15:04+00:00",
-  "cells_total": 1443,
+  "started_utc": "2026-10-27T09:20:18+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261027T091027Z.json",
+  "mesh_run_started_utc": "2026-10-27T09:10:05+00:00",
+  "cells_total": 1469,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
     "arista_eos",
@@ -51,12 +51,22 @@
       "target_codec": "arista_eos"
     },
     {
+      "fixture": "tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt",
+      "source_codec": "arista_eos",
+      "target_codec": "arista_eos"
+    },
+    {
       "fixture": "tests/fixtures/real/arista_eos/karneliuk_a_eos1_eos4260.txt",
       "source_codec": "arista_eos",
       "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt",
+      "source_codec": "arista_eos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt",
       "source_codec": "arista_eos",
       "target_codec": "arista_eos"
     },
@@ -593,19 +603,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8863,
+    "ALIGNED": 9009,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4098,
-    "EXPECTED_UNSUPPORTED": 2527,
-    "METHODOLOGY_ISSUE_under": 1876,
+    "EXPECTED_LOSSY": 4176,
+    "EXPECTED_UNSUPPORTED": 2576,
+    "METHODOLOGY_ISSUE_under": 1905,
     "METHODOLOGY_ISSUE_over": 16,
-    "STRUCTURAL_ONLY": 5641,
-    "TRIVIAL_EMPTY": 34632,
-    "fields_total": 57657,
+    "STRUCTURAL_ONLY": 5732,
+    "TRIVIAL_EMPTY": 35179,
+    "fields_total": 58597,
     "severity_high": 4,
-    "severity_medium": 285,
-    "severity_low": 7248,
-    "severity_ok": 50120
+    "severity_medium": 287,
+    "severity_low": 7366,
+    "severity_ok": 50940
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4022,6 +4032,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 4,
-    "cells_total_in_run": 1443
+    "cells_total_in_run": 1469
   }
 }

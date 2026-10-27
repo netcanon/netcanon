@@ -11,6 +11,8 @@ Cached measurement backing
 
 > **Update 2026-10-13 — one VLAN row moved, and the six `vlans[]` rows below are re-measured.**  A trunk's allowed list is now what the trunk carries, so a native VLAN its list leaves out makes the port no member of that VLAN.  The kitchen-sink's `Ethernet3` states `switchport trunk native vlan 1` beside `allowed vlan 10,20,100,200`, and VLAN 1 is in the tree for that line alone.  OS10 has a VLAN through an SVI or a port's membership, and this one now has neither, so its record is not written: `vlans[].id` is `lossy` for that one kind of record.  The other rows of this file are as retrieved.
 
+> **Update 2026-10-27 — `interfaces[].mtu` is `good`.**  The three cells it drifted on drifted in their interface COUNT (the reconciler files them `STRUCTURAL_ONLY`, owned by `interfaces[].description`), and no cell then had an MTU it could compare.  The 7050SX3-48YC8 capture is the first whose MTUs it compares, and every interface that states one comes back with it; read by address from the OS10 output, so does the kitchen sink's.  The row's counts below are as retrieved.  OS10 writes the payload plus 22 as its frame size, so a jumbo payload near EOS's maximum passes OS10's 9216 once converted: nothing checks a platform's range ([the MTU reference](../cisco_iosxe_cli_to_juniper_junos/mtu.md)).
+
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
 ## Why the dispositions could not be written in advance
@@ -50,7 +52,7 @@ Across the 6 cells, 169 source interface records produce 173 re-parsed records �
 | `interfaces[].ipv4_addresses` | lossy | 2 | 4 | 0 |
 | `interfaces[].ipv6_addresses` | lossy | 0 | 3 | 3 |
 | `interfaces[].lag_member_of` | lossy | 0 | 4 | 2 |
-| `interfaces[].mtu` | lossy | 0 | 3 | 3 |
+| `interfaces[].mtu` | good (update 2026-10-27; was lossy) | 0 | 3 | 3 |
 | `interfaces[].name` | lossy | 2 | 4 | 0 |
 | `interfaces[].vrrp_groups` | lossy | 0 | 3 | 3 |
 | `lags` | lossy | 0 | 3 | 3 |
@@ -145,9 +147,11 @@ Drifted on 3 of 6 cells (preserved on 0, both sides empty on 3).
 
 Drifted on 4 of 6 cells (preserved on 0, both sides empty on 2).
 
-### `interfaces[].mtu` — lossy
+### `interfaces[].mtu` — good (was lossy)
 
-Drifted on 3 of 6 cells (preserved on 0, both sides empty on 3).
+Drifted on 3 of 6 cells (preserved on 0, both sides empty on 3), as
+retrieved; each drift was in the interface count, not in an MTU.  See
+the 2026-10-27 update above.
 
 ### `interfaces[].name` — lossy
 

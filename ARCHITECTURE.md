@@ -1491,7 +1491,10 @@ stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under
 `deployment_ports`, belongs to no member (rank `None`) and comes after
 every member's ports.  A flat profile's management port is read the
-same way, so that the two pair.
+same way, so that the two pair.  Such a port is graded `capture` only
+where a proven claim shows the whole deployment, every member of it:
+a capture of one switch does not show the management port of a stack
+it is a member of.
 
 **Pairing policy** (`port_mapping.py`):
 

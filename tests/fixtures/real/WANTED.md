@@ -19,7 +19,7 @@ grammar.
 | Codec | Fixtures | OS versions covered | Notable gaps |
 |---|---|---|---|
 | **cisco_iosxe** | 13 (+1 refused: an IOSv 15.x capture with no indentation) | 16.9 / 17.3 / 17.9 / 17.12 / **17.15** | tag-VLAN trunk on physical with sub-interfaces *(17.13+ branch gap closed 2026-06-15 via `ciscolive_brkops1104_evpn_leaf` 17.15)* |
-| **arista_eos** | 5 | 4.21 / 4.22 / 4.23 / 4.26 | 4.27+ / 4.30+ (current GA train); MLAG + EVPN VxLAN-multihoming |
+| **arista_eos** | 7 | 4.20 / 4.21 / 4.22 / 4.23 / 4.26 / 4.32 | a 7280R3 or 7050X switch (a model family with no capture); a QSFP port broken out into lanes; MLAG + EVPN VxLAN-multihoming |
 | **aruba_aoss** | 6 | WB.16.08 / WC.16.07-11 / KB.15.15 | YA branch (2530), RA branch (2620), YC branch (2540); KA branch (3800 / 5400zl gen-1) |
 | **fortigate** | 3 | FortiOS 7.2.13 / 7.6.6 | 6.4.x (still common); 7.0.x / 7.4.x bridge versions; SD-WAN multi-link with health-check |
 | **junos** | 9 | 15.1 / **17.2** / 17.3 / 18.4 / **23.2** / 25.4 | SRX security platform; vJunos / cMX from CML *(19–22.x bridge now partly covered by `tsg8139_evpn_leaf_dhcpv6` 23.2, added 2026-06-15)* |

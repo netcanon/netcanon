@@ -181,8 +181,17 @@ Provenance in
   corpus VLAN-based EVPN leaf reference (Apache-2.0).  6 SVIs
   including a VARP secondary on Vlan110 + system-wide MAC.  Wave-C
   reference for Arista VARP wire-up
+- **`lwa_dcs_7060cx_32s_eos42014.txt`** — DCS-7060CX-32S on
+  EOS-4.20.14M (Apache-2.0); every QSFP100 cage at lane `/1` alone,
+  the two SFP+ ports, `Management1`.  The capture behind the `7060X`
+  family's DCS-7060CX-32S and the DCS-7060CX-32S target profile
+- **`dtn_dcs_7050sx3_48yc8_eos4321.txt`** — DCS-7050SX3-48YC8 on
+  EOS-4.32.1F (Apache-2.0), an EVPN-VXLAN leaf; routed dot1q
+  sub-interfaces in customer VRFs, VXLAN VNIs bound to VLANs and
+  VRFs, per-VRF BGP.  The capture behind the `7050X3` family's
+  DCS-7050SX3-48YC8
 
-Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
+Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
 
 ## Common gotchas
 
@@ -459,7 +468,10 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   on its own.  A single-lane port is `Ethernet<port>` and a QSFP+,
   QSFP100, OSFP or QSFP-DD port is listed as one interface, its first
   lane (`Ethernet49/1`), as EOS names a multi-lane port configured as
-  one interface.  A port broken out into lanes is not modelled: the
+  one interface.  With no device declared, the translator reads such a
+  name as a breakout lane, which most targets have no name for: the
+  job lists it and is `partial` until a port map or a declared pair of
+  devices places it.  A port broken out into lanes is not modelled: the
   names of its other lanes (`Ethernet49/2`) come back as
   off-inventory, and so do those of a 7050X's QSFP+ port that still
   runs as four 10G interfaces, its default.  A 7050QX-32's ports 25-32

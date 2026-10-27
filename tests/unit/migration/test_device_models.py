@@ -716,6 +716,44 @@ class TestDeploymentPorts:
         assert inv.evidence == "inferred"
         assert "The management port's name is a guess." in inv.caveats
 
+    _CLAIM = ("cisco_iosxe/Catbox", "tests/fixtures/real/cb.cfg", "stack", (("CB-12", 1, ()),))
+    _ONE = {"model": "CB-12", "id": 1, "modules": {"1": None}}
+
+    def _claimed(self, monkeypatch: pytest.MonkeyPatch, *, proven: bool = True) -> DeviceModelRegistry:
+        """Catbox with a claim of ONE CB-12 as member 1, its bay empty."""
+        data = _data(CATBOX_YAML)
+        data["captures"] = [{
+            "fixture": "tests/fixtures/real/cb.cfg", "marker": "switch 1 provision cb-12",
+            "mode": "stack", "members": [self._ONE],
+        }]
+        if proven:
+            monkeypatch.setattr(dm, "PROVEN_CAPTURE_CLAIMS", dm.PROVEN_CAPTURE_CLAIMS | {self._CLAIM})
+        return _catbox(data)
+
+    def test_a_capture_of_the_whole_deployment_shows_it(self, monkeypatch):
+        inv = _catbox_compile(self._claimed(monkeypatch), self._ONE)
+        assert inv.port("GigabitEthernet0/0").evidence == "capture"
+        assert inv.evidence == "capture"
+        assert "tests/fixtures/real/cb.cfg" in inv.evidence_refs
+        assert "Catbox guide, management port" not in inv.evidence_refs
+
+    def test_a_capture_of_one_member_does_not_show_the_stacks(self, monkeypatch):
+        """The claim is member 1 alone.  In a stack of two, member 1's
+        own ports are what the capture shows; the stack's management
+        port is not, since the capture is not of that stack."""
+        inv = _catbox_compile(
+            self._claimed(monkeypatch), self._ONE, {**self._ONE, "id": 2},
+        )
+        assert inv.port("TwoGigabitEthernet1/0/1").evidence == "capture"
+        assert inv.port("TwoGigabitEthernet2/0/1").evidence == "vendor-doc"
+        assert inv.port("GigabitEthernet0/0").evidence == "vendor-doc"
+        assert "Catbox guide, management port" in inv.evidence_refs
+
+    def test_a_claim_nothing_re_proves_shows_nothing(self, monkeypatch):
+        inv = _catbox_compile(self._claimed(monkeypatch, proven=False), self._ONE)
+        assert inv.port("GigabitEthernet0/0").evidence == "vendor-doc"
+        assert "tests/fixtures/real/cb.cfg" not in inv.evidence_refs
+
     def test_it_cannot_repeat_a_members_name(self):
         data = _data(CATBOX_YAML)
         data["deployment_ports"][0]["name"] = "TwoGigabitEthernet1/0/1"

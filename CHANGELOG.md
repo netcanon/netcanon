@@ -647,7 +647,19 @@ timestamp if your timezone matters for an audit.
   drawing) and the 7050QX-32's (no Arista text read names a port that
   runs at 40G only), which are `inferred` and say why.  The
   7060CX-32S, 7050CX3-32S, 7050SX-64 and 7280CR3-32P4 target profiles
-  describe the same ports as their families.  No capture claim is made.
+  describe the same ports as their families.  Two public running-configs
+  are committed as captures and name every port of their switch: a
+  DCS-7060CX-32S on EOS-4.20.14M and a DCS-7050SX3-48YC8 on EOS-4.32.1F
+  (`tests/fixtures/real/arista_eos/`, Apache-2.0).  Those two models,
+  standalone, are graded `capture`, `Management1` included, and so is
+  the DCS-7060CX-32S target profile (it was `vendor-doc`); the other
+  models keep their grades.  A port of a whole deployment -- one that
+  belongs to no member, as `Management1` and a Catalyst stack's
+  `GigabitEthernet0/0` do -- is graded `capture` only where a claim is
+  that whole deployment: a capture of one switch does not show the
+  management port of a stack it is a member of.  The test reader of a
+  capture's ports counts a sub-interface (`Ethernet1.2`) as the port it
+  rides on.
 - **`detect-deployment` reads an Arista config's `! device:` line.**
   An EOS `show running-config` opens with `! device: <host> (<model>,
   EOS-<release>)`, and detection -- and with it the source picker of
@@ -891,6 +903,14 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`detect-deployment` counts a sub-interface as the port it rides
+  on.**  The check of a proposal against the config listed every
+  sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port
+  name the proposed device does not have, so a config with one was
+  never `consistent`.  A unit is now
+  missing only where its port is, listed by the name the config uses,
+  as a plan with devices declared lists it in `off_inventory`; and
+  `used_port_count` counts ports, not units.
 - **A stack's own lines are listed among the sections not
   translated.**  A CX 6200's or 6300's stack lines (`vsf member N`
   with its `type` and `link` lines, `vsf secondary-member`, `vsf

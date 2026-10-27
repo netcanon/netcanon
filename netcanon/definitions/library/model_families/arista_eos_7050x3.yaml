@@ -34,10 +34,11 @@
 #   G2RU   Arista Quick Start Guide, 7000 Series 2RU, the HTML edition
 #          (its front-panel figures).
 #
-# Public running-configs not committed here, read as a cross-check of
-# the names: rucus0101/DTN_SDWAN,
-# DTN_WAN/DTN_SDWAN/config_backup (a DCS-7050SX3-48YC12 and a
-# DCS-7050SX3-48YC8, EOS-4.32.1F: every SFP port flat, every QSFP100
+# A committed capture of a DCS-7050SX3-48YC8 (EOS-4.32.1F) names every
+# port of it: the claim at the end of this file.  A public
+# running-config not committed here, read as a cross-check of the
+# names: rucus0101/DTN_SDWAN, DTN_WAN/DTN_SDWAN/config_backup, a
+# DCS-7050SX3-48YC12 on EOS-4.32.1F (every SFP port flat, every QSFP100
 # port at `/1` alone, and `Management1`).
 #
 # Part numbers.  The key of each model is the name the switch prints on
@@ -146,3 +147,12 @@ models:
       - {role: access, count: 96, speed: 25gig, cage: sfp28}
       - {role: uplink, count: 8, speed: 100gig, cage: qsfp28, multi_lane: true}
       - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+captures:
+  # rucus0101/DTN_SDWAN, r2-site1-leaf1: every SFP port flat, every
+  # QSFP100 port at `/1` alone, and `Management1`.  Its sub-interfaces
+  # (`Ethernet1.2`) are units of a port, and count as that port.
+  - fixture: tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt
+    marker: "! device: r2-site1-leaf1 (dcs-7050sx3-48yc8, eos-4.32.1f)"
+    mode: standalone
+    members: [{model: DCS-7050SX3-48YC8}]

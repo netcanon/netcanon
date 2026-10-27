@@ -106,7 +106,10 @@ those four may be ``capture``: a capture is a checked claim about ONE
 deployment — this model, in this mode, as this member, with these
 modules — so it is **granted**, by a :class:`CaptureClaim` that matches
 exactly, and never inherited by a sibling model, another member id or a
-module the capture does not show.  ``tests/unit/migration/
+module the capture does not show.  A port of the whole deployment is
+granted it only where the deployment IS the claim's, every member
+of it: a capture of one switch does not show the management port of
+a stack it is a member of.  ``tests/unit/migration/
 test_device_models_shipped.py`` re-proves every claim against its
 fixture on every run — which is what the grade means, so only the
 claims that test re-proves grant it (:data:`PROVEN_CAPTURE_CLAIMS`).
@@ -278,6 +281,12 @@ PROVEN_CAPTURE_CLAIMS: frozenset[ClaimKey] = frozenset({
     ("aruba_aoss/2930M",
      "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg",
      "stacked", (("2930M-40G-8SR-PoEP", 1, (("A", "JL083A"),)),)),
+    ("arista_eos/7060X",
+     "tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt",
+     "standalone", (("DCS-7060CX-32S", None, ()),)),
+    ("arista_eos/7050X3",
+     "tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt",
+     "standalone", (("DCS-7050SX3-48YC8", None, ()),)),
 })
 
 #: The family-file schema this module reads.
@@ -1325,20 +1334,47 @@ def _member_ports(
     return ports, refs, caveats
 
 
+def _whole_deployment_captured(
+    family: FamilyDef, mode_name: str, members: list[_ResolvedMember],
+) -> str | None:
+    """The fixture of a proven claim whose deployment is the WHOLE of
+    this one: the same mode and the same members, with the same ids
+    and modules, and no other.  A port of the deployment as a whole
+    is shown by a capture of that deployment and of no other: a claim
+    of one switch says nothing of the management port of a stack it
+    is a member of."""
+    for claim in family.captures:
+        if claim.mode != mode_name:
+            continue
+        _, claimed = _resolve_in_family(family, claim.mode, claim.members)
+        key = _claim_key(family, claim, claimed)
+        if key in PROVEN_CAPTURE_CLAIMS and key == _claim_key(family, claim, members):
+            return claim.fixture
+    return None
+
+
 def _deployment_ports(
     family: FamilyDef, refs: list[str], caveats: list[str],
+    fixture: str | None = None,
 ) -> list[PhysicalPort]:
     """The ports of the deployment as a whole, once, after every
     member's: no member rank, no member id, and an ordinal of their
     own per role.  Their references and caveats are added to *refs*
-    and *caveats*."""
+    and *caveats*.  With the *fixture* of a proven claim of the whole
+    deployment (:func:`_whole_deployment_captured`) they are graded
+    ``capture`` and cite it: the capture shows each name, which is all
+    the naming fact said, so its reference and caveat are retired, as
+    a member's are."""
     ports: list[PhysicalPort] = []
     next_ordinal: dict[str, int] = {}
     for index, port in enumerate(family.deployment_ports):
         ordinal = next_ordinal.get(port.role, 0)
         next_ordinal[port.role] = ordinal + 1
-        refs.append(port.naming.ref)
-        caveats.append(port.naming.caveat)
+        if fixture is not None:
+            refs.append(fixture)
+        else:
+            refs.append(port.naming.ref)
+            caveats.append(port.naming.caveat)
         ports.append(PhysicalPort(
             name=port.name,
             member_rank=None,
@@ -1352,7 +1388,7 @@ def _deployment_ports(
             cage=port.cage,
             poe=port.poe,
             notes=port.notes,
-            evidence=port.naming.grade,
+            evidence="capture" if fixture is not None else port.naming.grade,
         ))
     return ports
 
@@ -1427,7 +1463,9 @@ def _compile(
         if member.member_id is not None:
             part += f" as member {member.member_id}"
         parts.append(part)
-    ports.extend(_deployment_ports(family, refs, caveats))
+    ports.extend(_deployment_ports(
+        family, refs, caveats, _whole_deployment_captured(family, mode_name, members),
+    ))
     if mode_defaulted and len(family.modes) > 1:
         caveats.append(
             f"No deployment mode was stated; {family.display()} was "

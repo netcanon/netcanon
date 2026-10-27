@@ -178,11 +178,16 @@ per_field_expectation:
     references: [eos-os10-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 6 cells: drifted on 3, preserved on 0, both
-      sides empty on 3.
+    disposition: good
+    note: >
+      Every interface that states an MTU comes back with it: the
+      7050SX3-48YC8 capture's routed ports and sub-interfaces, and the
+      synthetic kitchen sink's.  The three cells this was once called
+      lossy on drifted in their interface count, not in an MTU
+      (STRUCTURAL_ONLY).  OS10's `mtu` is a frame size, written as the
+      payload plus 22, so a jumbo payload near EOS's maximum passes
+      OS10's 9216 once converted; nothing here checks a platform's
+      range (the MTU vendor reference says so).
     references: [eos-os10-surface]
 
   interfaces[].name:

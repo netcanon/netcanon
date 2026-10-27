@@ -185,16 +185,20 @@ the same module in that bay.  A sibling model with identical port
 names, a TAA twin, the same model as member 2, or the same model with a
 different module stays at the grade of its parts.  That is why a TAA
 twin gets its own model entry rather than a second line in its
-sibling's `skus:`.
+sibling's `skus:`.  A port of the whole deployment
+(`deployment_ports:`) is graded `capture` only where the claim is the
+whole deployment, every member of it: a capture of one switch does
+not show the management port of a stack it is a member of.
 
 Every claim is re-proven on every test run: the fixture must contain
 the marker, the marker must carry a part number of the claimed model,
 the fixture must belong to the family's vendor, and the hardware ports
 it names must **equal** the compiled inventory.  A capture that names
 only some of the device's ports cannot be claimed — the claim would
-grant the grade to ports it never shows.  In a mode whose names carry
-a member id, every member of the claim states the `id` the capture
-shows.
+grant the grade to ports it never shows.  A sub-interface the capture
+configures (`Ethernet1.2`) counts as the port it rides on.  In a mode
+whose names carry a member id, every member of the claim states the
+`id` the capture shows.
 
 `capture` means exactly that re-proof, so a claim grants the grade
 only when it is one the test re-proves: it is listed in
