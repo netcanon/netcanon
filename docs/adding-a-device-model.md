@@ -35,6 +35,7 @@ rule turns them into names for one stated deployment:
 | a **mode** | a deployment state that changes names (`standalone`, `vsf`, `stacked`) |
 | a **module** | what a bay can hold, and the ports it contributes |
 | a group's **`prefix`** | the interface type a grammar that names by type puts in front of the number (`TenGigabitEthernet`) |
+| a group's **`multi_lane`** | the ports are a grammar's multi-lane ports, each configured as one interface and named by its first lane (`Ethernet49/1`) |
 | a **deployment port** | a port of the whole deployment rather than of one member, by its literal name (a C9300 stack's one `GigabitEthernet0/0`) |
 | a **capture claim** | a committed real capture, and the exact deployment it is of |
 
@@ -46,8 +47,11 @@ fixed-port switch is the single `aoss` rule
 every Catalyst stackable the `catalyst` rule (`catalyst_port_name`
 in
 [`codecs/cisco_iosxe_cli/port_names.py`](../netcanon/migration/codecs/cisco_iosxe_cli/port_names.py)),
-and every CX 6200 and 6300 the `aoscx` rule (`vsf_switch_port_name` in
-[`codecs/aruba_aoscx/port_names.py`](../netcanon/migration/codecs/aruba_aoscx/port_names.py)).
+every CX 6200 and 6300 the `aoscx` rule (`vsf_switch_port_name` in
+[`codecs/aruba_aoscx/port_names.py`](../netcanon/migration/codecs/aruba_aoscx/port_names.py)),
+and every Arista fixed switch the `eos` rule (`fixed_switch_port_name`
+in
+[`codecs/arista_eos/port_names.py`](../netcanon/migration/codecs/arista_eos/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -62,6 +66,21 @@ with a 1G SFP in it and `TenGigabitEthernet1/1/1` with an SFP+ --
 describe the module in ONE state and say which in its `caveat`, which
 the inventory carries: a port's name is a function of its state, and
 two states are not one module.
+
+An Arista fixed switch names a single-lane port by its number
+(`Ethernet3`) and a multi-lane port -- a QSFP+, QSFP100, OSFP or
+QSFP-DD cage -- by port and lane (`Ethernet49/1`).  Which ports are
+named by lane is **stated** on the group as `multi_lane: true`, from
+the vendor's port list, and never derived from a cage: a 7050QX-32's
+ports 25-32 are QSFP+ cages that run at 40G only, and two public
+running-configs print them with no lane.  A family describes each
+multi-lane port configured as ONE interface, named by its first lane,
+and its mode's label says so; a port broken out into lanes is not
+modelled.  A rule that puts no lane in a name refuses `multi_lane`.
+An EOS switch numbers its ports in one run, so on some models the
+uplinks come before the access ports, or between two runs of them (a
+7050SX3-96YC8's two SFP+ ports are 105 and 106); the groups still go
+in port-number order.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
@@ -166,16 +185,20 @@ the same module in that bay.  A sibling model with identical port
 names, a TAA twin, the same model as member 2, or the same model with a
 different module stays at the grade of its parts.  That is why a TAA
 twin gets its own model entry rather than a second line in its
-sibling's `skus:`.
+sibling's `skus:`.  A port of the whole deployment
+(`deployment_ports:`) is graded `capture` only where the claim is the
+whole deployment, every member of it: a capture of one switch does
+not show the management port of a stack it is a member of.
 
 Every claim is re-proven on every test run: the fixture must contain
 the marker, the marker must carry a part number of the claimed model,
 the fixture must belong to the family's vendor, and the hardware ports
 it names must **equal** the compiled inventory.  A capture that names
 only some of the device's ports cannot be claimed — the claim would
-grant the grade to ports it never shows.  In a mode whose names carry
-a member id, every member of the claim states the `id` the capture
-shows.
+grant the grade to ports it never shows.  A sub-interface the capture
+configures (`Ethernet1.2`) counts as the port it rides on.  In a mode
+whose names carry a member id, every member of the claim states the
+`id` the capture shows.
 
 `capture` means exactly that re-proof, so a claim grants the grade
 only when it is one the test re-proves: it is listed in
@@ -294,8 +317,9 @@ slow; and a vendor whose ports keep a factory name is refused until the
 check in `propose_deployment` does for it what a translation does.
 Those slow texts state no device, so they stop at the detector's first
 patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`,
-`TestTheCatalystDetectorOnTextMadeToBeSlow` and
-`TestTheAoscxDetectorOnTextMadeToBeSlow` do) with a device stated and
+`TestTheCatalystDetectorOnTextMadeToBeSlow`,
+`TestTheAoscxDetectorOnTextMadeToBeSlow` and
+`TestTheAristaDetectorOnTextMadeToBeSlow` do) with a device stated and
 a tail made for each pattern.
 
 ### A new naming grammar
@@ -313,6 +337,8 @@ next free number and become port 25 of a 24-port switch.
 A rule that names a port by its interface type also states the types
 it accepts (`prefixes`); every group of a family under that rule must
 state one of them, and a group under any other rule must state none.
+A rule whose names carry a lane says so (`lanes`); a group may state
+`multi_lane` only under such a rule.
 Ports that no rule names — a stack's one management interface — go
 under `deployment_ports:` by their literal names: each belongs to no
 member and comes after every member's ports.
@@ -346,6 +372,7 @@ these are load errors, not surprises later:
 * a group with no `prefix` under a rule that names a port by its type,
   a `prefix` that rule does not take, or a `prefix` under a rule that
   puts no type in a name;
+* `multi_lane` on a group under a rule that puts no lane in a name;
 * a model key or part number another model already uses;
 * more port groups, ports in a group, or bay-and-module combinations
   than the loader will build (the limits are constants at the top of

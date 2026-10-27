@@ -520,7 +520,11 @@ def _captures() -> list[tuple[str, Path]]:
 #: and how many devices repeat one.  The IOS-XE carrier capture's six
 #: Q-in-Q units of `GigabitEthernet2/0/4` are written with their outer
 #: tag (2234), the inner one a drop, so five of them repeat the first.
-_REPEATS = {"ntc_carrier_interfaces.txt": 5}
+#: The Arista 7050SX3 capture's VLAN interfaces `Vlan2`-`Vlan14` and
+#: `Vlan254` are carried by `Ethernet49/1`, a breakout lane to the
+#: classifier and dropped onto OPNsense; each is put on `igb1`, whose
+#: routed sub-interfaces have the same fourteen tags.
+_REPEATS = {"ntc_carrier_interfaces.txt": 5, "dtn_dcs_7050sx3_48yc8_eos4321.txt": 14}
 
 
 def test_every_capture_says_each_repeat() -> None:

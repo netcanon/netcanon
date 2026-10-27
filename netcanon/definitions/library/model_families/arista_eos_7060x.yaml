@@ -1,0 +1,147 @@
+# Arista 7060X, 7060X2, 7060X4 and 7260X: the fixed switches of 32 or
+# 64 QSFP100, OSFP or QSFP-DD ports, and the 7060SX2-48YC6
+#
+# A fixed switch that stands alone: two switches of an MLAG pair are two
+# devices, and neither puts a member number in a name.  How a name is
+# made is the EOS User Manual's (UM, "Ethernet Ports", Referencing
+# Multi-lane Ports): a single-lane port (SFP+, SFP25, RJ45) is
+# `Ethernet<port>`, and a multi-lane port (QSFP100, OSFP, QSFP-DD) is
+# `Ethernet<port>/<lane>`.  A multi-lane port configured as one
+# interface (100G, 40G or 400G) is its first lane, `/1`; one broken out
+# has an interface for each lane in use (`/1` to `/4`, or `/1` to `/8`
+# on a 400G port).  This file describes every multi-lane port configured
+# as ONE interface: that is the mode's label.  A port broken out is not
+# modelled yet.
+#
+# The management port is `Management1` (UM, "Ethernet Ports", Management
+# Interfaces), declared once under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink` and
+# which `access` follows the flat target profiles of these switches: a
+# QSFP100, OSFP or QSFP-DD port is an uplink and an SFP port is an
+# access port.  It says nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UM     Arista EOS User Manual 4.36.2F, "Ethernet Ports".
+#   D60    Arista 7060X and 7260X Series Data Sheet (03-0010-13, March
+#          15, 2021): the specifications table and the ordering list.
+#   Q60    Arista 7060X, 7060X2, 7260X and 7260X3 Q&A (04-0006-01,
+#          November 20, 2017): the port and speed tables.
+#   D60X4  Arista 7060X4 Series Data Sheet (04-0025-22 as printed, June
+#          24, 2025).
+#   Q60X4  Arista 7060X4 Series Q&A (04-0027-03, December 17, 2019).
+#   G60    Arista Quick Start Guide, 7060 Series 1RU (Gen 3)
+#          (PDOC-00142-04): the front-panel figures.
+#   G2RU   Arista Quick Start Guide, 7000 Series 2RU (PDOC-00039-09).
+#
+# A committed capture of a DCS-7060CX-32S (EOS-4.20.14M) names every
+# port of it, every QSFP port at `/1` alone: the claim at the end of
+# this file.  Public running-configs not committed here, read as a
+# cross-check of the names (each shows `Management1`, every SFP port
+# flat and every QSFP port at `/1` or broken out):
+# saparikh/arista-demo (DCS-7060CX-32S, EOS-4.23.1F);
+# arista-netdevops-community/avd-mpls-example (DCS-7060CX2-32S,
+# EOS-4.26.1FX-EVPN-MCAST).
+#
+# Part numbers.  The key of each model is the name the switch prints on
+# its `! device:` line.  Each model's `skus:` also lists the ordering
+# variants of it that the data sheet's ordering list gives with a
+# suffix (`-F`, `-R`), since a switch can print one: the public
+# output of a 7050TX-64 in sorah/glazed
+# (spec/fixtures/dialects/eos/dcs7050.collected.txt) has
+# `DCS-7050TX-64-F` on its `! device:` line.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 7260QX-64: its QSFP+ ports run at 40G only (Q60), and no
+#     Arista text read says whether EOS names such a port with a lane.
+#   * The 7060DX4-32S and 7060DX4-32C: G60 lists them under the
+#     7060DX4-32's figure, and D60X4 does not list them.
+#   * The DC-powered and spare variants of each part (`-D`, `#`).
+schema: 1
+vendor: arista_eos
+family: "7060X"
+display_name: "Arista 7060X and 7260X"
+naming: eos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, each QSFP100, OSFP or QSFP-DD port configured as one interface (its first lane, /1)"
+    naming:
+      grade: vendor-doc
+      ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Referencing Multi-lane Ports (single-lane or fixed-lane ports are always modeled as a single interface, named Ethernet <port #> on a fixed switch; a multi-lane port is named Ethernet port #/lane #; in high-speed mode only the primary lanes are displayed as active, the remaining lanes showing as errdisabled); Arista EOS User Manual 4.36.2F, Ethernet Ports, QSFP100 and QSFP+ ports (configuring a QSFP28 port for 100GbE makes its /2, /3 and /4 interfaces inactive; 40GbE runs on the port's /1 lane, the primary lane); Arista EOS User Manual 4.36.2F, Ethernet Ports, Displaying Interface Interactions (at speed 400G-8, Ethernet1/2-8 become inactive)"
+    caveat: "Each QSFP100, OSFP or QSFP-DD port is listed as one interface, by its first lane (Ethernet1/1). A port broken out into lanes (4x25G, 4x10G or 2x50G on a QSFP100 port; 2x200G, 4x100G or 8x50G on a 400G port) has an interface for each lane in use, and those are not modelled: a source port Ethernet1/2 is not on this inventory. Whether an inactive lane appears in show running-config is not established by any Arista text read. Two switches of an MLAG pair are two devices: declare each."
+
+deployment_ports:
+  - name: Management1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 100/1000 management port"
+    naming: {grade: vendor-doc, ref: "Arista EOS User Manual 4.36.2F, Ethernet Ports, Management Interfaces (each switch has one or two management interfaces, configured with interface management <number>; the manual's examples configure interface management 1); Arista 7060X and 7260X Series Data Sheet (03-0010-13, March 15, 2021), specifications (one 100/1000 management port on each model); Arista 7060X4 Series Data Sheet (04-0025-22 as printed, June 24, 2025), specifications (one 10/100/1000 management port)", caveat: "That a switch with one management port names it Management1 rests on the manual's examples; no Arista text read pairs the port's label with the name."}
+
+models:
+  # --- 7060X and 7060X2, 32 QSFP100 and 2 SFP+ -------------------------------
+  DCS-7060CX-32S:
+    skus: [DCS-7060CX-32S, DCS-7060CX-32S-F, DCS-7060CX-32S-R]
+    display_name: "Arista 7060CX-32S, 32 QSFP100 and 2 SFP+ (DCS-7060CX-32S)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X and 7260X Series Data Sheet (03-0010-13, March 15, 2021), specifications (7060CX-32S: 32 x QSFP100, 2 x SFP+) and ordering list (DCS-7060CX-32S-F, DCS-7060CX-32S-R); Arista 7060X, 7060X2, 7260X and 7260X3 Q&A (04-0006-01, November 20, 2017), port tables (ports 1-32 QSFP100, ports 33-34 SFP+); Arista Quick Start Guide, 7060 Series 1RU (Gen 3) (PDOC-00142-04), front-panel figure of the 7060CX-32S (QSFP100 ports 1-32, SFP+ ports 33 and 34)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  DCS-7060CX2-32S:
+    skus: [DCS-7060CX2-32S, DCS-7060CX2-32S-F, DCS-7060CX2-32S-R]
+    display_name: "Arista 7060CX2-32S, 32 QSFP100 and 2 SFP+ (DCS-7060CX2-32S)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X and 7260X Series Data Sheet (03-0010-13, March 15, 2021), specifications (7060CX2-32S: 32 x QSFP100, 2 x SFP+) and ordering list (DCS-7060CX2-32S-F, DCS-7060CX2-32S-R); Arista 7060X, 7060X2, 7260X and 7260X3 Q&A (04-0006-01, November 20, 2017), port tables (ports 1-32 QSFP100, ports 33-34 SFP+); Arista Quick Start Guide, 7060 Series 1RU (Gen 3) (PDOC-00142-04), front-panel figure of the 7060CX2-32S (SFP+ ports 33 and 34, QSFP100 ports from 1)"}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 7060X2, 48 SFP25 and 6 QSFP100 -----------------------------------------
+  DCS-7060SX2-48YC6:
+    skus: [DCS-7060SX2-48YC6, DCS-7060SX2-48YC6-F, DCS-7060SX2-48YC6-R]
+    display_name: "Arista 7060SX2-48YC6, 48 SFP25 and 6 QSFP100 (DCS-7060SX2-48YC6)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X and 7260X Series Data Sheet (03-0010-13, March 15, 2021), specifications (7060SX2-48YC6: 48 x SFP25, 6 x QSFP100) and ordering list (DCS-7060SX2-48YC6-F, DCS-7060SX2-48YC6-R); Arista 7060X, 7060X2, 7260X and 7260X3 Q&A (04-0006-01, November 20, 2017), speed table (ports 1-48 SFP25, ports 49-54 QSFP100)", caveat: "The labels of the Quick Start Guide's figure of this model could not be read, so the port numbers rest on the Q&A's speed table alone."}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 6, speed: 100gig, cage: qsfp28, multi_lane: true}
+
+  # --- 7060X4, 32 OSFP or QSFP-DD and 2 SFP+ ----------------------------------
+  DCS-7060PX4-32:
+    skus: [DCS-7060PX4-32, DCS-7060PX4-32-F]
+    display_name: "Arista 7060PX4-32, 32 OSFP and 2 SFP+ (DCS-7060PX4-32)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X4 Series Data Sheet (04-0025-22 as printed, June 24, 2025), specifications (7060PX4-32: 32 x OSFP, 2 x SFP+) and ordering list (DCS-7060PX4-32-F); Arista 7060X4 Series Q&A (04-0027-03, December 17, 2019), speed table (ports 1-32 at 400G, 2x200G or 4x100G; ports 33-34 at 10G); Arista Quick Start Guide, 7060 Series 1RU (Gen 3) (PDOC-00142-04), front-panel figure of the 7060PX4-32 (OSFP ports numbered odd on top and even below)", caveat: "The labels of the figure's SFP+ ports could not be read; that they are 33 and 34 rests on the Q&A's speed table."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: osfp, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  DCS-7060DX4-32:
+    skus: [DCS-7060DX4-32, DCS-7060DX4-32-F]
+    display_name: "Arista 7060DX4-32, 32 QSFP-DD and 2 SFP+ (DCS-7060DX4-32)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X4 Series Data Sheet (04-0025-22 as printed, June 24, 2025), specifications (7060DX4-32: 32 x QSFP-DD, 2 x SFP+) and ordering list (DCS-7060DX4-32-F); Arista 7060X4 Series Q&A (04-0027-03, December 17, 2019), speed table (ports 1-32 at 400G, 2x200G or 4x100G; ports 33-34 at 10G); Arista Quick Start Guide, 7060 Series 1RU (Gen 3) (PDOC-00142-04), front-panel figure of the 7060DX4-32"}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 7260X, 64 QSFP100 and 2 SFP+ (2RU) -------------------------------------
+  DCS-7260CX-64:
+    skus: [DCS-7260CX-64, DCS-7260CX-64-F, DCS-7260CX-64-R]
+    display_name: "Arista 7260CX-64, 64 QSFP100 and 2 SFP+ (DCS-7260CX-64)"
+    panel: {grade: vendor-doc, ref: "Arista 7060X and 7260X Series Data Sheet (03-0010-13, March 15, 2021), specifications (7260CX-64: 64 x QSFP100, 2 x SFP+) and ordering list (DCS-7260CX-64-F, DCS-7260CX-64-R); Arista 7060X, 7060X2, 7260X and 7260X3 Q&A (04-0006-01, November 20, 2017), port tables (ports 1-64 QSFP100, ports 65-66 SFP+); Arista Quick Start Guide, 7000 Series 2RU (PDOC-00039-09), front panel of the 7260CX-64 (ports 1 to 64, then 65 and 66)"}
+    ports:
+      - {role: uplink, count: 64, speed: 100gig, cage: qsfp28, multi_lane: true}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+captures:
+  # lwa-project/ng_digital_processor, config/switch/config: every QSFP100
+  # port at `/1` alone (1-18 and 32 set to 40G, 19-31 not set), the two
+  # SFP+ ports flat, and `Management1`.
+  - fixture: tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt
+    marker: "! device: arista (dcs-7060cx-32s, eos-4.20.14m)"
+    mode: standalone
+    members: [{model: DCS-7060CX-32S}]

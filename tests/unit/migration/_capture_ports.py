@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from netcanon.migration.canonical.port_names import split_unit
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.services.migration_detect import detect_codec
 
@@ -49,6 +50,10 @@ def ports_in_capture(path: Path, vendor: str) -> tuple[set[str], str]:
     loopback or a bridge is not — and LAG names also arrive through
     VLAN membership, so they are subtracted after the union.
 
+    A sub-interface (``Ethernet1.2``, ``ge-0/0/1.54``) is a unit of a
+    port and not a port: it is evidence of the port it rides on, and is
+    counted by that port's name.
+
     A port the operator gave a name of its own (RouterOS ``set [ find
     default-name=sfp-sfpplus2 ] name="Access Point"``) is the hardware
     its factory name says, and is counted by that name: the label is
@@ -77,6 +82,7 @@ def ports_in_capture(path: Path, vendor: str) -> tuple[set[str], str]:
         iface.name for iface in intent.interfaces
         if iface.interface_type in NOT_A_PORT
     }
+    names = {unit[0] if (unit := split_unit(name)) else name for name in names}
     # A LAG's name arrives in either case (AOS-S prints ``trk1`` where
     # it is defined and ``Trk1`` in a VLAN list), as it does for
     # ``collect_hardware_port_names``.

@@ -11,22 +11,23 @@
 # each cage.
 # The two SFP+ ports are single-lane: `Ethernet33`, `Ethernet34`.
 #
-# Validation: Arista's 7060X datasheet ("32x QSFP100 and 2x SFP+") and
-# EOS manual; the exact id set below is what public running-configs
-# of a DCS-7060CX-32S show:
-#   lwa-project/ng_digital_processor  config/switch/config
-#                                     (commit 471d0c40c8)
-#   saparikh/arista-demo              snapshot0/unused/up414.cfg
-#                                     (commit 776baefb79)
-# None is committed here.
+# Validation: tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt
+# is a real DCS-7060CX-32S (`! device: arista (DCS-7060CX-32S,
+# EOS-4.20.14M)`) with every QSFP cage at lane `/1` alone.  Every id
+# below appears in it; tests/unit/migration/test_target_profile_evidence.py
+# re-proves that on every run.  The same id set is what Arista's 7060X
+# datasheet ("32x QSFP100 and 2x SFP+") and EOS manual describe, and
+# what another public running-config of the model shows
+# (saparikh/arista-demo snapshot0/unused/up414.cfg, commit 776baefb79,
+# not committed here).
 vendor: arista_eos
 model: DCS-7060CX-32S
 display_name: "Arista DCS-7060CX-32S (32x 100G + 2x 10G, Tomahawk)"
 device_class: switch
 stacking: ""
 deployment_state: "every QSFP cage running as one port (lane /1)"
-evidence: vendor-doc
-evidence_ref: "Arista 7060X / 7260X datasheet (7060CX-32S: 32x QSFP100 and 2x SFP+); EOS User Manual, Ethernet Ports (multi-lane ports are Ethernet<port>/<lane>); id set seen on public running-configs of DCS-7060CX-32S (EOS 4.20, 4.23), none committed here"
+evidence: capture
+evidence_ref: "tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt"
 caveat: "A QSFP cage broken out into lanes also has EthernetN/2-/4; only lane /1 of each cage is listed."
 ports:
   - {id: "Ethernet1/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}

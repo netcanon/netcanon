@@ -17,6 +17,7 @@ import yaml
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import device_models as dm
+from netcanon.migration.codecs.arista_eos.port_names import fixed_switch_port_name
 from netcanon.migration.codecs.aruba_aoscx.port_names import vsf_switch_port_name
 from netcanon.migration.codecs.aruba_aoss.port_names import physical_port_name
 from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
@@ -345,6 +346,76 @@ class TestAoscxPortName:
 
 
 # ---------------------------------------------------------------------------
+# The EOS naming rule
+# ---------------------------------------------------------------------------
+
+
+def _eos_request(index0: int, *, multi_lane: bool, member_id=None, slot="") -> dm.PortNameRequest:
+    group = dm.PortGroup(role="uplink", count=1, multi_lane=multi_lane)
+    return dm.PortNameRequest(
+        mode="standalone", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+class TestEosPortName:
+    @pytest.mark.parametrize(
+        ("port", "multi_lane", "printed"),
+        [
+            # Arista EOS User Manual, Ethernet Ports, Referencing
+            # Multi-lane Ports: a single-lane port of a fixed switch is
+            # "Ethernet <port #>".
+            (3, False, "Ethernet3"),
+            # Arista 7050X Q&A, the 40GbE example on a 7050QX-32: "use
+            # the following command on lane 1 of the physical port",
+            # `interface ethernet 3/1`, prompt `config-if-Et3/1`.
+            (3, True, "Ethernet3/1"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, port, multi_lane, printed):
+        assert fixed_switch_port_name(port=port, multi_lane=multi_lane) == printed
+
+    @pytest.mark.parametrize("port", [0, -1])
+    def test_a_port_number_counts_from_1(self, port):
+        with pytest.raises(ValueError, match="counts from 1"):
+            fixed_switch_port_name(port=port, multi_lane=False)
+
+    def test_the_rule_names_a_multi_lane_port_by_its_first_lane(self):
+        rule = dm._naming_rules()["eos"]
+        assert rule.render(_eos_request(48, multi_lane=True)) == "Ethernet49/1"
+        assert rule.render(_eos_request(32, multi_lane=False)) == "Ethernet33"
+
+    def test_a_fixed_switch_names_no_member(self):
+        """Two switches of an MLAG pair are two devices; a mode that
+        gives a member a number is not one of theirs."""
+        with pytest.raises(ValueError, match="without a member number"):
+            dm._naming_rules()["eos"].render(_eos_request(0, multi_lane=False, member_id=1))
+
+    def test_a_bay_is_a_module_these_switches_do_not_have(self):
+        with pytest.raises(ValueError, match="has no module"):
+            dm._naming_rules()["eos"].render(_eos_request(0, multi_lane=False, slot="A"))
+
+    def test_the_management_interface_is_not_a_numbered_port(self):
+        rule = dm._naming_rules()["eos"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`Management1`" in rule.why_not
+
+    def test_only_the_eos_rule_names_lanes(self):
+        assert {name for name, rule in dm._naming_rules().items() if rule.lanes} == {"eos"}
+
+    def test_a_rule_that_names_no_lane_refuses_a_multi_lane_group(self):
+        """An AOS-S name has no lane in it, so a group that says its
+        ports are named by lane is a mistake in the file, not a port."""
+        data = _data()
+        data["models"]["TB-8"]["ports"][1]["multi_lane"] = True
+        with pytest.raises(ValueError, match="puts no lane in a name"):
+            _family(data)
+
+    def test_multi_lane_is_a_yes_or_a_no(self):
+        with pytest.raises(ValueError):
+            dm.PortGroup(role="uplink", count=1, multi_lane="yes")
+
+
+# ---------------------------------------------------------------------------
 # Compiling a deployment
 # ---------------------------------------------------------------------------
 
@@ -644,6 +715,44 @@ class TestDeploymentPorts:
         assert inv.port("GigabitEthernet0/0").evidence == "inferred"
         assert inv.evidence == "inferred"
         assert "The management port's name is a guess." in inv.caveats
+
+    _CLAIM = ("cisco_iosxe/Catbox", "tests/fixtures/real/cb.cfg", "stack", (("CB-12", 1, ()),))
+    _ONE = {"model": "CB-12", "id": 1, "modules": {"1": None}}
+
+    def _claimed(self, monkeypatch: pytest.MonkeyPatch, *, proven: bool = True) -> DeviceModelRegistry:
+        """Catbox with a claim of ONE CB-12 as member 1, its bay empty."""
+        data = _data(CATBOX_YAML)
+        data["captures"] = [{
+            "fixture": "tests/fixtures/real/cb.cfg", "marker": "switch 1 provision cb-12",
+            "mode": "stack", "members": [self._ONE],
+        }]
+        if proven:
+            monkeypatch.setattr(dm, "PROVEN_CAPTURE_CLAIMS", dm.PROVEN_CAPTURE_CLAIMS | {self._CLAIM})
+        return _catbox(data)
+
+    def test_a_capture_of_the_whole_deployment_shows_it(self, monkeypatch):
+        inv = _catbox_compile(self._claimed(monkeypatch), self._ONE)
+        assert inv.port("GigabitEthernet0/0").evidence == "capture"
+        assert inv.evidence == "capture"
+        assert "tests/fixtures/real/cb.cfg" in inv.evidence_refs
+        assert "Catbox guide, management port" not in inv.evidence_refs
+
+    def test_a_capture_of_one_member_does_not_show_the_stacks(self, monkeypatch):
+        """The claim is member 1 alone.  In a stack of two, member 1's
+        own ports are what the capture shows; the stack's management
+        port is not, since the capture is not of that stack."""
+        inv = _catbox_compile(
+            self._claimed(monkeypatch), self._ONE, {**self._ONE, "id": 2},
+        )
+        assert inv.port("TwoGigabitEthernet1/0/1").evidence == "capture"
+        assert inv.port("TwoGigabitEthernet2/0/1").evidence == "vendor-doc"
+        assert inv.port("GigabitEthernet0/0").evidence == "vendor-doc"
+        assert "Catbox guide, management port" in inv.evidence_refs
+
+    def test_a_claim_nothing_re_proves_shows_nothing(self, monkeypatch):
+        inv = _catbox_compile(self._claimed(monkeypatch, proven=False), self._ONE)
+        assert inv.port("GigabitEthernet0/0").evidence == "vendor-doc"
+        assert "tests/fixtures/real/cb.cfg" not in inv.evidence_refs
 
     def test_it_cannot_repeat_a_members_name(self):
         data = _data(CATBOX_YAML)

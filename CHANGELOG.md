@@ -619,6 +619,59 @@ timestamp if your timezone matters for an audit.
   and is graded `inferred` (it was `vendor-doc`), as the family grades
   its JL661A: HPE numbers its SFP56 uplinks, and no HPE text read
   numbers its RJ45 ports.  Its notice is amber.
+- **Arista 7050X, 7050X3, 7060X, 7260X and 7280R3 switches can be
+  declared as a source or target device.**  Four model families, each
+  with one mode, `standalone` -- a switch on its own; the two switches
+  of an MLAG pair are two devices, each declared: `7060X` (the
+  7060CX-32S, 7060CX2-32S, 7060SX2-48YC6, 7060PX4-32, 7060DX4-32 and
+  7260CX-64), `7050X3` (the 7050CX3-32S, six 7050SX3 models and the
+  7050TX3-48C8), `7280R3` (17 models; a K or A part is a model of its
+  own) and `7050X` (the 7050SX-64, SX-72Q, SX2-72Q, TX-48, TX-64,
+  TX-72Q and QX-32).  Names come from a new `eos` naming rule: a
+  single-lane port is `Ethernet<port>`, and a multi-lane port -- a
+  QSFP+, QSFP100, OSFP or QSFP-DD cage -- configured as one interface
+  is its first lane, `Ethernet<port>/1` (EOS User Manual, "Ethernet
+  Ports", Referencing Multi-lane Ports).  Which ports are multi-lane
+  is stated on each group of ports (`multi_lane: true`), never derived
+  from a cage: a 7050QX-32's ports 25-32 run at 40G only, and two
+  public running-configs print them with no lane.  A port broken out
+  into lanes is not modelled, and each family's mode says so; on a
+  7050X a QSFP+ port runs as four 10G interfaces until lane 1 is set
+  to 40G ("By default they will operate in 4x10 mode", Arista's 7050X
+  Q&A), so the names of a switch nobody has set come back as
+  off-inventory.  The management port is `Management1`, which belongs
+  to no member.  A model's key is the part number the switch prints
+  (`DCS-7060CX-32S`), and its `-F` and `-R` ordering variants resolve
+  to it.  Every name is graded `vendor-doc` but the 7050SX3-48C8's
+  (Arista's quick start guide figure of it is the 7050SX3-48YC8's
+  drawing) and the 7050QX-32's (no Arista text read names a port that
+  runs at 40G only), which are `inferred` and say why.  The
+  7060CX-32S, 7050CX3-32S, 7050SX-64 and 7280CR3-32P4 target profiles
+  describe the same ports as their families.  Two public running-configs
+  are committed as captures and name every port of their switch: a
+  DCS-7060CX-32S on EOS-4.20.14M and a DCS-7050SX3-48YC8 on EOS-4.32.1F
+  (`tests/fixtures/real/arista_eos/`, Apache-2.0).  Those two models,
+  standalone, are graded `capture`, `Management1` included, and so is
+  the DCS-7060CX-32S target profile (it was `vendor-doc`); the other
+  models keep their grades.  A port of a whole deployment -- one that
+  belongs to no member, as `Management1` and a Catalyst stack's
+  `GigabitEthernet0/0` do -- is graded `capture` only where a claim is
+  that whole deployment: a capture of one switch does not show the
+  management port of a stack it is a member of.  The test reader of a
+  capture's ports counts a sub-interface (`Ethernet1.2`) as the port it
+  rides on.
+- **`detect-deployment` reads an Arista config's `! device:` line.**
+  An EOS `show running-config` opens with `! device: <host> (<model>,
+  EOS-<release>)`, and detection -- and with it the source picker of
+  the Interface rename modal -- now reads it: one switch, with no
+  member number, in the mode `standalone`.  The evidence is the line
+  without its host name.  The notes say that the line is a comment,
+  which nothing in the configuration depends on, and that no Arista
+  text read describes it; lines that name two models are text from
+  more than one switch and propose nothing, and a line that begins `!
+  device:` and cannot be read is counted.  Lines in a banner or another
+  body that runs to `EOF` are not read.  The detector is
+  `codecs/arista_eos/deployment_detect.py`.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both
@@ -850,6 +903,14 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`detect-deployment` counts a sub-interface as the port it rides
+  on.**  The check of a proposal against the config listed every
+  sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port
+  name the proposed device does not have, so a config with one was
+  never `consistent`.  A unit is now
+  missing only where its port is, listed by the name the config uses,
+  as a plan with devices declared lists it in `off_inventory`; and
+  `used_port_count` counts ports, not units.
 - **A stack's own lines are listed among the sections not
   translated.**  A CX 6200's or 6300's stack lines (`vsf member N`
   with its `type` and `link` lines, `vsf secondary-member`, `vsf

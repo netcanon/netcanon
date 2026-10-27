@@ -338,7 +338,10 @@ class TestTheRecord:
 #: entry, so every drop is the translator's.  Measured, and pinned:
 #: a number that moves is a drop that took something, or stopped.
 _RECORDS = {
-    "arista_eos": 2,
+    # 3, from 2: the 7050SX3-48YC8 capture's VTEP source is
+    # `Loopback1`, which Junos has no name for, as the two EVPN
+    # captures' already was.
+    "arista_eos": 3,
     "aruba_aoscx": 6,
     "aruba_aoss": 0,
     "cisco_iosxe_cli": 9,

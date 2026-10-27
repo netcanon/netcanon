@@ -1,0 +1,148 @@
+! Command: show running-config
+! device: arista (DCS-7060CX-32S, EOS-4.20.14M)
+!
+! boot system flash:/EOS-4.20.14M.swi
+!
+errdisable recovery cause link-flap
+!
+ip igmp snooping vlan 1 querier
+ip igmp snooping vlan 1 querier address 192.168.40.1
+ip igmp snooping vlan 1 querier version 3
+ip igmp snooping querier
+!
+transceiver qsfp default-mode 4x10G
+!
+hostname arista
+!
+spanning-tree mode mstp
+!
+service unsupported-transceiver FS 00000000
+!
+no aaa root
+!
+username admin privilege 15 role network-admin secret sha512 $6$c5MWRn/lZ.2rFwVa$AmXFrjAXa9N1Gg5BtRCYBp40pTqR9vR8YCWKAMaV4.ZJW3LODzxvLVoc9xHG31nszNrPDuiipCGtlzaezXctv1
+!
+interface Ethernet1/1
+   speed forced 40gfull
+!
+interface Ethernet2/1
+   speed forced 40gfull
+!
+interface Ethernet3/1
+   speed forced 40gfull
+!
+interface Ethernet4/1
+   speed forced 40gfull
+!
+interface Ethernet5/1
+   speed forced 40gfull
+!
+interface Ethernet6/1
+   speed forced 40gfull
+!
+interface Ethernet7/1
+   speed forced 40gfull
+!
+interface Ethernet8/1
+   speed forced 40gfull
+!
+interface Ethernet9/1
+   speed forced 40gfull
+!
+interface Ethernet10/1
+   speed forced 40gfull
+!
+interface Ethernet11/1
+   speed forced 40gfull
+!
+interface Ethernet12/1
+   speed forced 40gfull
+!
+interface Ethernet13/1
+   speed forced 40gfull
+!
+interface Ethernet14/1
+   speed forced 40gfull
+!
+interface Ethernet15/1
+   speed forced 40gfull
+!
+interface Ethernet16/1
+   speed forced 40gfull
+!
+interface Ethernet17/1
+   speed forced 40gfull
+!
+interface Ethernet18/1
+   speed forced 40gfull
+!
+interface Ethernet19/1
+   flowcontrol receive on
+!
+interface Ethernet20/1
+!
+interface Ethernet21/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet22/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet23/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet24/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet25/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet26/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet27/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet28/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet29/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet30/1
+   flowcontrol send on
+   flowcontrol receive on
+!
+interface Ethernet31/1
+   flowcontrol receive on
+!
+interface Ethernet32/1
+   flowcontrol send on
+   speed forced 40gfull
+   switchport mode trunk
+!
+interface Ethernet33
+!
+interface Ethernet34
+!
+interface Management1
+   ip address dhcp
+!
+interface Vlan1
+   ip pim sparse-mode
+!
+mac address-table static 0000.5e00.5301 vlan 1 interface Ethernet19/1
+!
+ip routing
+!
+ip multicast-routing
+!
+end

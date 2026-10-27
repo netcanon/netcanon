@@ -1733,7 +1733,9 @@ confirm, never applied by itself, and it tells you how far to trust it:
 * `missing_ports` / `consistent` — the check against the config itself:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
-  paste.  `missing_ports` holds the first few hundred and
+  paste.  A sub-interface (`Ethernet1.2`) is a name of the port it rides
+  on: it is missing only where that port is, and `used_port_count`
+  counts ports, not units.  `missing_ports` holds the first few hundred and
   `missing_port_count` the whole number; a name longer than 128
   characters is cut to that, ending `…`.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was
@@ -1751,8 +1753,8 @@ not take, a member number outside the mode's range, more members than
 the mode allows; and when the vendor has no detector yet.  The first
 of `notes` says which.  None of these is an error: the answer is a 200
 either way.
-Detection reads Aruba AOS-S, Aruba AOS-CX and Cisco Catalyst (IOS-XE)
-configs today; no other vendor has a detector yet.
+Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
+and Arista EOS configs today; no other vendor has a detector yet.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -1768,6 +1770,23 @@ block with no `type` line that can be read is left out, and a note
 names its member.
 An AOS-CX switch that is not a 6200 or 6300 prints no such block, and
 the proposal says the config states no device.
+
+**An EOS config names the switch that printed it.**  An Arista
+`show running-config` opens with a comment line that names the
+switch, its model and its release, `! device: leaf1
+(DCS-7050SX3-48YC8, EOS-4.32.1F)`, and detection reads that line: one
+switch, with no member number, in the family's mode `standalone`.  A
+model with `-F` or `-R` after its part number is that part.  What it
+cannot show, which its notes say: the line is a comment, which nothing
+in the configuration depends on and a file can be edited, and no
+Arista text read describes it.  The host name is not handed back; the
+evidence is the line without it.  Lines that name two models are text
+from more than one switch, and nothing is proposed.  The two switches
+of an MLAG pair are two devices: each config proposes its own switch.
+A virtual EOS (`vEOS`, `cEOS`) and a model no family describes are
+answered with a note.  On a 7050X whose QSFP+ ports still run as four
+10G interfaces, the default, a proposal is `consistent: false` and
+lists the names of lanes 2 to 4.
 
 **A Catalyst config states each switch of its stack.**  A `show
 running-config` from a Catalyst has a `switch N provision <type>` line
@@ -2063,8 +2082,9 @@ nothing, as before.
 
 * Model families ship for a first set of Aruba AOS-S switches and
   for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
-  9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), and
-  for the Aruba CX 6300 and 6200; `GET /model-families` is the
+  9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), for
+  the Aruba CX 6300 and 6200, and for the Arista 7050X, 7050X3,
+  7060X, 7260X and 7280R3; `GET /model-families` is the
   current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
@@ -2080,7 +2100,12 @@ nothing, as before.
   a port that holds a 1G SFP has another name, so with 1G SFP modules
   fitted, declare the bay empty.  A 9500's 40G port broken out into 10G
   ports is not modelled: the `TenGigabitEthernet` names of a breakout
-  come back as off-inventory.
+  come back as off-inventory.  Nor is an Arista port broken out into
+  lanes: a multi-lane port is listed as one interface, its first lane
+  (`Ethernet49/1`), and the names of its other lanes come back as
+  off-inventory -- on a 7050X a QSFP+ port runs as four 10G
+  interfaces until it is set to 40G.  An MLAG pair is two devices:
+  declare each.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

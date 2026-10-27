@@ -93,9 +93,11 @@ class TestModelFamilies:
         ]
         assert model["ports"] == [
             {"role": "access", "count": 48, "slot": "", "prefix": "",
-             "speed": "gig", "cage": "rj45", "poe": False, "notes": ""},
+             "multi_lane": False, "speed": "gig", "cage": "rj45", "poe": False,
+             "notes": ""},
             {"role": "uplink", "count": 4, "slot": "", "prefix": "",
-             "speed": "gig", "cage": "sfp", "poe": False, "notes": ""},
+             "multi_lane": False, "speed": "gig", "cage": "sfp", "poe": False,
+             "notes": ""},
         ]
 
     def test_filter_by_vendor(self, client: TestClient) -> None:
@@ -2116,12 +2118,27 @@ class TestDetectDeployment:
 
     def test_a_vendor_without_a_detector_says_so(self, client: TestClient) -> None:
         resp = client.post(self.URL, json={
-            "source": "arista_eos", "raw_text": "hostname sw\n",
+            "source": "cisco_nxos", "raw_text": "hostname sw\n",
         })
         assert resp.status_code == 200
         proposal = resp.json()
         assert proposal["stated"] is False and proposal["deployment"] is None
         assert "No detector" in proposal["notes"][0]
+
+    def test_an_arista_config_is_read_from_its_device_line(self, client: TestClient) -> None:
+        """The host name of the line is not handed back."""
+        resp = client.post(self.URL, json={
+            "source": "arista_eos",
+            "raw_text": "! device: rack9-leaf (DCS-7050SX3-48YC8, EOS-4.32.1F)\nhostname rack9-leaf\n",
+        })
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["family"] == "arista_eos/7050X3" and proposal["mode"] == "standalone"
+        assert proposal["deployment"]["members"] == [
+            {"model": "DCS-7050SX3-48YC8", "id": None, "modules": {}},
+        ]
+        assert proposal["evidence"] == ["! device: … (DCS-7050SX3-48YC8, EOS-4.32.1F)"]
+        assert "rack9" not in resp.text
 
     def test_a_stored_config_can_be_read_too(self, client: TestClient, test_settings) -> None:
         """``source_filename`` names a config in the backup store, as on

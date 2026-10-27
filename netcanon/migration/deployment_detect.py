@@ -105,6 +105,15 @@ def _clipped(name: str, limit: int = MAX_PORT_NAME_SHOWN) -> str:
     was cut."""
     return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
+
+def _port_of(name: str) -> str:
+    """The port *name* rides on, if it is a sub-interface
+    (``Ethernet1.2``); otherwise *name*."""
+    from .canonical.port_names import split_unit
+
+    unit = split_unit(name)
+    return unit[0] if unit else name
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,6 +137,12 @@ def _cisco_iosxe(raw_text: str) -> DetectedDeployment | None:
     return detect_deployment(raw_text)
 
 
+def _arista_eos(raw_text: str) -> DetectedDeployment | None:
+    from .codecs.arista_eos.deployment_detect import detect_deployment
+
+    return detect_deployment(raw_text)
+
+
 def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     """Vendor id to detector.
 
@@ -137,7 +152,10 @@ def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     number of the port names — that is the guess this feature exists
     to replace.
     """
-    return {"aruba_aoss": _aoss, "aruba_aoscx": _aoscx, "cisco_iosxe": _cisco_iosxe}
+    return {
+        "aruba_aoss": _aoss, "aruba_aoscx": _aoscx, "cisco_iosxe": _cisco_iosxe,
+        "arista_eos": _arista_eos,
+    }
 
 
 def detection_vendors() -> list[str]:
@@ -233,7 +251,8 @@ def propose_deployment(
         Otherwise it is ``None`` and the FIRST of ``notes`` says what
         stood in the way; what the detector had to say about the lines
         it read comes after.  ``missing_ports`` lists port names the config uses that
-        the proposed device does not have (capped;
+        the proposed device does not have -- a sub-interface where it
+        lacks the port the unit rides on (capped;
         ``missing_port_count`` is the whole number); ``consistent`` is
         ``True`` when there are none, and ``None`` when there was
         nothing to check: nothing was proposed, the config could not
@@ -426,14 +445,20 @@ def propose_deployment(
     # keep a factory name (`ports_keep_a_factory_name`): no such vendor
     # has a detector, and a test fails for the first that gets one
     # until this check is taught about them.
-    used = collect_hardware_port_names(
+    named = collect_hardware_port_names(
         tree,
         classify=getattr(codec, "classify_port_name", None),
         always=names,
         fold=not getattr(codec, "port_names_case_sensitive", False),
     )
+    # A sub-interface (``Ethernet1.2``) is a unit of a port, not a
+    # port: the device has it where it has the port it rides on, as a
+    # plan with devices declared reads it, and it is not counted as a
+    # port of its own.  One the device lacks is listed by the name the
+    # config uses, as the plan's ``off_inventory`` lists it.
+    used = {_port_of(name) for name in named}
     proposal.used_port_count = len(used)
-    missing = [name for name in used if name not in names]
+    missing = [name for name in named if _port_of(name) not in names]
     proposal.missing_port_count = len(missing)
     # A port name is the config's own text and has no length of its
     # own: each is cut to a length a list can be read at.

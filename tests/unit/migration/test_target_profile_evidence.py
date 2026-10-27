@@ -91,6 +91,7 @@ CAPTURE_GRADED = sorted(
 #: Pinned, so the conformance check cannot pass vacuously and so that
 #: DOWNGRADING a profile is a deliberate, reviewed edit.
 CAPTURE_MODEL_MARKER = {
+    "arista_eos/DCS-7060CX-32S": "! device: arista (dcs-7060cx-32s, eos-4.20.14m)",
     "aruba_aoss/2930F-48G": "module 1 type jl260a",
     "cisco_iosxe/C9300-24UX": "switch 1 provision c9300-24ux",
     "mikrotik_routeros/CRS310-8G+2S+": "# model = crs310-8g+2s+",
@@ -104,7 +105,6 @@ CAPTURE_MODEL_MARKER = {
 EXPECTED_VENDOR_DOC_GRADED = {
     "arista_eos/DCS-7050CX3-32S",
     "arista_eos/DCS-7050SX-64",
-    "arista_eos/DCS-7060CX-32S",
     "arista_eos/DCS-7280CR3-32P4",
     "aruba_aoss/2930F-24G",
     "aruba_aoss/2930F-24G-PoEP",

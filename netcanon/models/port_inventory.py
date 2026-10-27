@@ -437,8 +437,10 @@ class DeploymentProposal(BaseModel):
     """What :attr:`deployment` compiles to."""
 
     used_port_count: int = 0
-    """How many hardware port names the config uses.  ``0`` when
-    nothing was proposed or the config could not be parsed."""
+    """How many hardware ports the config uses names of; a
+    sub-interface (``Ethernet1.2``) is a name of the port it rides
+    on.  ``0`` when nothing was proposed or the config could not be
+    parsed."""
 
     missing_ports: list[str] = Field(
         default_factory=list,
@@ -452,7 +454,9 @@ class DeploymentProposal(BaseModel):
     """Port names the config uses that the proposed device does not
     have, in the order the parsed config lists them (interface
     stanzas first, then VLAN membership -- not the order of the
-    text).  Capped; :attr:`missing_port_count` is the whole number."""
+    text).  A sub-interface is listed where the device lacks the port
+    it rides on, by its own name, as a plan's ``off_inventory`` lists
+    it.  Capped; :attr:`missing_port_count` is the whole number."""
 
     missing_port_count: int = Field(
         default=0,

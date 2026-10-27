@@ -3,9 +3,9 @@
 Two layers, tested apart:
 
 * a vendor's **detector** reads the lines that state the hardware --
-  AOS-S's and the Catalyst's (IOS-XE).  Each is pinned on short configs
-  written for the purpose (every stanza form the vendor's guides and
-  real captures show) and on the committed captures;
+  AOS-S's, AOS-CX's, the Catalyst's (IOS-XE) and EOS's.  Each is pinned
+  on short configs written for the purpose (every stanza form the
+  vendor's guides and real captures show) and on the committed captures;
 * :func:`propose_deployment` resolves a detection against the model
   registry and checks it against the port names the config uses.
 
@@ -28,6 +28,7 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import deployment_detect
+from netcanon.migration.codecs.arista_eos import deployment_detect as eos_detect
 from netcanon.migration.codecs.aruba_aoscx import deployment_detect as aoscx_detect
 from netcanon.migration.codecs.aruba_aoss import deployment_detect as aoss_deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
@@ -130,7 +131,7 @@ vlan 1
 #: fail until it is.
 _CODEC_OF = {
     "aruba_aoss": "aruba_aoss", "aruba_aoscx": "aruba_aoscx",
-    "cisco_iosxe": "cisco_iosxe_cli",
+    "cisco_iosxe": "cisco_iosxe_cli", "arista_eos": "arista_eos",
 }
 
 #: The words a vendor's detector reports as ``fabric``: its configs'
@@ -138,6 +139,8 @@ _CODEC_OF = {
 _STANZA_WORDS = {
     "aruba_aoss": ("stacking", "vsf"), "aruba_aoscx": ("vsf",),
     "cisco_iosxe": ("switch",),
+    # An Arista fixed switch stands alone: no stanza, no member number.
+    "arista_eos": (),
 }
 
 _T = TypeVar("_T")
@@ -411,10 +414,10 @@ class TestProposalsThatStopShort:
         assert "does not say which device" in proposal.notes[0]
 
     def test_a_vendor_with_no_detector(self) -> None:
-        proposal = propose_deployment(get_codec("arista_eos"), "hostname x\n", REGISTRY)
+        proposal = propose_deployment(get_codec("cisco_nxos"), "hostname x\n", REGISTRY)
         assert not proposal.stated and proposal.deployment is None
         assert proposal.notes == [
-            "No detector reads the hardware lines of arista_eos configurations yet; "
+            "No detector reads the hardware lines of cisco_nxos configurations yet; "
             "declare the device yourself."
         ]
 
@@ -2677,3 +2680,309 @@ class TestTheAoscxDetectorOnTextMadeToBeSlow:
         if detected is not None:
             assert sum(map(len, detected.notes)) < 4_000
             assert max(map(len, detected.evidence), default=0) < 64
+
+
+# ---------------------------------------------------------------------------
+# Arista EOS
+# ---------------------------------------------------------------------------
+
+EOS = get_codec("arista_eos")
+
+
+def _eos(model: str, *ports: str, release: str = "EOS-4.32.1F") -> str:
+    """The head of an EOS `show running-config` as the public configs
+    print it -- the command, then the switch -- and an interface stanza
+    for each of *ports*.  The host name is made up."""
+    body = "".join(f"interface {port}\n   description up\n!\n" for port in ports)
+    return (
+        "! Command: show running-config\n"
+        f"! device: leaf1 ({model}, {release})\n"
+        "!\nhostname leaf1\n!\n" + body + "end\n"
+    )
+
+
+def _eos_units(model: str, *units: str, port: str = "") -> str:
+    """:func:`_eos` with a routed dot1q sub-interface for each of
+    *units* (the parser keeps one that states its encapsulation), and
+    a stanza for *port* if one is given."""
+    text = _eos(model, *([port] if port else []))
+    body = "".join(
+        f"interface {unit}\n   encapsulation dot1q vlan {n}\n   ip address 10.0.{n}.1/30\n!\n"
+        for n, unit in enumerate(units, start=2)
+    )
+    return text.replace("end\n", body + "end\n")
+
+
+_EOS_READ = "! device: sw (DCS-7280CR3-32P4, EOS-4.30.1F)\n"
+
+
+class TestAristaDetector:
+    def test_the_line_as_a_switch_prints_it(self) -> None:
+        detected = eos_detect.detect_deployment(_eos("DCS-7050SX3-48YC8"))
+        assert detected.fabric == ""
+        assert _members(detected) == [(None, "DCS-7050SX3-48YC8", {})]
+        assert detected.evidence == ["! device: \u2026 (DCS-7050SX3-48YC8, EOS-4.32.1F)"]
+        assert len(detected.notes) == 1
+
+    def test_the_notes_say_what_the_line_does_not_prove(self) -> None:
+        (note,) = eos_detect.detect_deployment(_eos("DCS-7060CX-32S")).notes
+        assert note.startswith("The `! device:` line is a comment")
+        assert "a file can be edited" in note
+        assert "no Arista text read describes the line" in note
+
+    def test_a_release_with_more_after_it(self) -> None:
+        """As a public 7280SR3K-48YC8 config prints an engineering build."""
+        detected = eos_detect.detect_deployment(
+            "! device: sw (DCS-7280SR3K-48YC8, EOS-4.27.0F-24865015.eostrunk.1 (engineering build))\n"
+        )
+        assert _members(detected) == [(None, "DCS-7280SR3K-48YC8", {})]
+        assert detected.evidence == ["! device: \u2026 (DCS-7280SR3K-48YC8, EOS-4.27.0F)"]
+
+    def test_an_ordering_variant_is_read_as_printed(self) -> None:
+        """A public 7050TX-64 config prints its -F."""
+        detected = eos_detect.detect_deployment(_eos("DCS-7050TX-64-F", release="EOS-4.28.3M"))
+        assert _members(detected) == [(None, "DCS-7050TX-64-F", {})]
+
+    def test_a_model_comes_back_in_capitals(self) -> None:
+        detected = eos_detect.detect_deployment("! device: sw (dcs-7060cx-32s, EOS-4.23.1F)\n")
+        assert _members(detected) == [(None, "DCS-7060CX-32S", {})]
+        assert detected.evidence == ["! device: \u2026 (dcs-7060cx-32s, EOS-4.23.1F)"]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "hostname sw\n",
+            "! Command: show running-config\n",
+            "   ! device: sw (DCS-7060CX-32S, EOS-4.23.1F)\n",
+            "!device: sw (DCS-7060CX-32S, EOS-4.23.1F)\n",
+            "! devices: sw (DCS-7060CX-32S, EOS-4.23.1F)\n",
+            "interface Ethernet1\n   description ! device: sw (DCS-7060CX-32S, EOS-4.23.1F)\n",
+        ],
+        ids=["empty", "no hardware line", "the command line alone", "indented", "no space",
+             "another word", "in a description"],
+    )
+    def test_text_that_states_no_device(self, text: str) -> None:
+        assert eos_detect.detect_deployment(text) is None
+
+    def test_windows_line_endings(self) -> None:
+        detected = eos_detect.detect_deployment(_eos("DCS-7060CX-32S").replace("\n", "\r\n"))
+        assert _members(detected) == [(None, "DCS-7060CX-32S", {})]
+        assert detected.evidence == ["! device: \u2026 (DCS-7060CX-32S, EOS-4.32.1F)"]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "! device:",
+            "! device: (DCS-7060CX-32S, EOS-4.23.1F)",
+            "! device: sw DCS-7060CX-32S, EOS-4.23.1F",
+            "! device: sw (DCS-7060CX-32S EOS-4.23.1F)",
+            "! device: sw (DCS-7060CX-32S, 4.23.1F)",
+            "! device: sw (-DCS-7060CX-32S, EOS-4.23.1F)",
+            "! device: sw (" + "D" * 33 + ", EOS-4.23.1F)",
+            "! device: " + "h" * 254 + " (DCS-7060CX-32S, EOS-4.23.1F)",
+        ],
+        ids=["nothing after", "no host name", "no bracket", "no comma", "no EOS-", "a leading hyphen",
+             "a model too long", "a host name too long"],
+    )
+    def test_a_line_no_switch_prints_is_counted_and_left_out(self, line: str) -> None:
+        detected = eos_detect.detect_deployment(f"{line}\n{_EOS_READ}")
+        assert _members(detected) == [(None, "DCS-7280CR3-32P4", {})]
+        assert detected.notes[1].startswith("1 line(s) begin `! device:` and could not be read")
+
+    def test_lines_none_of_which_can_be_read(self) -> None:
+        detected = eos_detect.detect_deployment("! device: sw\n! device: sw (x)\n")
+        assert detected.members == [] and detected.evidence == []
+        assert detected.notes[0].startswith("The config has `! device:` lines, but none could be read")
+        assert detected.notes[1].startswith("2 line(s) begin `! device:`")
+
+    def test_two_models_are_two_switches(self) -> None:
+        detected = eos_detect.detect_deployment(_eos("DCS-7060CX-32S") + _eos("DCS-7050SX-64"))
+        assert detected.members == [] and detected.evidence == []
+        assert detected.notes == [
+            "The config's `! device:` lines name 2 models (DCS-7050SX-64, DCS-7060CX-32S): the "
+            "text is from more than one switch, and no device is proposed.",
+        ]
+
+    def test_one_model_twice_is_one_switch(self) -> None:
+        detected = eos_detect.detect_deployment(_eos("DCS-7060CX-32S") + _eos("dcs-7060cx-32s"))
+        assert _members(detected) == [(None, "DCS-7060CX-32S", {})]
+        assert len(detected.evidence) == 1 and len(detected.notes) == 1
+
+    def test_a_few_models_are_named_and_the_rest_counted(self) -> None:
+        text = "".join(f"! device: sw (DCS-{n:04d}, EOS-4.30.1F)\n" for n in range(12))
+        (note,) = eos_detect.detect_deployment(text).notes
+        assert "name 12 models (DCS-0000, DCS-0001" in note and "DCS-0007 and 4 more)" in note
+
+    def test_a_banners_line_is_text(self) -> None:
+        text = "banner motd\n" + _EOS_READ + "EOF\n" + _eos("DCS-7060CX-32S")
+        assert _members(eos_detect.detect_deployment(text)) == [(None, "DCS-7060CX-32S", {})]
+        assert eos_detect.detect_deployment("banner login\n" + _EOS_READ + "EOF\n") is None
+
+    def test_a_banner_with_no_end_is_not_read_past(self) -> None:
+        with pytest.raises(ParseError):
+            eos_detect.detect_deployment("banner motd\nno end\n" + _eos("DCS-7060CX-32S"))
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "! device: sw (D" + "1" * 31 + ", EOS-4.30.1F)",
+            "! device: " + "h" * 253 + " (DCS-7060CX-32S, EOS-4.30.1F)",
+            "! device: sw (DCS-7060CX-32S, EOS-4" + "." * 31 + ")",
+        ],
+        ids=["a model of 32", "a host name of 253", "a release of 32"],
+    )
+    def test_the_bounds_are_read_up_to(self, line: str) -> None:
+        detected = eos_detect.detect_deployment(line + "\n")
+        assert len(detected.members) == 1 and len(detected.notes) == 1
+
+    @pytest.mark.parametrize(
+        "name",
+        sorted(
+            p.name for p in (REPO_ROOT / "tests/fixtures/real/arista_eos").glob("*.txt")
+            if not p.name.startswith(("lwa_", "dtn_"))
+        ),
+    )
+    def test_a_committed_capture_of_a_switch_no_family_describes(self, name: str) -> None:
+        """Every committed EOS capture but the two a claim cites (which
+        the test of every claim reads) is of a vEOS or a 7150S-64-CL."""
+        raw = (REPO_ROOT / "tests/fixtures/real/arista_eos" / name).read_text(encoding="utf-8")
+        (member,) = eos_detect.detect_deployment(raw).members
+        assert member.part in ("VEOS", "DCS-7150S-64-CL")
+        proposal = propose_deployment(EOS, raw, REGISTRY)
+        assert proposal.deployment is None and proposal.unknown_parts == [member.part]
+        assert f"No model family describes {member.part}" in proposal.notes[0]
+
+
+class TestAristaProposal:
+    def test_a_7060cx_32s(self) -> None:
+        text = _eos(
+            "DCS-7060CX-32S", "Management1", "Ethernet1/1", "Ethernet32/1", "Ethernet33",
+            "Port-Channel1", "Vlan10", "Loopback0",
+        )
+        proposal = propose_deployment(EOS, text, REGISTRY)
+        assert proposal.family == "arista_eos/7060X" and proposal.mode == "standalone"
+        assert proposal.fabric == ""
+        assert proposal.deployment.model_dump() == {
+            "mode": "standalone",
+            "members": [{"model": "DCS-7060CX-32S", "id": None, "modules": {}}],
+        }
+        assert proposal.consistent is True and proposal.used_port_count == 4
+        # 32 + 2 ports, and the management port.
+        assert proposal.inventory.port_count == 35
+
+    def test_an_ordering_variant_is_its_part(self) -> None:
+        proposal = propose_deployment(EOS, _eos("DCS-7050TX-64-F", "Ethernet49/1"), REGISTRY)
+        assert proposal.family == "arista_eos/7050X"
+        assert [m.model for m in proposal.deployment.members] == ["DCS-7050TX-64"]
+        assert proposal.consistent is True
+
+    def test_a_qsfp_port_left_as_four_10g_interfaces(self) -> None:
+        """A 7050X's QSFP+ ports run as four 10G interfaces until lane
+        1 is set to 40G; a port broken out is not modelled."""
+        lanes = [f"Ethernet49/{lane}" for lane in range(1, 5)]
+        proposal = propose_deployment(EOS, _eos("DCS-7050SX-64", "Ethernet1", *lanes), REGISTRY)
+        assert proposal.deployment is not None
+        assert proposal.consistent is False
+        assert proposal.missing_ports == lanes[1:]
+
+    def test_the_proposal_is_accepted_as_a_source_deployment(self) -> None:
+        proposal = propose_deployment(EOS, _eos("DCS-7280CR3-32P4", "Ethernet33/1"), REGISTRY)
+        inventory = compile_deployment(
+            Deployment(vendor="arista_eos", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        assert inventory.family == "arista_eos/7280R3"
+        assert inventory.names()[32:37] == [
+            "Ethernet33/1", "Ethernet34/1", "Ethernet35/1", "Ethernet36/1", "Management1",
+        ]
+
+    def test_missing_ports_are_the_plans_off_inventory(self) -> None:
+        body = _eos("DCS-7050SX-64", "Ethernet1", "Ethernet49/1", "Ethernet49/2", "Ethernet53")
+        proposal = propose_deployment(EOS, body, REGISTRY)
+        declared = compile_deployment(
+            Deployment(vendor="arista_eos", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        job = run_plan_with_models(EOS, EOS, body, declared, declared)
+        off_inventory = job.port_mapping_plan.off_inventory
+        assert sorted(proposal.missing_ports) == sorted(off_inventory) == ["Ethernet49/2", "Ethernet53"]
+
+    def test_a_sub_interface_is_a_unit_of_its_port(self) -> None:
+        """``Ethernet1.2`` rides on ``Ethernet1``: the switch has it
+        where it has the port, and it is no port of its own.  One whose
+        port the switch lacks is missing by the name the config uses,
+        as the plan's ``off_inventory`` lists it."""
+        body = _eos_units("DCS-7050SX-64", "Ethernet1.2", "Ethernet60.4", port="Ethernet1")
+        proposal = propose_deployment(EOS, body, REGISTRY)
+        assert proposal.used_port_count == 2
+        assert proposal.missing_ports == ["Ethernet60.4"]
+        declared = compile_deployment(
+            Deployment(vendor="arista_eos", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        job = run_plan_with_models(EOS, EOS, body, declared, declared)
+        assert job.port_mapping_plan.off_inventory == proposal.missing_ports
+
+    def test_sub_interfaces_of_its_own_ports_leave_a_proposal_consistent(self) -> None:
+        """Even where the port has no stanza of its own: the switch
+        has it.  (A plan with devices declared lists such a unit as
+        off-inventory, since the port is in no pairing for it to
+        follow; EOS prints a stanza for every port, so a config as the
+        switch prints it does not meet that.)"""
+        body = _eos_units("DCS-7050SX-64", "Ethernet1.2", "Ethernet49/1.3")
+        proposal = propose_deployment(EOS, body, REGISTRY)
+        assert proposal.consistent is True and proposal.used_port_count == 2
+
+    @pytest.mark.parametrize("model", ["vEOS", "cEOSLab", "DCS-7504", "DCS-7050QX-32S", "CCS-720XP-48Y6"])
+    def test_a_model_no_family_describes(self, model: str) -> None:
+        """A virtual EOS, a modular chassis, a 7050QX-32S (not
+        modelled) and a campus switch."""
+        proposal = propose_deployment(EOS, _eos(model, "Ethernet1"), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.unknown_parts == [model.upper()]
+        assert f"No model family describes {model.upper()}" in proposal.notes[0]
+
+    def test_text_from_two_switches_proposes_nothing(self) -> None:
+        proposal = propose_deployment(EOS, _eos("DCS-7060CX-32S") + _eos("DCS-7050SX-64"), REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        assert proposal.notes[0].startswith("The config's `! device:` lines name 2 models")
+
+    def test_the_host_name_is_not_in_the_proposal(self) -> None:
+        text = _eos("DCS-7060CX-32S", "Ethernet1/1").replace("leaf1", "rack9-spine")
+        dumped = propose_deployment(EOS, text, REGISTRY).model_dump_json()
+        assert "rack9" not in dumped
+
+
+class TestTheAristaDetectorOnTextMadeToBeSlow:
+    """Each tail is built to make the pattern go back over a run it has
+    already crossed, or to make a note grow with the text.  The detector
+    is called by itself: the parser's cost is not what this pins."""
+
+    PREFIXES = {
+        "nothing stated": "",
+        "a switch": _EOS_READ,
+    }
+    TAILS = {
+        "the opener and spaces": "! device:" + " " * 300_000 + "x",
+        "a long host name": "! device: " + "h" * 300_000,
+        "a host name and spaces": "! device: sw" + " " * 300_000 + "x",
+        "a host name and tabs": "! device: sw" + "\t" * 300_000 + "(",
+        "an open bracket and a long model": "! device: sw (" + "D" * 300_000,
+        "a model of hyphens": "! device: sw (D" + "-" * 300_000 + ",",
+        "a model and spaces": "! device: sw (DCS-7060CX-32S," + " " * 300_000 + "x",
+        "a long release": "! device: sw (DCS-7060CX-32S, EOS-" + "4" * 300_000,
+        "lines that trail off": ("! device: sw" + " " * 3000 + "x\n") * 100,
+        "lines no pattern reads": "! device: sw (x)\n" * 50_000,
+        "many models": "".join(f"! device: sw (DCS-{n}, EOS-4.30.1F)\n" for n in range(50_000)),
+        "one model many times": _EOS_READ * 50_000,
+        "blank lines": "\n" * 300_000,
+        "lines of spaces": "   \n" * 100_000,
+        "the opener again and again": "! device: " * 60_000,
+    }
+
+    @pytest.mark.parametrize("prefix", sorted(PREFIXES))
+    @pytest.mark.parametrize("tail", sorted(TAILS))
+    def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
+        text = self.PREFIXES[prefix] + self.TAILS[tail]
+        detected = _within(5.0, lambda: eos_detect.detect_deployment(text))
+        if detected is not None:
+            assert sum(map(len, detected.notes)) < 4_000
+            assert max(map(len, detected.evidence), default=0) < 100

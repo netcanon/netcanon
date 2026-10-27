@@ -80,6 +80,14 @@ their literal names: a Catalyst stack has one management interface,
 belongs to no member (``member_rank`` ``None``) and comes after every
 member's (:class:`DeploymentPortDef`).
 
+One more serves a grammar that names a port by its LANES (``eos``:
+``Ethernet49/1``).  A group of multi-lane ports states
+``multi_lane: true``, and the rule names each such port by its first
+lane: the state every family under that rule describes is each
+multi-lane port configured as one interface.  A rule that names no
+lane refuses the field (:attr:`NamingRuleSpec.lanes`); a port broken
+out into several interfaces is not modelled yet.
+
 Evidence.  How well a port's name is established is graded with the
 vocabulary of :data:`~netcanon.migration.target_profiles.ProfileEvidence`,
 but not per model: a name is the product of separately evidenced
@@ -98,7 +106,10 @@ those four may be ``capture``: a capture is a checked claim about ONE
 deployment — this model, in this mode, as this member, with these
 modules — so it is **granted**, by a :class:`CaptureClaim` that matches
 exactly, and never inherited by a sibling model, another member id or a
-module the capture does not show.  ``tests/unit/migration/
+module the capture does not show.  A port of the whole deployment is
+granted it only where the deployment IS the claim's, every member
+of it: a capture of one switch does not show the management port of
+a stack it is a member of.  ``tests/unit/migration/
 test_device_models_shipped.py`` re-proves every claim against its
 fixture on every run — which is what the grade means, so only the
 claims that test re-proves grant it (:data:`PROVEN_CAPTURE_CLAIMS`).
@@ -136,6 +147,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StrictInt,
     ValidationError,
     field_validator,
@@ -269,6 +281,12 @@ PROVEN_CAPTURE_CLAIMS: frozenset[ClaimKey] = frozenset({
     ("aruba_aoss/2930M",
      "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg",
      "stacked", (("2930M-40G-8SR-PoEP", 1, (("A", "JL083A"),)),)),
+    ("arista_eos/7060X",
+     "tests/fixtures/real/arista_eos/lwa_dcs_7060cx_32s_eos42014.txt",
+     "standalone", (("DCS-7060CX-32S", None, ()),)),
+    ("arista_eos/7050X3",
+     "tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt",
+     "standalone", (("DCS-7050SX3-48YC8", None, ()),)),
 })
 
 #: The family-file schema this module reads.
@@ -364,6 +382,18 @@ class PortGroup(BaseModel):
     :attr:`speed` — the word is a fact about the NAME, and a speed is
     a fact about the port.  Required by a naming rule that takes one
     (:attr:`NamingRuleSpec.prefixes`), refused by one that does not."""
+
+    multi_lane: StrictBool = False
+    """The port is one of a grammar's MULTI-LANE ports, whose
+    interfaces are named by port and lane: Arista's "Ethernet port
+    #/lane #" (EOS User Manual, "Ethernet Ports").  A family under such
+    a rule describes each multi-lane port configured as ONE interface,
+    which is named by its first lane (``Ethernet49/1``); the lanes of a
+    port broken out are not modelled.  Stated by hand from the vendor's
+    port list, never derived from :attr:`cage`: a QSFP+ port that runs
+    at 40G only is a cage of four lanes with one name and no lane in
+    it.  Refused by a rule that names no lane
+    (:attr:`NamingRuleSpec.lanes`)."""
 
     speed: PortSpeed = ""
     cage: PortCage = ""
@@ -667,6 +697,11 @@ class FamilyDef(BaseModel):
                         f"`prefix`, one of {sorted(rule.prefixes)}; this "
                         f"one states {stated}"
                     )
+                if group.multi_lane and not rule.lanes:
+                    raise ValueError(
+                        f"{owner}: naming rule {self.naming!r} puts no lane "
+                        f"in a name, so a group cannot state `multi_lane`"
+                    )
 
         for sku, module in self.modules.items():
             check_roles(f"module {sku!r}", module.ports)
@@ -863,6 +898,12 @@ class NamingRuleSpec:
     group that states a :attr:`PortGroup.prefix` is refused at load;
     otherwise every group states one of these."""
 
+    lanes: bool = False
+    """Whether this grammar names a multi-lane port by its lane
+    (EOS: ``Ethernet49/1``).  A group that states
+    :attr:`PortGroup.multi_lane` is refused at load by a rule that
+    does not."""
+
 
 def _aoss_rule(request: PortNameRequest) -> str:
     from .codecs.aruba_aoss.port_names import physical_port_name
@@ -914,6 +955,26 @@ def _aoscx_rule(request: PortNameRequest) -> str:
     return vsf_switch_port_name(member=request.member_id, port=request.index0 + 1)
 
 
+def _eos_rule(request: PortNameRequest) -> str:
+    from .codecs.arista_eos.port_names import fixed_switch_port_name
+
+    # An Arista fixed switch stands alone: two of them in an MLAG pair
+    # are two devices, each naming its ports without a member number.
+    if request.member_id is not None:
+        raise ValueError(
+            "an EOS fixed switch names a port without a member number; "
+            "the mode must not state `member_ids`"
+        )
+    if request.slot:
+        raise ValueError(
+            f"an EOS fixed switch has no module; its ports are numbered "
+            f"in one run, and bay {request.slot!r} is not one"
+        )
+    return fixed_switch_port_name(
+        port=request.index0 + 1, multi_lane=request.group.multi_lane,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -947,6 +1008,16 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "which no member owns; it is stated under "
                 "`deployment_ports`"
             ),
+        ),
+        "eos": NamingRuleSpec(
+            render=_eos_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an EOS switch's management interface, `Management1`, is "
+                "not one of its numbered Ethernet ports; it is stated "
+                "under `deployment_ports`"
+            ),
+            lanes=True,
         ),
     }
 
@@ -1263,20 +1334,47 @@ def _member_ports(
     return ports, refs, caveats
 
 
+def _whole_deployment_captured(
+    family: FamilyDef, mode_name: str, members: list[_ResolvedMember],
+) -> str | None:
+    """The fixture of a proven claim whose deployment is the WHOLE of
+    this one: the same mode and the same members, with the same ids
+    and modules, and no other.  A port of the deployment as a whole
+    is shown by a capture of that deployment and of no other: a claim
+    of one switch says nothing of the management port of a stack it
+    is a member of."""
+    for claim in family.captures:
+        if claim.mode != mode_name:
+            continue
+        _, claimed = _resolve_in_family(family, claim.mode, claim.members)
+        key = _claim_key(family, claim, claimed)
+        if key in PROVEN_CAPTURE_CLAIMS and key == _claim_key(family, claim, members):
+            return claim.fixture
+    return None
+
+
 def _deployment_ports(
     family: FamilyDef, refs: list[str], caveats: list[str],
+    fixture: str | None = None,
 ) -> list[PhysicalPort]:
     """The ports of the deployment as a whole, once, after every
     member's: no member rank, no member id, and an ordinal of their
     own per role.  Their references and caveats are added to *refs*
-    and *caveats*."""
+    and *caveats*.  With the *fixture* of a proven claim of the whole
+    deployment (:func:`_whole_deployment_captured`) they are graded
+    ``capture`` and cite it: the capture shows each name, which is all
+    the naming fact said, so its reference and caveat are retired, as
+    a member's are."""
     ports: list[PhysicalPort] = []
     next_ordinal: dict[str, int] = {}
     for index, port in enumerate(family.deployment_ports):
         ordinal = next_ordinal.get(port.role, 0)
         next_ordinal[port.role] = ordinal + 1
-        refs.append(port.naming.ref)
-        caveats.append(port.naming.caveat)
+        if fixture is not None:
+            refs.append(fixture)
+        else:
+            refs.append(port.naming.ref)
+            caveats.append(port.naming.caveat)
         ports.append(PhysicalPort(
             name=port.name,
             member_rank=None,
@@ -1290,7 +1388,7 @@ def _deployment_ports(
             cage=port.cage,
             poe=port.poe,
             notes=port.notes,
-            evidence=port.naming.grade,
+            evidence="capture" if fixture is not None else port.naming.grade,
         ))
     return ports
 
@@ -1365,7 +1463,9 @@ def _compile(
         if member.member_id is not None:
             part += f" as member {member.member_id}"
         parts.append(part)
-    ports.extend(_deployment_ports(family, refs, caveats))
+    ports.extend(_deployment_ports(
+        family, refs, caveats, _whole_deployment_captured(family, mode_name, members),
+    ))
     if mode_defaulted and len(family.modes) > 1:
         caveats.append(
             f"No deployment mode was stated; {family.display()} was "

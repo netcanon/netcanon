@@ -361,7 +361,8 @@ Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation ca
 `netcanon/api/routes/_migration_helpers.py`, `netcanon/migration/deployment_detect.py`,
 `netcanon/migration/codecs/aruba_aoss/deployment_detect.py`,
 `netcanon/migration/codecs/aruba_aoscx/deployment_detect.py`,
-`netcanon/migration/codecs/cisco_iosxe_cli/deployment_detect.py`
+`netcanon/migration/codecs/cisco_iosxe_cli/deployment_detect.py`,
+`netcanon/migration/codecs/arista_eos/deployment_detect.py`
 
 A plan or inventory request may declare a device: a model family, a mode,
 members and modules.  The declaration only ever selects among entries the
