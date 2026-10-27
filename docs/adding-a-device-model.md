@@ -43,9 +43,11 @@ rule** per naming grammar — not per product line.  Every AOS-S
 fixed-port switch is the single `aoss` rule
 (`physical_port_name` in
 [`codecs/aruba_aoss/port_names.py`](../netcanon/migration/codecs/aruba_aoss/port_names.py)),
-and every Catalyst stackable the `catalyst` rule (`catalyst_port_name`
+every Catalyst stackable the `catalyst` rule (`catalyst_port_name`
 in
-[`codecs/cisco_iosxe_cli/port_names.py`](../netcanon/migration/codecs/cisco_iosxe_cli/port_names.py)).
+[`codecs/cisco_iosxe_cli/port_names.py`](../netcanon/migration/codecs/cisco_iosxe_cli/port_names.py)),
+and every CX 6200 and 6300 the `aoscx` rule (`vsf_switch_port_name` in
+[`codecs/aruba_aoscx/port_names.py`](../netcanon/migration/codecs/aruba_aoscx/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -291,9 +293,10 @@ cites, the deployment the claim states; it is handed text made to be
 slow; and a vendor whose ports keep a factory name is refused until the
 check in `propose_deployment` does for it what a translation does.
 Those slow texts state no device, so they stop at the detector's first
-patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`
-and `TestTheCatalystDetectorOnTextMadeToBeSlow` do) with a device
-stated and a tail made for each pattern.
+patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`,
+`TestTheCatalystDetectorOnTextMadeToBeSlow` and
+`TestTheAoscxDetectorOnTextMadeToBeSlow` do) with a device stated and
+a tail made for each pattern.
 
 ### A new naming grammar
 

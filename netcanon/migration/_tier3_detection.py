@@ -108,6 +108,44 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     # Port-Channels were dual-homed can.
     re.compile(r"^mlag configuration\b", re.MULTILINE),
     re.compile(r"^[^\S\n]+mlag\s+\d+\s*$", re.MULTILINE),
+    # A Catalyst stack's own lines: `switch N provision <type>` (a
+    # switch that is alone prints it too, as a stack of one) and
+    # `switch N priority`; StackPower (`stack-power stack <name>`,
+    # `stack-power switch N`); and StackWise Virtual
+    # (`stackwise-virtual` with its `domain`, and `stackwise-virtual
+    # link N` / `stackwise-virtual dual-active-detection` INDENTED
+    # under the interfaces that carry the pair).  None has a canonical
+    # surface: a stack is declared as the deployment of a model
+    # family, which makes its port names right, and its own lines are
+    # not written.  Until 2026-10 they were dropped with no row.  Kept
+    # whole: the switch number and the type say which member was
+    # provisioned as what, and an indented line keeps its link number,
+    # as `mlag N` keeps its bundle.  No other grammar this table
+    # serves has these lines.
+    re.compile(r"^switch[ \t]+\d+[ \t]+(?:provision|priority)\b.*$", re.MULTILINE),
+    re.compile(r"^stack-power\b.*$", re.MULTILINE),
+    re.compile(r"^stackwise-virtual\b.*$", re.MULTILINE),
+    re.compile(
+        r"^[^\S\n]+stackwise-virtual[ \t]+(?:link[ \t]+\d+|dual-active-detection)\b",
+        re.MULTILINE,
+    ),
+)
+
+# Aruba AOS-S -- the set above (AOS-S has the Cisco-derived ACL
+# grammar), and the contexts the parser reads nothing of: the stack's
+# (`stacking`, a 2930M's or 3810M's backplane stack; `vsf`, a
+# 2930F's or 5400R's fabric) and the out-of-band management port's
+# (`oobm`, its addresses, a member's included).  Until 2026-10 they
+# were dropped with no row.  The label is the context's word alone:
+# a member's line under `stacking` or `vsf` carries the member's MAC
+# address, and a row is painted on a page and returned to every
+# client.  In any letter case, as the parser takes the header.  The
+# word ends at white space or the end of the line, so a one-line form
+# (`oobm ip address ...`) is taken by its word too, and a longer word
+# that begins with one of these (`stacking-port`) is not, as `\b`
+# would take it.
+_AOSS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^(?:stacking|vsf|oobm)(?!\S)", re.MULTILINE | re.IGNORECASE),
 )
 
 # FortiOS shape — `config <path>` headers for sections the FortiGate
@@ -227,12 +265,21 @@ _IOSXR_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
 # `interface`, `vlan`, `vrf`, `ip route`, `hostname` (parsed) and the
 # deferred Tier-2 `evpn` / `vsx` / `interface vxlan` blocks (which have
 # planned canonical surfaces, so flagging them as Tier-3 would mislead).
+#
+# `vsf` is a CX 6200's or 6300's stack (`vsf member N`, with the
+# `type` and `link` lines indented under it, `vsf secondary-member`,
+# `vsf split-detect`).  It has no canonical surface -- a stack is
+# declared as the deployment of a model family, and its port names
+# are made right; its own lines are not written -- so each line is a
+# row, kept whole: the member number says which block was left out.
+# The indented lines are under their header's row.
 _AOSCX_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^router (?:bgp|ospf|ospfv3|rip|pim)\b.*$", re.MULTILINE),
     re.compile(r"^access-list (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
     re.compile(r"^route-map\s+\S+", re.MULTILINE),
     re.compile(r"^class (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
     re.compile(r"^policy\s+\S+", re.MULTILINE),
+    re.compile(r"^vsf\b.*$", re.MULTILINE),
 )
 
 # VyOS curly-brace shape — block openers for the routing-protocol / NAT /
@@ -345,6 +392,13 @@ def detect_tier3_sections_iosxe_cli(raw: str) -> list[str]:
         the input contains no Tier-3 stanzas.
     """
     return _detect_regex(raw, _IOSXE_TIER3_HEADERS)
+
+
+def detect_tier3_sections_aoss(raw: str) -> list[str]:
+    """Detect Tier-3 stanza headers in Aruba AOS-S CLI text: those
+    :func:`detect_tier3_sections_iosxe_cli` detects, then AOS-S's own
+    (``stacking``, ``vsf``, ``oobm``), each by its word."""
+    return _detect_regex(raw, _IOSXE_TIER3_HEADERS + _AOSS_TIER3_HEADERS)
 
 
 def detect_tier3_sections_fortios(raw: str) -> list[str]:

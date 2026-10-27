@@ -145,6 +145,11 @@ Deliberately deferred to [Tier
   `dropped_tier3_sections` banner; not auto-rendered)
 - **ACLs** — standard / extended
 - **QoS** — `class` / `policy` / `apply qos`
+- **VSF** — a CX 6200's or 6300's stack lines (`vsf member` with
+  its `type` and `link` lines, `vsf secondary-member`, `vsf
+  split-detect`): each line is a row of the
+  `dropped_tier3_sections` banner.  The stack itself is declared as
+  the deployment of a model family, which makes its port names right
 - **NAT** — AOS-CX does not host typical edge NAT
 
 If your migration involves these surfaces, plan to hand-translate
@@ -363,12 +368,32 @@ translate it again from `show running-config` as the switch prints it.
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2
   model engages only when the port opts out of routing.
-- **Declaring an AOS-CX switch as the source device** — no model
-  family describes an AOS-CX switch yet, so it is declared through a
-  target profile.  The shipped 6300M profile lists no management
-  port, so a config that uses `interface mgmt` reports it as
-  off-inventory and the job is `partial`.  See
-  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
+- **Declaring a CX 6300 or 6200 as the source or target device** —
+  each is a model family with one mode, `vsf`: a stack of up to ten
+  6300s (the 6300M and 6300F models HPE's VSF guide lists for `type`,
+  JL658A to JL668A and JL762A) or up to eight 6200s (the 6200M and
+  6200F).  A port is `<member>/1/<port>`, and a switch that is alone
+  is member 1 ("If the switch is not a member of a VSF stack, then
+  member is 1"), so its ports are `1/1/1` on.  The stack's one
+  management interface, `mgmt`, belongs to no member and pairs with
+  the other side's management port.  A 6300 and a 6200 do not stack
+  together.  The four uplinks are numbered by HPE (`1/1/49-52` on a
+  48-port model); that the RJ45 ports before them are `1/1/1-48` is
+  `inferred` on every model, since no HPE text read numbers them (the
+  JL658A's SFP+ ports are numbered).  The 6300L, the models whose
+  ports or uplinks are of two kinds, the QSFP28 models and the TAA
+  twins are not modelled; the families' files list them.  The source
+  members are read from the config's `vsf member N` blocks (the `type`
+  line under each is "The part number of the member being
+  provisioned", HPE's VSF guide for the 6200 and 6300), and a switch
+  that is alone prints the block too.  The `vsf` lines themselves are
+  not translated: onto any target, AOS-CX included, the output has no
+  `vsf` line, and the job lists each among the sections it did not
+  translate (`vsf member 1`, `vsf split-detect mgmt`).  Another AOS-CX
+  switch (a 6400, an 8xxx) is declared
+  through a target profile.  The shipped 6300M profile lists `mgmt`,
+  and is graded `inferred` for the reason its family's JL661A is.
+  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **A routed sub-interface loses its tag.**  A stanza named
   `interface 1/1/1.54` is read as an interface of that name; its
   `encapsulation dot1q` line is not read.  Onto another vendor it

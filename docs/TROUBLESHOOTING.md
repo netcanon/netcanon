@@ -1030,7 +1030,8 @@ range, more members than the mode allows); the lines that state the
 hardware could not be read -- a banner the parser cannot tell from
 the configuration (on AOS-S a `banner motd` with no end, with text
 after its closing quote, or whose text holds a quote; on a Catalyst,
-any the IOS-XE parser refuses; see [The job says `parse failed:` for a
+any the IOS-XE parser refuses; on AOS-CX, a banner with no end; see
+[The job says `parse failed:` for a
 banner](#the-job-says-parse-failed-for-a-banner)); or the vendor has
 no detector yet.  A proposal from a C9300 config is `consistent:
 false` and lists the module ports: no line of the config states the

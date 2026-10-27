@@ -588,6 +588,37 @@ timestamp if your timezone matters for an audit.
   whether one prints a `switch N provision` line is not established:
   `detect-deployment` reads `switch N provision c9500-40x` as a
   C9500-40X.
+- **The Aruba CX 6300 and CX 6200 can be declared as a source or
+  target device, and `detect-deployment` reads an AOS-CX config's
+  `vsf member` blocks.**  Two model families, each with one mode,
+  `vsf`: `6300`, the twelve 6300M and 6300F models HPE's VSF guide
+  lists for `type` (JL658A to JL668A and JL762A), a stack of up to
+  ten; and `6200`, the 6200M (R8Q67A to R8Q70A) and 6200F (JL724A/B to
+  JL728A/B, S0M81A to S0M85A), a stack of up to eight.  A port's name
+  is `<member>/1/<port>`: "If the switch is not a member of a VSF
+  stack, then member is 1", and the slot is "Always 1" (VSF guide,
+  Identifying switch ports and interfaces).  The stack's one
+  management interface is `mgmt`, which belongs to no member.  A 6300
+  and a 6200 are two families and cannot share a deployment.  HPE
+  numbers each model's four uplinks (`1/1/49-52` on a 48-port model)
+  and no text read numbers its RJ45 ports, so every panel but the
+  JL658A's, whose SFP+ ports HPE numbers 1-24, is graded `inferred`
+  and says why.  Not modelled, and named in each family's file: the
+  6300L, the 6300 models whose ports or uplinks are of two kinds, the
+  QSFP28 models, the TAA twins, the 6200's R8Q71A and R8Q72A, and
+  which ports a VSF link uses.  A config states each member's part
+  number on the `type` line under `vsf member N` ("The part number of
+  the member being provisioned"), and a switch that is alone prints
+  the block too (Aruba's own template for a standalone JL728A has
+  `vsf member 1`); detection reads those blocks, the members by member
+  number.  The line shows what a member is provisioned as, not that
+  the switch is in the stack, and the notes say so.  No configuration
+  of a 6200 or 6300 was seen.  The 6300M target profile
+  (`aruba_aoscx/6300M-48G-PoE4-SFP56`) lists `mgmt` now, so the
+  `interface mgmt` of a config is no longer reported as off-inventory,
+  and is graded `inferred` (it was `vendor-doc`), as the family grades
+  its JL661A: HPE numbers its SFP56 uplinks, and no HPE text read
+  numbers its RJ45 ports.  Its notice is amber.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both
@@ -819,6 +850,25 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A stack's own lines are listed among the sections not
+  translated.**  A CX 6200's or 6300's stack lines (`vsf member N`
+  with its `type` and `link` lines, `vsf secondary-member`, `vsf
+  split-detect`) have no canonical surface, and the parser read
+  nothing of them: onto any target, AOS-CX included, the output had
+  no `vsf` line, and the job said `completed` with no row for them.
+  Each such line is a row of `dropped_tier3_sections` now (`vsf
+  member 1`), so the page's "detected but not translated" banner
+  names it; the status is as it was, a row being a section to apply
+  by hand.  A banner's lines are not read for it.  The other stacks'
+  lines were dropped the same way, and are rows too: a Catalyst's
+  `switch N provision` and `switch N priority`, StackPower
+  (`stack-power`) and StackWise Virtual (`stackwise-virtual`, and
+  the `stackwise-virtual link` and `dual-active-detection` lines
+  under an interface), each kept whole; and an AOS-S `stacking`,
+  `vsf` or `oobm` stanza, by its word alone, since a member's lines
+  in it carry the member's MAC address.  The model families' caveats
+  say so.  Guarded by `TestArubaAOSCXVSF`, `TestArubaAOSSStack` and
+  `TestCatalystStack` in `tests/unit/migration/test_tier3_detection.py`.
 - **What goes with a dropped name is said, where no devices are
   declared.**  The port translator removes, with a name it drops, a
   static route out of it, a DHCP pool on it, a VRRP track entry of

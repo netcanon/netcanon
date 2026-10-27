@@ -50,8 +50,8 @@ def _settings(tmp_path) -> Settings:
     # least one device definition to render.
     defs = tmp_path / "definitions"
     shutil.copytree(LIBRARY_DIR, defs)
-    # Plus one synthetic profile graded `inferred`: no shipped profile
-    # carries that grade, and the caveat path still has to be proven.
+    # Plus one synthetic profile graded `inferred`, whose caveat the
+    # test knows: the caveat path is proven on it.
     shutil.copyfile(
         UNVERIFIED_PROFILE_YAML,
         defs / "target_profiles" / UNVERIFIED_PROFILE_YAML.name,
@@ -105,9 +105,14 @@ class TestProfileProvenanceServedByEmbeddedServer:
         assert c9300["deployment_state"]
 
         # An unverified profile carries the caveat the operator must see.
-        # Only the synthetic one is graded `inferred`: nothing shipped is.
+        # The shipped ones graded `inferred` are KNOWN_DOUBTFUL in
+        # tests/unit/migration/test_target_profile_evidence.py.
         inferred = {k for k, p in by_key.items() if p["evidence"] == "inferred"}
-        assert inferred == {UNVERIFIED_PROFILE_KEY}
+        assert inferred == {
+            UNVERIFIED_PROFILE_KEY, "aruba_aoscx/6300M-48G-PoE4-SFP56",
+        }
+        for key in inferred:
+            assert by_key[key]["caveat"], key
         assert by_key[UNVERIFIED_PROFILE_KEY]["caveat"] == UNVERIFIED_PROFILE_CAVEAT
 
         # The rename modal ships the element that renders them, and the

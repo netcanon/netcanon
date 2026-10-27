@@ -11,7 +11,7 @@ tests/
 │   ├── definitions.py       Pre-built DeviceDefinition factory functions
 │   ├── ssh_responses.py     Canned SSH output strings per vendor
 │   ├── module_variants.py   Canonical module-variant allowlist shared with integration tier
-│   ├── target_profiles/     Synthetic target profiles (never shipped) for grades no shipped profile carries
+│   ├── target_profiles/     Synthetic target profiles (never shipped), whose grade and caveat the tests know
 │   ├── synthetic/<vendor>/  Hand-crafted minimal configs per vendor (parser-feature focus)
 │   ├── real/<vendor>/       Real-capture corpus + RESULTS.md + NOTICE.md + CROSS_MESH_RESULTS.md
 │   ├── refused/<vendor>/    Real captures their own codec refuses, kept as the evidence (in no corpus walk)

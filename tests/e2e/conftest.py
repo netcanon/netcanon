@@ -106,9 +106,9 @@ def _e2e_definitions_dir(tmp_path_factory) -> Path:
     if repo_profiles.is_dir():
         import shutil
         shutil.copytree(repo_profiles, defs_dir / "target_profiles")
-        # Plus one synthetic profile graded `evidence: inferred`.  No
-        # shipped profile carries that grade, so without it nothing
-        # would exercise the rename modal's amber "not verified" notice.
+        # Plus one synthetic profile graded `evidence: inferred`, so
+        # that the rename modal's amber "not verified" notice is
+        # exercised whatever the shipped profiles are graded.
         from tests.fixtures.target_profiles import UNVERIFIED_PROFILE_YAML
         shutil.copyfile(
             UNVERIFIED_PROFILE_YAML,

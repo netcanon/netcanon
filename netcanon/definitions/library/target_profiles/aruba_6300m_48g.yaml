@@ -10,24 +10,31 @@
 # so the names are the same standalone and as VSF member 1.  AOS-CX
 # has no letter slots.  Other VSF members are N/1/port.
 #
+# The out-of-band management port is `mgmt`, one interface for a
+# whole VSF stack (only the conductor's is given an address).
+#
 # Stacking is VSF, up to 10 members.  (VSX is a separate two-switch
 # high-availability feature, not stacking; it does not change port
 # names.)
 #
-# Validation: vendor documentation -- no 6300 capture is committed (the
-# AOS-CX fixtures in this repo are all 8xxx-class).
+# Validation: inferred.  HPE numbers the four SFP56 ports (49-52), and
+# no HPE text read numbers the 48 RJ45 ports, so that they are 1-48 is
+# inferred -- as the `6300` model family grades its JL661A.  No 6300
+# capture is committed (the AOS-CX fixtures in this repo are all
+# 8xxx-class).
 vendor: aruba_aoscx
 model: 6300M-48G-PoE4-SFP56
 display_name: "Aruba CX 6300M 48G Class 4 PoE 4SFP56 (JL661A)"
 device_class: switch
 stacking: vsf
 deployment_state: "standalone or VSF member 1 (the names are identical on AOS-CX)"
-evidence: vendor-doc
-evidence_ref: "AOS-CX 10.14 Fundamentals Guide 6300/6400 (member/slot/port); AOS-CX 10.14 VSF Guide (JL661A ports 49 and 50 reserved for auto-stacking); HPE Japan CX 6300 system configuration guide (JL661A ports 49-52 are SFP56); CX 6300 QuickSpecs a00073540enw v46"
-caveat: "In a VSF stack the ports assigned to VSF links (1/1/49 and 1/1/50 under auto-stacking) cannot carry port configuration. Other stack members are N/1/port."
+evidence: inferred
+evidence_ref: "AOS-CX 10.14 Fundamentals Guide 6300/6400 (member/slot/port); AOS-CX 10.14 VSF Guide (JL661A ports 49 and 50 reserved for auto-stacking); HPE Japan CX 6300 system configuration guide (JL661A ports 49-52 are SFP56); CX 6300 QuickSpecs a00073540enw v46; AOS-CX 10.18 VSF Guide 6200/6300, Management interface (mgmt, one per stack)"
+caveat: "That the 48 RJ45 ports are 1/1/1-1/1/48 is inferred: HPE numbers this model's four SFP56 ports 49-52 (HPE Japan's CX 6300 system configuration guide), and no HPE text read numbers its RJ45 ports. In a VSF stack the ports assigned to VSF links (1/1/49 and 1/1/50 under auto-stacking) cannot carry port configuration. Other stack members are N/1/port."
 ports:
   - {range: "1/1/1-1/1/48", kind: physical, speed: gig, poe: true}
   - {range: "1/1/49-1/1/52", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 1/10/25/50G uplink"}
+  - {id: "mgmt", kind: mgmt, notes: "OOBM RJ-45; one interface per VSF stack"}
 # AOS-CX writes a LAG as `interface lag N` -- with a space.  The rename
 # modal builds LAG options as prefix + number, so the prefix carries
 # the trailing space: `lag1` is not a name the aruba_aoscx codec, or

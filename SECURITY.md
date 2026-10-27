@@ -360,6 +360,7 @@ Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation ca
 **Files:** `netcanon/models/port_inventory.py`, `netcanon/migration/device_models.py`,
 `netcanon/api/routes/_migration_helpers.py`, `netcanon/migration/deployment_detect.py`,
 `netcanon/migration/codecs/aruba_aoss/deployment_detect.py`,
+`netcanon/migration/codecs/aruba_aoscx/deployment_detect.py`,
 `netcanon/migration/codecs/cisco_iosxe_cli/deployment_detect.py`
 
 A plan or inventory request may declare a device: a model family, a mode,
@@ -474,8 +475,9 @@ those patterns are bounded in what they take, each line is matched by itself,
 and none is applied to a fragment of unbounded length (two of the AOS-S
 detector's are applied to the banner's id, which is at most thirty-two
 characters; the Catalyst detector has one pattern, for a `switch N
-provision` line): the detector's work grows with the length of the text and
-no faster.  Each reads the lines with a banner's text emptied, as its
+provision` line, and the AOS-CX detector two, for a `vsf member N` line and
+the `type` line under it, each matched against one line): the detector's
+work grows with the length of the text and no faster.  Each reads the lines with a banner's text emptied, as its
 parser does, so a banner's words are not hardware.  (The parser's own cost on that text is the same as on a plan
 request.)  The answer quotes the hardware lines only as far as the part
 number — a member line's MAC address comes after it and is never read — and

@@ -910,6 +910,38 @@ for _model, _access_names in _C9500_PANELS.items():
             list(_access_names), list(_uplinks),
         )
 
+# Aruba CX 6300 and 6200, typed from HPE's tables: the twelve 6300s
+# HPE's VSF guide lists for `type`, and the 6200s.  Each has its RJ45
+# (or, on a JL658A, SFP+) ports and then four uplinks, member 1 alone.
+_X = "aruba_aoscx"
+_CX6300_PARTS = (
+    "JL658A", "JL659A", "JL660A", "JL661A", "JL662A", "JL663A", "JL664A",
+    "JL762A", "JL665A", "JL666A", "JL667A", "JL668A",
+)
+_CX6200_PARTS = (
+    "R8Q67A", "R8Q68A", "R8Q69A", "R8Q70A",
+    "JL724A", "JL724B", "JL725A", "JL725B", "JL726A", "JL726B",
+    "JL727A", "JL727B", "JL728A", "JL728B",
+    "S0M81A", "S0M82A", "S0M83A", "S0M84A", "S0M85A",
+)
+_AOSCX_ACCESS_PORTS: dict[int, tuple[str, ...]] = {
+    24: (
+        "JL658A", "JL660A", "JL662A", "JL664A", "JL666A", "JL668A",
+        "R8Q67A", "R8Q68A", "JL724A", "JL724B", "JL725A", "JL725B",
+        "S0M81A", "S0M82A",
+    ),
+    48: (
+        "JL659A", "JL661A", "JL663A", "JL762A", "JL665A", "JL667A",
+        "R8Q69A", "R8Q70A", "JL726A", "JL726B", "JL727A", "JL727B",
+        "JL728A", "JL728B", "S0M83A", "S0M84A", "S0M85A",
+    ),
+}
+for _access, _parts in _AOSCX_ACCESS_PORTS.items():
+    for _part in _parts:
+        EXPECTED_INVENTORIES[(_X, _part, "vsf", ())] = (
+            _run(1, _access, "1/1/"), _run(_access + 1, 4, "1/1/"),
+        )
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -928,6 +960,8 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "cisco_iosxe/C2960XR": ["FastEthernet0"],
     "cisco_iosxe/C3750X": ["FastEthernet0"],
     "cisco_iosxe/C9500": ["GigabitEthernet0/0"],
+    "aruba_aoscx/6300": ["mgmt"],
+    "aruba_aoscx/6200": ["mgmt"],
 }
 
 
@@ -1112,6 +1146,7 @@ _UNCLASSIFIED_BARE_LETTER = re.compile(r"^[A-Z]\d+$")
 _CODEC_OF_RULE: dict[str, str] = {
     "aoss": "aruba_aoss",
     "catalyst": "cisco_iosxe_cli",
+    "aoscx": "aruba_aoscx",
 }
 
 
@@ -1154,6 +1189,9 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                 assert identity.stack == port.member_id, where
                 if family.naming == "catalyst":
                     assert identity.module == int(port.slot or "0"), where
+                elif family.naming == "aoscx":
+                    # The slot is always 1: the switch is not modular.
+                    assert (identity.module, port.slot) == (1, ""), where
                 else:
                     assert identity.subslot_letter == port.slot, where
                 assert identity.port == port.index + 1, where
@@ -1195,6 +1233,7 @@ PROFILE_AGREES_WITH: dict[str, dict] = {
             "C9300-48P", "C9300-48U", "C9300-48UXM",
         )
     },
+    "aruba_aoscx/6300M-48G-PoE4-SFP56": {"mode": "vsf", "members": [{"model": "JL661A", "id": 1}]},
 }
 
 _PART_NUMBER = re.compile(r"\(([A-Z0-9-]+)\)")
@@ -1575,6 +1614,8 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
             *_C9500_PANELS,
         )
     },
+    # Aruba CX 6300 and 6200: the part number is the model key.
+    **{(_X, part): part for part in (*_CX6300_PARTS, *_CX6200_PARTS)},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -1652,6 +1693,11 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "cisco_iosxe/C9500 / panel / C9500-16X",
     "cisco_iosxe/C9500 / panel / C9500-40X",
     "cisco_iosxe/C9500 / module / C9500-NM-8X",
+    # An Aruba CX 6300's or 6200's RJ45 ports: HPE numbers the four
+    # uplinks after them, and no text read numbers the RJ45 ports
+    # themselves.  A JL658A's SFP+ ports are numbered (1-24).
+    *(f"aruba_aoscx/6300 / panel / {part}" for part in _CX6300_PARTS if part != "JL658A"),
+    *(f"aruba_aoscx/6200 / panel / {part}" for part in _CX6200_PARTS),
 }
 
 
@@ -2805,3 +2851,133 @@ class TestCiscoC9300L:
             powered = re.search(r"-\d+T-", key) is None
             assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
             assert not any(g.poe for g in model.ports if g.role == "uplink"), key
+
+
+# What the two families leave out, as their files name it: a part named
+# here is in the file's text, and resolves to no model.
+_CX6300_NOT_MODELLED = (
+    "S3L75A", "S3L76A", "S3L77A",
+    "S4P41A", "S4P42A", "R8S91A", "S6X58A",
+    "R8S89A", "R8S90A", "R8S92A", "S4P43A", "S4P44A", "S6X59A", "S6X60A",
+    "S0E91A", "S0E92A", "S4P45A", "S4P49A", "R9F63A",
+    "S0F99A", "S0G00A", "S0G06A", "S0G95A", "S0G98A", "S0X44A",
+)
+_CX6200_NOT_MODELLED = (
+    "R8Q71A", "R8Q72A", "R8V08A", "R8V13A", "S0M86A", "S0M90A", "S0G13A", "S0G17A",
+)
+
+
+class TestArubaCX6300And6200:
+    """An Aruba CX 6300 or 6200 is a fixed-port switch, alone or one of a
+    VSF stack (up to ten 6300s, up to eight 6200s), whose ports are named
+    ``<member>/1/<port>``, and whose stack has one management interface,
+    ``mgmt``.  HPE numbers each model's four uplinks; that the RJ45 ports
+    before them are 1-24 or 1-48 is inferred, and says so."""
+
+    CX6300 = REGISTRY.families["aruba_aoscx/6300"]
+    CX6200 = REGISTRY.families["aruba_aoscx/6200"]
+
+    def test_the_models(self) -> None:
+        assert list(self.CX6300.models) == list(_CX6300_PARTS)
+        assert list(self.CX6200.models) == list(_CX6200_PARTS)
+        typed = [part for parts in _AOSCX_ACCESS_PORTS.values() for part in parts]
+        assert sorted(typed) == sorted((*_CX6300_PARTS, *_CX6200_PARTS))
+        assert not self.CX6300.modules and not self.CX6200.modules
+        for family in (self.CX6300, self.CX6200):
+            for key, model in family.models.items():
+                assert model.skus == [key] and not model.bays, key
+                assert f"({key})" in model.display_name, key
+
+    @pytest.mark.parametrize("part", [*_CX6300_NOT_MODELLED, *_CX6200_NOT_MODELLED])
+    def test_what_is_not_modelled_is_not_resolved(self, part: str) -> None:
+        assert REGISTRY.resolve("aruba_aoscx", part) is None
+
+    def test_what_is_not_modelled_is_said(self) -> None:
+        for name, parts in (
+            ("aruba_aoscx_6300.yaml", _CX6300_NOT_MODELLED),
+            ("aruba_aoscx_6200.yaml", _CX6200_NOT_MODELLED),
+        ):
+            text = (FAMILIES_DIR / name).read_text(encoding="utf-8")
+            for part in parts:
+                assert part in text, (name, part)
+
+    def test_the_stacks(self) -> None:
+        """VSF, Identifying switch ports and interfaces: a 6300's member
+        is 1 to 10, a 6200's 1 to 8, and a switch that is alone is
+        member 1."""
+        assert list(self.CX6300.modes) == ["vsf"] and list(self.CX6200.modes) == ["vsf"]
+        assert self.CX6300.modes["vsf"].member_ids == (1, 10)
+        assert self.CX6200.modes["vsf"].member_ids == (1, 8)
+        alone = _compile("aruba_aoscx", None, {"model": "JL728A"})
+        assert (alone.mode, alone.mode_defaulted) == ("vsf", True)
+        assert alone.names()[0] == "1/1/1"
+        assert _compile("aruba_aoscx", "vsf", {"model": "JL661A", "id": 10}).names()[0] == "10/1/1"
+        with pytest.raises(Exception, match="outside 1-10"):
+            _compile("aruba_aoscx", "vsf", {"model": "JL661A", "id": 11})
+        with pytest.raises(Exception, match="outside 1-8"):
+            _compile("aruba_aoscx", "vsf", {"model": "JL728A", "id": 9})
+
+    def test_the_type_commands_example(self) -> None:
+        """VSF's example of the `type` command: member 1 a JL661A, member
+        2 a JL662A."""
+        inventory = _compile(
+            "aruba_aoscx", "vsf", {"model": "JL661A", "id": 1}, {"model": "JL662A", "id": 2},
+        )
+        assert inventory.names(role="access") == [*_run(1, 48, "1/1/"), *_run(1, 24, "2/1/")]
+        assert inventory.names(role="uplink") == [*_run(49, 4, "1/1/"), *_run(25, 4, "2/1/")]
+        assert inventory.names(role="mgmt") == ["mgmt"]
+
+    def test_the_one_virtual_device_example(self) -> None:
+        """VSF's example of two JL666A: `link 1 2/1/25` is an SFP56 port
+        of member 2, and `interface 2/1/1` one of its RJ45 ports."""
+        inventory = _compile(
+            "aruba_aoscx", "vsf", {"model": "JL666A", "id": 1}, {"model": "JL666A", "id": 2},
+        )
+        ports = {p.name: p for p in inventory.ports}
+        assert (ports["2/1/25"].role, ports["2/1/25"].speed, ports["2/1/25"].cage) == (
+            "uplink", "50gig", "sfp56",
+        )
+        assert (ports["2/1/1"].role, ports["2/1/1"].speed) == ("access", "gig")
+
+    def test_a_standalone_jl728a_has_the_ports_arubas_template_names(self) -> None:
+        """Aruba's onboarding template for a standalone JL728A (aruba/
+        central-python-workflows) configures `interface mgmt` and every
+        one of 1/1/1 to 1/1/52."""
+        inventory = _compile("aruba_aoscx", "vsf", {"model": "JL728A"})
+        assert sorted(inventory.names()) == sorted(["mgmt", *(f"1/1/{n}" for n in range(1, 53))])
+
+    def test_a_6200_and_a_6300_are_two_families(self) -> None:
+        """VSF, Interoperation: stacking is not supported across switch
+        families."""
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("aruba_aoscx", "vsf", {"model": "JL728A"}, {"model": "JL661A", "id": 2})
+
+    def test_poe(self) -> None:
+        """HPE's names say which models power their RJ45 ports; no
+        uplink is powered."""
+        for family in (self.CX6300, self.CX6200):
+            for key, model in family.models.items():
+                powered = "PoE" in model.display_name
+                assert {g.poe for g in model.ports if g.role == "access"} == {powered}, key
+                assert not any(g.poe for g in model.ports if g.role == "uplink"), key
+
+    def test_the_uplinks(self) -> None:
+        """A 6300's four uplinks are SFP56, 50G; a 6200's SFP+, 10G, but
+        an S0M81A to S0M85A's, which are 1G SFP."""
+        for family in (self.CX6300, self.CX6200):
+            for key, model in family.models.items():
+                uplinks = [(g.count, g.speed, g.cage) for g in model.ports if g.role == "uplink"]
+                if family is self.CX6300:
+                    expected = (4, "50gig", "sfp56")
+                elif key.startswith("S0M"):
+                    expected = (4, "gig", "sfp")
+                else:
+                    expected = (4, "10gig", "sfp+")
+                assert uplinks == [expected], key
+
+    def test_the_management_interface_is_the_stacks(self) -> None:
+        inventory = _compile(
+            "aruba_aoscx", "vsf", *({"model": "JL663A", "id": n} for n in range(1, 11)),
+        )
+        mgmt = [p for p in inventory.ports if p.role == "mgmt"]
+        assert [(p.name, p.member_id, p.cage) for p in mgmt] == [("mgmt", None, "rj45")]

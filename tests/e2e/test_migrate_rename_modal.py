@@ -2264,11 +2264,10 @@ class TestRenameModalProfileNotice:
         live_server_url: str,
     ):
         """Resolves an ``inferred`` profile from the live registry
-        rather than naming one.  No shipped profile carries that grade
-        (the set is pinned empty by
-        ``tests/unit/migration/test_target_profile_evidence.py``), so
-        the one found here is the synthetic profile ``conftest.py``
-        adds to the e2e server's definitions directory."""
+        rather than naming one: a shipped profile graded so (pinned
+        by ``tests/unit/migration/test_target_profile_evidence.py``)
+        or the synthetic profile ``conftest.py`` adds to the e2e
+        server's definitions directory."""
         profiles = page.request.get(
             live_server_url + "/api/v1/migration/target-profiles"
         ).json()

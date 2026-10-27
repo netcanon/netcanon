@@ -202,6 +202,12 @@ Deliberately deferred to [Tier
 - **Routing protocols** — BGP / OSPF / EIGRP stanzas (informational
   only; not auto-rendered to other vendors)
 - **PKI / crypto** material — trustpoints, certificate chains, keys
+- **A stack's own lines** — `switch N provision` / `switch N
+  priority`, StackPower (`stack-power`) and StackWise Virtual
+  (`stackwise-virtual`, and the `stackwise-virtual link` and
+  `dual-active-detection` lines under an interface); each is listed
+  among the sections not translated.  A stack is declared as a
+  deployment of a model family, which makes its port names right
 
 If your migration involves these surfaces, plan to hand-translate
 them or pair Netcanon with a complementary tool — see
@@ -636,7 +642,8 @@ translate it again from `show running-config` as the device prints it.
   provisioned switch is part of the stack" (Stack Manager and High
   Availability Configuration Guide, IOS XE 17.12.x, Catalyst 9300,
   "Offline Configuration to Provision a Stack Member") -- so it states
-  what the stack is provisioned for.  No line of the config states a
+  what the stack is provisioned for.  The lines themselves are not
+  translated, and the job lists each.  No line of the config states a
   network module, so no switch is proposed with one fitted; where a
   switch has a bay, declare the module that is fitted.  The XML of the NETCONF codec is not
   read.  The Catalyst 9200 is three families, because Cisco stacks

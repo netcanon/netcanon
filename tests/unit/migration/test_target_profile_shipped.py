@@ -233,6 +233,7 @@ class TestRealProfilesShipped:
         assert p.port_ids(kind="uplink") == [
             f"1/1/{n}" for n in range(49, 53)
         ]
+        assert p.port_ids(kind="mgmt") == ["mgmt"]
         assert p.stacking == "vsf"
         assert "JL661A" in p.display_name
         assert p.lags.prefix == "lag "

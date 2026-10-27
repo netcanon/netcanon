@@ -17,6 +17,7 @@ import yaml
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import device_models as dm
+from netcanon.migration.codecs.aruba_aoscx.port_names import vsf_switch_port_name
 from netcanon.migration.codecs.aruba_aoss.port_names import physical_port_name
 from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
     CATALYST_PORT_TYPES,
@@ -292,6 +293,55 @@ class TestCatalystPortName:
 
     def test_the_types_are_the_ones_the_rule_accepts(self):
         assert dm._naming_rules()["catalyst"].prefixes == CATALYST_PORT_TYPES
+
+
+class TestAoscxPortName:
+    @pytest.mark.parametrize(
+        ("member", "port", "printed"),
+        [
+            # HPE AOS-CX 10.18 VSF Guide (6200, 6300), Identifying switch
+            # ports and interfaces: "the logical interface 1/1/4 in
+            # software is associated with physical port 4 on member 1".
+            (1, 4, "1/1/4"),
+            # The same guide's "One Virtual Device" running-config, of
+            # member 2: "link 1 2/1/25", "interface 2/1/1"; and of
+            # member 1, "link 1 1/1/26".
+            (2, 25, "2/1/25"),
+            (2, 1, "2/1/1"),
+            (1, 26, "1/1/26"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, member, port, printed):
+        assert vsf_switch_port_name(member=member, port=port) == printed
+
+    @pytest.mark.parametrize(("member", "port"), [(0, 1), (1, 0), (-1, 1)])
+    def test_out_of_grammar_inputs_are_refused(self, member, port):
+        with pytest.raises(ValueError):
+            vsf_switch_port_name(member=member, port=port)
+
+    def test_the_rule_names_a_port_by_its_member(self):
+        group = dm.PortGroup(role="uplink", count=4)
+        request = dm.PortNameRequest(mode="vsf", member_id=2, slot="", index0=24, group=group)
+        assert dm._naming_rules()["aoscx"].render(request) == "2/1/25"
+
+    def test_a_switch_that_is_alone_is_member_1_and_says_so(self):
+        """"If the switch is not a member of a VSF stack, then member
+        is 1": no mode names a port without its member."""
+        group = dm.PortGroup(role="access", count=1)
+        request = dm.PortNameRequest(mode="vsf", member_id=None, slot="", index0=0, group=group)
+        with pytest.raises(ValueError, match="member number"):
+            dm._naming_rules()["aoscx"].render(request)
+
+    def test_a_bay_is_a_slot_these_switches_do_not_have(self):
+        group = dm.PortGroup(role="uplink", count=1)
+        request = dm.PortNameRequest(mode="vsf", member_id=1, slot="A", index0=0, group=group)
+        with pytest.raises(ValueError, match="no slot but 1"):
+            dm._naming_rules()["aoscx"].render(request)
+
+    def test_the_management_interface_is_not_a_members(self):
+        rule = dm._naming_rules()["aoscx"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`mgmt`" in rule.why_not
 
 
 # ---------------------------------------------------------------------------
