@@ -89,7 +89,9 @@ class PhysicalPort(BaseModel):
     sticky and sparse (a lone ex-member can be ``3/N``), so "the
     second member" is an ordinal, not an id.  ``None`` is reserved for
     a port that belongs to the deployment as a whole rather than to one
-    member (a stack's single management interface)."""
+    member: a stack's single management interface (a family's
+    ``deployment_ports``), and a flat profile's management port, so
+    that the two pair."""
 
     member_id: int | None = None
     """The vendor's member id that went into the name.  ``None`` when
@@ -499,7 +501,9 @@ class DeploymentProposal(BaseModel):
 
 UnplacedReason = Literal[
     "no-member",    # the target has no member at this rank
-    "no-position",  # the target member has fewer ports in this role
+    "no-position",  # the target member has fewer ports in this role;
+                    # for a port of the whole deployment, the target
+                    # deployment has none left in this role
 ]
 
 

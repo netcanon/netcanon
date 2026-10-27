@@ -346,7 +346,12 @@ def plan_port_mapping(
                     role=port.role,
                     member_rank=rank,
                     position=position,
-                    reason="no-position" if rank in target_members else "no-member",
+                    # A port of the whole deployment (no rank) has no
+                    # member to be missing.
+                    reason=(
+                        "no-position" if rank is None or rank in target_members
+                        else "no-member"
+                    ),
                     used=is_used,
                     dropped=port.role != "mgmt",
                 ))

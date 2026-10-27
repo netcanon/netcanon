@@ -3796,7 +3796,7 @@ class TestSmallerThingsInTheModal:
     ) -> None:
         _translate(page, live_server_url, "cisco_iosxe_cli", "cisco_iosxe_cli", _CISCO_SRC)
         page.locator(_tid("migrate-rename-open-btn")).click()
-        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(value="cisco_iosxe")
+        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(value="arista_eos")
         parents = page.locator(_tid("migrate-rename-target-model-select")).evaluate(
             "(list) => Array.from(list.options).map((o) => o.parentElement.tagName)"
         )

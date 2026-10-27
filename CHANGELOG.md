@@ -361,6 +361,233 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **The Cisco Catalyst 9300 can be declared as a source or target
+  device.**  Two model families: `C9300` (the 24/48-port T, P, U, H
+  and S models, the C9300-24UX, -48UXM and -48UN) and
+  `C9300-higher-scale` (C9300-24UB, -48UB, -24UXB, which Cisco's data
+  sheet says stack only with each other, so a stack that mixes the two
+  is refused).  A stack of up to eight; each switch has one bay for
+  the C9300-NM-4G, -4M, -8X, -2Q or -2Y.  Names come from a new
+  `catalyst` naming rule -- type, switch, module, port -- with the
+  type stated per group of ports from Cisco's interface lists
+  (`prefix:`), never derived from a speed: a C9300-48UXM is
+  `TwoGigabitEthernet1/0/1-36` then `TenGigabitEthernet1/0/37-48`.
+  Every name is graded `vendor-doc`; no capture claim is made, since a
+  C9300 config lists the interfaces of every network module the bay
+  can take and so no capture's names equal one deployment's ports.
+  The stack's one management interface, `GigabitEthernet0/0`, is a
+  new kind of entry, a port of the whole deployment
+  (`deployment_ports:`): it belongs to no member and pairs with the
+  other side's management port -- a flat profile's management port
+  now belongs to no member either, so the two pair.
+- **A Catalyst's source switches are read from its config.**  A
+  Catalyst `show running-config` has a `switch N provision <type>`
+  line for each switch of its stack (a switch that is alone too), and
+  `detect-deployment` -- and with it the source picker of the
+  Interface rename modal -- now reads them: the members by switch
+  number, in the family's mode that numbers its switches (`stack`;
+  `standalone` for a 2960-X LAN Lite switch), each line quoted as
+  evidence.  The notes say that the line is what the stack is
+  provisioned for, and that no line states a network module, so no
+  switch is proposed with one fitted (a 2960-X, a 3650, a C9200L and a
+  C9300L have no bay); a C9300 config, which holds the interfaces of every
+  module the bay takes, is then `consistent: false` and lists them.
+  Lines in a banner or a stanza are not read;
+  a line that sets out to state a switch and cannot be read is
+  counted; XML (the NETCONF codec) is said not to be read.  The
+  detector is `codecs/cisco_iosxe_cli/deployment_detect.py`, under
+  the `cisco_iosxe` vendor id both IOS-XE codecs share.
+- **The Cisco Catalyst 9200 and 9200L can be declared as a source or
+  target device.**  Three model families, because Cisco stacks none of
+  them with another: `C9200` (the 24/48-port T, P and PL models and
+  the C9200-24PXG and -48PXG; StackWise-160), `C9200-PB` (C9200-24PB
+  and -48PB, which Cisco's stacking guide says "can only be stacked
+  with each other") and `C9200L` (the fixed-uplink models;
+  StackWise-80).  A stack of up to eight.  A C9200 has one bay, for
+  the C9200-NM-4G or -4X on the 1G models and the -4X or -2Y on the
+  PXG models; the C9200-NM-2Q is not modelled, since no Cisco document
+  read gives the names of its ports.  A C9200L's uplinks are fixed and
+  named as module 1 (`TenGigabitEthernet1/1/1-4` on a C9200L-24P-4X).
+  A PXG model's Multigigabit ports are `TenGigabitEthernet`, numbered
+  on from its gigabit ports (`GigabitEthernet1/0/1-16`, then
+  `TenGigabitEthernet1/0/17-24`).  The C9200L-48PXG-4X has twelve
+  Multigigabit ports; Cisco's command reference numbers
+  TenGigabitEthernet ports 37 to 48 but says a 48-port switch's
+  Multigigabit ports are 41-48, so that they are ports 37-48 is
+  inferred and the part is graded `inferred`.  No configuration of any of them was seen: no
+  capture claim is made, and whether a C9200 config holds the
+  interfaces of a module that is not fitted, as a C9300's does, is not
+  established.  `detect-deployment` proposes their stacks from the
+  `switch N provision` lines, as for the C9300.
+- **The Cisco Catalyst 3850 can be declared as a source or target
+  device.**  One model family, `C3850`: the 24/48-port T, P, F and U
+  models, the Multigigabit WS-C3850-24XU and -12X48U, and the SFP and
+  SFP+ models WS-C3850-12S, -24S, -12XS and -24XS, in a StackWise-480
+  stack of up to nine.  One bay, for what Cisco's data sheet lists per
+  model among the C3850-NM-4-1G, -2-10G, -4-10G and -8-10G.  Named as
+  a C9300 is: a WS-C3850-24XS with a C3850-NM-8-10G in switch 2 is
+  `TenGigabitEthernet2/0/1-24` and `TenGigabitEthernet2/1/1-8`.  Two
+  parts are graded `inferred`, each with its reason: the
+  WS-C3850-12X48U's twelve Multigigabit ports, which Cisco numbers
+  nowhere, are taken as ports 37-48 from the command reference's
+  TenGigabitEthernet range and the configuration guide's example; and
+  the C3850-NM-2-10G, whose two 1G and two 1G/10G slots no Cisco
+  document read names, is `GigabitEthernet1/1/1-2` and then
+  `TenGigabitEthernet1/1/3-4`.  Not modelled: the C3850-NM-2-40G (no
+  Catalyst 3850 document read names a 40-Gigabit interface) and the
+  WS-C3850-48XS, which does not stack.  What the stack's caveat says
+  is not checked: Cisco's eight-switch limit for a stack that holds a
+  WS-C3850-24XS, -24XU or -12X48U, and its license levels.  No
+  configuration of a 3850 was seen.  `detect-deployment` reads
+  `switch N provision ws-c3850-48p` as it reads a C9300's line.
+- **The Cisco Catalyst 3650 can be declared as a source or target
+  device.**  One model family, `C3650`: the T, P and F models with four
+  1G uplinks (S), two 1G and two 10G (D) or four 10G (Q), the
+  WS-C3650-24PDM and -48FQM among them, and the Multigigabit
+  WS-C3650-12X48UQ and -12X48UR, in a StackWise-160 stack of up to
+  nine.  The uplinks are fixed and named as module 1, as a C9200L's
+  are: a WS-C3650-48PQ as switch 2 has `TenGigabitEthernet2/1/1-4`.
+  Graded `inferred`, each with its reason: the names of a D model's
+  uplinks, `GigabitEthernet1/1/1-2` and then
+  `TenGigabitEthernet1/1/3-4`, which Cisco labels G1-G4 (the two on the
+  right also TE3 and TE4) and names in no interface list; and the
+  twelve Multigigabit ports of the 12X48UQ and -12X48UR, taken as 37-48
+  as the 3850's are.  Not modelled: the WS-C3650-8X24PD and -8X24UQ (no
+  document read says which eight of their 24 ports are Multigigabit),
+  the -12X48FD (the hardware guide and the data sheet disagree on its
+  uplinks) and the -12X48UZ (no 3650 document read names a 40-Gigabit
+  interface).  A model is named without its license suffix (-L, -S or
+  -E), and the license level is not checked.  No configuration of a
+  3650 was seen.  `detect-deployment`
+  reads a 3650's `switch N provision` line as it reads a C9300's.
+- **The Cisco Catalyst 9300L and 9300LM can be declared as a source or
+  target device.**  One model family, `C9300L`, since Cisco stacks the
+  two series together and with nothing else: a StackWise-320 stack of
+  up to eight, whose uplinks are fixed and named as module 1 --
+  `GigabitEthernet1/1/1-4` on a -4G model, `TenGigabitEthernet1/1/1-4`
+  on a -4X, `FortyGigabitEthernet1/1/1-2` on a -2Q and
+  `TwentyFiveGigE1/1/1-4` on a C9300LM.  Graded `inferred`, each with
+  its reason: the Multigigabit ports of the C9300L-24UXG, -48UXG and
+  C9300LM-48UX, which no Cisco document read numbers (and which the
+  configuration guide says a C9300L does not have), taken as the last
+  ports of the panel; and the C9300LM's 25G uplinks, where the command
+  reference numbers `TwentyFiveGigE` ports 1 to 2 only.  No
+  configuration of a C9300L or C9300LM was seen.  The C9300 family's
+  YAML said the C9300X stacks apart from a C9300; Cisco's data sheet
+  says the two stack at StackWise-480 speeds, and the YAML says so now.
+- **The Cisco Catalyst 9300X can be declared as a source or target
+  device**, in the `C9300` family, since Cisco stacks a C9300X with a
+  C9300 at StackWise-480 speeds: the C9300X-12Y, -24Y, -24HX, -48HX and
+  -48TX, with the C9300X network modules -- `TenGigabitEthernet1/1/1-8`
+  on a C9300X-NM-8M, `TwentyFiveGigE1/1/1-8` on an -NM-8Y,
+  `HundredGigE1/1/1-2` on an -NM-2C and `HundredGigE1/1/1-4` on an
+  -NM-4C.  A C9300X takes no C9300 module and a C9300 no C9300X one,
+  and the -NM-4C fits only the 24Y, 48HX and 48TX (the data sheet and
+  the hardware guide's network-module chapter; its Product Overview
+  says the 24Y alone, and the module's caveat says so).  Graded
+  `inferred`, with the reason in each caveat: the names of a C9300X's
+  own ports, `TwentyFiveGigE1/0/1-12` or `-24` and
+  `TenGigabitEthernet1/0/1-24` or `-48`, which no Cisco document read
+  gives -- the command reference names no C9300X, and its
+  TenGigabitEthernet range leaves out ports 25 to 36.  Not modelled:
+  the C9300X-48HXN (no document read says which eight of its ports are
+  10G, and two ports of a module are disabled on it), and a breakout of
+  the 100G ports.  The license level is not checked.  No configuration
+  of a C9300X was seen.  `detect-deployment` reads `switch N provision
+  c9300x-48hx` beside a C9300's line as one stack.
+- **The Cisco Catalyst 2960-X and 2960-XR can be declared as a source
+  or target device.**  Three model families, since Cisco stacks a
+  2960-X with no 2960-XR ("can't be stacked together") and a LAN Lite
+  switch with nothing: `C2960X`, the LAN Base models, and `C2960XR`,
+  each a FlexStack-Plus stack of up to eight, and `C2960X-LL`, the two
+  LAN Lite models, a switch that is alone and number 1, whose names are
+  `inferred`: the interface chapters of Cisco's 2960-X guides give
+  every name with a switch number and say nothing of LAN Lite, and its
+  2960-S guide names a port of a 2960-S "running the LAN Lite image"
+  `gigabitethernet0/4`, with none.  Every port is
+  module 0 of the switch, and "SFP module ports are numbered
+  consecutively following the 10/100/1000 ports": a WS-C2960X-48TS-L is
+  `GigabitEthernet1/0/1-48` and then `GigabitEthernet1/0/49-52`.  The
+  stack's one management port is `FastEthernet0`, which pairs with the
+  other side's management port when both devices are declared; with
+  none declared, a job onto another vendor lists it as untranslated and
+  is `partial`.  Graded `inferred`, each with its reason: the two SFP+
+  uplinks of a D model, `TenGigabitEthernet1/0/1-2`, which no sentence
+  of Cisco's configuration guides numbers and whose examples name them
+  on module 0 in the 2960-X's 15.2(2)E guide and on module 1 in its
+  15.2(6)E guide and the 2960-XR's.  Not modelled: the
+  WS-C2960X-24PSQ-L (no document read says which eight of its ports
+  have PoE, nor which two uplinks are SFP), and a stack with a Catalyst
+  2960-S or 2960-SF, which Cisco builds of up to four.  The switch runs
+  Cisco IOS 15.2, not IOS XE; the IOS-XE CLI codec reads it as it reads
+  the IOSv captures.  No configuration of a 2960-X or 2960-XR was seen.
+  `detect-deployment` reads `switch N provision ws-c2960x-48fpd-l` as
+  it reads a C9300's line.
+- **The Cisco Catalyst 3750-X can be declared as a source or target
+  device.**  One model family, `C3750X`: the nine models of the
+  hardware guide's table, each named without its image suffix (`-L`,
+  `-S`, `-E`), in a StackWise Plus stack of up to nine, with one
+  network-module bay whose ports are module 1 ("uplink ports are 1").
+  The stack's one management port is `FastEthernet0`.  A port of the
+  C3KX-NM-10G or C3KX-SM-10G has two names, by the optic in it --
+  Cisco: "gigabitethernet x/1/2 and x/1/4 and tengigabitethernet x/1/1
+  and x/1/2" -- so each module is described with an SFP+ in each 10G
+  slot, `TenGigabitEthernet1/1/1-2`, and its caveat says so; a module
+  that holds 1G SFP modules is declared with its bay empty.  Graded
+  `inferred`, each with its reason: the C3KX-NM-1G's
+  `GigabitEthernet1/1/1-4` and the C3KX-NM-10GT's
+  `TenGigabitEthernet1/1/1-2`, which no document read names, and the
+  SFP downlinks of the WS-C3750X-12S and -24S, which Cisco's guides
+  number nowhere.  Not modelled: the Catalyst 3560-X, whose names have
+  no switch number, and a stack with a Catalyst 3750-E or 3750.  The
+  switch runs Cisco IOS 15.0 or 15.2; the IOS-XE CLI codec reads it as
+  it reads the IOSv captures.  No configuration of a 3750-X was seen,
+  and which type word its `switch N provision` line prints is not
+  established: `detect-deployment` reads `switch N provision
+  ws-c3750x-48p` as a WS-C3750X-48P.
+- **The Cisco Catalyst 2960-S can be declared as a source or target
+  device.**  One model family, `C2960S`: the ten LAN Base models of the
+  hardware guide's table, a FlexStack stack of up to four ("A switch
+  stack is a set of up to four Catalyst 2960-S switches"), named as a
+  2960-X's are -- every port module 0 of the switch, the SFP uplinks
+  numbered on from the downlinks (`GigabitEthernet1/0/49-52` on a
+  WS-C2960S-48TS-L, which the hardware guide labels "49, 50, 51, and
+  52").  The stack's one management port is `FastEthernet0`.  Graded
+  `inferred`: the two SFP+ uplinks of a D model,
+  `TenGigabitEthernet1/0/1-2`, which the configuration guide names
+  nowhere and the hardware guide labels 1 and 2.  Not modelled: the
+  LAN Lite models, whose names Cisco gives with no switch number
+  (`gigabitethernet0/4`); the 2960-SF, whose downlinks are 10/100
+  ports, so that the guide's rule for SFP ports numbered after
+  10/100/1000 ports does not say what its SFP ports are named; the
+  WS-C2960S-48TS-J1; and a stack with a 2960-X, which Cisco builds of
+  up to four.  No configuration of a 2960-S was seen;
+  `detect-deployment` reads `switch N provision ws-c2960s-48fpd-l` as a
+  WS-C2960S-48FPD-L.
+- **The Cisco Catalyst 9500 (UADP 2.0) can be declared as a source or
+  target device.**  One model family, `C9500`: the four base models of
+  the hardware guide's table, C9500-12Q, -24Q, -16X and -40X, alone or
+  one of a StackWise Virtual pair (mode `stackwise-virtual`; "The valid
+  values for the new switch number are 1 and 2"), a switch that is
+  alone being switch 1.  The pair's one management port is
+  `GigabitEthernet0/0`.  A C9500-16X or -40X takes one network module,
+  the C9500-NM-8X or C9500-NM-2Q, whose ports are module 1.  The 40G
+  ports of a C9500-12Q, -24Q and C9500-NM-2Q are named as Cisco's
+  breakout tables name them (`FortyGigabitEthernet1/0/1-12`,
+  `FortyGigabitEthernet1/1/1-2`).  Graded `inferred`, each with its
+  reason: the 10G ports of a C9500-16X, -40X and C9500-NM-8X
+  (`TenGigabitEthernet1/0/1-40`, `TenGigabitEthernet1/1/1-8`), which no
+  page read names.  Not modelled: a breakout, whose
+  `TenGigabitEthernet` names Cisco tells an operator to disregard while
+  the 40G ports are in use; the bundle part numbers (C9500-16X-2Q,
+  C9500-40X-2Q, C9500-24X, C9500-48X), declared as the base model with
+  its module; the High Performance models and the 9500X, of which the
+  C9500-48Y4C and C9500-24Y4C keep their target profiles; and a check
+  that both switches of a pair are one model at one license level, as
+  Cisco requires.  No configuration of a Catalyst 9500 was seen, and
+  whether one prints a `switch N provision` line is not established:
+  `detect-deployment` reads `switch N provision c9500-40x` as a
+  C9500-40X.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

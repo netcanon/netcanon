@@ -18,6 +18,10 @@ import yaml
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import device_models as dm
 from netcanon.migration.codecs.aruba_aoss.port_names import physical_port_name
+from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
+    CATALYST_PORT_TYPES,
+    catalyst_port_name,
+)
 from netcanon.migration.device_models import (
     SPEED_RANK,
     Deployment,
@@ -229,6 +233,68 @@ class TestAossPhysicalPortName:
 
 
 # ---------------------------------------------------------------------------
+# The Catalyst naming rule
+# ---------------------------------------------------------------------------
+
+
+class TestCatalystPortName:
+    @pytest.mark.parametrize(
+        ("port_type", "member", "module", "port", "printed"),
+        [
+            # Cisco IOS XE 17.12 Interface and Hardware Components
+            # Configuration Guide (Catalyst 9300), Interface
+            # Configuration Mode: "GigabitEthernet1/0/1", and an uplink
+            # module's "GigabitEthernet1/1/1 through GigabitEthernet1/1/4
+            # or TenGigabitEthernet1/1/1 through TenGigabitEthernet1/1/4".
+            ("GigabitEthernet", 1, 0, 1, "GigabitEthernet1/0/1"),
+            ("GigabitEthernet", 1, 1, 4, "GigabitEthernet1/1/4"),
+            ("TenGigabitEthernet", 1, 1, 1, "TenGigabitEthernet1/1/1"),
+            # Cisco IOS XE 17.12 Layer 2 Configuration Guide (Catalyst
+            # 9300), Configuring EtherChannels, as typed there, none of
+            # them switch 1: "interface range gigabitethernet2/0/1 -2",
+            # "... gigabitethernet2/0/4 -5", "interface
+            # gigabitethernet3/0/3".
+            ("GigabitEthernet", 2, 0, 1, "gigabitethernet2/0/1"),
+            ("GigabitEthernet", 2, 0, 5, "gigabitethernet2/0/5"),
+            ("GigabitEthernet", 3, 0, 3, "gigabitethernet3/0/3"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, port_type, member, module, port, printed):
+        name = catalyst_port_name(
+            port_type=port_type, member=member, module=module, port=port,
+        )
+        assert name.lower() == printed.lower()
+        assert name.startswith(port_type)
+
+    def test_the_switch_number_is_never_absent(self):
+        """A switch in no stack is switch 1, and says so in every
+        name; there is no member-less form to fall back to."""
+        with pytest.raises(TypeError):
+            catalyst_port_name(port_type="GigabitEthernet", module=0, port=1)  # type: ignore[call-arg]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"port_type": "GigabitEthernet", "member": 0, "module": 0, "port": 1},
+            {"port_type": "GigabitEthernet", "member": 1, "module": -1, "port": 1},
+            {"port_type": "GigabitEthernet", "member": 1, "module": 0, "port": 0},
+            # The internal app-hosting interface is not a port.
+            {"port_type": "AppGigabitEthernet", "member": 1, "module": 0, "port": 1},
+            # The word as the device prints it, and no other spelling.
+            {"port_type": "gigabitethernet", "member": 1, "module": 0, "port": 1},
+            {"port_type": "Gi", "member": 1, "module": 0, "port": 1},
+            {"port_type": "TwentyFiveGigabitEthernet", "member": 1, "module": 1, "port": 1},
+        ],
+    )
+    def test_out_of_grammar_inputs_are_refused(self, kwargs):
+        with pytest.raises(ValueError):
+            catalyst_port_name(**kwargs)
+
+    def test_the_types_are_the_ones_the_rule_accepts(self):
+        assert dm._naming_rules()["catalyst"].prefixes == CATALYST_PORT_TYPES
+
+
+# ---------------------------------------------------------------------------
 # Compiling a deployment
 # ---------------------------------------------------------------------------
 
@@ -397,6 +463,163 @@ class TestFixedPanelSlots:
         }
         inv = _compile(DeviceModelRegistry([_family(data)]), None, {"model": "TB-BANK"})
         assert inv.names() == ["1", "2", "3", "4", "C1", "C2", "5", "6", "C3"]
+
+
+# A made-up family in the Catalyst grammar.  Nothing here is a claim
+# about real hardware: "Catbox" has a panel of two port types, one
+# numbered bay and a stack-wide management port.
+CATBOX_YAML = """
+schema: 1
+vendor: cisco_iosxe
+family: Catbox
+naming: catalyst
+default_mode: stack
+modes:
+  stack:
+    label: "stack"
+    member_ids: [1, 8]
+    naming: {grade: vendor-doc, ref: "Catbox guide"}
+modules:
+  NM-2:
+    inventory: {grade: vendor-doc, ref: "NM-2 sheet"}
+    ports:
+      - {role: uplink, count: 2, prefix: TenGigabitEthernet, speed: 10gig}
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    naming: {grade: vendor-doc, ref: "Catbox guide, management port"}
+models:
+  CB-12:
+    panel: {grade: vendor-doc, ref: "CB-12 sheet"}
+    ports:
+      - {role: access, count: 8, prefix: TwoGigabitEthernet, speed: 2.5gig}
+      - {role: access, count: 4, prefix: TenGigabitEthernet, speed: 10gig}
+    bays:
+      "1": {accepts: [NM-2]}
+"""
+
+
+def _catbox(data: dict | None = None) -> DeviceModelRegistry:
+    return DeviceModelRegistry([_family(data if data is not None else _data(CATBOX_YAML))])
+
+
+def _catbox_compile(registry: DeviceModelRegistry, *members: dict) -> Inventory:
+    return compile_deployment(
+        Deployment(
+            vendor="cisco_iosxe", mode="stack",
+            members=[MemberSpec(**m) for m in members],
+        ),
+        registry,
+    )
+
+
+class TestCatalystFamilies:
+    def test_the_panel_is_numbered_straight_through_whatever_the_type(self):
+        inv = _catbox_compile(_catbox(), {"model": "CB-12"})
+        assert inv.names(role="access") == [
+            *(f"TwoGigabitEthernet1/0/{n}" for n in range(1, 9)),
+            *(f"TenGigabitEthernet1/0/{n}" for n in range(9, 13)),
+        ]
+
+    def test_a_module_is_its_bays_number_and_restarts_at_one(self):
+        inv = _catbox_compile(_catbox(), {"model": "CB-12", "id": 3, "modules": {"1": "NM-2"}})
+        assert inv.names(role="uplink") == [
+            "TenGigabitEthernet3/1/1", "TenGigabitEthernet3/1/2",
+        ]
+        assert {(p.slot, p.module) for p in inv.ports if p.role == "uplink"} == {("1", "NM-2")}
+
+    def test_a_bay_that_is_not_a_number_fails_at_load(self):
+        data = _data(CATBOX_YAML)
+        data["models"]["CB-12"]["bays"] = {"A": {"accepts": ["NM-2"]}}
+        with pytest.raises(DeviceModelLoadError, match="not a number"):
+            _catbox(data)
+
+    def test_a_mode_without_member_ids_fails_at_load(self):
+        """Every Catalyst name carries the switch number."""
+        data = _data(CATBOX_YAML)
+        del data["modes"]["stack"]["member_ids"]
+        with pytest.raises(DeviceModelLoadError, match="switch number"):
+            _catbox(data)
+
+    def test_every_group_states_its_type(self):
+        data = _data(CATBOX_YAML)
+        del data["models"]["CB-12"]["ports"][1]["prefix"]
+        with pytest.raises(ValueError, match="every group states `prefix`"):
+            _family(data)
+
+    @pytest.mark.parametrize("prefix", ["AppGigabitEthernet", "Te", "tengigabitethernet"])
+    def test_a_type_the_grammar_does_not_name_ports_with_is_refused(self, prefix):
+        data = _data(CATBOX_YAML)
+        data["modules"]["NM-2"]["ports"][0]["prefix"] = prefix
+        with pytest.raises(ValueError, match="every group states `prefix`"):
+            _family(data)
+
+    def test_a_grammar_with_no_type_refuses_one(self):
+        data = _data()
+        data["models"]["TB-8"]["ports"][0]["prefix"] = "GigabitEthernet"
+        with pytest.raises(ValueError, match="puts no interface type in a name"):
+            _family(data)
+
+
+class TestDeploymentPorts:
+    """A stack's one management interface: no naming rule renders it
+    and no member owns it."""
+
+    def test_it_is_named_once_after_every_members_ports(self):
+        inv = _catbox_compile(
+            _catbox(), {"model": "CB-12"}, {"model": "CB-12"}, {"model": "CB-12"},
+        )
+        assert inv.names(role="mgmt") == ["GigabitEthernet0/0"]
+        port = inv.ports[-1]
+        assert port.name == "GigabitEthernet0/0"
+        assert (port.member_rank, port.member_id, port.ordinal) == (None, None, 0)
+        assert (port.role, port.speed, port.evidence) == ("mgmt", "gig", "vendor-doc")
+        assert "Catbox guide, management port" in inv.evidence_refs
+        assert len(inv.ports) == 3 * 12 + 1
+
+    def test_it_is_in_no_members_summary(self):
+        inv = _catbox_compile(_catbox(), {"model": "CB-12"})
+        (member,) = inv.members
+        assert member.rank == 0
+        assert inv.names(role="mgmt", member_rank=0) == []
+        assert inv.names(member_rank=0)[-1] == "TenGigabitEthernet1/0/12"
+
+    def test_its_grade_is_its_own(self):
+        data = _data(CATBOX_YAML)
+        data["deployment_ports"][0]["naming"] = {
+            "grade": "inferred", "caveat": "The management port's name is a guess.",
+        }
+        inv = _catbox_compile(_catbox(data), {"model": "CB-12"})
+        assert inv.port("GigabitEthernet0/0").evidence == "inferred"
+        assert inv.evidence == "inferred"
+        assert "The management port's name is a guess." in inv.caveats
+
+    def test_it_cannot_repeat_a_members_name(self):
+        data = _data(CATBOX_YAML)
+        data["deployment_ports"][0]["name"] = "TwoGigabitEthernet1/0/1"
+        with pytest.raises(DeviceModelLoadError, match="names a port twice"):
+            _catbox(data)
+
+    @pytest.mark.parametrize("name", ["", "Gi 0/0", "GigabitEthernet0/0\n"])
+    def test_its_name_is_one_token(self, name):
+        data = _data(CATBOX_YAML)
+        data["deployment_ports"][0]["name"] = name
+        with pytest.raises(ValueError):
+            _family(data)
+
+    def test_it_pairs_with_a_flat_profiles_management_port(self):
+        """A flat profile's management port is the deployment's too."""
+        from netcanon.migration.port_mapping import plan_port_mapping
+
+        profile = TargetProfile(
+            vendor="x", model="y",
+            ports=[{"id": "1", "kind": "physical"}, {"id": "mgmt0", "kind": "mgmt"}],
+        )
+        target = inventory_from_profile(profile)
+        source = _catbox_compile(_catbox(), {"model": "CB-12"})
+        plan = plan_port_mapping(source, target, ["TwoGigabitEthernet1/0/1", "GigabitEthernet0/0"])
+        assert plan.rename_map == {"TwoGigabitEthernet1/0/1": "1", "GigabitEthernet0/0": "mgmt0"}
 
 
 class TestResolvedDeployment:
@@ -1056,6 +1279,101 @@ class TestLoader:
         assert len(registry) == 0
 
 
+class TestATextIsReadOnce:
+    """Each start of the application loads every shipped family, and
+    the integration tier starts one for each test: read anew each
+    time, the shipped library ran that tier past its time limit.  The
+    YAML of a text is read once; nothing else about a load changes."""
+
+    @staticmethod
+    def _counting(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        dm._read_family_yaml.cache_clear()
+        reads: list[str] = []
+        real = dm.yaml.compose
+
+        def compose(raw, *args, **kwargs):
+            reads.append(raw)
+            return real(raw, *args, **kwargs)
+
+        monkeypatch.setattr(dm.yaml, "compose", compose)
+        return reads
+
+    def test_the_same_text_is_read_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ):
+        reads = self._counting(monkeypatch)
+        (tmp_path / "a.yaml").write_text(FAMILY_YAML, encoding="utf-8")
+        (tmp_path / "b").mkdir()
+        (tmp_path / "b" / "same.yaml").write_text(FAMILY_YAML, encoding="utf-8")
+        first = load_family_file(tmp_path / "a.yaml")
+        again = load_family_file(tmp_path / "a.yaml")
+        elsewhere = load_family_file(tmp_path / "b" / "same.yaml")
+        assert reads == [FAMILY_YAML]
+        assert first == again == elsewhere
+
+    def test_a_changed_text_is_read_again(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Keyed by the text, not the path or its time: a file
+        rewritten within one tick of the clock is not served stale."""
+        reads = self._counting(monkeypatch)
+        path = tmp_path / "testbox.yaml"
+        path.write_text(FAMILY_YAML, encoding="utf-8")
+        before = load_family_file(path)
+        changed = FAMILY_YAML.replace("count: 8,", "count: 6,", 1)
+        assert changed != FAMILY_YAML
+        path.write_text(changed, encoding="utf-8")
+        after = load_family_file(path)
+        assert reads == [FAMILY_YAML, changed]
+        assert before != after
+
+    def test_no_load_shares_data_with_another(self, tmp_path: Path):
+        """The kept data is copied before it is changed: what one load
+        is given, another is not."""
+        dm._read_family_yaml.cache_clear()
+        path = tmp_path / "testbox.yaml"
+        path.write_text(FAMILY_YAML, encoding="utf-8")
+        load_family_file(path)
+        load_family_file(path)
+        # The loader writes each model's key into its entry; on the
+        # kept data itself, that would be seen here.
+        assert dm._read_family_yaml(FAMILY_YAML)[1] == yaml.safe_load(FAMILY_YAML)
+
+    @pytest.mark.parametrize(
+        ("content", "needle"),
+        [
+            ("models: &m {x: *m}\n", "aliases"),
+            ("vendor: [unclosed", "YAML parse error"),
+            (FAMILY_YAML.replace("captures:", "  TB-8: {}\ncaptures:"), "duplicate key"),
+        ],
+    )
+    def test_a_bad_text_is_refused_every_time(
+        self, tmp_path: Path, content: str, needle: str,
+    ):
+        """Nothing is kept for a text that fails, and the second load
+        is refused as the first was, with its own path."""
+        dm._read_family_yaml.cache_clear()
+        for name in ("one.yaml", "two.yaml"):
+            path = tmp_path / name
+            path.write_text(content, encoding="utf-8")
+            with pytest.raises(DeviceModelLoadError, match=needle) as caught:
+                load_family_file(path)
+            assert name in str(caught.value)
+
+    def test_the_shipped_library_is_read_once_a_process(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ):
+        """What the integration tier needs: a second registry costs no
+        YAML reading at all."""
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        reads = self._counting(monkeypatch)
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        first = len(reads)
+        assert first > 0
+        dm.load_model_families(Path("no-such-definitions-dir"))
+        assert len(reads) == first
+
+
 class TestOverlay:
     """An operator's own families are laid over the shipped ones.  An
     overlay can ADD; it can never silently replace."""
@@ -1253,6 +1571,9 @@ class TestInventoryFromProfile:
         assert inv.names() == ["1", "mgmt0"]
         assert inv.port("mgmt0").role == "mgmt"
         assert [p.index for p in inv.ports] == [0, 2]
+        # No member owns a management port, as no member of a stack
+        # owns its one management interface: the two pair.
+        assert [p.member_rank for p in inv.ports] == [0, None]
 
     def test_a_profile_with_no_ports_is_an_empty_ungraded_inventory(self):
         """``opnsense/Generic`` lists no ports.  That means "not

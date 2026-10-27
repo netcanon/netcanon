@@ -1473,6 +1473,19 @@ naming grammar, not per product line — that renders one port's name
 from its coordinates, and declares which roles it can name at all (a
 group in a role the rule cannot name is refused at load: AOS-S
 out-of-band management is the `oobm` context, not a numbered port).
+A grammar that names a port by its interface type (the Catalyst's
+`TwoGigabitEthernet1/0/36`) takes the type from the data, stated on
+each port group (`prefix`), and never from a speed; the rule says
+which types it accepts.  Where the type is the optic's and not the
+port's (a 3750-X's C3KX-NM-10G names a slot `GigabitEthernet1/1/2`
+with a 1G SFP in it and `TenGigabitEthernet1/1/1` with an SFP+), the
+module is described in one state, and its caveat, which the inventory
+carries, says which.  A port of the WHOLE deployment — a C9300
+stack's one management interface, `GigabitEthernet0/0`, whichever
+switch is active — is listed by its literal name under
+`deployment_ports`, belongs to no member (rank `None`) and comes after
+every member's ports.  A flat profile's management port is read the
+same way, so that the two pair.
 
 **Pairing policy** (`port_mapping.py`):
 
@@ -1489,7 +1502,9 @@ out-of-band management is the `oobm` context, not a numbered port).
   side read from a
   flat profile states no member number, and gets neither line.
 * Within a member, ports pair role to role, in order.  A port never
-  changes member to find a place.
+  changes member to find a place.  A port of the whole deployment
+  pairs only with a port of the whole deployment of the other side:
+  a target member's management port is not a place for it.
 * A used port with no position on the target is **dropped,
   explicitly**, and reported.  It is never spilled onto a port of
   another role, and never left out of the map: left to the name-shape
@@ -1883,9 +1898,10 @@ detection, an Apply — is dropped.
 
 **Reading the source device from the config**
 (`netcanon/migration/deployment_detect.py`).  An AOS-S `show
-running-config` usually states its own hardware; no other vendor has a
-detector yet.  Detection is split the way naming is: a small *detector*
-beside the vendor's codec reads the lines that state the device and
+running-config` usually states its own hardware, and a Catalyst's
+states the type of each switch of its stack (`switch N provision`);
+no other vendor has a detector yet.  Detection is split the way
+naming is: a small *detector* beside the vendor's codec reads the lines that state the device and
 returns the part numbers, member numbers and bays they state — it has
 no table of models — and `propose_deployment` resolves what was read
 against the model registry, picks the family mode from whether the

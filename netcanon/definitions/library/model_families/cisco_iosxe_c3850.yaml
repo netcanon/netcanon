@@ -1,0 +1,253 @@
+# Cisco Catalyst 3850 switch series (IOS XE)
+#
+# A fixed-port access switch with ONE network-module bay and a
+# StackWise-480 stack of up to nine members.  The names are made as a
+# Catalyst 9300's are:
+#
+#   * Every name is `<type><switch>/<module>/<port>`, and the switch
+#     number is never absent: Cisco's examples name a standalone
+#     switch's ports as switch 1.
+#   * The switch's own ports are module 0, numbered from 1 straight
+#     through the panel whatever their type: a WS-C3850-12X48U is
+#     GigabitEthernet1/0/1-36 and then TenGigabitEthernet1/0/37-48
+#     (inferred, below).
+#   * A network module's ports are module 1 and restart at 1:
+#     TenGigabitEthernet1/1/1-4 for a C3850-NM-4-10G.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# The stack has ONE management interface, GigabitEthernet0/0: each
+# member has the jack and the active switch's carries the link.  It is
+# declared once, under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Cisco Catalyst 3850 Switch Hardware Installation Guide,
+#         "Product Overview" (the models, the network modules and their
+#         slots, the Ethernet management port, the models that do not
+#         support StackWise-480) and "Switch Installation" (data stacks
+#         of up to nine switches; eight where the stack holds a
+#         WS-C3850-24XS, -24XU or -12X48U).
+#   DS    Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (the
+#         switch configurations) and Table 2 (the network modules each
+#         model supports), and the stacking notes (license levels).
+#   CG    Interface and Hardware Components Configuration Guide, Cisco
+#         IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), "Configuring
+#         Interface Characteristics" > "Interface Configuration Mode",
+#         and "Configuring Ethernet Management Port".
+#   CR    Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst
+#         3850 Switches), "Interface and Hardware Commands", `interface`
+#         (TenGigabitEthernet: switch ID 1 to 8, slot 0 to 1, port 1 to
+#         24 and 37 to 48), and "Stack Manager and High Availability
+#         Commands", `switch provision` (stack member number 1 to 9).
+#
+# The stack's size.  CG, HIG and CR's `switch provision` say nine; CR's
+# `interface` entry gives TenGigabitEthernet a switch ID of 1 to 8.
+# The family takes 1 to 9, from the three that agree.  A stack that
+# holds a WS-C3850-24XS, -24XU or -12X48U has at most eight (HIG: "the
+# maximum number of ASIC chips per stack cannot exceed 32"); that is
+# not checked here, and the mode's caveat says so.
+#
+# Which ports of a WS-C3850-12X48U are Multigigabit.  HIG and DS give
+# twelve and no port numbers.  CR numbers TenGigabitEthernet ports of
+# module 0 from 1 to 24 and from 37 to 48, and CG's Multigigabit
+# example configures `interface tengigabitethernet 1/1/37`.  That they
+# are ports 37-48 is inferred from the two, and the panel is graded so.
+#
+# The C3850-NM-2-10G.  HIG: "Two slots (left side) support only 1 G SFP
+# modules and two slots (right side) support either 1 G SFP or 10 G
+# SFP modules."  No Cisco document read names the four ports, so the
+# names given (GigabitEthernet1/1/1-2, then TenGigabitEthernet1/1/3-4,
+# numbered from the left as CG numbers a panel) are inferred and the
+# module is graded so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The C3850-NM-2-40G (2 x 40G QSFP+).  DS lists it for the
+#     WS-C3850-24XS, -24XU and -12X48U, but no Catalyst 3850 document
+#     read names its ports: CR's `interface` lists no 40-Gigabit type.
+#     A switch with one fitted is declared with its bay empty, and a
+#     job that uses the 40G names asks what to do with each.
+#   * The WS-C3850-48XS: HIG says it does not support StackWise-480,
+#     and no document read names its four 40G ports.
+#   * Which interfaces a 3850 config holds for a network module that is
+#     not fitted, or for the ports of a fitted one that it does not
+#     have: no config of a 3850 was seen.
+#   * The Catalyst 3650, which stacks over StackWise-160 and not with a
+#     3850.
+schema: 1
+vendor: cisco_iosxe
+family: C3850
+display_name: "Cisco Catalyst 3850"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise-480 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics, Interface Configuration Mode (interface type, stack member number 1 to 9, module number and port number; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), switch provision (stack member number 1 to 9); Cisco Catalyst 3850 Switch Hardware Installation Guide, Switch Installation (data stacks with up to nine switches)"
+    caveat: "Names carry the switch number even on a switch that is alone. A stack that holds a WS-C3850-24XS, WS-C3850-24XU or WS-C3850-12X48U can have a maximum of 8 switches (Cisco Catalyst 3850 Switch Hardware Installation Guide); that is not checked here. Cisco does not stack a LAN Base switch with an IP Base or IP Services one (Cisco Catalyst 3850 Series Switches Data Sheet); the license is not checked here either. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 3850 was seen: which interfaces one holds for a network module that is not fitted is not established."
+
+modules:
+  C3850-NM-4-1G:
+    description: "4-port 1G SFP network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (C3850-NM-4-1G: this module has four 1 G SFP module slots); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; the SFP module ports are gigabitethernet1/1/1 through gigabitethernet1/1/4)"}
+    ports:
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+  C3850-NM-2-10G:
+    description: "2 x 1G SFP and 2 x 1G/10G SFP+ network module"
+    inventory:
+      grade: inferred
+      ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (C3850-NM-2-10G: this module has four slots; two slots (left side) support only 1 G SFP modules and two slots (right side) support either 1 G SFP or 10 G SFP modules); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics, Interface Configuration Mode (uplink ports are module 1 and the port numbers restart)"
+      caveat: "C3850-NM-2-10G: Cisco says its two left slots take only 1G SFP modules and its two right slots 1G or 10G, and names none of the four ports. That they are GigabitEthernet1/1/1-2 and then TenGigabitEthernet1/1/3-4 is inferred, and no configuration of a switch with one fitted was seen."
+    ports:
+      - {role: uplink, count: 2, prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 2, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+  C3850-NM-4-10G:
+    description: "4-port 10G SFP+ network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (C3850-NM-4-10G: this module has four 10 G slots or four 1 G slots); Cisco Catalyst 3850 Series Switches Data Sheet (supported only on the 48-port Gigabit Ethernet models or on the 12-port or higher 10 Gigabit Ethernet models); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; tengigabitethernet1/1/1 through tengigabitethernet1/1/4)"}
+    ports:
+      - {role: uplink, count: 4, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+  C3850-NM-8-10G:
+    description: "8-port 10G SFP+ network module"
+    inventory: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (C3850-NM-8-10G: this module has eight 10 G slots with an SFP+ port in each slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 2 (supported on the WS-C3850-24XS, -24XU and -12X48U); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics, Interface Configuration Mode (uplink ports are module 1 and the port numbers restart); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), interface (TenGigabitEthernet, slot 0 to 1)"}
+    ports:
+      - {role: uplink, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; in a stack the active link is from the Ethernet management port on the active switch); Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (10/100/1000 Ethernet management port, an RJ-45 connector)"}
+
+models:
+  WS-C3850-24T:
+    skus: [WS-C3850-24T]
+    display_name: "Cisco Catalyst WS-C3850-24T"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24T: stackable 24 10/100/1000 Ethernet ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 2 (C3850-NM-4-1G, C3850-NM-2-10G)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G]}
+
+  WS-C3850-48T:
+    skus: [WS-C3850-48T]
+    display_name: "Cisco Catalyst WS-C3850-48T"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-48T: stackable 48 10/100/1000 Ethernet ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G]}
+
+  WS-C3850-24P:
+    skus: [WS-C3850-24P]
+    display_name: "Cisco Catalyst WS-C3850-24P"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24P: stackable 24 10/100/1000 PoE+ ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (24 PoE+) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G]}
+
+  WS-C3850-48P:
+    skus: [WS-C3850-48P]
+    display_name: "Cisco Catalyst WS-C3850-48P"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-48P: stackable 48 10/100/1000 PoE+ ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (48 PoE+) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G]}
+
+  WS-C3850-48F:
+    skus: [WS-C3850-48F]
+    display_name: "Cisco Catalyst WS-C3850-48F"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-48F: stackable 48 10/100/1000 PoE+ ports, 1 network module slot, 1100 W power supply); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (48 PoE+) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G]}
+
+  WS-C3850-24U:
+    skus: [WS-C3850-24U]
+    display_name: "Cisco Catalyst WS-C3850-24U"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24U: stackable 24 10/100/1000 Cisco UPOE ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (24 UPOE) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G]}
+
+  WS-C3850-48U:
+    skus: [WS-C3850-48U]
+    display_name: "Cisco Catalyst WS-C3850-48U"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-48U: stackable 48 10/100/1000 Cisco UPOE ports, 1 network module slot); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (48 UPOE) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G]}
+
+  WS-C3850-24XU:
+    skus: [WS-C3850-24XU]
+    display_name: "Cisco Catalyst WS-C3850-24XU"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24XU: stackable 24 100M/1G/2.5G/5G/10G UPoE ports, 1 network module slot); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics (Multigigabit Ethernet on the WS-C3850-24XU; 10-Gigabit Ethernet, tengigabitethernet, for 10,000 Mb/s); Cisco Catalyst 3850 Series Switches Data Sheet, Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G, C3850-NM-8-10G, C3850-NM-2-40G)"}
+    ports:
+      - {role: access, count: 24, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G, C3850-NM-8-10G]}
+
+  WS-C3850-12X48U:
+    skus: [WS-C3850-12X48U]
+    display_name: "Cisco Catalyst WS-C3850-12X48U"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-12X48U: stackable 12 100M/1G/2.5G/5G/10G and 36 1G UPoE ports, 1 network module slot; a maximum of 28 ports are available for UPoE connections); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48); Interface and Hardware Components Configuration Guide, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), Configuring Interface Characteristics (Multigigabit Ethernet on the WS-C3850-12X48U; example: interface tengigabitethernet 1/1/37); Cisco Catalyst 3850 Series Switches Data Sheet, Table 2 (C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G, C3850-NM-8-10G, C3850-NM-2-40G)"
+      caveat: "WS-C3850-12X48U: Cisco gives this model 12 Multigigabit ports and 36 1G ports, and names no port numbers for either. Its command reference numbers TenGigabitEthernet ports of module 0 from 37 to 48, and its configuration guide's Multigigabit example configures port 37; that the Multigigabit ports are 37-48 is inferred from the two, and no configuration of a WS-C3850-12X48U was seen."
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G, C3850-NM-4-10G, C3850-NM-8-10G]}
+
+  WS-C3850-12S:
+    skus: [WS-C3850-12S]
+    display_name: "Cisco Catalyst WS-C3850-12S"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-12S: stackable 12 SFP module slots, 1 network module slot; the downlink ports support standard SFP modules); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (12 SFP) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G)"}
+    ports:
+      - {role: access, count: 12, prefix: GigabitEthernet, speed: gig, cage: sfp}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G]}
+
+  WS-C3850-24S:
+    skus: [WS-C3850-24S]
+    display_name: "Cisco Catalyst WS-C3850-24S"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24S: stackable 24 SFP module slots, 1 network module slot; the downlink ports support standard SFP modules); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (24 SFP) and Table 2 (C3850-NM-4-1G, C3850-NM-2-10G)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: sfp}
+    bays:
+      "1": {accepts: [C3850-NM-4-1G, C3850-NM-2-10G]}
+
+  WS-C3850-12XS:
+    skus: [WS-C3850-12XS]
+    display_name: "Cisco Catalyst WS-C3850-12XS"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-12XS: 12-port SFP+ transceiver, 1 network module slot, support for up to 10 G SFP+; the downlink ports support standard SFP+ modules); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (12 1/10G SFP+) and Table 2 (C3850-NM-4-10G)"}
+    ports:
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+    bays:
+      "1": {accepts: [C3850-NM-4-10G]}
+
+  WS-C3850-24XS:
+    skus: [WS-C3850-24XS]
+    display_name: "Cisco Catalyst WS-C3850-24XS"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 3850 Switch Hardware Installation Guide, Product Overview (WS-C3850-24XS: 24-port SFP+ transceiver, 1 network module slot, support for up to 10 G SFP+; the downlink ports support standard SFP+ modules); Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 3850 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24); Cisco Catalyst 3850 Series Switches Data Sheet, Table 1 (24 1/10G SFP+) and Table 2 (C3850-NM-4-10G, C3850-NM-8-10G, C3850-NM-2-40G)"}
+    ports:
+      - {role: access, count: 24, prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+    bays:
+      "1": {accepts: [C3850-NM-4-10G, C3850-NM-8-10G]}

@@ -1,0 +1,285 @@
+# Cisco Catalyst 9300L and 9300LM switch series (IOS XE)
+#
+# Fixed-port access switches with FIXED uplinks (no network-module bay)
+# and an optional StackWise-320 stack of up to eight members.  Cisco
+# stacks a C9300L with a C9300L or a C9300LM, and with nothing else, so
+# the two series are one family.  The names are made as a C9300's are:
+#
+#   * Every name is `<type><switch>/<module>/<port>`, and the switch
+#     number is never absent.
+#   * The switch's downlink ports are module 0, numbered from 1 straight
+#     through the panel whatever their type.
+#   * The fixed uplink ports are module 1 (`slot: "1"`) and restart at
+#     1: GigabitEthernet1/1/1-4 on a C9300L-24P-4G.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# The stack has ONE management interface, GigabitEthernet0/0: each
+# member has the jack (on its rear panel) and the active switch's
+# carries the link.  It is declared once, under `deployment_ports`.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Cisco Catalyst 9300 Series Switches Hardware Installation
+#         Guide, "Product Overview": Table 2 (the C9300L models), Table 3
+#         (the C9300LM models), and the rear-panel figures (MGMT, the
+#         RJ-45 10/100/1000 management port; StackWise-320 port
+#         connectors).
+#   DS    Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (the
+#         switch configurations) and its stacking notes ("Stacks with
+#         other Catalyst 9300L and 9300LM models with same license
+#         level"; "You cannot stack fixed uplink models (C9300L SKUs)
+#         with modular uplink models (C9300 SKUs)").
+#   CG    Cisco IOS XE 17.12 Interface and Hardware Components
+#         Configuration Guide (Catalyst 9300 Switches), "Configuring
+#         Interface Characteristics" > "Interface Configuration Mode", and
+#         "Configuring Ethernet Management Port".
+#   SG    Stacking and High Availability Configuration Guide, Cisco IOS
+#         XE Dublin 17.12.x (Catalyst 9300 Switches), "Managing Switch
+#         Stacks" (up to eight members; the stack member number is 1 to
+#         8; "Cisco Catalyst 9300L Series Switches stack with only Cisco
+#         Catalyst 9300L Series Switches as stack members").
+#   CR    Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300
+#         Switches), `interface` (TenGigabitEthernet: slot 0 to 1, port 1
+#         to 24 and 37 to 48; FortyGigabitEthernet: slot 1, port 1 to 2;
+#         TwentyFiveGigE: slot 1, port 1 to 2).
+#
+# Where the sources disagree.  CG says "Cisco Catalyst 9300L Series
+# Switches do not support Multigigabit Ethernet" and that they "support
+# only fixed uplink SFP ports of 4x1G and 4x10G"; HIG and DS list the
+# C9300L-24UXG and -48UXG with Multigigabit ports and a -2Q variant
+# with two 40G QSFP+ uplinks, and CG's own breakout section names the
+# C9300L-24UXG-2Q and -48UXG-2Q.  This file follows HIG and DS.  HIG
+# gives the C9300L-48PF-4G "4x1 GE SFP+ fixed uplink ports"; DS gives
+# it 4x 1G, as for every other -4G model, and this file follows DS.
+# SG's sentence that a C9300L stacks only with a C9300L names no
+# C9300LM; DS says the two stack together, and this file follows DS.
+#
+# Inferred, and graded so, each with its reason in its caveat:
+#
+#   * Which ports of a C9300L-24UXG, C9300L-48UXG or C9300LM-48UX are
+#     Multigigabit.  No document read numbers them.  HIG lists the 1G
+#     ports first ("Stackable 16 10/100/1000 Mbps and 8 Multigigabit
+#     Ethernet"), DS the Multigigabit ones ("8 ports Multigigabit ... +
+#     16 ports 1G").  They are taken as the last ports of the panel
+#     (17-24, 37-48 and 41-48), in HIG's order and as on the
+#     C9300-48UXM, whose figure HIG labels "Ports 1-36" and "ports
+#     37-48" with the faster ports last; CR's TenGigabitEthernet range
+#     holds all three.
+#   * The C9300LM's four 25G uplinks.  CR spells the type
+#     TwentyFiveGigE, and numbers its ports 1 to 2 only (the
+#     C9300-NM-2Y's); TwentyFiveGigE1/1/1-4 is inferred.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A breakout of a -2Q model's QSFP+ ports.
+#   * Which interfaces a C9300L or C9300LM config holds besides its
+#     ports (a C9300 config lists every network module's names and an
+#     application-hosting port): no configuration of one was seen.
+#   * The C9300 and the C9300X (cisco_iosxe_c9300.yaml), whose uplinks
+#     are modules: DS stacks a C9300L or C9300LM
+#     only with another of the two, and says a fixed uplink model does
+#     not stack with a modular uplink one, so a deployment of a C9300L
+#     and a C9300 is refused.
+schema: 1
+vendor: cisco_iosxe
+family: C9300L
+display_name: "Cisco Catalyst 9300L and 9300LM"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise-320 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (the device number range is 1 to 8; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart); Stacking and High Availability Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), Managing Switch Stacks (up to eight stacking-capable switches; Cisco Catalyst 9300L series switches connect through their StackWise-320 ports)"
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a C9300L or C9300LM only with a C9300L or C9300LM, and only at the same license level (Cisco Catalyst 9300 Series Switches Data Sheet); the license is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 9300L or 9300LM was seen: which interfaces one holds besides its ports is not established."
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; in a stack, the management port of the active switch carries the link); Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, rear panels of the C9300L and C9300LM (MGMT, an RJ-45 10/100/1000 management port)"}
+
+models:
+  C9300L-24T-4G:
+    skus: [C9300L-24T-4G]
+    display_name: "Cisco Catalyst C9300L-24T-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24T-4G: stackable 24 10/100/1000 Mbps Ethernet ports; 4x1 GE SFP fixed uplink ports; 350 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart: GigabitEthernet1/1/1 through GigabitEthernet1/1/4; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9300L-24P-4G:
+    skus: [C9300L-24P-4G]
+    display_name: "Cisco Catalyst C9300L-24P-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24P-4G: stackable 24 10/100/1000 Mbps PoE+ ports; 4x1 GE SFP fixed uplink ports; PoE budget of 505 W with 715 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart: GigabitEthernet1/1/1 through GigabitEthernet1/1/4; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9300L-24T-4X:
+    skus: [C9300L-24T-4X]
+    display_name: "Cisco Catalyst C9300L-24T-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24T-4X: stackable 24 10/100/1000 Mbps Ethernet ports; 4x10 GE SFP+ fixed uplink ports; 350 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet; example: TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-24P-4X:
+    skus: [C9300L-24P-4X]
+    display_name: "Cisco Catalyst C9300L-24P-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24P-4X: stackable 24 10/100/1000 Mbps PoE+ ports; 4x10 GE SFP+ fixed uplink ports; PoE budget of 505 W with 715 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet; example: TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-48T-4G:
+    skus: [C9300L-48T-4G]
+    display_name: "Cisco Catalyst C9300L-48T-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48T-4G: stackable 48 10/100/1000 Mbps Ethernet ports; 4x1 GE SFP fixed uplink ports; 350 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart: GigabitEthernet1/1/1 through GigabitEthernet1/1/4; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9300L-48P-4G:
+    skus: [C9300L-48P-4G]
+    display_name: "Cisco Catalyst C9300L-48P-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48P-4G: stackable 48 10/100/1000 Mbps PoE+ ports; 4x1G SFP fixed uplink ports; PoE budget of 505 W with 715 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart: GigabitEthernet1/1/1 through GigabitEthernet1/1/4; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9300L-48T-4X:
+    skus: [C9300L-48T-4X]
+    display_name: "Cisco Catalyst C9300L-48T-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48T-4X: stackable 48 10/100/1000 Mbps Ethernet ports; 4x10 GE SFP+ fixed uplink ports; 350 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet; example: TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-48P-4X:
+    skus: [C9300L-48P-4X]
+    display_name: "Cisco Catalyst C9300L-48P-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48P-4X: stackable 48 10/100/1000 Mbps PoE+ ports; 4x10 GE SFP+ fixed uplink ports; PoE budget of 505 W with 715 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet; example: TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-48PF-4G:
+    skus: [C9300L-48PF-4G]
+    display_name: "Cisco Catalyst C9300L-48PF-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48PF-4G: stackable 48 10/100/1000 Mbps PoE+ ports; 4x1 GE SFP+ fixed uplink ports; PoE budget of 890 W with 1100 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (C9300L-48PF-4G: 48 PoE+, 4x 1G fixed uplinks); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart: GigabitEthernet1/1/1 through GigabitEthernet1/1/4; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9300L-48PF-4X:
+    skus: [C9300L-48PF-4X]
+    display_name: "Cisco Catalyst C9300L-48PF-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48PF-4X: stackable 48 10/100/1000 Mbps PoE+ ports; 4x10 GE SFP+ fixed uplink ports; PoE budget of 890 W with 1100 WAC power supply; supports StackWise-320); Cisco IOS XE 17.12 Interface and Hardware Components Configuration Guide (Catalyst 9300 Switches), Configuring Interface Characteristics, Interface Configuration Mode (on a device with SFP uplink ports the module number is 1 and the port numbers restart; on a Cisco Catalyst 9300L Series Switch the type can be either Gigabit Ethernet or 10-Gigabit Ethernet; example: TenGigabitEthernet 1/1/1)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-24UXG-4X:
+    skus: [C9300L-24UXG-4X]
+    display_name: "Cisco Catalyst C9300L-24UXG-4X"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24UXG-4X: stackable 16 10/100/1000 Mbps and 8 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE ports; 4x10 GE SFP+ fixed uplink ports; PoE budget of 880 W with 1100 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (24 UPOE, 8 mGig, 16x 1G; 4x 10G/1G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48)"
+      caveat: "C9300L-24UXG-4X: No Cisco document read numbers its Multigigabit ports, and the configuration guide says the C9300L does not support Multigigabit Ethernet at all; that they are ports 17-24 is inferred from the hardware installation guide, which lists the 1G ports before the Multigigabit ones (the data sheet lists them the other way round), and from the C9300-48UXM, whose faster ports are its last; no configuration of a C9300L-24UXG-4X was seen."
+    ports:
+      - {role: access, count: 16, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-24UXG-2Q:
+    skus: [C9300L-24UXG-2Q]
+    display_name: "Cisco Catalyst C9300L-24UXG-2Q"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-24UXG-2Q: stackable 16 10/100/1000 Mbps and 8 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE ports; 2x40 GE QSFP+ fixed uplink ports; PoE budget of 722 W with 1100 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (24 UPOE, 8 mGig, 16x 1G; 2x 40G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48; FortyGigabitEthernet, slot 1, port 1 to 2)"
+      caveat: "C9300L-24UXG-2Q: No Cisco document read numbers its Multigigabit ports, and the configuration guide says the C9300L does not support Multigigabit Ethernet at all; that they are ports 17-24 is inferred from the hardware installation guide, which lists the 1G ports before the Multigigabit ones (the data sheet lists them the other way round), and from the C9300-48UXM, whose faster ports are its last; no configuration of a C9300L-24UXG-2Q was seen."
+    ports:
+      - {role: access, count: 16, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 2, slot: "1", prefix: FortyGigabitEthernet, speed: 40gig, cage: qsfp+}
+
+  C9300L-48UXG-4X:
+    skus: [C9300L-48UXG-4X]
+    display_name: "Cisco Catalyst C9300L-48UXG-4X"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48UXG-4X: stackable 36 10/100/1000 Mbps and 12 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE ports; 4x10 GE SFP+ fixed uplink ports; PoE budget of 675 W with 1100 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48 UPOE, 12 mGig, 36x 1G; 4x 10G/1G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48)"
+      caveat: "C9300L-48UXG-4X: No Cisco document read numbers its Multigigabit ports, and the configuration guide says the C9300L does not support Multigigabit Ethernet at all; that they are ports 37-48 is inferred from the hardware installation guide, which lists the 1G ports before the Multigigabit ones (the data sheet lists them the other way round), and from the C9300-48UXM, whose faster ports are its last; no configuration of a C9300L-48UXG-4X was seen."
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9300L-48UXG-2Q:
+    skus: [C9300L-48UXG-2Q]
+    display_name: "Cisco Catalyst C9300L-48UXG-2Q"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 2 (C9300L-48UXG-2Q: stackable 36 10/100/1000 Mbps and 12 Multigigabit Ethernet (100 Mbps or 1/2.5/5/10 Gbps) UPOE ports; 2x40 GE QSFP+ fixed uplink ports; PoE budget of 675 W with 1100 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48 UPOE, 12 mGig, 36x 1G; 2x 40G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48; FortyGigabitEthernet, slot 1, port 1 to 2)"
+      caveat: "C9300L-48UXG-2Q: No Cisco document read numbers its Multigigabit ports, and the configuration guide says the C9300L does not support Multigigabit Ethernet at all; that they are ports 37-48 is inferred from the hardware installation guide, which lists the 1G ports before the Multigigabit ones (the data sheet lists them the other way round), and from the C9300-48UXM, whose faster ports are its last; no configuration of a C9300L-48UXG-2Q was seen."
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 2, slot: "1", prefix: FortyGigabitEthernet, speed: 40gig, cage: qsfp+}
+
+  C9300LM-48T-4Y:
+    skus: [C9300LM-48T-4Y]
+    display_name: "Cisco Catalyst C9300LM-48T-4Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 3 (C9300LM-48T-4Y: stackable 48 x 10/100/1000 M Ethernet ports; 4 x 25 GE SFP28 fixed uplink ports; 600 WAC power supply and fixed fans; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48x 1G data; 4x 25G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TwentyFiveGigE, slot 1, port 1 to 2)"
+      caveat: "C9300LM-48T-4Y: The four 25G uplinks are named in no Cisco document read: the command reference spells the type TwentyFiveGigE and numbers its module-1 ports 1 to 2 only, so TwentyFiveGigE1/1/1-4 is inferred. No configuration of a C9300LM-48T-4Y was seen."
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  C9300LM-24U-4Y:
+    skus: [C9300LM-24U-4Y]
+    display_name: "Cisco Catalyst C9300LM-24U-4Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 3 (C9300LM-24U-4Y: stackable 24 x 10/100/1000 M UPOE ports; 4 x 25 GE SFP28 fixed uplink ports; PoE budget of 420 W with a single default 600 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (24x 1G UPOE; 4x 25G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TwentyFiveGigE, slot 1, port 1 to 2)"
+      caveat: "C9300LM-24U-4Y: The four 25G uplinks are named in no Cisco document read: the command reference spells the type TwentyFiveGigE and numbers its module-1 ports 1 to 2 only, so TwentyFiveGigE1/1/1-4 is inferred. No configuration of a C9300LM-24U-4Y was seen."
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  C9300LM-48U-4Y:
+    skus: [C9300LM-48U-4Y]
+    display_name: "Cisco Catalyst C9300LM-48U-4Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 3 (C9300LM-48U-4Y: stackable 48 x 10/100/1000 M UPOE ports; 4 x 25 GE SFP28 fixed uplink ports; PoE budget of 790 W with a single default 1000 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48x 1G UPOE; 4x 25G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TwentyFiveGigE, slot 1, port 1 to 2)"
+      caveat: "C9300LM-48U-4Y: The four 25G uplinks are named in no Cisco document read: the command reference spells the type TwentyFiveGigE and numbers its module-1 ports 1 to 2 only, so TwentyFiveGigE1/1/1-4 is inferred. No configuration of a C9300LM-48U-4Y was seen."
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  C9300LM-48UX-4Y:
+    skus: [C9300LM-48UX-4Y]
+    display_name: "Cisco Catalyst C9300LM-48UX-4Y"
+    panel:
+      grade: inferred
+      ref: "Cisco Catalyst 9300 Series Switches Hardware Installation Guide, Product Overview, Table 3 (C9300LM-48UX-4Y: stackable 40 x 10/100/1000 M and 8 Multigigabit Ethernet (100M/1000M/2.5GE/5GE/10GE) UPOE ports; 4 x 25 GE SFP28 fixed uplink ports; PoE budget of 790 W with a single default 1000 WAC power supply; supports StackWise-320); Cisco Catalyst 9300 Series Switches Data Sheet, Table 2 (48 UPOE: 8x 10G mGig + 40x 1G; 4x 25G); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9300 Switches), interface (TwentyFiveGigE, slot 1, port 1 to 2; TenGigabitEthernet, slot 0 to 1, port 1 to 24 and 37 to 48)"
+      caveat: "C9300LM-48UX-4Y: The four 25G uplinks are named in no Cisco document read: the command reference spells the type TwentyFiveGigE and numbers its module-1 ports 1 to 2 only, so TwentyFiveGigE1/1/1-4 is inferred; and no Cisco document read numbers its eight Multigigabit ports, so that they are ports 41-48 is inferred from the hardware installation guide, which lists the 1G ports before the Multigigabit ones (the data sheet lists them the other way round), and from the C9300-48UXM, whose faster ports are its last. No configuration of a C9300LM-48UX-4Y was seen."
+    ports:
+      - {role: access, count: 40, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}

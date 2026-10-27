@@ -114,6 +114,14 @@ def _aoss(raw_text: str) -> DetectedDeployment | None:
     return detect_deployment(raw_text)
 
 
+def _cisco_iosxe(raw_text: str) -> DetectedDeployment | None:
+    # One vendor id, two codecs: the CLI text is read, and the XML of
+    # the NETCONF codec is answered with a note.
+    from .codecs.cisco_iosxe_cli.deployment_detect import detect_deployment
+
+    return detect_deployment(raw_text)
+
+
 def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     """Vendor id to detector.
 
@@ -123,7 +131,7 @@ def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     number of the port names — that is the guess this feature exists
     to replace.
     """
-    return {"aruba_aoss": _aoss}
+    return {"aruba_aoss": _aoss, "cisco_iosxe": _cisco_iosxe}
 
 
 def detection_vendors() -> list[str]:

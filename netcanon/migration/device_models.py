@@ -69,6 +69,17 @@ A family with swappable modules adds ``modules:`` (keyed by SKU) and a
 per-model ``bays:`` mapping; see :class:`ModuleDef` and
 :class:`BayDef`.
 
+Two more fields serve a grammar that names a port by its interface
+type (``catalyst``: ``TenGigabitEthernet1/1/1``).  Every port group
+states its type as ``prefix:``, typed from the vendor's own interface
+lists and never derived from a speed; a rule that puts no type in a
+name refuses one (:attr:`NamingRuleSpec.prefixes`).  And
+``deployment_ports:`` lists the ports of the WHOLE deployment, by
+their literal names: a Catalyst stack has one management interface,
+``GigabitEthernet0/0``, whichever switch is active.  Such a port
+belongs to no member (``member_rank`` ``None``) and comes after every
+member's (:class:`DeploymentPortDef`).
+
 Evidence.  How well a port's name is established is graded with the
 vocabulary of :data:`~netcanon.migration.target_profiles.ProfileEvidence`,
 but not per model: a name is the product of separately evidenced
@@ -108,6 +119,8 @@ same :class:`Inventory` shape) and ``docs/adding-a-device-model.md``.
 
 from __future__ import annotations
 
+import copy
+import functools
 import logging
 import re
 from collections import Counter
@@ -335,9 +348,50 @@ class PortGroup(BaseModel):
     """Naming bank on the FIXED panel.  Numbering is per slot: each
     slot counts from one, and a later group in the same slot carries
     on where the earlier one stopped, whatever lies between them.
-    Almost always empty: an AOS-S 2930F numbers its uplinks ``49-52``
-    straight after access ``1-48``.  Must be empty in a module's
-    groups — a module's ports are named by the bay it is fitted in."""
+    Usually empty: an AOS-S 2930F numbers its uplinks ``49-52``
+    straight after access ``1-48``.  To the Catalyst rule a slot is the
+    module number, and ``""`` is module 0: a 3650's fixed uplinks are
+    slot ``1`` (``GigabitEthernet1/1/1``), and a 2960-X's SFP+ uplinks
+    slot ``0``, module 0 like its downlinks but a bank that counts from
+    one of its own (``TenGigabitEthernet1/0/1`` beside
+    ``GigabitEthernet1/0/1``).  Must be empty in a module's groups — a
+    module's ports are named by the bay it is fitted in."""
+
+    prefix: str = ""
+    """The interface type the name begins with, for a grammar that has
+    one: ``GigabitEthernet``, ``TenGigabitEthernet``.  Stated by hand
+    from the vendor's own interface list, never derived from
+    :attr:`speed` — the word is a fact about the NAME, and a speed is
+    a fact about the port.  Required by a naming rule that takes one
+    (:attr:`NamingRuleSpec.prefixes`), refused by one that does not."""
+
+    speed: PortSpeed = ""
+    cage: PortCage = ""
+    poe: bool = False
+    notes: str = ""
+
+
+class DeploymentPortDef(BaseModel):
+    """A port that belongs to a deployment as a whole, by its name.
+
+    A stack of Catalyst switches has ONE management interface,
+    ``GigabitEthernet0/0``, whatever the number of members: each
+    member has the jack, and the active switch's carries the link.
+    No naming rule renders it and no member owns it, so it is stated
+    literally and compiled once per deployment, with no member rank
+    (:attr:`PhysicalPort.member_rank` ``None``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64, pattern=r"^\S+$")
+    """The literal name, written verbatim into a generated config."""
+
+    role: PortRole
+
+    naming: Grade
+    """How well this name — and that there is one per deployment — is
+    established."""
 
     speed: PortSpeed = ""
     cage: PortCage = ""
@@ -552,6 +606,13 @@ class FamilyDef(BaseModel):
     modes: dict[str, ModeDef] = Field(min_length=1)
     modules: dict[str, ModuleDef] = Field(default_factory=dict)
     models: dict[str, ModelDef] = Field(min_length=1)
+    deployment_ports: list[DeploymentPortDef] = Field(
+        default_factory=list, max_length=_MAX_PORT_GROUPS,
+    )
+    """Ports of the deployment as a whole, in every mode and whatever
+    its members: a stack's one management interface.  Listed after
+    every member's ports (see :class:`DeploymentPortDef`)."""
+
     captures: list[CaptureClaim] = Field(default_factory=list)
 
     @property
@@ -591,6 +652,20 @@ class FamilyDef(BaseModel):
                         f"{owner}: naming rule {self.naming!r} cannot name "
                         f"a {group.role!r} port ({rule.why_not}); it names "
                         f"{sorted(rule.roles)} only"
+                    )
+                if not rule.prefixes and group.prefix:
+                    raise ValueError(
+                        f"{owner}: naming rule {self.naming!r} puts no "
+                        f"interface type in a name, so a group cannot "
+                        f"state `prefix` ({group.prefix!r})"
+                    )
+                if rule.prefixes and group.prefix not in rule.prefixes:
+                    stated = f"{group.prefix!r}" if group.prefix else "none"
+                    raise ValueError(
+                        f"{owner}: naming rule {self.naming!r} names a port "
+                        f"by its interface type, so every group states "
+                        f"`prefix`, one of {sorted(rule.prefixes)}; this "
+                        f"one states {stated}"
                     )
 
         for sku, module in self.modules.items():
@@ -782,6 +857,12 @@ class NamingRuleSpec:
     why_not: str = ""
     """One clause explaining the roles left out, for the load error."""
 
+    prefixes: frozenset[str] = frozenset()
+    """The interface types this grammar begins a name with.  Empty
+    for a grammar that has none (AOS-S: ``24``, ``1/A1``), where a
+    group that states a :attr:`PortGroup.prefix` is refused at load;
+    otherwise every group states one of these."""
+
 
 def _aoss_rule(request: PortNameRequest) -> str:
     from .codecs.aruba_aoss.port_names import physical_port_name
@@ -789,6 +870,28 @@ def _aoss_rule(request: PortNameRequest) -> str:
     return physical_port_name(
         member=request.member_id,
         slot=request.slot,
+        port=request.index0 + 1,
+    )
+
+
+def _catalyst_rule(request: PortNameRequest) -> str:
+    from .codecs.cisco_iosxe_cli.port_names import catalyst_port_name
+
+    if request.member_id is None:
+        raise ValueError(
+            "a Catalyst port name always carries the switch number; "
+            "the mode must state `member_ids`"
+        )
+    # The fixed panel is module 0; a bay is named by its module number.
+    if request.slot and not (request.slot.isascii() and request.slot.isdigit()):
+        raise ValueError(
+            f"a Catalyst module is numbered; bay {request.slot!r} is not "
+            f"a number"
+        )
+    return catalyst_port_name(
+        port_type=request.group.prefix,
+        member=request.member_id,
+        module=int(request.slot or "0"),
         port=request.index0 + 1,
     )
 
@@ -808,7 +911,23 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "not a numbered port"
             ),
         ),
+        "catalyst": NamingRuleSpec(
+            render=_catalyst_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "a Catalyst stack has one management interface, "
+                "`GigabitEthernet0/0`, which no member owns; it is "
+                "stated under `deployment_ports`"
+            ),
+            prefixes=_catalyst_port_types(),
+        ),
     }
+
+
+def _catalyst_port_types() -> frozenset[str]:
+    from .codecs.cisco_iosxe_cli.port_names import CATALYST_PORT_TYPES
+
+    return CATALYST_PORT_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -1117,6 +1236,38 @@ def _member_ports(
     return ports, refs, caveats
 
 
+def _deployment_ports(
+    family: FamilyDef, refs: list[str], caveats: list[str],
+) -> list[PhysicalPort]:
+    """The ports of the deployment as a whole, once, after every
+    member's: no member rank, no member id, and an ordinal of their
+    own per role.  Their references and caveats are added to *refs*
+    and *caveats*."""
+    ports: list[PhysicalPort] = []
+    next_ordinal: dict[str, int] = {}
+    for index, port in enumerate(family.deployment_ports):
+        ordinal = next_ordinal.get(port.role, 0)
+        next_ordinal[port.role] = ordinal + 1
+        refs.append(port.naming.ref)
+        caveats.append(port.naming.caveat)
+        ports.append(PhysicalPort(
+            name=port.name,
+            member_rank=None,
+            member_id=None,
+            role=port.role,
+            ordinal=ordinal,
+            slot="",
+            index=index,
+            module="",
+            speed=port.speed,
+            cage=port.cage,
+            poe=port.poe,
+            notes=port.notes,
+            evidence=port.naming.grade,
+        ))
+    return ports
+
+
 def compile_deployment(
     deployment: Deployment, registry: DeviceModelRegistry,
 ) -> Inventory:
@@ -1187,6 +1338,7 @@ def _compile(
         if member.member_id is not None:
             part += f" as member {member.member_id}"
         parts.append(part)
+    ports.extend(_deployment_ports(family, refs, caveats))
     if mode_defaulted and len(family.modes) > 1:
         caveats.append(
             f"No deployment mode was stated; {family.display()} was "
@@ -1286,7 +1438,10 @@ def inventory_from_profile(
     A target profile already lists literal port names for one stated
     deployment state, so no naming rule is involved: names are taken
     verbatim, roles come from each port's ``kind`` and ordinals from
-    list order (chassis ports, then the selected module's).
+    list order (chassis ports, then the selected module's).  A
+    management port belongs to no member (``member_rank`` ``None``),
+    as a family's stack-wide management port does, so that the two
+    pair with each other.
 
     What a profile does NOT state is not invented: the cage is left
     unstated (the profile's ``sfp`` flag means "a pluggable cage of
@@ -1329,7 +1484,9 @@ def inventory_from_profile(
             next_ordinal[role] = ordinal + 1
             ports.append(PhysicalPort(
                 name=port.id,
-                member_rank=0,
+                # A management port is the deployment's, as a family's
+                # is (:class:`DeploymentPortDef`), so that the two pair.
+                member_rank=None if role == "mgmt" else 0,
                 member_id=None,
                 role=role,
                 ordinal=ordinal,
@@ -1405,6 +1562,42 @@ def _repeated_key(node: yaml.Node | None) -> tuple[str, int] | None:
     return None
 
 
+class _AliasInFile(Exception):
+    """The text of a family file uses a YAML alias."""
+
+
+@functools.lru_cache(maxsize=1024)
+def _read_family_yaml(raw: str) -> tuple[tuple[str, int] | None, Any]:
+    """The first repeated key in *raw*, and the data *raw* holds.
+
+    Both are a function of the text alone, so they are kept.  Every
+    start of the application loads every shipped family file, and the
+    pure-Python YAML reader takes tens of milliseconds a file: with a
+    library of families that was most of a second for each start, and
+    the integration tier, which starts an application for each test,
+    ran several times as long and past its time limit.  The key is the
+    whole text, never a path or a time, so a file that has changed is
+    read again.  The data is shared: :func:`load_family_file` copies it
+    before changing it.  Nothing is kept for a text that fails.
+
+    Raises:
+        _AliasInFile: the text uses a YAML alias.
+        yaml.YAMLError, RecursionError: as the YAML reader raises them.
+    """
+    # An alias makes one node reachable from two places.  No family
+    # file needs one, and refusing them removes a self-referential
+    # document (unbounded recursion) and an alias bomb (exponential
+    # work) in a single rule.  RecursionError is for a file that is
+    # merely nested very deeply.
+    if any(
+        isinstance(event, yaml.AliasEvent)
+        for event in yaml.parse(raw, Loader=yaml.SafeLoader)
+    ):
+        raise _AliasInFile
+    repeated = _repeated_key(yaml.compose(raw, Loader=yaml.SafeLoader))
+    return repeated, yaml.safe_load(raw)
+
+
 def load_family_file(path: Path) -> FamilyDef:
     """Load and validate one family YAML file.
 
@@ -1428,21 +1621,14 @@ def load_family_file(path: Path) -> FamilyDef:
             f"{path}: cannot be read as UTF-8 text: {exc}"
         ) from exc
     try:
-        # An alias makes one node reachable from two places.  No family
-        # file needs one, and refusing them removes a self-referential
-        # document (unbounded recursion) and an alias bomb (exponential
-        # work) in a single rule.  RecursionError below is for a file
-        # that is merely nested very deeply.
-        if any(
-            isinstance(event, yaml.AliasEvent)
-            for event in yaml.parse(raw, Loader=yaml.SafeLoader)
-        ):
-            raise DeviceModelLoadError(
-                f"{path}: YAML aliases (`*name`) are not allowed in a "
-                f"family file; write the value out"
-            )
-        repeated = _repeated_key(yaml.compose(raw, Loader=yaml.SafeLoader))
-        data: Any = yaml.safe_load(raw)
+        repeated, kept = _read_family_yaml(raw)
+        # The kept data is shared with every later load of this text.
+        data: Any = copy.deepcopy(kept)
+    except _AliasInFile:
+        raise DeviceModelLoadError(
+            f"{path}: YAML aliases (`*name`) are not allowed in a "
+            f"family file; write the value out"
+        ) from None
     except (yaml.YAMLError, RecursionError) as exc:
         raise DeviceModelLoadError(f"{path}: YAML parse error: {exc}") from exc
     if repeated is not None:

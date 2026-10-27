@@ -1,0 +1,173 @@
+# Cisco Catalyst 9200L switch series (IOS XE): the fixed-uplink models
+#
+# A fixed-port access switch with fixed uplinks, no network-module bay,
+# and a StackWise-80 stack of up to eight members.  The names are made
+# as a C9200's are -- cisco_iosxe_c9200.yaml says how, and lists its
+# sources under the same tags -- with one difference: the uplinks are
+# on the switch, and are still module 1 ("On a device with SFP uplink
+# ports, the module number is 1 and the port numbers restart", CG), so
+# a C9200L-24P-4X is GigabitEthernet1/0/1-24 and then
+# TenGigabitEthernet1/1/1-4.  They are a group with `slot: "1"`.
+#
+# A family of its own: the Stacking and High Availability Configuration
+# Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), says "Do
+# not stack Cisco Catalyst 9200L Series Switches with Cisco Catalyst
+# 9200 Series Switches".
+#
+# Which ports are Multigigabit.  CR says "The range for multi-Gigabit
+# Ethernet ports on 24-port switches is 17-24" and "on 48-port switches
+# is 41-48", which is right for the C9200L-24PXG-4X, -24PXG-2Y and
+# -48PXG-2Y (8 such ports each, by HIG and DS).  The C9200L-48PXG-4X
+# has 12 (HIG, DS), which 41-48 cannot hold; CR also numbers
+# TenGigabitEthernet ports of module 0 from 37 to 48, and that the 12
+# are 37-48 is inferred from the two, and graded so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * Whether a C9200L config holds an interface of each type for its
+#     fixed uplinks (GigabitEthernet1/1/1-4 beside
+#     TenGigabitEthernet1/1/1-4): no config of a C9200L was seen.
+#   * The C9200L-M models, managed from the Meraki dashboard.
+schema: 1
+vendor: cisco_iosxe
+family: C9200L
+display_name: "Cisco Catalyst 9200L"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "StackWise-80 stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Interface Characteristics, Interface Configuration Mode (interface type, module number and port number; switch (downlink) ports are module 0 and uplink ports module 1; on a device with SFP uplink ports the module number is 1 and the port numbers restart, GigabitEthernet1/1/1 through GigabitEthernet1/1/4; types GigabitEthernet, TenGigabitEthernet and TwentyFiveGigE; a standalone device's ports are numbered as switch 1); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (switch ID 1 to 8; TenGigabitEthernet, slot 0 to 1, port ranges 1 to 4, 17 to 24 and 37 to 48; TwentyFiveGigE, slot 1, ports 1 to 2); Stacking and High Availability Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Managing Switch Stacks (up to eight stacking-capable switches)"
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco does not stack a C9200L with a C9200, nor switches of different license levels; the license is not checked here. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 9200L was seen."
+
+deployment_ports:
+  - name: GigabitEthernet0/0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the active switch's carries the link"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), Configuring Ethernet Management Port (the Ethernet management port, also referred to as the Gi0/0 or GigabitEthernet0/0 port; in a stack the active link is from the Ethernet management port on the active switch); Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Rear Panel of a C9200L Switch (MGMT, RJ-45 10/100/1000 management port)"}
+
+models:
+  # --- 1G copper, 4 x 1G SFP: Gi<n>/0/1-24 or -48, then Gi<n>/1/1-4 -------
+  C9200L-24T-4G:
+    skus: [C9200L-24T-4G]
+    display_name: "Cisco Catalyst C9200L-24T-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24T-4G: 24x1G ports; 4x1G SFP fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports data; 4x 1G fixed uplinks)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9200L-48T-4G:
+    skus: [C9200L-48T-4G]
+    display_name: "Cisco Catalyst C9200L-48T-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48T-4G: 48x1G ports; 4x1G SFP fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports data; 4x 1G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9200L-24P-4G:
+    skus: [C9200L-24P-4G]
+    display_name: "Cisco Catalyst C9200L-24P-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24P-4G: 24x1G PoE+ ports; 4x1G SFP fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+; 4x 1G fixed uplinks)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9200L-48P-4G:
+    skus: [C9200L-48P-4G]
+    display_name: "Cisco Catalyst C9200L-48P-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48P-4G: 48x1G PoE+ ports; 4x1G SFP fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+; 4x 1G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  C9200L-48PL-4G:
+    skus: [C9200L-48PL-4G]
+    display_name: "Cisco Catalyst C9200L-48PL-4G"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48PL-4G: 48x1G PoE+ ports with partial PoE support; 4x1G SFP fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports partial PoE+; 4x 1G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true, notes: "partial PoE+"}
+      - {role: uplink, count: 4, slot: "1", prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  # --- 1G copper, 4 x 10G SFP+: Gi<n>/0/1-24 or -48, then Te<n>/1/1-4 -----
+  C9200L-24T-4X:
+    skus: [C9200L-24T-4X]
+    display_name: "Cisco Catalyst C9200L-24T-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24T-4X: 24x1G ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports data; 4x 1/10G fixed uplinks)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9200L-48T-4X:
+    skus: [C9200L-48T-4X]
+    display_name: "Cisco Catalyst C9200L-48T-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48T-4X: 48x1G ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports data; 4x 1/10G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9200L-24P-4X:
+    skus: [C9200L-24P-4X]
+    display_name: "Cisco Catalyst C9200L-24P-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24P-4X: 24x1G PoE+ ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+; 4x 1/10G fixed uplinks)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9200L-48P-4X:
+    skus: [C9200L-48P-4X]
+    display_name: "Cisco Catalyst C9200L-48P-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48P-4X: 48x1G PoE+ ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+; 4x 1/10G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9200L-48PL-4X:
+    skus: [C9200L-48PL-4X]
+    display_name: "Cisco Catalyst C9200L-48PL-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48PL-4X: 48x1G PoE+ ports with partial PoE support; 4x10G fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports partial PoE+; 4x 1/10G fixed uplinks)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true, notes: "partial PoE+"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  # --- 1G and Multigigabit copper ------------------------------------------
+  C9200L-24PXG-4X:
+    skus: [C9200L-24PXG-4X]
+    display_name: "Cisco Catalyst C9200L-24PXG-4X"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24PXG-4X: 8xMultigigabit Ethernet PoE+ ports and 16x1G PoE+ ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+: 8 mGig ports up to 10G, 16 ports up to 1G; 4x 1/10G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 24-port switch are 17-24)"}
+    ports:
+      - {role: access, count: 16, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  C9200L-24PXG-2Y:
+    skus: [C9200L-24PXG-2Y]
+    display_name: "Cisco Catalyst C9200L-24PXG-2Y"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-24PXG-2Y: 8xMultigigabit Ethernet PoE+ ports and 16x1G PoE+ ports; 2x25G SFP28 fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (24 ports full PoE+: 8 mGig ports up to 10G, 16 ports up to 1G; 2x 1/10/25G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 24-port switch are 17-24; TwentyFiveGigE, slot 1, ports 1 to 2)"}
+    ports:
+      - {role: access, count: 16, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 2, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  C9200L-48PXG-2Y:
+    skus: [C9200L-48PXG-2Y]
+    display_name: "Cisco Catalyst C9200L-48PXG-2Y"
+    panel: {grade: vendor-doc, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48PXG-2Y: 8xMultigigabit Ethernet PoE+ ports and 40x1G PoE+ ports; 2x25G SFP28 fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+: 8 mGig ports up to 10G, 40 ports up to 1G; 2x 1/10/25G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 48-port switch are 41-48; TwentyFiveGigE, slot 1, ports 1 to 2)"}
+    ports:
+      - {role: access, count: 40, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 8, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 2, slot: "1", prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  C9200L-48PXG-4X:
+    skus: [C9200L-48PXG-4X]
+    display_name: "Cisco Catalyst C9200L-48PXG-4X"
+    panel: {grade: inferred, ref: "Cisco Catalyst 9200 Series Switches Hardware Installation Guide, Product Overview, Table 1 (C9200L-48PXG-4X: 12xMultigigabit Ethernet PoE+ ports and 36x1G PoE+ ports; 4x10G SFP+ fixed uplink ports); Cisco Catalyst 9200 Series Switches Data Sheet, Table 2 (48 ports full PoE+: 12 mGig ports up to 10G, 36 ports up to 1G; 4x 1/10G fixed uplinks); Command Reference, Cisco IOS XE Dublin 17.12.x (Catalyst 9200 Switches), interface (TenGigabitEthernet port ranges 1 to 4, 17 to 24 and 37 to 48; the multi-Gigabit Ethernet ports of a 48-port switch are 41-48)", caveat: "C9200L-48PXG-4X: Cisco gives this model 12 Multigigabit ports, and its command reference numbers TenGigabitEthernet ports 37 to 48 but says the Multigigabit ports of a 48-port switch are 41-48; that they are ports 37-48 is inferred from the two, and no configuration of a C9200L-48PXG-4X was seen."}
+    ports:
+      - {role: access, count: 36, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: TenGigabitEthernet, speed: 10gig, cage: rj45, poe: true, notes: "Multigigabit"}
+      - {role: uplink, count: 4, slot: "1", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}

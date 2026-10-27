@@ -1027,13 +1027,17 @@ model family describes a part number in `unknown_parts`; the members
 belong to different families; what the config states does not compile
 (a module the bay does not take, a member number outside the mode's
 range, more members than the mode allows); the lines that state the
-hardware could not be read -- on AOS-S, a banner the parser cannot
-tell from the configuration (a `banner motd` with no end, with text
-after its closing quote, or whose text holds a quote; see [The job
-says `parse failed:` for a
+hardware could not be read -- a banner the parser cannot tell from
+the configuration (on AOS-S a `banner motd` with no end, with text
+after its closing quote, or whose text holds a quote; on a Catalyst,
+any the IOS-XE parser refuses; see [The job says `parse failed:` for a
 banner](#the-job-says-parse-failed-for-a-banner)); or the vendor has
-no detector yet.  A stack that comes back short of a member, or with a
-bay empty that the config provisions, has a note that counts the
+no detector yet.  A proposal from a C9300 config is `consistent:
+false` and lists the module ports: no line of the config states the
+module, so the bay is proposed empty, and the config names the ports
+of every module the bay takes.  Declare the module that is fitted;
+the names of the others are not ports of the switch.  A stack that comes back short of a member, or with a bay
+empty that the config provisions, has a note that counts the
 member lines, member blocks or module lines that could not be read;
 so has a `module 1` line that could not be read, where the banner was
 used in its place.

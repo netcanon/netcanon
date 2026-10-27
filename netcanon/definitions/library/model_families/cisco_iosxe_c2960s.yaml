@@ -1,0 +1,195 @@
+# Cisco Catalyst 2960-S switch series (Cisco IOS): the LAN Base models
+#
+# A fixed-port access switch with fixed uplinks, no network-module bay,
+# and a FlexStack stack of up to four members ("A switch stack is a set
+# of up to four Catalyst 2960-S switches connected through their stack
+# ports", SCG).  The switch runs Cisco IOS, not IOS XE; the IOS-XE CLI
+# codec reads its configuration, as it reads IOS 15.  How a name is
+# made, all from CG:
+#
+#   * "To configure a port on a Catalyst 2960-S switch running the LAN
+#     base image (supporting stacking), specify the interface type,
+#     stack member number, module number, and switch port number":
+#     `<type><switch>/<module>/<port>`.  "The module or slot number on
+#     the switch (always 0)", and "The default switch number, before it
+#     is integrated into a switch stack, is 1" -- CG's own example for
+#     "a standalone switch" is `interface gigabitethernet1/0/4`.
+#   * "The port numbers always begin at 1, starting with the far left
+#     port when facing the front of the switch", and "SFP module ports
+#     are numbered consecutively following the 10/100/1000 ports": a
+#     WS-C2960S-48TS-L is GigabitEthernet1/0/1-48 and then
+#     GigabitEthernet1/0/49-52 (HIG's front panel of the 2960S-48TS-L:
+#     "Module slot numbers are 49, 50, 51, and 52").
+#   * A D model's two SFP+ uplinks are TenGigabitEthernet1/0/1-2: a run
+#     of their own on module 0 (`slot: "0"`, a bank that counts from 1
+#     beside the downlinks' bank) -- inferred, below.
+#
+# The TYPE word is stated per group of ports (`prefix:`), from Cisco's
+# own interface lists, and never derived from a speed.
+#
+# The stack has ONE management interface, FastEthernet0 ("The Ethernet
+# management port, also referred to as the Fa0 or fastethernet0 port",
+# CG, in a section headed "Catalyst 2960-S Only"): each member has the
+# jack and the stack master's carries the link.  It is declared once,
+# under `deployment_ports`, and belongs to no member.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HIG   Catalyst 2960-S Switch Hardware Installation Guide, "Product
+#         Overview" (Table 1-1, the models, their software images and
+#         which support Cisco FlexStack; the front-panel figures and
+#         their module slot numbers; the 10/100 Ethernet management
+#         port).
+#   EOL   End-of-Sale and End-of-Life Announcement for the Cisco
+#         Catalyst 2960-S Series and 2960-SF Series Switches (the part
+#         numbers and their descriptions).
+#   CG    Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software
+#         Configuration Guide, Cisco IOS Release 15.0(2)SE and Later,
+#         "Configuring Interface Characteristics".
+#   SCG   The same guide, "Managing Switch Stacks" (up to four members;
+#         "Stacking is supported only on Catalyst 2960-S switches
+#         running the LAN base image"; `switch stack-member-number
+#         provision type`, "For type, enter the model number of the
+#         member").
+#
+# Where the sources are silent: the names of a D model's 10G uplinks.
+# CG names no 10-Gigabit port, in a sentence or an example; its rule
+# that "SFP module ports are numbered consecutively" is for SFP module
+# ports.  HIG's front panel of the 2960S-48FPD-L gives "Module slot
+# numbers are 1 and 2".  TenGigabitEthernet1/0/1-2 follows those labels
+# and the module number, as a 2960-X D model's do, and each D model's
+# panel is graded inferred and says so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The LAN Lite models, WS-C2960S-48TS-S and WS-C2960S-24TS-S: they
+#     do not stack (SCG), and CG names their ports with no switch number
+#     ("a Catalyst 2960-S switch running the LAN Lite image": `interface
+#     gigabitethernet0/4`), a form no naming rule here writes.
+#   * The Catalyst 2960-SF (WS-C2960S-F48FPS-L and the rest), whose
+#     downlinks are 10/100 ports: CG's rule numbers SFP module ports
+#     after the 10/100/1000 ports, which an SF does not have, and HIG's
+#     front panel of the 2960S-F48FPS-L labels its SFP slots "49, 50,
+#     51, and 52".  What those ports are named is not established.
+#   * The WS-C2960S-48TS-J1 ("Catalyst 2960-S 48TS-L for Japan Post",
+#     EOL): a part number of its own, not read as a 48TS-L here.
+#   * A stack with a Catalyst 2960-X LAN Base switch, which Cisco builds
+#     of up to four (Cisco Catalyst 2960-X and 2960-XR Series Switches
+#     Data Sheet): the 2960-X is a family of its own
+#     (cisco_iosxe_c2960x.yaml), and a deployment is one family.
+#   * Whether a D model's config also holds GigabitEthernet interfaces
+#     numbered after its downlinks (GigabitEthernet1/0/49-50 beside
+#     TenGigabitEthernet1/0/1-2): no config of a 2960-S was seen.
+#   * Which type word a 2960-S prints in its `switch N provision` line:
+#     SCG says the model number of the member, and its example is
+#     `switch 2 provision switch PID`.
+schema: 1
+vendor: cisco_iosxe
+family: C2960S
+display_name: "Cisco Catalyst 2960-S LAN Base"
+naming: catalyst
+default_mode: stack
+
+modes:
+  stack:
+    label: "FlexStack stack (`switch N provision`; a switch that is alone is a stack of one)"
+    member_ids: [1, 4]
+    naming:
+      grade: vendor-doc
+      ref: "Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Managing Switch Stacks (a switch stack is a set of up to four Catalyst 2960-S switches connected through their stack ports; stacking is supported only on Catalyst 2960-S switches running the LAN base image; the member number (1 to 4) identifies each member in the stack; switch stack-member-number provision type, for type the model number of the member); Catalyst 2960-S Switch Hardware Installation Guide, Product Overview (some models of the switches support stacking through the Cisco FlexStack technology)"
+    caveat: "Names carry the switch number even on a switch that is alone. Cisco stacks a 2960-S with a Catalyst 2960-X LAN Base switch in a stack of at most four (Cisco Catalyst 2960-X and 2960-XR Series Switches Data Sheet); the 2960-X is a family of its own, so such a stack cannot be declared. The LAN Lite models (WS-C2960S-48TS-S and WS-C2960S-24TS-S) and the Catalyst 2960-SF are not modelled. The stack's own lines (switch N provision, switch priorities) describe the hardware and are not translated. No configuration of a Catalyst 2960-S was seen: whether one with SFP+ uplinks also holds GigabitEthernet interfaces numbered after its downlinks is not established."
+
+deployment_ports:
+  - name: FastEthernet0
+    role: mgmt
+    speed: fast
+    cage: rj45
+    notes: "Ethernet management port, one per stack: the stack master's carries the link"
+    naming: {grade: vendor-doc, ref: "Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics, Using the Ethernet Management Port (Catalyst 2960-S Only) (the Ethernet management port, also referred to as the Fa0 or fastethernet0 port, is a Layer 3 host port; in a Catalyst 2960-S stack the active link is from the Ethernet management port on the stack master); Catalyst 2960-S Switch Hardware Installation Guide, Product Overview (the 10/100 Ethernet management port, a standard RJ-45 connection)"}
+
+models:
+  # --- 2 x SFP+: Gi<n>/0/1-24 or -48, then Te<n>/0/1-2 (inferred) -------
+  WS-C2960S-48FPD-L:
+    skus: [WS-C2960S-48FPD-L]
+    display_name: "Cisco Catalyst WS-C2960S-48FPD-L"
+    panel: {grade: inferred, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48FPD-L: LAN Base, 48 10/100/1000 PoE+ ports (PoE budget of 740 W) and 2 SFP+ module slots, Cisco FlexStack); Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Figure 1-1, Catalyst 2960S-48FPD-L Front Panel (module slot numbers are 1 and 2); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48FPD-L: Catalyst 2960S 48 GigE PoE 740W, 2 x 10G SFP+ LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)", caveat: "WS-C2960S-48FPD-L: two SFP+ uplinks. Cisco's configuration guide says the module number is always 0 and names no 10-Gigabit port, and the hardware guide's front panel of a 2960S-48FPD-L gives its module slot numbers as 1 and 2. That they are TenGigabitEthernet1/0/1-2 follows the module number and those labels, is inferred, and no configuration of a 2960-S was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960S-48LPD-L:
+    skus: [WS-C2960S-48LPD-L]
+    display_name: "Cisco Catalyst WS-C2960S-48LPD-L"
+    panel: {grade: inferred, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48LPD-L: LAN Base, 48 10/100/1000 PoE+ ports (PoE budget of 370 W) and 2 SFP+ module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48LPD-L: Catalyst 2960S 48 GigE PoE 370W, 2 x 10G SFP+ LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)", caveat: "WS-C2960S-48LPD-L: two SFP+ uplinks. Cisco's configuration guide says the module number is always 0 and names no 10-Gigabit port, and the hardware guide's front panel of a 2960S-48FPD-L gives its module slot numbers as 1 and 2. That they are TenGigabitEthernet1/0/1-2 follows the module number and those labels, is inferred, and no configuration of a 2960-S was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960S-24PD-L:
+    skus: [WS-C2960S-24PD-L]
+    display_name: "Cisco Catalyst WS-C2960S-24PD-L"
+    panel: {grade: inferred, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-24PD-L: LAN Base, 24 10/100/1000 PoE+ ports (PoE budget of 370 W) and 2 SFP+ module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-24PD-L: Catalyst 2960S 24 GigE PoE 370W, 2 x 10G SFP+ LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)", caveat: "WS-C2960S-24PD-L: two SFP+ uplinks. Cisco's configuration guide says the module number is always 0 and names no 10-Gigabit port, and the hardware guide's front panel of a 2960S-48FPD-L gives its module slot numbers as 1 and 2. That they are TenGigabitEthernet1/0/1-2 follows the module number and those labels, is inferred, and no configuration of a 2960-S was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960S-48TD-L:
+    skus: [WS-C2960S-48TD-L]
+    display_name: "Cisco Catalyst WS-C2960S-48TD-L"
+    panel: {grade: inferred, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48TD-L: LAN Base, 48 10/100/1000 ports and 2 SFP+ module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48TD-L: Catalyst 2960S 48 GigE, 2 x 10G SFP+ LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)", caveat: "WS-C2960S-48TD-L: two SFP+ uplinks. Cisco's configuration guide says the module number is always 0 and names no 10-Gigabit port, and the hardware guide's front panel of a 2960S-48FPD-L gives its module slot numbers as 1 and 2. That they are TenGigabitEthernet1/0/1-2 follows the module number and those labels, is inferred, and no configuration of a 2960-S was seen."}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  WS-C2960S-24TD-L:
+    skus: [WS-C2960S-24TD-L]
+    display_name: "Cisco Catalyst WS-C2960S-24TD-L"
+    panel: {grade: inferred, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-24TD-L: LAN Base, 24 10/100/1000 ports and 2 SFP+ module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-24TD-L: Catalyst 2960S 24 GigE, 2 x 10G SFP+ LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)", caveat: "WS-C2960S-24TD-L: two SFP+ uplinks. Cisco's configuration guide says the module number is always 0 and names no 10-Gigabit port, and the hardware guide's front panel of a 2960S-48FPD-L gives its module slot numbers as 1 and 2. That they are TenGigabitEthernet1/0/1-2 follows the module number and those labels, is inferred, and no configuration of a 2960-S was seen."}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "0", prefix: TenGigabitEthernet, speed: 10gig, cage: sfp+}
+
+  # --- 4 x SFP: Gi<n>/0/1-24 or -48, then Gi<n>/0/25-28 or 49-52 -----
+  WS-C2960S-48FPS-L:
+    skus: [WS-C2960S-48FPS-L]
+    display_name: "Cisco Catalyst WS-C2960S-48FPS-L"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48FPS-L: LAN Base, 48 10/100/1000 PoE+ ports (PoE budget of 740 W) and 4 SFP module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48FPS-L: Catalyst 2960S 48 GigE PoE 740W, 4 x SFP LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960S-48LPS-L:
+    skus: [WS-C2960S-48LPS-L]
+    display_name: "Cisco Catalyst WS-C2960S-48LPS-L"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48LPS-L: LAN Base, 48 10/100/1000 PoE+ ports (PoE budget of 370 W) and 4 SFP module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48LPS-L: Catalyst 2960S 48 GigE PoE 370W, 4 x SFP LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960S-24PS-L:
+    skus: [WS-C2960S-24PS-L]
+    display_name: "Cisco Catalyst WS-C2960S-24PS-L"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-24PS-L: LAN Base, 24 10/100/1000 PoE+ ports (PoE budget of 370 W) and 4 SFP module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-24PS-L: Catalyst 2960S 24 GigE PoE 370W, 4 x SFP LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960S-48TS-L:
+    skus: [WS-C2960S-48TS-L]
+    display_name: "Cisco Catalyst WS-C2960S-48TS-L"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-48TS-L: LAN Base, 48 10/100/1000 ports and 4 SFP module slots, Cisco FlexStack); Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Figure 1-2, Catalyst 2960S-48TS-L Front Panel (module slot numbers are 49, 50, 51, and 52); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-48TS-L: Catalyst 2960S 48 GigE, 4 x SFP LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)"}
+    ports:
+      - {role: access, count: 48, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}
+
+  WS-C2960S-24TS-L:
+    skus: [WS-C2960S-24TS-L]
+    display_name: "Cisco Catalyst WS-C2960S-24TS-L"
+    panel: {grade: vendor-doc, ref: "Catalyst 2960-S Switch Hardware Installation Guide, Product Overview, Table 1-1 (Catalyst 2960S-24TS-L: LAN Base, 24 10/100/1000 ports and 4 SFP module slots, Cisco FlexStack); End-of-Sale and End-of-Life Announcement for the Cisco Catalyst 2960-S Series and 2960-SF Series Switches, product part numbers (WS-C2960S-24TS-L: Catalyst 2960S 24 GigE, 4 x SFP LAN Base); Catalyst 2960, 2960-S, 2960-C, and 2960-Plus Switches Software Configuration Guide, Cisco IOS Release 15.0(2)SE and Later, Configuring Interface Characteristics (a port on a Catalyst 2960-S switch running the LAN base image (supporting stacking) is identified by the interface type, stack member number, module number, and switch port number; the switch number range is 1 to 4; the default switch number, before it is integrated into a switch stack, is 1; the module or slot number on the switch is always 0; the port numbers always begin at 1, starting with the far left port when facing the front of the switch, for example gigabitethernet1/0/1; for a switch with 10/100/1000 ports and SFP module ports, SFP module ports are numbered consecutively following the 10/100/1000 ports; on a standalone switch: interface gigabitethernet1/0/4)"}
+    ports:
+      - {role: access, count: 24, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, prefix: GigabitEthernet, speed: gig, cage: sfp}

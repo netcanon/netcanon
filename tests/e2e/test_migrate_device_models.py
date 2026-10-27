@@ -56,6 +56,28 @@ CAPTURE_2930M = (
     REPO_ROOT / "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"
 ).read_text(encoding="utf-8")
 
+#: A switch numbered 2, with its type on the line that provisions it.
+_CISCO_SWITCH_2 = """hostname test-sw
+!
+switch 2 provision c9300-24p
+!
+interface GigabitEthernet2/0/1
+ description user
+ switchport mode access
+ switchport access vlan 10
+!
+end
+"""
+
+_ARISTA_SRC = """hostname test-sw
+!
+interface Ethernet1
+   description user
+   switchport access vlan 10
+!
+end
+"""
+
 _CISCO_SRC = """hostname test-sw
 !
 interface GigabitEthernet1/0/1
@@ -397,9 +419,9 @@ class TestSourceDeviceIsReadFromTheConfig:
     def test_a_vendor_with_no_detector_says_so(
         self, page: Page, live_server_url: str,
     ) -> None:
-        """Nothing reads the hardware lines of a Cisco config yet: the
+        """Nothing reads the hardware lines of an Arista config yet: the
         picker stays empty, lists that vendor's profiles, and says why."""
-        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_SRC)
+        _translate(page, live_server_url, "arista_eos", "aruba_aoss", _ARISTA_SRC)
         page.locator(_tid("migrate-rename-open-btn")).click()
         select = page.locator(_tid("migrate-device-source-model-select"))
         expect(select).to_have_value("")
@@ -407,12 +429,48 @@ class TestSourceDeviceIsReadFromTheConfig:
         # The whole reason: it names the codec the config was asked
         # about as, and that is the SOURCE's.
         expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_have_text(
-            "No detector reads the hardware lines of cisco_iosxe configurations yet; "
+            "No detector reads the hardware lines of arista_eos configurations yet; "
             "declare the device yourself."
         )
         values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
-        assert "profile:C9300-48P" in values
+        assert "profile:DCS-7050SX-64" in values
         assert not [v for v in values if v.startswith("fam:")]
+
+    def test_a_catalyst_is_read_from_its_provision_line(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """``switch 2 provision c9300-24p``: the model, the stack mode
+        and the switch number are filled in, and the line is quoted."""
+        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_SWITCH_2)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(_source_note(page)).to_be_visible()
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            "fam:C9300:C9300-24P"
+        )
+        expect(page.locator(_tid("migrate-device-source-mode-select"))).to_have_value("stack")
+        expect(page.locator(_tid("migrate-device-source-member-0-id"))).to_have_value("2")
+        expect(_source_note(page)).to_contain_text("no switch is proposed with one fitted")
+        lines = page.locator(_tid("migrate-device-source-note-read-from"))
+        lines.locator("summary").click()
+        expect(lines).to_contain_text("switch 2 provision c9300-24p")
+
+    def test_a_cisco_config_that_states_no_switch_says_so(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A paste with no ``switch N provision`` line: the picker
+        stays empty, lists the Catalyst families and profiles, and
+        says why."""
+        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_SRC)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        select = page.locator(_tid("migrate-device-source-model-select"))
+        expect(select).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_have_text(
+            "The config does not say which device it came from; declare the "
+            "device yourself."
+        )
+        values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
+        assert "profile:C9300-48P" in values
+        assert "fam:C9300:C9300-48P" in values
 
 
 # ---------------------------------------------------------------------------
