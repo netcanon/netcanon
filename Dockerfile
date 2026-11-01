@@ -9,7 +9,7 @@
 # Base image pinned by digest (the multi-arch index for 3.14.6-slim-bookworm)
 # so the build is reproducible and not silently re-tagged upstream.  Dependabot's
 # docker ecosystem bumps both the tag and this digest together.
-FROM python:3.14.7-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f AS builder
+FROM python:3.15.0-slim-bookworm@sha256:0e019bbdfb5d9874cb2389f1c2884b64aa2ac97c99960b5bc521cef978c0617d AS builder
 
 # build-essential lets cryptography / paramiko / pyyaml fall back to source
 # if the wheel index lacks a Python 3.14 / linux/amd64 prebuilt.  The runtime
@@ -57,7 +57,7 @@ RUN pip install --no-cache-dir --upgrade pip wheel \
 # Stage 2 — runtime
 # ===========================================================================
 # Same digest-pinned base as the builder stage (see note above).
-FROM python:3.14.7-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f AS runtime
+FROM python:3.15.0-slim-bookworm@sha256:0e019bbdfb5d9874cb2389f1c2884b64aa2ac97c99960b5bc521cef978c0617d AS runtime
 
 # curl is the only runtime addition — used by HEALTHCHECK.  No build tools.
 # ``apt-get upgrade`` applies Debian security point-releases on top of the
