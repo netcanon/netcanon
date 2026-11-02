@@ -569,6 +569,21 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   says why in its caveat, and what a family leaves out is listed,
   with the reason, in its file; the EX4100, the modular chassis and
   the switches that run Junos OS Evolved are not described.
+- **A Virtual Chassis Fabric cannot be declared**, nor can a Virtual
+  Chassis that mixes two families' models (a QFX5100 with an EX4300
+  or a QFX5110).  A Virtual Chassis Fabric has up to 20 members,
+  numbered 0 to 19, and Juniper has ended its support.  A mode takes
+  one family's models, and a member id outside its range is refused.
+  Translate such a config with no device declared.  Its port names
+  then go through the name translator, and no device is there to
+  check them against: onto IOS-XE `xe-12/0/25` is written
+  `TenGigabitEthernet12/0/25`, a member the target may not have, and
+  onto EOS, whose names carry no member number, `Ethernet25`.  Where
+  two ports land on one name (port 25 of members 0 and 12, onto EOS)
+  the job is `partial` and lists them (`fused_ports`).  Give each
+  port the name of a port the target has, in the Interface rename
+  modal or `port_rename_map`.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor
   syntax; the renaming operation (port / VLAN / user-name etc.)

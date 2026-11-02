@@ -2297,8 +2297,11 @@ nothing, as before.
   A static route that names a dropped port is removed whole rather
   than kept with its next hop alone; the plan lists it
   (`lost_routes`).
-* Not modelled: modular chassis, breakout lanes, and ports a stack
-  uses as its links (which carry no configuration on the real device).
+* Not modelled: modular chassis, breakout lanes, ports a stack uses
+  as its links (which carry no configuration on the real device), a
+  stack of two families' models, and a Juniper Virtual Chassis Fabric
+  (see [`vendors/juniper_junos.md`](vendors/juniper_junos.md) for how
+  to translate a config of one).
 * The pairing is a starting point.  Two switches of the same shape
   pair exactly; a switch onto a firewall, or onto a device with a
   different mix of port types, needs a human look.
