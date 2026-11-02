@@ -32,6 +32,7 @@ Usage:
     pii_guard.py --self-test            each layer fires on a synthetic canary; clean text passes
 Exit 0 clean, 1 finding, 2 the scan could not run (fail closed).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -108,13 +109,8 @@ class Scanner:
                 return "listed identifier"
         return None
 
-    def line_findings(self, line: str) -> list[str]:
-        """Rule labels that fire on one line. Labels never include the matched text."""
-        if ALLOW_MARK in line:
-            return []
-        out = []
-        if self.paths and _PROFILE_PATH.search(line):
-            out.append("user-profile path")
+    def identifier_finding(self, line: str) -> str | None:
+        """The layer-2 label for `line`, or None. Other guards may call this directly."""
         hit = self._identifier(line)
         if hit is None:
             # A regex that spells an identifier with character classes or escapes (`ab[c]d`, `a\.b`)
@@ -124,6 +120,16 @@ class Scanner:
                 hit = self._identifier(squashed)
                 if hit:
                     hit += ", spelled with [] or \\"
+        return hit
+
+    def line_findings(self, line: str) -> list[str]:
+        """Rule labels that fire on one line. Labels never include the matched text."""
+        if ALLOW_MARK in line:
+            return []
+        out = []
+        if self.paths and _PROFILE_PATH.search(line):
+            out.append("user-profile path")
+        hit = self.identifier_finding(line)
         if hit:
             out.append(hit)
         for n, pat in enumerate(self.tokens, 1):
@@ -187,7 +193,7 @@ def self_test(root: Path) -> list[str]:
         return [f"hashes file unreadable: {e}"]
     if digest(CANARY) not in digests:
         fails.append(f"{HASHES_REL} lacks the canary digest (layer 2 would be unproven)")
-    sc = Scanner(digests, [re.compile("canary-lab" + r"\.invalid", re.I)])
+    sc = Scanner(digests, [re.compile("canary-lab" + r"\.invalid", re.IGNORECASE)])
     profile = "C:" + "\\" + "Us" + "ers" + "\\someone\\repo"
     cases = {
         "layer 1 (profile path)": (f"see {profile}", "user-profile path"),
@@ -198,7 +204,8 @@ def self_test(root: Path) -> list[str]:
             f"grep -E '{CANARY[:3]}[{CANARY[3]}]{CANARY[4:]}'",
             "listed identifier",
         ),
-        "layer 3 (private token)": ("host.canary-lab.invalid", "private token#1"),
+        # Assembled at runtime, so a repo whose token list holds this canary never flags this file.
+        "layer 3 (private token)": ("host." + "canary-lab" + ".invalid", "private token#1"),
     }
     for name, (text, want) in cases.items():
         got = sc.line_findings(text)
@@ -228,11 +235,9 @@ def main(argv: list[str]) -> int:
     paths = "--no-paths" not in argv
     argv = [a for a in argv if a != "--no-paths"]
     sc = Scanner(load_digests(root), load_tokens(), paths=paths)
-    layer3 = (
-        f"{len(sc.tokens)} private token(s)"
-        if sc.tokens
-        else "no private tokens (secret unset, fork or Dependabot PR)"
-    )
+    layer3 = "no private tokens (secret unset, fork or Dependabot PR)"
+    if sc.tokens:
+        layer3 = f"{len(sc.tokens)} private token(s)"
     if not paths:
         layer3 += "; user-profile path layer OFF (--no-paths)"
     if argv[:1] == ["--tree"]:
