@@ -194,7 +194,7 @@ Docker (and almost certainly MSI) ships zero `migration/vendors/*.yaml`.
   as `??` (untracked, NOT ignored) — matching the peer's check-ignore result.
 - `pii-guard.yml:27-29` states the dossier "is gitignored, so git grep never sees
   it" — **false in-tree**. The guard is content-pattern-only
-  (`samuelr[i]pp09|C:[\]Users`, pii-guard.yml:50).
+  (`<personal-email pattern>|C:[\]Users`, pii-guard.yml:50).
 - Nuance (does not change the verdict): `docs/codebase-review/` quotes the email, so
   the content guard would likely catch THAT dir at PR time; the truly exposed surface
   is `run3-verification/` (unlicensed third-party config content that plausibly

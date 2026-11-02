@@ -1,15 +1,30 @@
 name: PII guard
 
-# Recurrence guard for the 2026-06 PII remediation: fail the build if any
-# tracked file leaks the maintainer's personal email or an operator-machine
-# Windows user-profile path.  Runs on every PR and push to main.
+# Recurrence guard for the 2026-06 PII remediation: fail the build if a
+# tracked file, or a commit being merged, leaks a maintainer identifier.
+# Runs on every PR and push to main.  docker-publish.yml,
+# desktop-msi-publish.yml and demo-publish.yml refuse to publish a commit
+# this workflow has not passed, so its file name and job name are load-bearing.
+#
+# The scanner (.github/scripts/pii_guard.py) never holds or prints the
+# identifiers it hunts.  The previous guard spelled the personal email's local
+# part as a character-class regex (so it would not match its own text), which
+# published it to anyone who read this file.  Now:
+#   1. user-profile paths are matched by SHAPE (any user, any spelling);
+#   2. personal identifiers are matched by sha256 DIGEST, listed in
+#      .github/pii-guard.hashes (a digest confirms a guess, never reveals a
+#      value); the scan also squashes `[`, `]` and `\` so a char-class
+#      spelling like the old one is caught too;
+#   3. deployment names come from the optional PII_GUARD_TOKENS repository
+#      secret (absent on fork and Dependabot PRs; layers 1-2 still enforce).
+# A finding prints the file, line and rule, never the matched text.
 
 on:
   pull_request:
   push:
     branches: [main, master]
 
-# Read-only: this job only inspects the checked-out tree.
+# Read-only: this job only inspects the checked-out tree and its history.
 permissions:
   contents: read
 
@@ -17,67 +32,46 @@ jobs:
   scan-tracked-files:
     name: No leaked personal identifiers
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          # The commit-metadata scan walks the commits being merged.
+          fetch-depth: 0
 
-      - name: git grep tracked files for leaked identifiers
-        run: |
-          # Scope: tracked files only.  The review dossier under
-          # docs/codebase-review/ intentionally quotes these values; it is
-          # gitignored (see .gitignore) so git grep never sees it, and the
-          # tracked-path assertion below fails closed if it is ever force-
-          # added anyway.  Commit-message / Co-authored-by trailer hygiene is
-          # enforced locally by scripts/git-hooks/pre-push (see its header for
-          # how to enable it).
-          #
-          # The patterns use regex character classes (`[i]` = a literal
-          # `i`, `[\]` = a literal backslash) for two reasons:
-          #   1. The forbidden literals (the personal email and the
-          #      Windows user-profile path prefix) then never appear
-          #      verbatim ANYWHERE in this committed file — not even in
-          #      these comments — so the guard does not itself reintroduce
-          #      the very strings the remediation scrubs, and it does not
-          #      match its own text (no self-exclude needed).
-          #   2. `git grep -E` does NOT treat a bare `\\` as a reliable
-          #      literal backslash (it silently fails to match → the
-          #      guard would pass VACUOUSLY); a `[\]` class DOES match.
-          #      Both forms are verified against real operator-path
-          #      content.
-          #
-          # The grep is case-insensitive (`-i`) and covers every spelling of
-          # the user-profile path (#34): the drive-letter branch collapses the
-          # single-backslash, doubled-backslash (`+`), and forward-slash forms
-          # (a `[\/]` class matches either separator — the doubled-backslash
-          # form is exactly how job-record / traceback JSONs serialise Windows
-          # paths), and a separate branch covers the Git-Bash MSYS `/c/…` form.
-          # Every branch keeps a char class breaking the contiguous literal, so
-          # the widened pattern still never matches its own text.
-          #
-          # `git grep` exits 0 on match, 1 on no-match, 2 on error; we
-          # treat the error case as a FAILURE (fail closed), not "clean".
-          set +e
-          git grep -inI -E 'samuelr[i]pp09|c:[\/]+users|/c/[u]sers' -- .
-          rc=$?
-          set -e
-          if [ "${rc}" -eq 0 ]; then
-            echo "::error::A tracked file leaks a personal identifier or an operator-machine path (matches above). Redact it. (The review dossier that legitimately quotes these values is gitignored and is not scanned.)"
-            exit 1
-          elif [ "${rc}" -ne 1 ]; then
-            echo "::error::PII guard could not run (git grep exit ${rc}) — failing closed."
-            exit 1
-          fi
-          echo "PII guard: clean — no leaked identifiers in tracked files."
+      - name: Self-test (every layer fires on a synthetic canary)
+        # A scan that finds nothing must never be a scan that checked nothing.
+        run: python3 -I .github/scripts/pii_guard.py --self-test
+
+      - name: Scan tracked files
+        # Scope: tracked files only.  The review dossier under
+        # docs/codebase-review/ intentionally quotes the scrubbed values; it is
+        # gitignored, so git ls-files never lists it, and the next step fails
+        # closed if it is ever force-added anyway.
+        env:
+          PII_GUARD_TOKENS: ${{ secrets.PII_GUARD_TOKENS }}
+        run: python3 -I .github/scripts/pii_guard.py --tree
+
+      - name: Scan the identity and message of every commit being merged
+        # The 2026-06 leak was 17 `Co-authored-by:` gmail trailers in commit
+        # bodies: file content is not the only vector.  scripts/git-hooks/pre-push
+        # runs the same scan locally, before a push; this is the server-side
+        # backstop for a clone without the hook.
+        env:
+          PII_GUARD_TOKENS: ${{ secrets.PII_GUARD_TOKENS }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 -I .github/scripts/pii_guard.py --range "$BASE" "$HEAD"
 
       - name: No PII / unlicensed review directory is tracked
         run: |
-          # Path-based companion to the content grep above.  Two directories
+          # Path-based companion to the content scan above.  Two directories
           # must NEVER be committed:
           #   * docs/codebase-review/ — quotes the scrubbed PII verbatim.
           #   * docs/reviews/2026-06-19-run3-verification/ — third-party
           #     device configs with no redistributable licence; these match
-          #     NEITHER pattern in the content grep, so only a path check can
+          #     no identifier the content scan knows, so only a path check can
           #     catch them.
           # .gitignore keeps them out on a normal `git add`; this asserts the
           # guarantee actually held (a `git add -f`, a stale pre-.gitignore

@@ -28,6 +28,27 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The PII guard no longer publishes what it guards.**  The CI
+  guard (`.github/workflows/pii-guard.yml`) and the pre-push hook
+  (`scripts/git-hooks/pre-push`) spelled the maintainer's personal
+  email local part as a character-class regex, so the grep would not
+  match its own text -- which still published it to anyone who read
+  either file (two review dossiers quoted the pattern too; redacted).
+  Both now run `.github/scripts/pii_guard.py`, which holds no
+  identifier in readable form: user-profile paths are matched by
+  shape, personal identifiers by sha256 digest from
+  `.github/pii-guard.hashes` (a digest can confirm a guess, never
+  reveal a value), and deployment names from an optional
+  `PII_GUARD_TOKENS` repository secret.  The scan also strips `[`,
+  `]` and `\`, so a character-class spelling like the old one is now
+  itself a finding.  CI additionally scans the identity and message
+  of every commit being merged -- the server-side backstop for a
+  clone without the hook -- and a `--self-test` step first proves
+  each layer fires on a synthetic canary, so a scan that finds
+  nothing is never a scan that checked nothing.  The workflow and
+  job names are unchanged, so the publish workflows' PII-guard gate
+  and the `main` ruleset's required check keep working.
+
 - **The Docker image no longer carries pip.**  The base image's pip
   (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
   intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,

@@ -1,0 +1,8 @@
+# pii-guard identifier digests: sha256("pii-guard/v1:" + lowercase identifier), one per line, then a label.
+# Digests only, never values: this file can confirm a guess but cannot reveal an identifier.
+# Add one (the value goes through stdin, never into a file or your shell history):
+#   python3 .github/scripts/pii_guard.py --hash   # paste the identifier, then Ctrl-D
+# Labels say WHAT KIND of identifier a digest is, never which one.
+6a9355931a5eab2da0a5c9b8dd9a676196069b765e4751074a5975770ace606c  canary (synthetic; --self-test proves this layer fires)
+205d187b5cd9683875488630de2f8b31124f2508c80e04d82837e85548bd4421  maintainer personal email address
+2b861f6cbb5a381aadca2f423126bffe0055100549397351118f404b3fdfe7bf  maintainer personal email local part
