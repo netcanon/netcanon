@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The FortiGate 100E capture no longer carries SSH private keys.**
+  `tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf`
+  is a real device's configuration, and its sanitisation replaced the
+  14 certificate keys and the 48 `ENC` secrets but kept the eight
+  OpenSSH private keys under `config firewall ssh local-key` and
+  `local-ca` (the SSH host and SSH CA keys), along with the domain of
+  its ACME certificate.  The keys were passphrase-encrypted, and the
+  passphrases had already been replaced, but they were the device's
+  own keys.  They are now the corpus placeholder
+  `REMOVED_FIXTURE_SANITISATION`, and the domain is `example.test`.
+  Neither value is parsed into the canonical model, so no conversion
+  output changes.  A new test (`tests/unit/test_fixture_key_material.py`)
+  fails if any `user_contrib_*` capture holds a private-key body
+  other than the placeholder, or a FortiOS `ENC` value other than a
+  synthetic marker.  The capture's row in
+  `tests/fixtures/real/NOTICE.md` lists the new redactions.
+
 - **The PII guard no longer publishes what it guards.**  The CI
   guard (`.github/workflows/pii-guard.yml`) and the pre-push hook
   (`scripts/git-hooks/pre-push`) spelled the maintainer's personal
