@@ -49,6 +49,15 @@ timestamp if your timezone matters for an audit.
   job names are unchanged, so the publish workflows' PII-guard gate
   and the `main` ruleset's required check keep working.
 
+- **The workflows now do what SECURITY.md says they do.**  The
+  zizmor scan held `security-events: write` and `actions: read` at
+  file level; they move to its one job, so the file defaults to
+  read-only like every other workflow.  The two `actions/checkout`
+  steps in `pages.yml` now set `persist-credentials: false`, which
+  SECURITY.md already claimed for every checkout.  CODEOWNERS named a
+  team that cannot exist on a user account, so GitHub flagged every
+  line and enforced nothing; it now names the maintainer's account.
+
 - **The Docker image no longer carries pip.**  The base image's pip
   (26.2.1) vendors a certifi CA bundle that trusts emSign roots whose
   intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2,
