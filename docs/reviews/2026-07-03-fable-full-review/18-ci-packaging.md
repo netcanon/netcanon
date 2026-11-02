@@ -122,7 +122,7 @@ manifest) would end the whack-a-mole.
   is no `.gitignore` entry for either dir (checked `.gitignore` end to end;
   only `local/`, runtime dirs, etc.).
 * The guard itself (pii-guard.yml:50) is **content-pattern-only**
-  (`samuelr[i]pp09|C:[\]Users`). A `git add docs/` / `git add -A` slip
+  (`<personal-email pattern>|C:[\]Users`). A `git add docs/` / `git add -A` slip
   commits both dirs; the guard fires only if the file content happens to
   match those two patterns. `docs/codebase-review/` likely matches (it
   quotes the email), but `docs/reviews/2026-06-19-run3-verification/`
