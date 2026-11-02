@@ -739,6 +739,66 @@ timestamp if your timezone matters for an audit.
   chosen for a target whose vendor has model families and no flat
   profile, as NX-OS has; it was chosen from the profiles alone, and the
   list of models stayed closed until a vendor was picked.
+- **Juniper EX and QFX switches can be declared as a source or target
+  device.**  Fourteen model families: the EX2300, EX3400, EX4300,
+  EX4400, EX4600 and EX4650, and the QFX5100, QFX5110, QFX5120-48Y,
+  QFX5120-48YM, QFX5120-48T, QFX5120-32C, QFX5200 and QFX5210.  Each
+  QFX5120 model is a family of its own, because a QFX5120 Virtual
+  Chassis is of one model.  Every family but the QFX5210 has one
+  mode, `virtual-chassis`: a Virtual Chassis, or a switch on its own.
+  The QFX5210-64C is described as `standalone`, because its guide
+  says nothing of a Virtual Chassis.  Names come from a new `junos`
+  naming rule (`ex_qfx_port_name` beside the Junos codec).  A port is
+  `type-fpc/pic/port` (Juniper, "Understanding Interface Naming
+  Conventions"), and the FPC is the member id.  It is 0 on a switch
+  that has never been in a Virtual Chassis, and a switch that left
+  one keeps the id it had there.  Ports count from 0 within their
+  PIC, by the number the CLI shows.  The panel's own ports are PIC 0.
+  The uplinks of an EX2300 are PIC 1, and of an EX3400 PIC 2.  An
+  EX4300's or EX4400's module bay is PIC 2, and an EX4600 has two
+  bays, PIC 1 and PIC 2.  The rule refuses a bay that is not PIC 1
+  or 2, and a mode with no member ids.  The EX4300-32F's SFP+ uplinks
+  are `xe-0/0/32` to `xe-0/0/35`, as the CLI numbers them, though the
+  faceplate labels them 0 to 3.  An EX4400-24X's two QSFP28 ports are
+  `et-0/1/0` and `et-0/1/1`.  The rear QSFP ports an EX3400, EX4300 or
+  EX4400 holds as Virtual Chassis ports by default are not network
+  interfaces, and are not listed.  A port's prefix follows the optic
+  or the speed (`ge-`, `xe-` or `et-`), and each mode says which
+  optics its names are for.  A port broken out into lanes
+  (`xe-0/0/48:0`) is not modelled.  The management port is `me0` on
+  the EX2300, EX3400, EX4300 and EX4400; on the first three that
+  rests on Juniper's generic page for switches, and their Quick
+  Starts call the MGMT port `vme`.  On the EX4600, EX4650 and the QFX
+  it is `em0`, with `em1` beside it on all but the QFX5120-48T,
+  QFX5120-32C and QFX5210.  The Virtual Chassis management interface
+  `vme` is not on the inventory.
+  Besides the commonest models, the EX4300-48MP (24 `ge` and 24 `mge`
+  ports, and two uplink modules of its own, the EX-UM-4SFPP-MR and
+  the EX-UM-2QSFP-MR) and the EX4400-48XP and EX4400-48MXP (Junos
+  24.2R1-S1) are described, and the QFX5120-48YM's DC parts
+  (`-DC-AO`, `-DC-AI`) are among its part numbers.
+  Which ports are uplinks follows the cage, as on the Arista and
+  Nexus families.  On a QFX5120-32C or QFX5210-64C the two SFP+ ports
+  are numbered after the uplinks, and listed after them.  A model's
+  key is its name (`EX4300-48T`), and its part numbers carry the
+  airflow, power and spare suffixes (`EX4600-40F-AFI`).  A name
+  Juniper prints in a guide, a printed default or a validated design
+  is graded `vendor-doc`.  Where Juniper's texts disagree -- the PIC
+  of a QFX5100-48S's or -48T's QSFP+ ports, the number of a
+  QFX5100-96S's last port -- the panel follows Juniper's port tables
+  and its caveat says so.  The access ports of every EX2300 but the
+  24P, the EX4400-48XP and EX4400-48MXP panels, five uplink modules
+  and four management ports (`me0` on the EX2300, EX3400 and EX4300,
+  and the EX4650's `em1`) are `inferred`, and each says why.  So are
+  the member-id ranges Juniper does not print (EX4600, EX4650,
+  QFX5100, QFX5110, QFX5120-48YM and QFX5200), in their modes'
+  caveats; an id outside the range is refused.  No capture is
+  claimed, and nothing reads the switch from the config: a Junos
+  configuration names no model, so an EX or QFX is declared by hand.
+  The EX4300-48T, EX4600-40F and QFX5120-48Y profiles are checked to
+  describe the same ports as their families.  The EX4300-48T profile
+  is now graded `inferred`, for its management port alone: it named
+  the hardware guide for `me0`, and no EX4300 text names that port.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

@@ -1126,6 +1126,132 @@ def _nxos_port_key(name: str) -> tuple[int, int]:
     assert match, name
     return int(match.group(1)), int(match.group(2))
 
+
+_J = "juniper_junos"
+
+
+def _junos(*groups: tuple[str, int, int, int, int, str]) -> tuple[list[str], list[str]]:
+    """Each group as ``(prefix, fpc, pic, first, count, role)``."""
+    access: list[str] = []
+    uplinks: list[str] = []
+    for prefix, fpc, pic, first, count, role in groups:
+        names = [f"{prefix}-{fpc}/{pic}/{n}" for n in range(first, first + count)]
+        (access if role == _ACC else uplinks).extend(names)
+    return access, uplinks
+
+
+#: Each model on its own, member 0.  A Junos port counts from 0 within
+#: its PIC: the EX2300's uplinks are PIC 1, the EX3400's PIC 2, and an
+#: EX4300-32F's SFP+ uplinks carry on PIC 0's numbering at 32.  The
+#: ports a switch holds as Virtual Chassis ports by default (the EX3400's,
+#: EX4300's and EX4400's rear QSFP ports, but not the EX4400-24X's front
+#: ones) are no interface, and are not here.
+_JUNOS_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # EX2300
+    "EX2300-C-12T": _junos(("ge", 0, 0, 0, 12, _ACC), ("xe", 0, 1, 0, 2, _UP)),
+    "EX2300-C-12P": _junos(("ge", 0, 0, 0, 12, _ACC), ("xe", 0, 1, 0, 2, _UP)),
+    "EX2300-24T": _junos(("ge", 0, 0, 0, 24, _ACC), ("xe", 0, 1, 0, 4, _UP)),
+    "EX2300-24P": _junos(("ge", 0, 0, 0, 24, _ACC), ("xe", 0, 1, 0, 4, _UP)),
+    "EX2300-48T": _junos(("ge", 0, 0, 0, 48, _ACC), ("xe", 0, 1, 0, 4, _UP)),
+    "EX2300-48P": _junos(("ge", 0, 0, 0, 48, _ACC), ("xe", 0, 1, 0, 4, _UP)),
+    # EX3400
+    "EX3400-24T": _junos(("ge", 0, 0, 0, 24, _ACC), ("xe", 0, 2, 0, 4, _UP)),
+    "EX3400-24P": _junos(("ge", 0, 0, 0, 24, _ACC), ("xe", 0, 2, 0, 4, _UP)),
+    "EX3400-48T": _junos(("ge", 0, 0, 0, 48, _ACC), ("xe", 0, 2, 0, 4, _UP)),
+    "EX3400-48P": _junos(("ge", 0, 0, 0, 48, _ACC), ("xe", 0, 2, 0, 4, _UP)),
+    # EX4300: the uplink module is PIC 2.
+    "EX4300-24T": _junos(("ge", 0, 0, 0, 24, _ACC)),
+    "EX4300-24P": _junos(("ge", 0, 0, 0, 24, _ACC)),
+    "EX4300-48T": _junos(("ge", 0, 0, 0, 48, _ACC)),
+    "EX4300-48P": _junos(("ge", 0, 0, 0, 48, _ACC)),
+    "EX4300-48MP": _junos(("ge", 0, 0, 0, 24, _ACC), ("mge", 0, 0, 24, 24, _ACC)),
+    "EX4300-32F": _junos(("ge", 0, 0, 0, 32, _ACC), ("xe", 0, 0, 32, 4, _UP)),
+    # EX4400: the extension module is PIC 2.
+    "EX4400-24T": _junos(("ge", 0, 0, 0, 24, _ACC)),
+    "EX4400-24P": _junos(("ge", 0, 0, 0, 24, _ACC)),
+    "EX4400-48T": _junos(("ge", 0, 0, 0, 48, _ACC)),
+    "EX4400-48P": _junos(("ge", 0, 0, 0, 48, _ACC)),
+    "EX4400-48XP": _junos(("ge", 0, 0, 0, 48, _ACC)),
+    "EX4400-48F": _junos(("ge", 0, 0, 0, 36, _ACC), ("xe", 0, 0, 36, 12, _ACC)),
+    "EX4400-24X": _junos(("xe", 0, 0, 0, 24, _ACC), ("et", 0, 1, 0, 2, _UP)),
+    "EX4400-24MP": _junos(("mge", 0, 0, 0, 24, _ACC)),
+    "EX4400-48MP": _junos(("mge", 0, 0, 0, 48, _ACC)),
+    "EX4400-48MXP": _junos(("mge", 0, 0, 0, 48, _ACC)),
+    # EX4600 and EX4650
+    "EX4600-40F": _junos(("xe", 0, 0, 0, 24, _ACC), ("et", 0, 0, 24, 4, _UP)),
+    "EX4650-48Y": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 8, _UP)),
+    # QFX5100 and QFX5110
+    "QFX5100-48S": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 6, _UP)),
+    "QFX5100-48T": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 6, _UP)),
+    "QFX5100-96S": _junos(("xe", 0, 0, 0, 96, _ACC), ("et", 0, 0, 96, 8, _UP)),
+    "QFX5110-48S": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 4, _UP)),
+    # QFX5120: on the 32C the two SFP+ ports are numbered after the uplinks.
+    "QFX5120-48Y": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 8, _UP)),
+    "QFX5120-48YM": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 8, _UP)),
+    "QFX5120-48T": _junos(("xe", 0, 0, 0, 48, _ACC), ("et", 0, 0, 48, 6, _UP)),
+    "QFX5120-32C": _junos(("et", 0, 0, 0, 32, _UP), ("xe", 0, 0, 32, 2, _ACC)),
+    # QFX5200 and QFX5210
+    "QFX5200-32C": _junos(("et", 0, 0, 0, 32, _UP)),
+    "QFX5210-64C": _junos(("et", 0, 0, 0, 64, _UP), ("xe", 0, 0, 64, 2, _ACC)),
+}
+#: Module -> its ports as ``(prefix, count)``: every one is an uplink,
+#: numbered from 0 on the PIC that is its bay.
+_JUNOS_MODULE_PORTS: dict[str, tuple[str, int]] = {
+    "EX-UM-4X4SFP": ("xe", 4), "EX-UM-2QSFP": ("et", 2), "EX-UM-8X8SFP": ("xe", 8),
+    "EX-UM-4SFPP-MR": ("xe", 4), "EX-UM-2QSFP-MR": ("et", 2),
+    "EX4400-EM-4S": ("xe", 4), "EX4400-EM-4Y": ("et", 4), "EX4400-EM-1C": ("et", 1),
+    "QFX-EM-4Q": ("et", 4), "EX4600-EM-8F": ("xe", 8),
+}
+_EX4400_MODULES = ("EX4400-EM-4S", "EX4400-EM-4Y", "EX4400-EM-1C")
+_EX4600_MODULES = ("QFX-EM-4Q", "EX4600-EM-8F")
+#: Model -> each bay -> the modules it takes.
+_JUNOS_BAYS: dict[str, dict[str, tuple[str, ...]]] = {
+    **{
+        model: {"2": ("EX-UM-4X4SFP",)}
+        for model in ("EX4300-24T", "EX4300-24P", "EX4300-48T", "EX4300-48P")
+    },
+    "EX4300-48MP": {"2": ("EX-UM-4SFPP-MR", "EX-UM-2QSFP-MR")},
+    "EX4300-32F": {"2": ("EX-UM-2QSFP", "EX-UM-8X8SFP")},
+    **{
+        model: {"2": _EX4400_MODULES}
+        for model in _JUNOS_PANELS if model.startswith("EX4400-")
+    },
+    "EX4600-40F": {"1": _EX4600_MODULES, "2": _EX4600_MODULES},
+}
+#: Model -> its first part number, where that is not the model's name:
+#: every part of these carries an airflow, power or spare suffix.
+_JUNOS_FIRST_PART: dict[str, str] = {
+    "EX4600-40F": "EX4600-40F-AFI",
+    "EX4650-48Y": "EX4650-48Y-AFO",
+    "QFX5100-48S": "QFX5100-48S-AFI",
+    "QFX5100-48T": "QFX5100-48T-AFI",
+    "QFX5100-96S": "QFX5100-96S-AFI",
+    "QFX5110-48S": "QFX5110-48S-AFO",
+    "QFX5120-48Y": "QFX5120-48Y-AFO2",
+    "QFX5120-48YM": "QFX5120-48YM-AFO",
+    "QFX5120-48T": "QFX5120-48T-AFO",
+    "QFX5120-32C": "QFX5120-32C-AFO",
+    "QFX5210-64C": "QFX5210-64C-AFI",
+}
+for _model, _ports in _JUNOS_PANELS.items():
+    _mode = "standalone" if _model == "QFX5210-64C" else "virtual-chassis"
+    _bays = _JUNOS_BAYS.get(_model, {})
+    for _choice in product(*[[None, *skus] for skus in _bays.values()]):
+        _fitted = tuple(sorted((b, s) for b, s in zip(_bays, _choice) if s))
+        _uplinks = list(_ports[1])
+        for _bay, _sku in _fitted:
+            _prefix, _count = _JUNOS_MODULE_PORTS[_sku]
+            _uplinks += _junos((_prefix, 0, int(_bay), 0, _count, _UP))[1]
+        EXPECTED_INVENTORIES[(_J, _model, _mode, _fitted)] = (_ports[0], _uplinks)
+
+_JUNOS_PORT = re.compile(r"^(?:ge|mge|xe|et)-(\d+)/(\d+)/(\d+)$")
+
+
+def _junos_port_key(name: str) -> tuple[int, int, int]:
+    match = _JUNOS_PORT.match(name)
+    assert match, name
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -1157,6 +1283,15 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
             "9300-GX2", "9300-H", "93128TX", "9332C-9364C",
         )
     },
+    **{f"{_J}/{family}": ["me0"] for family in ("EX2300", "EX3400", "EX4300", "EX4400")},
+    **{
+        f"{_J}/{family}": ["em0", "em1"]
+        for family in (
+            "EX4600", "EX4650", "QFX5100", "QFX5110", "QFX5120-48Y", "QFX5120-48YM",
+            "QFX5200",
+        )
+    },
+    **{f"{_J}/{family}": ["em0"] for family in ("QFX5120-48T", "QFX5120-32C", "QFX5210")},
 }
 
 
@@ -1203,6 +1338,12 @@ class TestExactInventories:
             # SFP+ access ports are numbered after the 64 uplinks.
             assert inventory.names() == (
                 sorted(access + uplinks, key=_nxos_port_key) + mgmt
+            )
+        elif vendor == _J:
+            # And a Junos switch, PIC by PIC: on a QFX5120-32C the two
+            # SFP+ access ports are numbered after the 32 uplinks.
+            assert inventory.names() == (
+                sorted(access + uplinks, key=_junos_port_key) + mgmt
             )
         else:
             assert inventory.names() == access + uplinks + mgmt
@@ -1359,6 +1500,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "aoscx": "aruba_aoscx",
     "eos": "arista_eos",
     "nxos": "cisco_nxos",
+    "junos": "juniper_junos",
 }
 
 
@@ -1421,6 +1563,15 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     assert (identity.module, identity.subslot_letter) == (
                         int(port.slot or "1"), "",
                     ), where
+                elif family.naming == "junos":
+                    # The slot is the PIC (the panel's own is 0), and a
+                    # port counts from 0 within it.
+                    assert (identity.module, identity.subslot_letter) == (
+                        int(port.slot or "0"), "",
+                    ), where
+                    assert identity.port == port.index, where
+                    checked += 1
+                    continue
                 else:
                     assert identity.subslot_letter == port.slot, where
                 assert identity.port == port.index + 1, where
@@ -1468,6 +1619,18 @@ PROFILE_AGREES_WITH: dict[str, dict] = {
         for model in (
             "DCS-7060CX-32S", "DCS-7050CX3-32S", "DCS-7050SX-64", "DCS-7280CR3-32P4",
         )
+    },
+    # A Juniper profile states its switch on its own (FPC 0), and the
+    # EX4300-48T's the SFP+ uplink module it preselects.
+    "juniper_junos/EX4300-48T": {
+        "mode": "virtual-chassis",
+        "members": [{"model": "EX4300-48T", "id": 0, "modules": {"2": "EX-UM-4X4SFP"}}],
+    },
+    "juniper_junos/EX4600-40F": {
+        "mode": "virtual-chassis", "members": [{"model": "EX4600-40F-AFI", "id": 0}],
+    },
+    "juniper_junos/QFX5120-48Y": {
+        "mode": "virtual-chassis", "members": [{"model": "QFX5120-48Y-AFO2", "id": 0}],
     },
 }
 
@@ -1856,6 +2019,9 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     **{(_E, model): model for model in _EOS_PANELS},
     # Cisco Nexus: the product ID is the model key.
     **{(_N, model): model for model in _NXOS_PANELS},
+    # Juniper: the model's name is its key, and its first part number is
+    # that name or, where every part carries a suffix, the first of them.
+    **{(_J, _JUNOS_FIRST_PART.get(model, model)): model for model in _JUNOS_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -1987,6 +2153,29 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "cisco_nxos/9300 / module / N9K-M4PC-CFP2",
     "cisco_nxos/93128TX / module / N9K-M6PQ",
     "cisco_nxos/93128TX / module / N9K-M6PQ-E",
+    # An EX2300's uplink names are Juniper's, and its access-port names
+    # are printed for the EX2300-24P alone; and the EX2300's, EX3400's
+    # and EX4300's me0 rests on Juniper's generic page for switches.
+    *(
+        f"juniper_junos/EX2300 / panel / {model}"
+        for model in _JUNOS_PANELS
+        if model.startswith("EX2300-") and model != "EX2300-24P"
+    ),
+    "juniper_junos/EX2300 / deployment port / me0",
+    "juniper_junos/EX3400 / deployment port / me0",
+    "juniper_junos/EX4300 / deployment port / me0",
+    # Modules whose port names Juniper prints nowhere.
+    "juniper_junos/EX4300 / module / EX-UM-2QSFP",
+    "juniper_junos/EX4300 / module / EX-UM-8X8SFP",
+    "juniper_junos/EX4300 / module / EX-UM-2QSFP-MR",
+    "juniper_junos/EX4600 / module / QFX-EM-4Q",
+    "juniper_junos/EX4600 / module / EX4600-EM-8F",
+    # Two EX4400 models of Junos 24.2R1-S1, whose port names Juniper
+    # prints nowhere.
+    "juniper_junos/EX4400 / panel / EX4400-48XP",
+    "juniper_junos/EX4400 / panel / EX4400-48MXP",
+    # The EX4650's other management port, which its guide never names.
+    "juniper_junos/EX4650 / deployment port / em1",
 }
 
 

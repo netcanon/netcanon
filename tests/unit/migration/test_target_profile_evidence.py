@@ -116,7 +116,6 @@ EXPECTED_VENDOR_DOC_GRADED = {
     "cisco_iosxe/C9300-48P",
     "cisco_iosxe/C9300-48U",
     "cisco_iosxe/C9300-48UXM",
-    "juniper_junos/EX4300-48T",
     "juniper_junos/EX4600-40F",
     "juniper_junos/QFX5120-48Y",
 }
@@ -134,6 +133,13 @@ EXPECTED_VENDOR_DOC_GRADED = {
 #: RJ45 ports before them are 1-48 is inferred -- as the `6300` model
 #: family grades its JL661A, the same switch.
 #:
+#: The EX4300-48T is here for its management port alone.  Juniper
+#: prints every other id it lists, but no EX4300 text names the MGMT
+#: port: that it is `me0` rests on Juniper's generic page for switches
+#: and on a printed EX4300-48P factory default, and the EX4300 Quick
+#: Start calls the port `vme` -- as the `EX4300` model family grades
+#: the same port.
+#:
 #: Rot-fail by design.  Whoever finds a shipped profile that is wrong
 #: without an established replacement flags it (``evidence: inferred``
 #: plus a ``caveat``) and adds its key here, rather than swapping one
@@ -141,7 +147,10 @@ EXPECTED_VENDOR_DOC_GRADED = {
 #: state the 2026-10 audit found.  Whoever resolves one (re-files it,
 #: deletes it, or establishes the names) changes the YAML and this set
 #: in the same PR.
-KNOWN_DOUBTFUL: set[str] = {"aruba_aoscx/6300M-48G-PoE4-SFP56"}
+KNOWN_DOUBTFUL: set[str] = {
+    "aruba_aoscx/6300M-48G-PoE4-SFP56",
+    "juniper_junos/EX4300-48T",
+}
 
 
 def _inferred_without_a_caveat(profiles: dict[str, TargetProfile]) -> list[str]:

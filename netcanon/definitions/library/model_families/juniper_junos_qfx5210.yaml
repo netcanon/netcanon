@@ -1,0 +1,70 @@
+# Juniper QFX5210-64C
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC of a switch on its
+# own is 0.  HG5210 calls the QFX5210-64C "a flexible 2 U standalone
+# switch" and says nothing of a Virtual Chassis: the one mode below is a
+# switch on its own, which is inferred from the guide's silence.  Every
+# port is on PIC 0: 64 QSFP28 ports 0 to 63, 100G by default, and "two
+# dedicated SFP+ ports", which HG5210 does not number.  JVD
+# configurations of a 64C configure `xe-0/0/64` and `xe-0/0/65`, numbered
+# on from the QSFP28 ports; the panel's caveat says that the two numbers
+# rest on them alone.
+#
+# Which ports are `uplink`: the QSFP28 ports, as on every switch of these
+# families; the two SFP+ ports are `access`, in port-number order after
+# the uplinks.
+#
+# The management port is `em0` (C0, RJ-45) (HG5210).  No `em1` is named
+# for this model.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG5210  Juniper, QFX5210 Switch Hardware Guide (2026-03-09).
+#   JVD     Juniper Validated Designs, the Juniper/jvd repository on
+#           GitHub: configurations Juniper publishes for its designs.
+#
+# Nothing is graded inferred.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A QSFP28 port broken out into lanes.  From Junos 19.1R1 the ports
+#     auto-sense and none is broken out by default; before it, breaking
+#     out port N (0 to 31) disabled port N+32.
+#   * A 1G optic in an SFP+ port, which JVD configurations name ge-.
+schema: 1
+vendor: juniper_junos
+family: QFX5210
+display_name: "Juniper QFX5210"
+naming: junos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own; SFP+ optics in the two SFP+ cages; no port broken out"
+    member_ids: [0, 0]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, QFX5210 Switch Hardware Guide (2026-03-09) (QFX5210-64C, a flexible 2 U standalone switch: 64 QSFP28 ports 0 through 63, 100G by default, and two dedicated SFP+ ports); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5210-64C configurations (interfaces et-0/0/0 to et-0/0/63, xe-0/0/64 and xe-0/0/65)"
+    caveat: "The switch is described as standalone, and no Virtual Chassis of it is modelled: Juniper's guide does not mention one. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics. A QSFP28 port broken out into lanes is not modelled."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C0"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5210 Switch Hardware Guide (2026-03-09), management panel (em0, C0, RJ-45 1000BASE-T)"}
+
+models:
+  QFX5210-64C:
+    skus: [QFX5210-64C-AFI, QFX5210-64C-AFO]
+    display_name: "Juniper QFX5210-64C, 64 QSFP28 and 2 SFP+ (QFX5210-64C-AFI)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5210 Switch Hardware Guide (2026-03-09) (QFX5210-64C-AFI and -AFO; 64 QSFP28 ports 0 through 63; two dedicated SFP+ ports); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5210-64C configurations (interfaces et-0/0/0 to et-0/0/63, xe-0/0/64 and xe-0/0/65)", caveat: "The hardware guide does not number the two SFP+ ports: that they are 64 and 65 rests on Juniper's validated-design configurations alone."}
+    ports:
+      - {role: uplink, count: 64, prefix: et, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, prefix: xe, speed: 10gig, cage: sfp+}

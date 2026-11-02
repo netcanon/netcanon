@@ -25,6 +25,10 @@ from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
     catalyst_port_name,
 )
 from netcanon.migration.codecs.cisco_nxos.port_names import nexus_port_name
+from netcanon.migration.codecs.juniper_junos.port_names import (
+    classify_port_name as classify_junos_port_name,
+)
+from netcanon.migration.codecs.juniper_junos.port_names import ex_qfx_port_name
 from netcanon.migration.device_models import (
     SPEED_RANK,
     Deployment,
@@ -475,6 +479,129 @@ class TestNxosPortName:
         rule = dm._naming_rules()["nxos"]
         assert rule.roles == frozenset({"access", "uplink"})
         assert "`mgmt0`" in rule.why_not
+
+
+# ---------------------------------------------------------------------------
+# The Junos naming rule
+# ---------------------------------------------------------------------------
+
+
+def _junos_request(
+    index0: int, *, prefix="xe", slot="", member_id: int | None = 0,
+) -> dm.PortNameRequest:
+    group = dm.PortGroup(role="uplink", count=1, prefix=prefix)
+    return dm.PortNameRequest(
+        mode="virtual-chassis", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+class TestJunosPortName:
+    @pytest.mark.parametrize(
+        ("media", "fpc", "pic", "port", "printed"),
+        [
+            # Juniper, Example: Configuring Aggregated Ethernet
+            # High-Speed Uplinks Between an EX4200 Virtual Chassis Access
+            # Switch and an EX4200 Virtual Chassis Distribution Switch
+            # (Junos OS 13.1): the uplinks of member 1, PIC 1.
+            ("xe", 1, 1, 0, "xe-1/1/0"),
+            # Juniper, Virtual Chassis User Guide for Switches
+            # (2026-09-21): "if the switch was previously member 1, its
+            # interfaces are named ge-1/0/0 and so on".
+            ("ge", 1, 0, 0, "ge-1/0/0"),
+            # Juniper, EX2300 Switch Hardware Guide (2025-08-12): uplink
+            # ports "listed as ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to
+            # xe-0/1/3".
+            ("xe", 0, 1, 0, "xe-0/1/0"),
+            # Juniper, EX3400 Switch Hardware Guide (2026-01-09): the four
+            # uplink ports "listed as ge-0/2/0 through ge-0/2/3 and
+            # xe-0/2/0 through xe-0/2/3".
+            ("xe", 0, 2, 3, "xe-0/2/3"),
+            # Juniper, EX4400 Switch Hardware Guide (2026-07-22): the
+            # EX4400-24P's factory default names the extension module's
+            # ports et-0/2/0 to et-0/2/3.
+            ("et", 0, 2, 0, "et-0/2/0"),
+            # Juniper, Interfaces User Guide for Switches (2026-06-21):
+            # the EX4400's multigigabit ports, mge-0/0/0 on.
+            ("mge", 0, 0, 0, "mge-0/0/0"),
+            # The same guide, Table 34: port 48 of an EX4650-48Y at 40G
+            # or 100G is et-0/0/48.
+            ("et", 0, 0, 48, "et-0/0/48"),
+            # Juniper, Understanding Interface Naming Conventions on EX
+            # Series Switches (Junos OS 13.2): ge-0/0/10.0, whose unit
+            # is not part of the port's name.
+            ("ge", 0, 0, 10, "ge-0/0/10"),
+            # Juniper, EX4300 Switch Hardware Guide (2025-08-12): the
+            # EX4300-32F's SFP+ uplink ports are "numbered 32 through
+            # 35" in the CLI.
+            ("xe", 0, 0, 32, "xe-0/0/32"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, media, fpc, pic, port, printed):
+        assert ex_qfx_port_name(media=media, fpc=fpc, pic=pic, port=port) == printed
+        # And the codec reads it back as the same member, PIC and port.
+        identity = classify_junos_port_name(printed)
+        assert (identity.kind, identity.stack, identity.module, identity.port) == (
+            "physical", fpc, pic, port,
+        )
+
+    @pytest.mark.parametrize("media", ["xle", "fte", "vcp", "Xe", "ae", ""])
+    def test_only_a_port_prefix_names_a_port(self, media):
+        """`xle` and `fte` are names of a switch in a QFabric system,
+        which no family here models, a VCP is not a network interface,
+        and `ae` is an aggregate: none is a port of these inventories."""
+        with pytest.raises(ValueError, match="is not the prefix"):
+            ex_qfx_port_name(media=media, fpc=0, pic=0, port=0)
+
+    @pytest.mark.parametrize("fpc", [-1, 10])
+    def test_the_fpc_is_a_member_id(self, fpc):
+        with pytest.raises(ValueError, match="0 to 9"):
+            ex_qfx_port_name(media="ge", fpc=fpc, pic=0, port=0)
+
+    @pytest.mark.parametrize("pic", [-1, 3])
+    def test_a_switch_has_three_pics(self, pic):
+        with pytest.raises(ValueError, match="PICs 0, 1 and 2"):
+            ex_qfx_port_name(media="ge", fpc=0, pic=pic, port=0)
+
+    def test_a_port_counts_from_0(self):
+        with pytest.raises(ValueError, match="counts from 0"):
+            ex_qfx_port_name(media="ge", fpc=0, pic=0, port=-1)
+
+    def test_the_panel_is_pic_0_and_a_bay_its_pic(self):
+        rule = dm._naming_rules()["junos"]
+        assert rule.render(_junos_request(10, prefix="ge")) == "ge-0/0/10"
+        assert rule.render(_junos_request(3, slot="2")) == "xe-0/2/3"
+        assert rule.render(_junos_request(0, slot="1", prefix="et")) == "et-0/1/0"
+
+    def test_the_fpc_is_the_member_id(self):
+        """A member that is not the first, and a switch alone that kept
+        the id it had in a Virtual Chassis."""
+        rule = dm._naming_rules()["junos"]
+        assert rule.render(_junos_request(0, member_id=1)) == "xe-1/0/0"
+        assert rule.render(_junos_request(3, slot="2", member_id=3)) == "xe-3/2/3"
+        with pytest.raises(ValueError, match="0 to 9"):
+            rule.render(_junos_request(0, member_id=10))
+
+    def test_a_name_always_carries_the_fpc(self):
+        with pytest.raises(ValueError, match="always carries the FPC"):
+            dm._naming_rules()["junos"].render(_junos_request(0, member_id=None))
+
+    # chr(0xFF12) is a full-width 2: a digit to `str.isdigit`, and not
+    # one Junos prints.  PIC 0 is the panel's own ports, which state no
+    # slot.
+    @pytest.mark.parametrize("slot", ["0", "A", "02x", "-1", chr(0xFF12)])
+    def test_a_bay_is_pic_1_or_2(self, slot):
+        with pytest.raises(ValueError, match="is not PIC 1 or 2"):
+            dm._naming_rules()["junos"].render(_junos_request(0, slot=slot))
+
+    def test_a_pic_past_2_is_refused(self):
+        with pytest.raises(ValueError, match="PICs 0, 1 and 2"):
+            dm._naming_rules()["junos"].render(_junos_request(0, slot="3"))
+
+    def test_the_management_interface_is_not_a_numbered_port(self):
+        rule = dm._naming_rules()["junos"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`me0`" in rule.why_not and "`em0`" in rule.why_not
+        assert rule.prefixes == frozenset({"ge", "mge", "xe", "et"})
 
 
 # ---------------------------------------------------------------------------

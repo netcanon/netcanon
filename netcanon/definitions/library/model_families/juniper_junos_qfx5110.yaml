@@ -1,0 +1,79 @@
+# Juniper QFX5110-48S
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC is the switch: 0 on
+# its own, and in a Virtual Chassis of up to 10 members the member id.
+# Juniper does not print the range of member ids of a QFX5110 Virtual
+# Chassis (CLIREF says only that it depends on the number of switches
+# allowed): 0 to 9 is inferred from the ten members it allows.  A switch
+# that leaves a Virtual Chassis keeps its member id in its names (VCUG),
+# so the one mode below covers a switch on its own as well.  Every port
+# is on PIC 0: 48 SFP+ ports 0 to 47, then four QSFP28 ports 48 to 51,
+# 100G by default (HG5110).
+#
+# The management ports are `em0` (C0, RJ-45) and `em1` (C1, SFP); the
+# switch has "an additional SFP management Ethernet port (second C0)",
+# which is the same interface as C0 (HG5110).
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG5110  Juniper, QFX5110 Switch Hardware Guide (2026-09-24).
+#   N13QFX  Juniper, Understanding Interface Naming Conventions (QFX
+#           Series and EX4600), Junos OS 13.2 (2014-11-07).
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#   CLIREF  Juniper, CLI Reference, member (Virtual Chassis).
+#   JVD     Juniper Validated Designs, the Juniper/jvd repository on
+#           GitHub: configurations Juniper publishes for its designs.
+#
+# Nothing is graded inferred.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The QFX5110-32Q: no Juniper text prints a port name of it.
+#   * A QSFP28 port at 40G broken out into four 10G lanes.
+#   * A 10GBASE-T SFP+ optic, which names its port ge-.
+#   * A mixed QFX5110 and QFX5100 Virtual Chassis: one family per
+#     declaration.
+schema: 1
+vendor: juniper_junos
+family: QFX5110
+display_name: "Juniper QFX5110"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the SFP+ cages; no port broken out"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, QFX5110 Switch Hardware Guide (2026-09-24) (QFX5110-48S: 48 SFP+ ports 0 through 47 and four QSFP28 ports 48 through 51, 100G by default; a QFX5110 Virtual Chassis has up to 10 members); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (type-fpc/pic/port; xe is 10-Gigabit Ethernet and et 40-Gigabit Ethernet); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5110-48S configurations (interfaces xe-0/0/0 to xe-0/0/47 and et-0/0/48 to et-0/0/51); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (the FPC of a member is its member ID, and a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. Juniper does not print the range of member ids of a QFX5110: that it is 0 to 9 is inferred from the ten members it allows. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP, or a 10GBASE-T SFP+ optic, the same port is ge-<fpc>/0/<port>, which is not a port of this inventory. A QSFP28 port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C0. The second C0, SFP, is the same interface"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5110 Switch Hardware Guide (2026-09-24), management panel (em0 is C0, RJ-45; an additional SFP management Ethernet port, the second C0)"}
+  - name: em1
+    role: mgmt
+    speed: gig
+    cage: sfp
+    notes: "Management port C1"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5110 Switch Hardware Guide (2026-09-24), management panel (em1 is C1, SFP)"}
+
+models:
+  QFX5110-48S:
+    skus: [QFX5110-48S-AFO, QFX5110-48S-AFI, QFX5110-48S-DC-AFO, QFX5110-48S-DC-AFI]
+    display_name: "Juniper QFX5110-48S, 48 SFP+ and 4 QSFP28 (QFX5110-48S-AFO)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5110 Switch Hardware Guide (2026-09-24) (QFX5110-48S-AFO, -AFI, -DC-AFO and -DC-AFI; 48 SFP+ ports 0 through 47, 10G; four QSFP28 ports 48 through 51: the default 100-Gigabit Ethernet ports can be configured as 40-Gigabit); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (type-fpc/pic/port; xe is 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: xe, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, prefix: et, speed: 100gig, cage: qsfp28}

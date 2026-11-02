@@ -1485,7 +1485,14 @@ and lane (Arista's `Ethernet49/1`) takes which ports those are from
 the data too, stated on each group (`multi_lane`), never from a cage
 — a 7050QX-32's 40G-only QSFP+ ports have no lane in their name —
 and a family describes each such port as one interface, its first
-lane; a port broken out into lanes is not modelled.
+lane; a port broken out into lanes is not modelled.  A grammar that
+numbers a bank of ports of its own (a Junos PIC: the panel's ports
+are PIC 0, a bank of the panel or a module bay PIC 1 or 2) takes the
+number from the group's `slot`, which on that grammar counts from
+zero; and where the member number is an id the switch keeps (a Junos
+FPC is the Virtual Chassis member id, and a switch that left one
+keeps it), the mode states the ids it allows (`member_ids`) and a
+switch on its own is declared with the id it has.
 A port of the WHOLE deployment — a C9300
 stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under

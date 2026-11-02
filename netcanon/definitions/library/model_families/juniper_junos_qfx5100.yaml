@@ -1,0 +1,125 @@
+# Juniper QFX5100: the QFX5100-48S, -48T and -96S
+#
+# A Junos port name is `type-fpc/pic/port` (N13QFX).  The FPC is the
+# switch: 0 on its own, and in a Virtual Chassis of up to 10 members the
+# member id.  Juniper does not print the range of member ids of a QFX5100
+# Virtual Chassis (CLIREF says only that it depends on the number of
+# switches allowed): 0 to 9 is inferred from the ten members it allows.
+# A switch that leaves a Virtual Chassis keeps its member id in its names
+# (VCUG), so the one mode below covers a switch on its own as well.
+# Every port is on PIC 0: the SFP+ (or 10GBASE-T) ports first, then the
+# QSFP+ ports, numbered on from them (HG5100; N13QFX: "6 40-Gbps QSFP+
+# ports labeled 48 through 53").
+#
+# The 48S's and 48T's QSFP+ ports are `et-<fpc>/0/48` to
+# `et-<fpc>/0/53`: a table titled for both models prints the names
+# (PSET, Table 60; the 2020-12-17 edition's Table 27 and the 2018-11-09
+# port-range page's Table 6 print the same).  Juniper's texts disagree
+# all the same.  The Junos OS 13.2 edition of the port-range page
+# (PR13QFX, Table 6) lists `et-0/1/0` to `et-0/1/5`, under a column
+# headed "On PIC 0", and the prose of every edition says the QSFP+ ports
+# are on PIC 1.  This file follows the tables, which are also what a
+# committed capture of a QFX5100 Virtual Chassis writes
+# (`et-<fpc>/0/48`); the panel caveats say so.  The capture is a check
+# on the reading, not evidence for any one model: it does not say which
+# QFX5100 it is.
+#
+# The management ports are `em0` (C0, RJ-45) and `em1` (C1, SFP): "em0
+# (C0) and em1 (C1) are found on the FRU end" (HG5100).  The -3AFI and
+# -3AFO parts have a second C0, which is not a second interface.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG5100   Juniper, QFX5100 Switch Hardware Guide (2023-02-26): Table 1
+#            (models), the port panels, the management panel.
+#   N13QFX   Juniper, Understanding Interface Naming Conventions (QFX
+#            Series and EX4600), Junos OS 13.2 (2014-11-07).
+#   PR13QFX  Juniper, Understanding Port Ranges and System Modes (QFX),
+#            Junos OS 13.2 (2015-02-23).
+#   VCUG     Juniper, Virtual Chassis User Guide for Switches
+#            (2026-09-21).
+#   PSET     Juniper, Interfaces User Guide for Switches, Port Settings
+#            (2024-07-11; archived by the Wayback Machine on 2024-08-04).
+#   N24      Juniper, Understanding Interface Naming Conventions, the
+#            2017-01-18, 2019-09-26 and 2024-07-29 editions.
+#   CLIREF   Juniper, CLI Reference, member (Virtual Chassis).
+#
+# Nothing is graded inferred but the range of member ids, which the
+# mode's caveat states.  The 96S's eight QSFP+ ports are "labeled 96
+# through 103" (N24); HG5100 numbers them "96 through 104", one too
+# many, and calls the model "QFX5100-98S" in the same passage, while
+# its own list of the ports a breakout disables ends at 103.  Its panel
+# caveat says so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The QFX5100-24Q and -24Q-AA.  Juniper prints the names of the
+#     24Q's QSFP+ ports at 40G (`et-0/0/0` to `et-0/0/23`), but its
+#     texts disagree on their default state: HG5100 says they are
+#     "channelized by default (96 ports)", the Port Settings page says so
+#     of its 104-port system mode only, and the Port Speed page gives
+#     40G.  A lane name does not classify.
+#   * The QFX5100-48SH and -48TH, which run as satellites of a Junos
+#     Fusion and not as Junos switches without another licence.
+#   * A QSFP+ port broken out into four 10G lanes (`xe-0/0/48:0`).
+#   * A mixed QFX5100 and QFX5110, or QFX5100 and EX4300, Virtual
+#     Chassis, and a Virtual Chassis Fabric: one family per declaration.
+schema: 1
+vendor: juniper_junos
+family: QFX5100
+display_name: "Juniper QFX5100"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the SFP+ cages; no port broken out"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (type-fpc/pic/port; on a QFX5100 PIC 0 holds the 10G ports and the 40G QSFP+ ports; xe is 10-Gigabit Ethernet and et 40-Gigabit Ethernet); Juniper, QFX5100 Switch Hardware Guide (2023-02-26) (QFX Virtual Chassis and QFX5100 Virtual Chassis both support up to 10 members); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (the FPC of a member is its member ID, and a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. Juniper does not print the range of member ids of a QFX5100: that it is 0 to 9 is inferred from the ten members it allows. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP the same port is ge-<fpc>/0/<port>, which is not a port of this inventory. A QSFP+ port broken out into four 10G lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C0, on the FRU end. The -3AFI and -3AFO parts have a second C0, SFP, for the same interface"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5100 Switch Hardware Guide (2023-02-26), management panel (em0 (C0) and em1 (C1) are found on the FRU end; C0 is RJ-45 10/100/1000)"}
+  - name: em1
+    role: mgmt
+    speed: gig
+    cage: sfp
+    notes: "Management port C1, on the FRU end"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5100 Switch Hardware Guide (2023-02-26), management panel (em0 (C0) and em1 (C1) are found on the FRU end; C1 is SFP)"}
+
+models:
+  QFX5100-48S:
+    skus: [QFX5100-48S-AFI, QFX5100-48S-3AFI, QFX5100-48S-AFO, QFX5100-48S-3AFO, QFX5100-48S-DC-AFI, QFX5100-48S-DC-AFO]
+    display_name: "Juniper QFX5100-48S, 48 SFP+ and 6 QSFP+ (QFX5100-48S-AFI)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5100 Switch Hardware Guide (2023-02-26), Table 1 (QFX5100-48S-AFI, -3AFI, -AFO, -3AFO, -DC-AFI and -DC-AFO, 48 SFP+ and 6 QSFP+ ports); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (QFX5100-48S: 48 10G ports labeled 0 through 47 and 6 40-Gbps QSFP+ ports labeled 48 through 53, on PIC 0); Juniper, Interfaces User Guide for Switches, Port Settings (2024-07-11, archived by the Wayback Machine on 2024-08-04), Table 60, Valid Port Ranges on QFX5100-48S and QFX5100-48T Switches Running Enhanced Layer 2 Software (et-0/0/48 to et-0/0/53, on PIC 0)", caveat: "Juniper's texts disagree on the PIC of the QSFP+ ports: the port-range table of Junos OS 13.2 lists et-0/1/0 to et-0/1/5 under a column headed On PIC 0, and the prose of every edition says PIC 1; the same table in later editions prints et-0/0/48 to et-0/0/53, which are followed here."}
+    ports:
+      - {role: access, count: 48, prefix: xe, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 6, prefix: et, speed: 40gig, cage: qsfp+}
+
+  QFX5100-48T:
+    skus: [QFX5100-48T-AFI, QFX5100-48T-AFO, QFX5100-48T-DC-AFI, QFX5100-48T-DC-AFO]
+    display_name: "Juniper QFX5100-48T, 48 10GBASE-T and 6 QSFP+ (QFX5100-48T-AFI)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5100 Switch Hardware Guide (2023-02-26), Table 1 (QFX5100-48T-AFI, -AFO, -DC-AFI and -DC-AFO) and the port panel (48 10GBASE-T ports 0 through 47 and 6 QSFP+ ports 48 through 53); Juniper, Interfaces User Guide for Switches, Port Settings (2024-07-11, archived by the Wayback Machine on 2024-08-04), Table 60, Valid Port Ranges on QFX5100-48S and QFX5100-48T Switches Running Enhanced Layer 2 Software (et-0/0/48 to et-0/0/53, on PIC 0); Juniper, Interfaces User Guide for Switches (2026-06-21) (set interfaces xe-0/0/0 speed 1g on a QFX5100-48T)", caveat: "Juniper's texts disagree on the PIC of the QSFP+ ports: the port-range table of Junos OS 13.2 lists et-0/1/0 to et-0/1/5 under a column headed On PIC 0, and the prose of every edition says PIC 1; the same table in later editions prints et-0/0/48 to et-0/0/53, which are followed here."}
+    ports:
+      - {role: access, count: 48, prefix: xe, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 6, prefix: et, speed: 40gig, cage: qsfp+}
+
+  QFX5100-96S:
+    skus: [QFX5100-96S-AFI, QFX5100-96S-AFO, QFX5100-96S-DC-AFI, QFX5100-96S-DC-AFO]
+    display_name: "Juniper QFX5100-96S, 96 SFP+ and 8 QSFP+ (QFX5100-96S-AFI)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5100 Switch Hardware Guide (2023-02-26), Table 1 (QFX5100-96S-AFI, -AFO, -DC-AFI and -DC-AFO) and the port panel (physical ports 0 through 95, SFP+; eight 40G QSFP+ ports); Juniper, Understanding Interface Naming Conventions, the 2017-01-18, 2019-09-26 and 2024-07-29 editions (QFX5100-96S, PIC 0: 96 10-Gigabit Ethernet ports labeled 0 through 95 and 8 40-Gbps QSFP+ ports labeled 96 through 103; xe is 10-Gigabit Ethernet and et 40-Gigabit Ethernet on a QFX5100 running Enhanced Layer 2 Software)", caveat: "The hardware guide numbers the eight QSFP+ ports 96 through 104, one number too many, in a passage that also calls the model QFX5100-98S; Juniper's naming page numbers them 96 through 103, as the guide's own list of the ports a breakout disables does, and is followed here."}
+    ports:
+      - {role: access, count: 96, prefix: xe, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 8, prefix: et, speed: 40gig, cage: qsfp+}

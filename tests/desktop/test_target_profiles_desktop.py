@@ -109,7 +109,9 @@ class TestProfileProvenanceServedByEmbeddedServer:
         # tests/unit/migration/test_target_profile_evidence.py.
         inferred = {k for k, p in by_key.items() if p["evidence"] == "inferred"}
         assert inferred == {
-            UNVERIFIED_PROFILE_KEY, "aruba_aoscx/6300M-48G-PoE4-SFP56",
+            UNVERIFIED_PROFILE_KEY,
+            "aruba_aoscx/6300M-48G-PoE4-SFP56",
+            "juniper_junos/EX4300-48T",
         }
         for key in inferred:
             assert by_key[key]["caveat"], key

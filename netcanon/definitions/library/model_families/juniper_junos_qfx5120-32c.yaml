@@ -1,0 +1,73 @@
+# Juniper QFX5120-32C
+#
+# A family of its own: a QFX5120 Virtual Chassis is of one model (HG5120,
+# Table 6), and see the QFX5120-48Y family's file for why that makes one
+# family per model.
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC is the switch: 0 on
+# its own, and in a Virtual Chassis the member id, "0 through 1" (HG5120,
+# Table 8); a 32C Virtual Chassis has up to 2 members (Table 6).  A
+# switch that leaves a Virtual Chassis keeps its member id in its names
+# (VCUG).  Every port is on PIC 0: 32 QSFP28 ports 0 to 31, then two SFP+
+# ports numbered on from them, 32 and 33.  HG5120 numbers the two only in
+# a figure's caption ("SFP+ port 32 / 33"); JVD configurations of a 32C
+# configure `xe-0/0/32` and `xe-0/0/33`.
+#
+# Which ports are `uplink`: the QSFP28 ports, as on every switch of these
+# families; the two SFP+ ports are `access`, in port-number order after
+# the uplinks.
+#
+# The management port is `em0`, the one MGMT port, on the front (HG5120).
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG5120  Juniper, QFX5120 Switch Hardware Guide (2026-09-30).
+#   JVD     Juniper Validated Designs, the Juniper/jvd repository on
+#           GitHub: configurations Juniper publishes for its designs.
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#
+# Nothing is graded inferred.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A QSFP28 port broken out into lanes (`xe-0/0/<n>:0` and the like;
+#     port 31 shares lanes with an SFP+ port and does not break out
+#     into four).
+schema: 1
+vendor: juniper_junos
+family: QFX5120-32C
+display_name: "Juniper QFX5120-32C"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of 2 QFX5120-32C switches, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the SFP+ cages; no port broken out"
+    member_ids: [0, 1]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30), the QFX5120-32C port panel (32 QSFP28 ports 0 through 31, 40/100G; SFP+ port 32 and SFP+ port 33), Table 6 (a QFX5120-32C Virtual Chassis has up to 2 members, of the same model) and Table 8 (FPC 0 through 1, PIC 0); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5120-32C configurations (interfaces et-0/0/0 to et-0/0/31, xe-0/0/32 and xe-0/0/33); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics. A QSFP28 port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port, labelled MGMT, on the front panel"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30), the QFX5120-32C management panel (one management port, em0, on the front panel)"}
+
+models:
+  QFX5120-32C:
+    skus: [QFX5120-32C-AFO, QFX5120-32C-AFI, QFX5120-32C-DC-AFO, QFX5120-32C-DC-AFI]
+    display_name: "Juniper QFX5120-32C, 32 QSFP28 and 2 SFP+ (QFX5120-32C-AFO)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30) (QFX5120-32C-AFO, -AFI, -DC-AFO and -DC-AFI; 32 QSFP28 ports 0 through 31; SFP+ port 32 and SFP+ port 33); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5120-32C configurations (interfaces et-0/0/0 to et-0/0/31, xe-0/0/32 and xe-0/0/33)"}
+    ports:
+      - {role: uplink, count: 32, prefix: et, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, prefix: xe, speed: 10gig, cage: sfp+}

@@ -1,0 +1,220 @@
+# Juniper EX4400: the copper, fibre and multigigabit models
+#
+# A Junos port name is `type-fpc/pic/port` (N13EX).  The FPC is the
+# switch: 0 by default, and in a Virtual Chassis the member id, 0 to 9
+# (HG4400, Table 114).  A switch that leaves a Virtual Chassis keeps its
+# member id in its names (VCUG), so the one mode below covers a switch on
+# its own as well.  The PIC is 0 for the built-in ports, 1 for the two
+# QSFP28 ports "numbered 0 and 1" and 2 for the extension module (HG4400,
+# Table 114), and ports count from 0 within their PIC.
+#
+# On every model but the EX4400-24X the two PIC 1 ports are on the rear
+# and are Virtual Chassis ports by default ("2x100G QSFP28 VCP"); a port
+# in that state is no interface at all, and they are left out.  On the
+# EX4400-24X they are on the front and are network ports by default
+# (HG4400, Table 114; Understanding HiGig and HGoE Modes in a Virtual
+# Chassis), and they are its uplinks.
+#
+# The prefix follows the speed.  The factory default Juniper prints names
+# each module port twice, `et-0/2/<n>` and `xe-0/2/<n>`, and only the one
+# the module and its optic select is an interface.  The defaults of each
+# model's built-in ports are in Port Speed on EX Series Switches (Tables
+# 7 to 13): 1G on the copper models, 1G then 10G on the 48F, 10G on the
+# 24X and the 24MP, 2.5G then 10G on the 48MP.
+#
+# The management port is `me0` (HG4400: `set interfaces me0 unit 0
+# family inet address`).  In a Virtual Chassis, and in the factory
+# default, the address is on `vme`, which is not a port of the inventory.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Which ports are `uplink`: the PIC 2 extension module and the 24X's
+# front QSFP28 ports; every built-in port of PIC 0 is an access port,
+# the 48F's twelve SFP+ ports included (Juniper calls them built-in
+# ports, not uplinks).
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   N13EX   Juniper, Understanding Interface Naming Conventions on EX
+#           Series Switches, Junos OS 13.2 (2014-04-25).
+#   HG4400  Juniper, EX4400 Switch Hardware Guide (2026-07-22): Table 114
+#           (CLI terminology: FPC, PIC), the factory-default
+#           configuration of an EX4400-24P.
+#   PSEX    Juniper, Port Speed on EX Series Switches: Tables 7 to 12
+#           (default speeds), Table 13 (Naming Formats for EX4400-48MP
+#           and EX4400-24MP).
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#   RN242   Juniper, Junos OS Release Notes 24.2R1: PR1827455.
+#   JVD     Juniper Validated Designs, the Juniper/jvd repository on
+#           GitHub: configurations Juniper publishes for its designs.
+#
+# Graded inferred, each with its reason: the panels of the EX4400-48XP
+# and EX4400-48MXP (Junos 24.2R1-S1), whose port names no Juniper text
+# prints.  HG4400 numbers their 48 built-in ports 0 to 47 on PIC 0 and
+# gives their speeds (Tables 24, 36 and 114).  The 48XP's `ge` follows
+# Juniper's naming rule for a gigabit port; the 48MXP's `mge` is
+# printed for that model in RN242, and that all 48 of its ports are
+# `mge` rests on the EX4400-48MP, which has the same 36 and 12.
+#
+# Two Juniper texts disagree on the 48MP's ports 36 to 47 (PSEX calls
+# them SFP+, HG4400 Table 114 10GBASE-T), so their cage is not stated.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A module set to another speed (`set chassis fpc 0 pic 2 port 0
+#     speed 10g`), or the EX4400-EM-1C or a network-mode PIC 1 port
+#     broken out (`et-0/2/0:0`): the names change, and a lane name does
+#     not classify.
+#   * The rear PIC 1 ports made network ports (`request virtual-chassis
+#     mode network-port`).  A configuration of an EX4400-48MP that
+#     Juniper publishes (JVD) names them `et-0/1/0` and `et-0/1/1`, but
+#     the mode keeps them as Virtual Chassis ports, which are no
+#     interface.
+#   * The -TAA parts.
+schema: 1
+vendor: juniper_junos
+family: EX4400
+display_name: "Juniper EX4400"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); each port at its default speed; the rear QSFP28 ports left as Virtual Chassis ports"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (network interfaces are specified as type-fpc/pic/port; the FPC number is 0 by default and is the member ID of the switch in a Virtual Chassis); Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (FPC 0 to 9; PIC 0 the built-in ports 0 to 23 or 0 to 47; PIC 1 the two QSFP28 ports numbered 0 and 1; PIC 2 the extension module) and the factory-default configuration of an EX4400-24P (ge-0/0/0 to ge-0/0/23); Juniper, Port Speed on EX Series Switches, Tables 7 to 12 (the default speed of each model's ports) and Table 13 (Naming Formats for EX4400-48MP and EX4400-24MP: mge-0/0/0, mge-0/0/1); Juniper, Virtual Chassis User Guide for Switches (2026-09-21), troubleshooting (a switch keeps the member ID it had in a Virtual Chassis after it leaves, and its interfaces keep it)"
+    bay_naming:
+      grade: vendor-doc
+      ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 2 is the extension module: 4x10G SFP+, 4x25G SFP28 or 1x100G QSFP28) and the factory-default configuration of an EX4400-24P (et-0/2/0 to et-0/2/3 and xe-0/2/0 to xe-0/2/3); Juniper, Port Speed on EX Series Switches (the EX4400-EM-4Y's ports default to 25G and the EX4400-EM-4S's to 10G; the EX4400-EM-1C's port is configured as pic 2 port 0)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. A port's prefix follows its speed: these names are for each port at its default speed, and a port set to another (an SFP in an SFP+ cage, a module set to 10G or 1G) is named ge- or xe- in its place, which is not a port of this inventory. On every model but the EX4400-24X the two rear QSFP28 ports are Virtual Chassis ports by default and have no interface name in that state; they are not modelled. A port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated. The management address of a Virtual Chassis, and of the factory default, is on vme, which is not a port of this inventory."
+
+deployment_ports:
+  - name: me0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port, labelled MGMT, on the rear panel"
+    naming: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), connecting and configuring the switch (set interfaces me0 unit 0 family inet address)"}
+
+modules:
+  EX4400-EM-4S:
+    description: "4-port SFP+ extension module"
+    inventory: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (4x10G SFP+ extension module in PIC 2) and the factory-default configuration of an EX4400-24P (xe-0/2/0 to xe-0/2/3); Juniper, Port Speed on EX Series Switches (the EX4400-EM-4S's ports default to 10G)"}
+    ports:
+      - {role: uplink, count: 4, prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX4400-EM-4Y:
+    description: "4-port SFP28 extension module"
+    inventory: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (4x25G SFP28 extension module in PIC 2) and the factory-default configuration of an EX4400-24P (et-0/2/0 to et-0/2/3); Juniper, Port Speed on EX Series Switches (the EX4400-EM-4Y's ports default to 25G, and are changed to 10G or 1G all four at once)"}
+    ports:
+      - {role: uplink, count: 4, prefix: et, speed: 25gig, cage: sfp28}
+
+  EX4400-EM-1C:
+    description: "1-port QSFP28 extension module"
+    inventory: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (1x100G QSFP28 extension module in PIC 2) and the factory-default configuration of an EX4400-24P (et-0/2/0); Juniper, Port Speed on EX Series Switches (the EX4400-EM-1C's port is pic 2 port 0, 100G by default, 40G with a QSFP+ optic)"}
+    ports:
+      - {role: uplink, count: 1, prefix: et, speed: 100gig, cage: qsfp28}
+
+models:
+  # --- 24 or 48 copper gigabit ports ----------------------------------------------
+  EX4400-24T:
+    skus: [EX4400-24T, EX4400-24T-AFI, EX4400-24T-DC, EX4400-24T-DC-AFI, EX4400-24T-S]
+    display_name: "Juniper EX4400-24T, 24 RJ-45 and an extension module (EX4400-24T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 24 built-in ports, 0 to 23) and the factory-default configuration of an EX4400-24P (ge-0/0/0 to ge-0/0/23; the factory-default configuration file for the other EX4400 models is similar); Juniper, Port Speed on EX Series Switches, Tables 7 to 12 (1G on the EX4400-24T's built-in ports)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-24P:
+    skus: [EX4400-24P, EX4400-24P-S]
+    display_name: "Juniper EX4400-24P, 24 RJ-45 PoE and an extension module (EX4400-24P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 24 built-in ports, 0 to 23) and the factory-default configuration of an EX4400-24P (ge-0/0/0 to ge-0/0/23); Juniper, Port Speed on EX Series Switches, Tables 7 to 12 (1G on the EX4400-24P's built-in ports)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-48T:
+    skus: [EX4400-48T, EX4400-48T-AFI, EX4400-48T-DC, EX4400-48T-DC-AFI, EX4400-48T-S]
+    display_name: "Juniper EX4400-48T, 48 RJ-45 and an extension module (EX4400-48T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 48 built-in ports, 0 to 47) and the factory-default configuration of an EX4400-24P (the factory-default configuration file for the other EX4400 models is similar); Juniper, Port Speed on EX Series Switches, Tables 7 to 12 (1G on the EX4400-48T's built-in ports)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-48P:
+    skus: [EX4400-48P, EX4400-48P-S]
+    display_name: "Juniper EX4400-48P, 48 RJ-45 PoE and an extension module (EX4400-48P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 48 built-in ports, 0 to 47) and the factory-default configuration of an EX4400-24P (the factory-default configuration file for the other EX4400 models is similar); Juniper, Port Speed on EX Series Switches, Tables 7 to 12 (1G on the EX4400-48P's built-in ports)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-48XP:
+    skus: [EX4400-48XP, EX4400-48XP-S]
+    display_name: "Juniper EX4400-48XP, 48 RJ-45 PoE and an extension module (EX4400-48XP)"
+    panel: {grade: inferred, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 23 (EX4400-48XP and EX4400-48XP-S, from Junos 24.2R1-S1), Table 24 (48 10-Mbps/100-Mbps/1000-Mbps PoE ports and 2 100GbE QSFP28 ports), Table 114 (PIC 0 the 48 built-in ports, 0 to 47) and Table 5 (every extension module is supported on the EX4400-48XP); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet)", caveat: "No Juniper text prints a port name of an EX4400-48XP: that its built-in ports are ge-<fpc>/0/0 to ge-<fpc>/0/47 is inferred from their numbering, their gigabit speed and the type-fpc/pic/port rule."}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  # --- fibre ---------------------------------------------------------------------
+  EX4400-48F:
+    skus: [EX4400-48F, EX4400-48F-AFI, EX4400-48F-DC, EX4400-48F-DC-AFI, EX4400-48F-S]
+    display_name: "Juniper EX4400-48F, 36 SFP, 12 SFP+ and an extension module (EX4400-48F)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 48 built-in ports, 0 to 47); Juniper, Port Speed on EX Series Switches, Table 9 (EX4400-48F: ports 0 to 35 SFP at 1G and ports 36 to 47 SFP+ at 10G by default); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (ge is Gigabit Ethernet and xe 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 36, prefix: ge, speed: gig, cage: sfp}
+      - {role: access, count: 12, prefix: xe, speed: 10gig, cage: sfp+}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-24X:
+    skus: [EX4400-24X, EX4400-24X-AFI, EX4400-24X-DC, EX4400-24X-DC-AFI]
+    display_name: "Juniper EX4400-24X, 24 SFP+, 2 QSFP28 and an extension module (EX4400-24X)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 24 built-in ports, 0 to 23; on the EX4400-24X, PIC 1 is 2x100G QSFP28, not VCP); Juniper, Port Speed on EX Series Switches, Table 10 (EX4400-24X: ports 0 to 23 at 10G, PIC 1 at 100G by default); Juniper, Understanding HiGig and HGoE Modes in a Virtual Chassis (the EX4400-24X's 100G front ports are network ports by default)"}
+    ports:
+      - {role: access, count: 24, prefix: xe, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, slot: "1", prefix: et, speed: 100gig, cage: qsfp28}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  # --- multigigabit --------------------------------------------------------------
+  EX4400-24MP:
+    skus: [EX4400-24MP, EX4400-24MP-S]
+    display_name: "Juniper EX4400-24MP, 24 multigigabit RJ-45 PoE and an extension module (EX4400-24MP)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 24 built-in ports, 0 to 23, 100M to 10G BASE-T); Juniper, Port Speed on EX Series Switches, Table 13 (Naming Formats for EX4400-48MP and EX4400-24MP: mge-0/0/0, mge-0/0/1) and the EX4400-24MP's default speed (10G on ports 0 to 23)"}
+    ports:
+      - {role: access, count: 24, prefix: mge, speed: 10gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-48MP:
+    skus: [EX4400-48MP, EX4400-48MP-S]
+    display_name: "Juniper EX4400-48MP, 36 2.5G and 12 10G multigigabit PoE ports and an extension module (EX4400-48MP)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 114 (PIC 0 the 48 built-in ports: 36 100M to 2.5G BASE-T and 12 100M to 10G); Juniper, Port Speed on EX Series Switches, Table 13 (Naming Formats for EX4400-48MP and EX4400-24MP: mge-0/0/0, mge-0/0/1) and the EX4400-48MP's default speeds (2.5G on ports 0 to 35, 10G on ports 36 to 47)"}
+    ports:
+      - {role: access, count: 36, prefix: mge, speed: 2.5gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: mge, speed: 10gig, poe: true, notes: "Juniper's hardware guide lists these as 10GBASE-T and its port-speed page as SFP+; the cage is not stated here"}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}
+
+  EX4400-48MXP:
+    skus: [EX4400-48MXP, EX4400-48MXP-S]
+    display_name: "Juniper EX4400-48MXP, 36 2.5G and 12 10G multigigabit PoE ports and an extension module (EX4400-48MXP)"
+    panel: {grade: inferred, ref: "Juniper, EX4400 Switch Hardware Guide (2026-07-22), Table 35 (EX4400-48MXP and EX4400-48MXP-S, from Junos 24.2R1-S1), Table 36 (36 100-Mbps/1-Gbps/2.5-Gbps PoE ports, 12 100-Mbps to 10-Gbps PoE ports and 2 100GbE QSFP28 ports), Table 114 (PIC 0 the 48 built-in ports, 0 to 47) and Table 5 (every extension module is supported on the EX4400-48MXP); Juniper, EX4400 Models (hardware topic, 2026-06-09), the EX4400-48MXP front panel (the 2.5G ports are 0 to 35, the 10G ports 36 to 47); Juniper, Junos OS Release Notes 24.2R1, PR1827455 (the mge- interfaces of an EX4400-48MP or EX4400-48MXP); Juniper, Port Speed on EX Series Switches, Table 13 (every port of the EX4400-48MP, which has the same 36 and 12, is mge)", caveat: "No Juniper text prints a port name of an EX4400-48MXP. Juniper's release notes name its ports mge-; that all 48 are, mge-<fpc>/0/0 to mge-<fpc>/0/47, is inferred from the EX4400-48MP, whose 36 and 12 ports are all mge, and from the type-fpc/pic/port rule. Two Juniper texts disagree on the speeds of the 36: Table 114 includes 10 Mbps, Table 36 does not."}
+    ports:
+      - {role: access, count: 36, prefix: mge, speed: 2.5gig, cage: rj45, poe: true}
+      - {role: access, count: 12, prefix: mge, speed: 10gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX4400-EM-4S, EX4400-EM-4Y, EX4400-EM-1C], label: "Extension module (PIC 2)"}

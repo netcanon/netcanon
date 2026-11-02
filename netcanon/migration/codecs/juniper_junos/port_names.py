@@ -197,6 +197,75 @@ TAGGING_STATEMENT_TAGS: dict[str, int] = {
 }
 
 
+#: The media prefixes an EX or QFX switch running Junos OS gives a port
+#: of its panel or of a module: ``ge`` (1G), ``mge`` (multigigabit),
+#: ``xe`` (10G) and ``et`` (25G, 40G, 100G).  ``xle`` and ``fte`` arise
+#: only under the QFabric software package, and a ``vcp-255/...``
+#: Virtual Chassis port is not a network interface.
+EX_QFX_MEDIA: frozenset[str] = frozenset({"ge", "mge", "xe", "et"})
+
+#: The highest member id of a Virtual Chassis of EX or QFX switches,
+#: which holds at most ten; the FPC number of a member is its member
+#: id, 0 to 9.
+_LAST_VC_MEMBER_ID = 9
+
+#: The highest PIC number of an EX or QFX switch's ports: 0 for the
+#: built-in ports, then a bank of the panel or a module bay, which
+#: every switch here numbers 1 or 2.
+_LAST_EX_QFX_PIC = 2
+
+
+def ex_qfx_port_name(*, media: str, fpc: int, pic: int, port: int) -> str:
+    """The name Junos OS gives port *port* of PIC *pic* of the EX or QFX
+    switch that is Virtual Chassis member *fpc*, not broken out.
+
+    "Network interfaces in Junos OS are specified as follows:
+    type-fpc / pic / port" (Juniper, *Understanding Interface Naming
+    Conventions on EX Series Switches*, Junos OS 13.2, 2014-04-25; the
+    QFX Series and EX4600 page of the same release gives the same
+    form).  The FPC is the switch: "The FPC number is 0 by default on
+    these switches", and in a Virtual Chassis "the FPC number indicates
+    the member ID of the switch".  A switch taken out of a Virtual
+    Chassis keeps that id in its names -- "if the switch was previously
+    member 1, its interfaces are named ge-1/0/0 and so on" (*Virtual
+    Chassis User Guide for Switches*, 2026-09-21, troubleshooting) -- so
+    a switch on its own is not always FPC 0.  The PIC is 0 for the
+    built-in ports and 1 or 2 for a bank of the panel or a module bay,
+    which model it is being a fact of the model ("On EX4300 switches,
+    the PIC number is 0 for built-in network ports, 1 for built-in
+    QSFP+ ports ..., and 2 for uplink module ports", the 13.2 page).
+    Ports count from 0 within their PIC, by the number the CLI shows,
+    not the faceplate label: the EX4300-32F's "SFP+ uplink ports are
+    labeled 0 through 3" and "In the CLI output ... are numbered 32
+    through 35" (*EX4300 Switch Hardware Guide*, 2025-08-12).
+
+    The prefix is the speed the optic or a chassis statement selects,
+    which is why it is the caller's to state: the same cage is
+    ``ge-0/2/0`` with an SFP and ``xe-0/2/0`` with an SFP+.  A lane of a
+    port broken out (``xe-0/0/48:0``) and a logical unit are not named
+    here.
+
+    Raises:
+        ValueError: *media* is not a prefix of an EX or QFX port, *fpc*
+            is not a member id (0 to 9), *pic* is not 0, 1 or 2, or
+            *port* is negative.
+    """
+    if media not in EX_QFX_MEDIA:
+        raise ValueError(
+            f"{media!r} is not the prefix of an EX or QFX port; "
+            f"Junos writes one of {', '.join(sorted(EX_QFX_MEDIA))}"
+        )
+    if not 0 <= fpc <= _LAST_VC_MEMBER_ID:
+        raise ValueError(
+            f"the FPC of an EX or QFX port is a Virtual Chassis member id, 0 to 9, not {fpc}"
+        )
+    if not 0 <= pic <= _LAST_EX_QFX_PIC:
+        raise ValueError(f"an EX or QFX switch numbers its PICs 0, 1 and 2, not {pic}")
+    if port < 0:
+        raise ValueError(f"a Junos port number counts from 0, not {port}")
+    return f"{media}-{fpc}/{pic}/{port}"
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a Junos port name into a :class:`PortIdentity`."""
     # Standard <media>-<fpc>/<pic>/<port>[.unit]

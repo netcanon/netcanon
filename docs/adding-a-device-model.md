@@ -52,8 +52,11 @@ every CX 6200 and 6300 the `aoscx` rule (`vsf_switch_port_name` in
 every Arista fixed switch the `eos` rule (`fixed_switch_port_name`
 in
 [`codecs/arista_eos/port_names.py`](../netcanon/migration/codecs/arista_eos/port_names.py)),
-and every Cisco Nexus 9300 the `nxos` rule (`nexus_port_name` in
-[`codecs/cisco_nxos/port_names.py`](../netcanon/migration/codecs/cisco_nxos/port_names.py)).
+every Cisco Nexus 9300 the `nxos` rule (`nexus_port_name` in
+[`codecs/cisco_nxos/port_names.py`](../netcanon/migration/codecs/cisco_nxos/port_names.py)),
+and every Juniper EX and QFX switch the `junos` rule
+(`ex_qfx_port_name` in
+[`codecs/juniper_junos/port_names.py`](../netcanon/migration/codecs/juniper_junos/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -92,6 +95,22 @@ named otherwise.  What a module contributes can depend on the switch
 it is fitted in -- an N9K-M12PQ has twelve active ports in a 9396PX
 and eight in a 93128TX -- and a module is described once per family,
 so such a switch is a family of its own.
+
+A Juniper EX or QFX switch names a port `type-fpc/pic/port`
+(`xe-0/2/3`).  The FPC is the Virtual Chassis member id, 0 on a
+switch that has never been in one, so a Junos mode always states
+`member_ids`.  The panel's own ports are PIC 0 and state no slot; a
+bank of the panel that is a PIC of its own (an EX2300's uplinks are
+PIC 1) and a module bay are named by their PIC (`"1"` or `"2"`),
+and the rule refuses any other slot.  Ports count from 0 within a
+PIC, by the number the CLI shows, not the faceplate label (an
+EX4300-32F's SFP+ ports are labelled 0 to 3 and are `xe-0/0/32` to
+`xe-0/0/35`).  The prefix is the optic's speed, not the cage's, so
+every group states its `prefix` and the mode says which optics its
+names are for.  A port the switch holds as a Virtual Chassis port by
+default is no interface, and is left out.  A Virtual Chassis is of
+the models one family describes, so models that cannot share one
+(each QFX5120) are families of their own.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that

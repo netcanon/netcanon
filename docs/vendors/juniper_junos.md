@@ -547,6 +547,28 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   interface.  A non-zero unit of a management port (`me0 unit 5`)
   follows its port (`set interfaces em0 unit 5 ...`).  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
+- **Declaring an EX or QFX switch as the source or target device**
+  -- the EX2300, EX3400, EX4300, EX4400, EX4600 and EX4650, and the
+  QFX5100, QFX5110, QFX5120 (each model a family of its own),
+  QFX5200 and QFX5210 are model families.  The mode is
+  `virtual-chassis` -- a Virtual Chassis, or a switch on its own --
+  and `standalone` on the QFX5210.  A port is `type-fpc/pic/port`,
+  and the FPC is the member id: a switch that left a Virtual Chassis
+  keeps it, so declare the id its config shows.  PIC 0 is the panel;
+  an EX2300's uplinks are PIC 1 and an EX3400's PIC 2, an EX4300's or
+  EX4400's module bay is PIC 2, and an EX4600 has two bays, PIC 1
+  and 2.  A port's prefix follows the optic in it: each mode names
+  its cages for the optics it states, and a port that holds another
+  optic, a lane of a port broken out (`xe-0/0/48:0`) and `vme` come
+  back as off-inventory.  The management port is `me0` on the
+  EX2300, EX3400, EX4300 and EX4400, and `em0` (with `em1` where the
+  switch has one) on the others.  On the EX2300, EX3400 and EX4300
+  `me0` is graded `inferred`: no text of those models names the MGMT
+  port, and their Quick Starts call it `vme`.  A Junos configuration
+  names no model, so the switch is chosen by hand.  A part graded `inferred`
+  says why in its caveat, and what a family leaves out is listed,
+  with the reason, in its file; the EX4100, the modular chassis and
+  the switches that run Junos OS Evolved are not described.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor
   syntax; the renaming operation (port / VLAN / user-name etc.)

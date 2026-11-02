@@ -3,7 +3,8 @@
 # Every string an operator can author here is markup that would run a
 # script if it were ever read as HTML: each `onerror` / `onload` pushes
 # a number onto `window.__markup_ran`, which the tests then require to
-# be empty.  The panel is graded `inferred`, which no shipped family is.
+# be empty.  The panel is graded `inferred`, so that the amber note is
+# exercised whatever the shipped families are graded.
 schema_version: 1
 vendor: aruba_aoss
 family: FIXTURE-MARKUP
