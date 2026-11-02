@@ -24,6 +24,7 @@ from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
     CATALYST_PORT_TYPES,
     catalyst_port_name,
 )
+from netcanon.migration.codecs.cisco_nxos.port_names import nexus_port_name
 from netcanon.migration.device_models import (
     SPEED_RANK,
     Deployment,
@@ -413,6 +414,67 @@ class TestEosPortName:
     def test_multi_lane_is_a_yes_or_a_no(self):
         with pytest.raises(ValueError):
             dm.PortGroup(role="uplink", count=1, multi_lane="yes")
+
+
+# ---------------------------------------------------------------------------
+# The NX-OS naming rule
+# ---------------------------------------------------------------------------
+
+
+def _nxos_request(index0: int, *, slot="", member_id=None) -> dm.PortNameRequest:
+    group = dm.PortGroup(role="uplink", count=1)
+    return dm.PortNameRequest(
+        mode="standalone", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+class TestNxosPortName:
+    @pytest.mark.parametrize(
+        ("module", "port", "printed"),
+        [
+            # Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+            # Guide, Release 9.3(x), Configuring Basic Interface
+            # Parameters: an Ethernet port is `ethernet slot/port`, and
+            # the port speed groups of a 937xPX/TX are 1/49-54.
+            (1, 49, "Ethernet1/49"),
+            # The same guide, Release 7.x, Example: Configuring QSA on
+            # Cisco Nexus 9396PX switch: `interface ethernet 2/7`, a port
+            # of the uplink module.
+            (2, 7, "Ethernet2/7"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, module, port, printed):
+        assert nexus_port_name(module=module, port=port) == printed
+
+    @pytest.mark.parametrize(("module", "port"), [(0, 1), (1, 0), (-1, 1), (1, -1)])
+    def test_module_and_port_count_from_1(self, module, port):
+        with pytest.raises(ValueError, match="counts from 1"):
+            nexus_port_name(module=module, port=port)
+
+    def test_the_panel_is_module_1_and_a_bay_its_number(self):
+        rule = dm._naming_rules()["nxos"]
+        assert rule.render(_nxos_request(48)) == "Ethernet1/49"
+        assert rule.render(_nxos_request(6, slot="2")) == "Ethernet2/7"
+
+    # chr(0xFF12) is a full-width 2: a digit to `str.isdigit`, and not
+    # one NX-OS prints.
+    @pytest.mark.parametrize("slot", ["1", "0", "A", "02x", chr(0xFF12)])
+    def test_a_bay_is_numbered_from_2(self, slot):
+        """Module 1 is the switch's own panel: a bay named 1 would give
+        two ports one name."""
+        with pytest.raises(ValueError, match="numbered from 2"):
+            dm._naming_rules()["nxos"].render(_nxos_request(0, slot=slot))
+
+    def test_a_fixed_switch_names_no_member(self):
+        """Two switches of a vPC pair are two devices; a mode that gives
+        a member a number is not one of theirs."""
+        with pytest.raises(ValueError, match="without a member number"):
+            dm._naming_rules()["nxos"].render(_nxos_request(0, member_id=1))
+
+    def test_the_management_interface_is_not_a_numbered_port(self):
+        rule = dm._naming_rules()["nxos"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`mgmt0`" in rule.why_not
 
 
 # ---------------------------------------------------------------------------

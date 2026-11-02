@@ -1738,8 +1738,10 @@ class TestAnAnswerNobodyReads:
     #: since the job's sentence offers no devices for NX-OS, of which
     #: none is described.  9,507,861 since each OPNsense VLAN's id is a
     #: lossy path as well, a VLAN on a port being read back as a
-    #: sub-interface of it: the rendered config did not change.)
-    LENGTH = 9_507_861
+    #: sub-interface of it: the rendered config did not change.
+    #: 9,507,913 since a Nexus 9300 is described, and the job's
+    #: sentence offers both devices again.)
+    LENGTH = 9_507_913
 
     @staticmethod
     def _client_that_does_not_read(port: int) -> socket.socket:

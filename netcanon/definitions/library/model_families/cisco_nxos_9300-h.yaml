@@ -1,0 +1,108 @@
+# Cisco Nexus 9364C-H1, 93400LD-H1 and 9332D-H2R: fixed switches Cisco
+# sells on their own data sheets
+#
+# The grouping is this file's, not a Cisco series: each model has a
+# data sheet of its own, and each says it is based on Cisco Cloud
+# Scale technology.  They share a suffix, and the way they are named.
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/49`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  The RJ-45 and SFP management connectors of these
+# models are that one interface, and only one is used.
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP28 or QSFP-DD port is an uplink, and an SFP56 or SFP+ port an
+# access port.  It decides only how the ports of two devices are
+# paired, and says nothing about how a switch is cabled.  So the two
+# SFP+ ports of the 9364C-H1 and 9332D-H2R, which follow the uplinks in
+# number, are `access` ports listed after them.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout.
+#   IF106   The same guide, Release 10.6(x), "Configuring Basic
+#           Interface Parameters", Table 4 (the ports that have a
+#           retimer, per model).
+#   G...    Each model's NX-OS Mode Switch Hardware Installation
+#           Guide, Overview.
+#
+# Graded vendor-doc: the 9364C-H1 and 93400LD-H1, whose guides number
+# every port.  Graded inferred, with its reason in its caveat: the
+# 9332D-H2R, whose port numbers no Cisco text read gives.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.  On the 9364C-H1 a 4x10G or 4x25G
+#     breakout is on the first port of a quad only, and the other
+#     three ports of that quad are hardware disabled (its guide).
+#   * The timing connectors (1PPS, 10MHz, Time of Day) of the
+#     93400LD-H1 and 9332D-H2R, which are not Ethernet ports.
+schema: 1
+vendor: cisco_nxos
+family: "9300-H"
+display_name: "Cisco Nexus 9364C-H1, 93400LD-H1 and 9332D-H2R"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/1/1 is not on this inventory. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. The model's SFP management connector is this one interface too, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); Cisco N9364C-H1 NX-OS Mode Switch Hardware Installation Guide, Overview (1 management port: one RJ-45 port or one SFP port); each model's NX-OS Mode Switch Hardware Installation Guide, Overview (a management port, RJ45, and a management port, SFP)"}
+
+models:
+  # --- 64 QSFP28 and 2 SFP+ ------------------------------------------------------
+  N9K-C9364C-H1:
+    skus: [N9K-C9364C-H1]
+    display_name: "Cisco Nexus 9364C-H1, 64 QSFP28 and 2 SFP+ (N9K-C9364C-H1)"
+    panel: {grade: vendor-doc, ref: "Cisco N9364C-H1 NX-OS Mode Switch Hardware Installation Guide, Overview (ports 1 to 48, 40/100-Gigabit QSFP28, in 4 rows of 12; ports 49 to 64, 40/100-Gigabit QSFP28 with MACsec; 1/10-Gigabit SFP+ ports 65-66); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (N9K-C9364C-H1, ports with a retimer: 1-64)", caveat: "The Cisco Nexus 9364C-H1 Switch Data Sheet (Updated August 26, 2025) lists the 64 100G ports only; the hardware installation guide names the two SFP+ ports 65-66 as well."}
+    ports:
+      - {role: uplink, count: 64, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 48 SFP56 and 4 QSFP-DD ----------------------------------------------------
+  N9K-C93400LD-H1:
+    skus: [N9K-C93400LD-H1]
+    display_name: "Cisco Nexus 93400LD-H1, 48 SFP56 and 4 QSFP-DD (N9K-C93400LD-H1)"
+    panel: {grade: vendor-doc, ref: "Cisco N93400LD-H1 NX-OS Mode Switch Hardware Installation Guide, Overview (48 50-GE ZSFP downlink ports, ports 1-48; 4 400-G QSFP-DD uplink ports, ports 49-52); Cisco Nexus 93400LD-H1 Switch Data Sheet (Updated August 29, 2025) (48 50G SFP56 and 4 400G QSFP-DD)"}
+    ports:
+      - {role: access, count: 48, speed: 50gig, cage: sfp56}
+      - {role: uplink, count: 4, speed: 400gig, cage: qsfp-dd}
+
+  # --- 32 QSFP-DD and 2 SFP+ -----------------------------------------------------
+  N9K-C9332D-H2R:
+    skus: [N9K-C9332D-H2R]
+    display_name: "Cisco Nexus 9332D-H2R, 32 QSFP-DD and 2 SFP+ (N9K-C9332D-H2R)"
+    panel: {grade: inferred, ref: "Cisco N9332D-H2R NX-OS Mode Switch Hardware Installation Guide, Overview (Updated July 16, 2026) (32 400G QSFP-DD and 2 10G SFP+); Cisco Nexus 9332D-H2R Switch Data Sheet (Updated February 6, 2024) (32 400G QSFP-DD); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (N9K-C9332D-H2R, ports with a retimer: 1-32)", caveat: "Cisco's texts read give the counts, and number the QSFP-DD ports 1-32 only through the retimer table. That the two SFP+ ports are 33-34 is inferred from the 9364C-H1, whose SFP+ ports follow its QSFP28 ports. The data sheet lists the 32 QSFP-DD ports only."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

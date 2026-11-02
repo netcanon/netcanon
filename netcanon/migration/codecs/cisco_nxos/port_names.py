@@ -1,5 +1,7 @@
 """
-Cisco NX-OS port-name classification + formatting.
+Cisco NX-OS port-name classification + formatting, and the name a
+Nexus 9300 gives a port of its own (:func:`nexus_port_name`, the
+``nxos`` naming rule of :mod:`netcanon.migration.device_models`).
 
 Pure functions — no parser / renderer state — so the cross-vendor
 orchestrator in :mod:`netcanon.migration.canonical.port_names` can import
@@ -73,6 +75,33 @@ _LOGICAL_PATTERNS: tuple[tuple[str, str], ...] = (
 _LOGICAL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(p, re.IGNORECASE), k) for p, k in _LOGICAL_PATTERNS
 )
+
+
+def nexus_port_name(*, module: int, port: int) -> str:
+    """The name NX-OS gives port *port* of module *module* of a Nexus
+    9300, the port not broken out.
+
+    An Ethernet port is identified by "I/O module slot numbers and port
+    numbers on the module", written ``ethernet slot/port`` (Cisco Nexus
+    9000 Series NX-OS Interfaces Configuration Guide, "Configuring Basic
+    Interface Parameters", Information Needed to Identify an Interface
+    for Configurations), and a running-config prints it with no space,
+    ``Ethernet1/49``.  A fixed switch's own panel is module 1 ("Cisco
+    Nexus 937xPX/TX: 1/49-54", the same chapter's list of port speed
+    groups); the uplink module of a first-generation 9396 or 93128 is
+    module 2, its ports numbered from 1 ("ports 1 through 6 [2/1-6]",
+    their hardware installation guides, Uplink Connections).  A port
+    broken out into lanes is ``Ethernet1/49/1`` and is not named here.
+
+    Raises:
+        ValueError: *module* or *port* is not a number NX-OS uses; both
+            count from 1.
+    """
+    if module < 1:
+        raise ValueError(f"an NX-OS module number counts from 1, not {module}")
+    if port < 1:
+        raise ValueError(f"an NX-OS port number counts from 1, not {port}")
+    return f"Ethernet{module}/{port}"
 
 
 def classify_port_name(name: str) -> PortIdentity:

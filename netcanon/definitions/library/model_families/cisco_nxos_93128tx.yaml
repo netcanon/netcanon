@@ -1,0 +1,116 @@
+# Cisco Nexus 93128TX: a first-generation switch of 96 10GBASE-T ports
+# and an uplink module
+#
+# A family of its own because a module is described once per family:
+# in a 93128TX the 12-port uplink module has 8 active ports, where in
+# a 9396PX or 9396TX (the `9300` family) it has 12.
+#
+# NX-OS 10.1(1) and later do not support this hardware (RN1011), so a
+# config from it is NX-OS 9.3(x) or earlier.
+#
+# A switch that stands alone: the two switches of a vPC pair are two
+# devices, and neither puts a member number in a name.  How a name is
+# made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`.  The switch's own ports are
+# module 1, `Ethernet1/1` onward, and its uplink module is module 2,
+# `Ethernet2/1` onward (its guide, Uplink Connections: "[2/1-6]" and
+# "[2/7-8]").  The bay is therefore named "2".
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP+ port is an uplink, and an RJ45 port an access port.  It decides
+# only how the ports of two devices are paired.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   DSN9300 Cisco N9300 Platform Switches Data Sheet (Updated August
+#           18, 2026).
+#   RN923   Cisco Nexus 9000 Series NX-OS Release Notes, Release
+#           9.2(3), Table 17.
+#   RN1011  Cisco Nexus 9000 Series NX-OS Release Notes, Release
+#           10.1(1), "Unsupported Hardware".
+#   G93128  Cisco N93128TX NX-OS Mode Switch Hardware Installation
+#           Guide (Updated July 16, 2026): "Overview" and "Connecting
+#           the Switch to the Network".
+#
+# Graded vendor-doc: the 12-port module's eight active ports, which
+# G93128 numbers.  Graded inferred, each with its reason in its caveat:
+# the fixed panel, which Cisco numbers in a figure only, and the 6-port
+# modules, whose `2/` prefix Cisco does not print.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 4-port 100G CFP2 module (N9K-M4PC-CFP2).  It has two active
+#     ports in a 93128TX, and G93128 says in one place that they are
+#     ports 3 and 4 and, in the same chapter, ports 1 and 2.  Rather
+#     than pick one, the bay does not offer it.
+#   * Ports 9-12 of the 12-port module, which are inactive in this
+#     switch (the module's caveat).
+#   * The 2-RU N9K-C93128TX2, which only an end-of-life notice lists.
+schema: 1
+vendor: cisco_nxos
+family: "93128TX"
+display_name: "Cisco Nexus 93128TX"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two)"
+    bay_naming:
+      grade: vendor-doc
+      ref: "Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Connecting the Switch to the Network, Uplink Connections (the 12-port uplink module has two port groups, ports 1 through 6 [2/1-6] and ports 7-8 [2/7-8]); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, port speed groups (93128PX/TX: 2/1-6 and 2/7-8)"
+    caveat: "Each port is listed as one interface: Ethernet1/<port> on the switch's own panel, Ethernet2/<port> on its uplink module. Cisco's documents disagree on whether these QSFP+ ports can be broken out into lanes; a port broken out is not modelled. NX-OS 10.1(1) and later do not support this hardware. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Overview (an out-of-band management port, RJ-45)"}
+
+modules:
+  N9K-M12PQ:
+    description: "12-port 40G QSFP+ uplink module, 8 ports active in a 93128TX"
+    inventory: {grade: vendor-doc, ref: "Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Overview (12-port, 8 active ports) and Connecting the Switch to the Network, Uplink Connections (ports 1 through 6 [2/1-6] and ports 7-8 [2/7-8]; only the leftmost eight ports are active); Cisco N9300 Platform Switches Data Sheet (Updated August 18, 2026) (8 active ports when installed in the Cisco N93128TX)", caveat: "In a 93128TX only the leftmost eight of the module's twelve ports are active, Ethernet2/1-8. Whether ports 9-12 still print as interfaces is not established; they are left out."}
+    ports:
+      - {role: uplink, count: 8, speed: 40gig, cage: qsfp+}
+
+  N9K-M6PQ:
+    description: "6-port 40G QSFP+ uplink module"
+    inventory: {grade: inferred, ref: "Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Connecting the Switch to the Network, Uplink Connections (the six-port uplink module has six active ports, ports 1 through 6); Cisco Nexus 9000 Series NX-OS Release Notes, Release 9.2(3), Table 17 (N9K-M6PQ, for the 9396PX, 9396TX and 93128TX)", caveat: "Cisco's guide numbers the module's ports 1 through 6, and prints the 2/ prefix for the 12-port module only. That they are Ethernet2/1-6 is inferred from it."}
+    ports:
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+}
+
+  N9K-M6PQ-E:
+    description: "6-port 40G QSFP+ uplink module, enhanced"
+    inventory: {grade: inferred, ref: "Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Overview (an M4PC, M6PQ, M6PQ-E, or M12PQ uplink module) and Connecting the Switch to the Network, Uplink Connections (the six-port uplink module has six active ports, ports 1 through 6)", caveat: "Cisco's guide numbers the module's ports 1 through 6, and prints the 2/ prefix for the 12-port module only. That they are Ethernet2/1-6 is inferred from it."}
+    ports:
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+}
+
+models:
+  N9K-C93128TX:
+    skus: [N9K-C93128TX]
+    display_name: "Cisco Nexus 93128TX, 96 10GBASE-T and an uplink module (N9K-C93128TX)"
+    panel: {grade: inferred, ref: "Cisco N93128TX NX-OS Mode Switch Hardware Installation Guide (Updated July 16, 2026), Overview (a 3-RU, fixed-port switch: 96 fixed 1/10GBASE-T (copper) downlink ports and an M4PC, M6PQ, M6PQ-E, or M12PQ uplink module); Cisco N9300 Platform Switches Data Sheet (Updated August 18, 2026)", caveat: "Cisco's texts read give the count, and name the uplink module's ports 2/1-8. That the fixed 10GBASE-T ports are 1-96 is inferred from the slot/port rule; Cisco numbers them in a figure only. The 4-port 100G CFP2 module is not offered: Cisco's guide gives its two active ports in this switch as ports 3 and 4 and, in the same chapter, as ports 1 and 2."}
+    ports:
+      - {role: access, count: 96, speed: 10gig, cage: rj45}
+    bays:
+      "2": {accepts: [N9K-M12PQ, N9K-M6PQ, N9K-M6PQ-E], label: "Uplink module (module 2)"}

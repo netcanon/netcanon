@@ -1031,6 +1031,101 @@ def _eos_port_number(name: str) -> int:
     assert match, name
     return int(match.group(1))
 
+
+# Cisco Nexus 9300 -- typed by hand from the family files' sources, each
+# model's port groups in PORT-NUMBER order, as (module, first port,
+# count, role).  The switch's own panel is module 1; the uplink module
+# of a first-generation 9396 or 93128 is module 2, its ports from 1.
+_N = "cisco_nxos"
+
+
+def _nxos(*groups: tuple[int, int, int, str]) -> tuple[list[str], list[str]]:
+    access: list[str] = []
+    uplinks: list[str] = []
+    for module, first, count, role in groups:
+        names = [f"Ethernet{module}/{n}" for n in range(first, first + count)]
+        (access if role == _ACC else uplinks).extend(names)
+    return access, uplinks
+
+
+_NXOS_48_6 = ((1, 1, 48, _ACC), (1, 49, 6, _UP))
+_NXOS_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # 9300-EX
+    "N9K-C93180YC-EX": _nxos(*_NXOS_48_6),
+    "N9K-C93108TC-EX": _nxos(*_NXOS_48_6),
+    "N9K-C93180LC-EX": _nxos((1, 1, 28, _UP), (1, 29, 4, _UP)),
+    # 9300-FX
+    "N9K-C93180YC-FX": _nxos(*_NXOS_48_6),
+    "N9K-C93108TC-FX": _nxos(*_NXOS_48_6),
+    "N9K-C9348GC-FXP": _nxos((1, 1, 48, _ACC), (1, 49, 4, _ACC), (1, 53, 2, _UP)),
+    "N9K-C9348GC-FXP-B1": _nxos((1, 1, 48, _ACC), (1, 49, 4, _ACC), (1, 53, 2, _UP)),
+    # 9300-FX2
+    "N9K-C9336C-FX2": _nxos((1, 1, 36, _UP)),
+    "N9K-C9336C-FX2-E": _nxos((1, 1, 36, _UP)),
+    "N9K-C93240YC-FX2": _nxos((1, 1, 48, _ACC), (1, 49, 12, _UP)),
+    "N9K-C93360YC-FX2": _nxos((1, 1, 96, _ACC), (1, 97, 12, _UP)),
+    "N9K-C93216TC-FX2": _nxos((1, 1, 96, _ACC), (1, 97, 12, _UP)),
+    # 9300-FX3
+    "N9K-C93180YC-FX3": _nxos(*_NXOS_48_6),
+    "N9K-C93180YC-FX3S": _nxos(*_NXOS_48_6),
+    "N9K-C93108TC-FX3P": _nxos(*_NXOS_48_6),
+    "N9K-C93108TC-FX3": _nxos(*_NXOS_48_6),
+    "N9K-C9348GC-FX3": _nxos((1, 1, 48, _ACC), (1, 49, 4, _ACC), (1, 53, 2, _UP)),
+    "N9K-C9348GC-FX3PH": _nxos(
+        (1, 1, 40, _ACC), (1, 41, 8, _ACC), (1, 49, 4, _ACC), (1, 53, 2, _UP),
+    ),
+    # 9300-GX
+    "N9K-C9316D-GX": _nxos((1, 1, 16, _UP)),
+    "N9K-C93600CD-GX": _nxos((1, 1, 28, _UP), (1, 29, 8, _UP)),
+    "N9K-C9364C-GX": _nxos((1, 1, 64, _UP)),
+    # 9300-GX2: the two SFP+ ports are numbered after the uplinks.
+    "N9K-C9364D-GX2A": _nxos((1, 1, 64, _UP), (1, 65, 2, _ACC)),
+    "N9K-C9348D-GX2A": _nxos((1, 1, 48, _UP), (1, 49, 2, _ACC)),
+    "N9K-C9332D-GX2B": _nxos((1, 1, 32, _UP), (1, 33, 2, _ACC)),
+    "N9K-C9332D-GX2B-M": _nxos((1, 1, 32, _UP), (1, 33, 2, _ACC)),
+    # 9332C-9364C
+    "N9K-C9332C": _nxos((1, 1, 32, _UP), (1, 33, 2, _ACC)),
+    "N9K-C9364C": _nxos((1, 1, 64, _UP), (1, 65, 2, _ACC)),
+    # 9300-H
+    "N9K-C9364C-H1": _nxos((1, 1, 64, _UP), (1, 65, 2, _ACC)),
+    "N9K-C93400LD-H1": _nxos((1, 1, 48, _ACC), (1, 49, 4, _UP)),
+    "N9K-C9332D-H2R": _nxos((1, 1, 32, _UP), (1, 33, 2, _ACC)),
+    # 9300, the first generation
+    "N9K-C9372PX": _nxos(*_NXOS_48_6),
+    "N9K-C9372PX-E": _nxos(*_NXOS_48_6),
+    "N9K-C9372TX": _nxos(*_NXOS_48_6),
+    "N9K-C9372TX-E": _nxos(*_NXOS_48_6),
+    "N9K-C93120TX": _nxos((1, 1, 96, _ACC), (1, 97, 6, _UP)),
+    "N9K-C9332PQ": _nxos((1, 1, 32, _UP)),
+    "N9K-C9396PX": _nxos((1, 1, 48, _ACC)),
+    "N9K-C9396TX": _nxos((1, 1, 48, _ACC)),
+    # 93128TX
+    "N9K-C93128TX": _nxos((1, 1, 96, _ACC)),
+}
+#: Family -> each uplink module it describes -> its active ports, which
+#: are module 2's from 1.  In a 93128TX the 12-port module has 8.
+_NXOS_MODULE_PORTS: dict[str, dict[str, int]] = {
+    "9300": {"N9K-M12PQ": 12, "N9K-M6PQ": 6, "N9K-M6PQ-E": 6, "N9K-M4PC-CFP2": 4},
+    "93128TX": {"N9K-M12PQ": 8, "N9K-M6PQ": 6, "N9K-M6PQ-E": 6},
+}
+#: Model -> the family whose modules its bay "2" takes.
+_NXOS_BAYED = {"N9K-C9396PX": "9300", "N9K-C9396TX": "9300", "N9K-C93128TX": "93128TX"}
+for _model, _ports in _NXOS_PANELS.items():
+    EXPECTED_INVENTORIES[(_N, _model, "standalone", ())] = _ports
+for _model, _family in _NXOS_BAYED.items():
+    for _sku, _count in _NXOS_MODULE_PORTS[_family].items():
+        EXPECTED_INVENTORIES[(_N, _model, "standalone", (("2", _sku),))] = (
+            _NXOS_PANELS[_model][0], _nxos((2, 1, _count, _UP))[1],
+        )
+
+_NXOS_PORT = re.compile(r"^Ethernet(\d+)/(\d+)$")
+
+
+def _nxos_port_key(name: str) -> tuple[int, int]:
+    match = _NXOS_PORT.match(name)
+    assert match, name
+    return int(match.group(1)), int(match.group(2))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -1055,6 +1150,13 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     "arista_eos/7050X3": ["Management1"],
     "arista_eos/7280R3": ["Management1"],
     "arista_eos/7050X": ["Management1"],
+    **{
+        f"{_N}/{family}": ["mgmt0"]
+        for family in (
+            "9300", "9300-EX", "9300-FX", "9300-FX2", "9300-FX3", "9300-GX",
+            "9300-GX2", "9300-H", "93128TX", "9332C-9364C",
+        )
+    },
 }
 
 
@@ -1095,6 +1197,12 @@ class TestExactInventories:
             # the role.
             assert inventory.names() == (
                 sorted(access + uplinks, key=_eos_port_number) + mgmt
+            )
+        elif vendor == _N:
+            # So does a Nexus, module by module: on a 9364D-GX2A the two
+            # SFP+ access ports are numbered after the 64 uplinks.
+            assert inventory.names() == (
+                sorted(access + uplinks, key=_nxos_port_key) + mgmt
             )
         else:
             assert inventory.names() == access + uplinks + mgmt
@@ -1250,6 +1358,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "catalyst": "cisco_iosxe_cli",
     "aoscx": "aruba_aoscx",
     "eos": "arista_eos",
+    "nxos": "cisco_nxos",
 }
 
 
@@ -1306,6 +1415,12 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                 elif family.naming == "aoscx":
                     # The slot is always 1: the switch is not modular.
                     assert (identity.module, port.slot) == (1, ""), where
+                elif family.naming == "nxos":
+                    # The panel is module 1, an uplink module the number
+                    # of its bay.
+                    assert (identity.module, identity.subslot_letter) == (
+                        int(port.slot or "1"), "",
+                    ), where
                 else:
                     assert identity.subslot_letter == port.slot, where
                 assert identity.port == port.index + 1, where
@@ -1739,6 +1854,8 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     # Arista: the name a switch prints on its `! device:` line is the
     # model key.
     **{(_E, model): model for model in _EOS_PANELS},
+    # Cisco Nexus: the product ID is the model key.
+    **{(_N, model): model for model in _NXOS_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -1828,6 +1945,48 @@ KNOWN_INFERRED_PARTS: set[str] = {
     # read names such a port, and two public running-configs print
     # them with no lane.
     "arista_eos/7050X / panel / DCS-7050QX-32",
+    # A Nexus 9300 whose ports Cisco numbers in a figure, or in no text
+    # read: the counts are its data sheet's, and the numbers follow the
+    # slot/port rule from 1/1, the uplinks after the access ports (on a
+    # GX2 or a 9332C, 9364C or 9332D-H2R the two SFP+ ports after the
+    # uplinks, as on the 9364D-GX2A and 9364C-H1, whose guides number
+    # them).
+    "cisco_nxos/9300-EX / panel / N9K-C93180YC-EX",
+    "cisco_nxos/9300-EX / panel / N9K-C93108TC-EX",
+    *(
+        f"cisco_nxos/9300-FX / panel / {model}"
+        for model in (
+            "N9K-C93180YC-FX", "N9K-C93108TC-FX", "N9K-C9348GC-FXP",
+            "N9K-C9348GC-FXP-B1",
+        )
+    ),
+    "cisco_nxos/9300-FX2 / panel / N9K-C93240YC-FX2",
+    "cisco_nxos/9300-FX2 / panel / N9K-C93216TC-FX2",
+    "cisco_nxos/9300-FX3 / panel / N9K-C93108TC-FX3",
+    "cisco_nxos/9300-FX3 / panel / N9K-C9348GC-FX3",
+    "cisco_nxos/9300-FX3 / panel / N9K-C9348GC-FX3PH",
+    "cisco_nxos/9300-GX2 / panel / N9K-C9348D-GX2A",
+    "cisco_nxos/9300-GX2 / panel / N9K-C9332D-GX2B",
+    "cisco_nxos/9300-GX2 / panel / N9K-C9332D-GX2B-M",
+    "cisco_nxos/9332C-9364C / panel / N9K-C9332C",
+    "cisco_nxos/9332C-9364C / panel / N9K-C9364C",
+    "cisco_nxos/9300-H / panel / N9K-C9332D-H2R",
+    *(
+        f"cisco_nxos/9300 / panel / {model}"
+        for model in (
+            "N9K-C9372PX-E", "N9K-C9372TX", "N9K-C9372TX-E", "N9K-C93120TX",
+            "N9K-C9396PX", "N9K-C9396TX",
+        )
+    ),
+    "cisco_nxos/93128TX / panel / N9K-C93128TX",
+    # A first-generation uplink module whose `2/` prefix Cisco prints
+    # for the 12-port module only, and the CFP2 module, whose port
+    # numbers no text read gives.
+    "cisco_nxos/9300 / module / N9K-M6PQ",
+    "cisco_nxos/9300 / module / N9K-M6PQ-E",
+    "cisco_nxos/9300 / module / N9K-M4PC-CFP2",
+    "cisco_nxos/93128TX / module / N9K-M6PQ",
+    "cisco_nxos/93128TX / module / N9K-M6PQ-E",
 }
 
 
@@ -3193,3 +3352,113 @@ class TestAristaEos:
             mode = family.modes["standalone"]
             assert "first lane" in mode.label, family.key
             assert "broken out" in mode.caveat and "MLAG" in mode.caveat, family.key
+
+
+class TestCiscoNexus:
+    """The Cisco Nexus 9300 switches: each one switch, its panel module
+    1, a first-generation uplink module module 2."""
+
+    FAMILIES = [f for f in REGISTRY.families.values() if f.vendor == _N]
+
+    def test_the_families(self) -> None:
+        assert sorted(f.family for f in self.FAMILIES) == [
+            "9300", "9300-EX", "9300-FX", "9300-FX2", "9300-FX3", "9300-GX",
+            "9300-GX2", "9300-H", "93128TX", "9332C-9364C",
+        ]
+
+    def test_every_switch_stands_alone(self) -> None:
+        bayed = {}
+        for family in self.FAMILIES:
+            assert (family.naming, list(family.modes)) == ("nxos", ["standalone"]), family.key
+            assert family.modes["standalone"].member_ids is None, family.key
+            for key, model in family.models.items():
+                assert model.skus == [key], key
+                if model.bays:
+                    bayed[key] = list(model.bays)
+        assert bayed == {
+            "N9K-C9396PX": ["2"], "N9K-C9396TX": ["2"], "N9K-C93128TX": ["2"],
+        }
+
+    def test_a_member_number_is_refused(self) -> None:
+        """Two switches of a vPC pair are two devices: declare each."""
+        with pytest.raises(dm.DeploymentError):
+            _compile(_N, "standalone", {"model": "N9K-C93180YC-FX3", "id": 1})
+        with pytest.raises(dm.DeploymentError):
+            _compile(
+                _N, "standalone",
+                {"model": "N9K-C93180YC-FX3"}, {"model": "N9K-C93180YC-FX3"},
+            )
+
+    def test_speed_follows_the_cage(self) -> None:
+        """A cage holds one speed in these files: the port's speed as
+        one interface.  The CFP2 module has no cage of the schema's,
+        and says CFP2 in its notes."""
+        speed_of = {
+            "sfp+": {"10gig"}, "sfp28": {"25gig"}, "sfp56": {"50gig"},
+            "qsfp+": {"40gig"}, "qsfp28": {"100gig"}, "qsfp-dd": {"400gig"},
+            "rj45": {"fast", "gig", "10gig"}, "": {"100gig"},
+        }
+        groups = [
+            (key, group)
+            for family in self.FAMILIES
+            for key, part in (*family.models.items(), *family.modules.items())
+            for group in part.ports
+        ]
+        for key, group in groups:
+            assert group.speed in speed_of[group.cage], (key, group)
+            if not group.cage:
+                assert group.notes == "CFP2", (key, group)
+
+    def test_an_uplink_is_a_wide_cage(self) -> None:
+        """Which ports are uplinks follows the cage, and no port is named
+        by lane or with a prefix."""
+        wide = {"qsfp+", "qsfp28", "qsfp-dd", ""}
+        for family in self.FAMILIES:
+            for key, part in (*family.models.items(), *family.modules.items()):
+                for group in part.ports:
+                    assert (group.role == "uplink") == (group.cage in wide), (key, group)
+                    assert not group.multi_lane and not group.prefix, (key, group)
+
+    def test_the_management_port(self) -> None:
+        for family in self.FAMILIES:
+            assert [
+                (p.name, p.role, p.cage) for p in family.deployment_ports
+            ] == [("mgmt0", "mgmt", "rj45")], family.key
+
+    def test_an_uplink_module_is_module_2(self) -> None:
+        names = _compile(
+            _N, None, {"model": "N9K-C9396PX", "modules": {"2": "N9K-M12PQ"}},
+        ).names()
+        assert names[47:50] == ["Ethernet1/48", "Ethernet2/1", "Ethernet2/2"]
+        assert names[-2:] == ["Ethernet2/12", "mgmt0"]
+
+    def test_a_93128tx_has_eight_ports_of_the_12_port_module(self) -> None:
+        inventory = _compile(
+            _N, None, {"model": "N9K-C93128TX", "modules": {"2": "N9K-M12PQ"}},
+        )
+        assert inventory.names(role="uplink") == _run(1, 8, "Ethernet2/")
+
+    def test_the_cfp2_module_is_not_offered_in_a_93128tx(self) -> None:
+        """Cisco's guide gives its two active ports in this switch two
+        ways; rather than pick one, the bay does not take it."""
+        family, model = REGISTRY.resolve(_N, "N9K-C93128TX")
+        assert "N9K-M4PC-CFP2" not in model.bays["2"].accepts
+        assert "N9K-M4PC-CFP2" not in family.modules
+        with pytest.raises(dm.DeploymentError):
+            _compile(
+                _N, None, {"model": "N9K-C93128TX", "modules": {"2": "N9K-M4PC-CFP2"}},
+            )
+
+    def test_the_gx2s_sfp_plus_ports_follow_its_uplinks(self) -> None:
+        inventory = _compile(_N, None, {"model": "N9K-C9364D-GX2A"})
+        assert [(p.name, p.role, p.cage) for p in inventory.ports[-4:]] == [
+            ("Ethernet1/64", "uplink", "qsfp-dd"),
+            ("Ethernet1/65", "access", "sfp+"),
+            ("Ethernet1/66", "access", "sfp+"),
+            ("mgmt0", "mgmt", "rj45"),
+        ]
+
+    def test_the_mode_says_what_is_not_modelled(self) -> None:
+        for family in self.FAMILIES:
+            caveat = family.modes["standalone"].caveat
+            assert "broken out" in caveat and "vPC" in caveat, family.key

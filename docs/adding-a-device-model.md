@@ -49,9 +49,11 @@ in
 [`codecs/cisco_iosxe_cli/port_names.py`](../netcanon/migration/codecs/cisco_iosxe_cli/port_names.py)),
 every CX 6200 and 6300 the `aoscx` rule (`vsf_switch_port_name` in
 [`codecs/aruba_aoscx/port_names.py`](../netcanon/migration/codecs/aruba_aoscx/port_names.py)),
-and every Arista fixed switch the `eos` rule (`fixed_switch_port_name`
+every Arista fixed switch the `eos` rule (`fixed_switch_port_name`
 in
-[`codecs/arista_eos/port_names.py`](../netcanon/migration/codecs/arista_eos/port_names.py)).
+[`codecs/arista_eos/port_names.py`](../netcanon/migration/codecs/arista_eos/port_names.py)),
+and every Cisco Nexus 9300 the `nxos` rule (`nexus_port_name` in
+[`codecs/cisco_nxos/port_names.py`](../netcanon/migration/codecs/cisco_nxos/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -81,6 +83,15 @@ An EOS switch numbers its ports in one run, so on some models the
 uplinks come before the access ports, or between two runs of them (a
 7050SX3-96YC8's two SFP+ ports are 105 and 106); the groups still go
 in port-number order.
+
+A Cisco Nexus 9300 names a port by module and port
+(`Ethernet1/49`).  A switch's own panel is module 1, and a
+first-generation switch's uplink module is the module of its bay, so
+the bay is named by that number (`"2"`) and the rule refuses a bay
+named otherwise.  What a module contributes can depend on the switch
+it is fitted in -- an N9K-M12PQ has twelve active ports in a 9396PX
+and eight in a 93128TX -- and a module is described once per family,
+so such a switch is a family of its own.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that

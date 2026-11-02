@@ -825,6 +825,19 @@ interface mgmt0
   ip address 192.0.2.9/24
 """
 
+#: An IOS XR router with its management port, which IOS-XE has no
+#: name for, as NX-OS's above.
+_IOSXR_WITH_MGMT = """!! IOS XR Configuration 7.3.2
+hostname r1
+interface MgmtEth0/RP0/CPU0/0
+ ipv4 address 192.0.2.9 255.255.255.0
+!
+interface GigabitEthernet0/0/0/0
+ ipv4 address 10.1.0.1 255.255.255.0
+!
+end
+"""
+
 #: Two IOS ports, to be sent to two spellings of one AOS-S name.
 _IOS_TWO_PORTS = """!
 version 17.9
@@ -909,6 +922,21 @@ hostname "sw"
 vlan 1
    name "DEFAULT_VLAN"
    untagged 1/1-1/2,1/A1
+   exit
+"""
+
+#: An AOS-S switch of two ports and two VLANs, and no address: onto
+#: OS10 its ports are ``ethernet1/1/1`` and ``ethernet1/1/2``, and
+#: nothing is listed.
+_AOSS_TWO_PORTS = """; J9999A Configuration Editor; Created on release #WC.16.11.0001
+hostname "sw"
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 1-2
+   exit
+vlan 20
+   name "users"
+   tagged 2
    exit
 """
 
@@ -1739,12 +1767,12 @@ class TestRenameModalWhereDevicesSettleNothing:
     def test_no_pair_for_a_source_with_no_device(
         self, page: Page, live_server_url: str,
     ):
-        """A management port NX-OS has and IOS-XE does not: a
+        """A management port IOS XR has and IOS-XE does not: a
         hardware port, and what a pair of devices would decide -- but
-        no device of an NX-OS switch is described, so there is no
+        no device of an IOS XR router is described, so there is no
         pair to choose and the strip does not say to choose one."""
         _open_modal_on(
-            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+            page, live_server_url, "cisco_iosxr", "cisco_iosxe_cli", _IOSXR_WITH_MGMT,
         )
         expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_disabled()
         assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
@@ -1758,10 +1786,10 @@ class TestRenameModalWhereDevicesSettleNothing:
     def test_no_pair_for_a_target_with_no_device(
         self, page: Page, live_server_url: str,
     ):
-        """Two ports of an AOS-S switch written as one on NX-OS.
+        """Two ports of an AOS-S switch written as one on OS10.
         The source has devices to choose from and the target has
         none: there is still no pair."""
-        _open_modal_on(page, live_server_url, "aruba_aoss", "cisco_nxos", _AOSS_TWO_ON_ONE)
+        _open_modal_on(page, live_server_url, "aruba_aoss", "dell_os10", _AOSS_TWO_ON_ONE)
         assert "status: partial" in _status_line(page)
         expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_enabled()
         assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
@@ -1773,11 +1801,10 @@ class TestRenameModalWhereDevicesSettleNothing:
         )
 
     def test_no_target_device_to_choose(self, page: Page, live_server_url: str):
-        """The source device is declared and the target is NX-OS,
+        """The source device is declared and the target is OS10,
         which has no device to choose: the hint does not say to
         choose one."""
-        _open_modal_on(page, live_server_url, "aruba_aoss", "cisco_nxos", _AOSS_VLAN_ADDRESS)
-        # ``Vlan20`` is what NX-OS calls that interface: nothing is listed.
+        _open_modal_on(page, live_server_url, "aruba_aoss", "dell_os10", _AOSS_TWO_PORTS)
         assert "status: completed" in _status_line(page)
         page.locator(_tid("migrate-device-source-model-select")).select_option(
             value="fam:2930F:2930F-48G-PoEP-4SFPP"

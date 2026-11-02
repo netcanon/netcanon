@@ -3039,15 +3039,18 @@
 
   /** Choose initial vendor + model based on the target codec
    *  selected in the form.  Pre-selects the vendor dropdown when a
-   *  profile for that vendor exists; leaves model un-picked so the
-   *  operator explicitly chooses their hardware (we don't know which
-   *  model they're migrating to). */
+   *  profile or a model family of that vendor exists (a vendor can
+   *  have families and no profile, as NX-OS does); leaves model
+   *  un-picked so the operator explicitly chooses their hardware (we
+   *  don't know which model they're migrating to). */
   function suggestTargetProfileVendor(targetCodec) {
-    if (!targetCodec || !_renameProfiles.length) return '';
-    var match = _renameProfiles.find(function(p) {
-      return targetCodec.indexOf(p.vendor) === 0;
+    if (!targetCodec) return '';
+    var vendors = _renameProfiles.map(function(p) { return p.vendor; })
+      .concat(_modelFamilies.map(function(f) { return f.vendor; }));
+    var match = vendors.find(function(vendor) {
+      return targetCodec.indexOf(vendor) === 0;
     });
-    return match ? match.vendor : '';
+    return match || '';
   }
 
   window.openRenameModal = function() {

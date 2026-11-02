@@ -1,0 +1,120 @@
+# Cisco Nexus 9300-FX: fixed switches of SFP28 or 10GBASE-T ports and
+# QSFP28 uplinks, and the 9348GC-FXP models of 1G copper, SFP28 and
+# QSFP28
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/49`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  Where a model has an RJ-45 and an SFP management
+# connector, the two are that one interface, and only one is used.  The
+# 93180YC-FX has the RJ-45 one only (DSFX: its L1 and L2 ports are
+# unused, and are not data ports).
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP28 port is an uplink, and an SFP28 or RJ45 port an access port.
+# It decides only how the ports of two devices are paired, and says
+# nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout, and the SFP-10G-T-X default port
+#           maps.
+#   DSFX    Cisco N9300-FX Series Switches Data Sheet (C78-742284,
+#           October 9, 2026).
+#   DSB1    Cisco Nexus 9348GC-FXP-B1 PoE Switch for ACI and NX-OS
+#           Supported Deployments Data Sheet (C78-740106, July 23,
+#           2020).
+#   G...    Each model's NX-OS Mode Hardware Installation Guide,
+#           Overview.
+#
+# Graded inferred, each with its reason in its caveat: every panel of
+# this file.  Cisco's guides give these models' port numbers in a
+# figure only; they are taken from the count order that every model
+# numbered in words follows.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.
+#   * The 93180YC-FX's Unified Ports: its downlinks can run Fibre
+#     Channel, and which ports convert and what they are named was not
+#     read.
+#   * The 24-port licensed models (the -24 parts).
+#   * The N9K-C93180YC2-FX, N9K-C93108TC2-FX and N9K-C9348GC2-FXP,
+#     which no data sheet read lists.
+schema: 1
+vendor: cisco_nxos
+family: "9300-FX"
+display_name: "Cisco Nexus 9300-FX"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/49/1 is not on this inventory. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. On a model that also has an SFP management connector, the two are this one interface, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); each model's NX-OS Mode Hardware Installation Guide (the RJ-45 and SFP management ports are out-of-band management ports, and the switch does not support the use of both)"}
+
+models:
+  # --- 48 SFP28 or 10GBASE-T and 6 QSFP28 ----------------------------------------
+  N9K-C93180YC-FX:
+    skus: [N9K-C93180YC-FX]
+    display_name: "Cisco Nexus 93180YC-FX, 48 SFP28 and 6 QSFP28 (N9K-C93180YC-FX)"
+    panel: {grade: inferred, ref: "Cisco N9300-FX Series Switches Data Sheet (C78-742284, October 9, 2026) (48 1/10/25G SFP28, MACsec and Unified Ports capable, and 6 40/100G QSFP28; 1 RJ-45 management port, the L1 and L2 ports unused); Cisco Nexus 93180YC-FX NX-OS Mode Switch Hardware Installation Guide (Last Modified 2020-07-22), Overview; Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), the SFP-10G-T-X default port map (N9K-C93180YC-EX and N9K-C93180YC-FX: SFP ports up to 48)", caveat: "Cisco's texts read give the counts, and number no port of this model but SFP ports within 1-48. That the SFP28 ports are 1-48 and the QSFP28 ports 49-54 is inferred from the count order, which every Nexus 9300 numbered in words follows. The downlinks can run Fibre Channel (Unified Ports); a port so converted is not modelled."}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 6, speed: 100gig, cage: qsfp28}
+
+  N9K-C93108TC-FX:
+    skus: [N9K-C93108TC-FX]
+    display_name: "Cisco Nexus 93108TC-FX, 48 10GBASE-T and 6 QSFP28 (N9K-C93108TC-FX)"
+    panel: {grade: inferred, ref: "Cisco N9300-FX Series Switches Data Sheet (C78-742284, October 9, 2026) (48 100M/1/10GBASE-T and 6 40/100G QSFP28; 2 management ports, 1 RJ-45 and 1 SFP+); Cisco Nexus 93108TC-FX NX-OS Mode Hardware Installation Guide (Last Modified 2018-10-19), Overview", caveat: "Cisco's texts read give the counts and number no port of this model. That the 10GBASE-T ports are 1-48 and the QSFP28 ports 49-54 is inferred from the count order, which every Nexus 9300 numbered in words follows."}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 6, speed: 100gig, cage: qsfp28}
+
+  # --- 48 1G copper, 4 SFP28 and 2 QSFP28 ----------------------------------------
+  N9K-C9348GC-FXP:
+    skus: [N9K-C9348GC-FXP]
+    display_name: "Cisco Nexus 9348GC-FXP, 48 1G copper, 4 SFP28 and 2 QSFP28 (N9K-C9348GC-FXP)"
+    panel: {grade: inferred, ref: "Cisco N9300-FX Series Switches Data Sheet (C78-742284, October 9, 2026) (48 100M/1G BASE-T, 4 1/10/25G SFP28 and 2 40/100G QSFP28); Cisco Nexus 9348GC-FXP NX-OS Mode Hardware Installation Guide (Last Modified 2018-10-31), Overview (SFP28 downlink ports (4), QSFP28 uplink ports (2))", caveat: "Cisco's texts read give the counts and number no port of this model. That the copper ports are 1-48, the SFP28 ports 49-52 and the QSFP28 ports 53-54 is inferred from the count order, which every Nexus 9300 numbered in words follows."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}
+
+  N9K-C9348GC-FXP-B1:
+    skus: [N9K-C9348GC-FXP-B1]
+    display_name: "Cisco Nexus 9348GC-FXP-B1, 48 1G copper PoE, 4 SFP28 and 2 QSFP28 (N9K-C9348GC-FXP-B1)"
+    panel: {grade: inferred, ref: "Cisco Nexus 9348GC-FXP-B1 PoE Switch for ACI and NX-OS Supported Deployments Data Sheet (C78-740106, July 23, 2020) (48 100M/1G PoE/PoE+ ports, 4 10/25G SFP28 and 2 40/100G QSFP28)", caveat: "The data sheet gives the counts and numbers no port. That the copper ports are 1-48, the SFP28 ports 49-52 and the QSFP28 ports 53-54 is inferred from the count order, which every Nexus 9300 numbered in words follows."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}

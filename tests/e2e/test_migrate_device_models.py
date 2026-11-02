@@ -648,6 +648,50 @@ class TestStandalone2930FOntoStacked2930M:
 
 
 # ---------------------------------------------------------------------------
+# A Nexus with an uplink module: its bay is numbered, not lettered
+# ---------------------------------------------------------------------------
+
+TARGET_9396PX = "fam:9300:N9K-C9396PX"
+
+
+class TestANexusWithItsUplinkModule:
+    """A first-generation Nexus 9396PX: 48 ports of its own, module 1,
+    and an uplink module in a bay that is module 2."""
+
+    def test_the_2930fs_uplinks_land_on_module_2(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        mp = _translate(page, live_server_url, "aruba_aoss", "cisco_nxos", CAPTURE_2930F)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(_source_note(page)).to_be_visible()
+        # NX-OS has model families and no flat profile: the vendor is
+        # chosen from the families.
+        expect(page.locator(_tid("migrate-rename-target-vendor-select"))).to_have_value(
+            "cisco_nxos"
+        )
+        _pick_target(page, TARGET_9396PX)
+        expect(page.locator(_tid("migrate-device-target-mode-select"))).to_have_value("standalone")
+        expect(page.locator(_tid("migrate-device-target-member-0-id"))).to_have_count(0)
+        # A bay nobody stated is said: it is counted as empty.
+        expect(page.locator(_tid("migrate-device-target-note-unstated"))).to_contain_text("bay 2")
+        page.locator(_tid("migrate-device-target-member-0-bay-2")).select_option(value="N9K-M12PQ")
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
+            re.compile(r"^61 ports: Ethernet1/1 . mgmt0$")
+        )
+        body = _apply(page)
+        assert body["target_deployment"] == {
+            "mode": "standalone",
+            "members": [{"model": "N9K-C9396PX", "modules": {"2": "N9K-M12PQ"}}],
+        }
+        expect(page.locator(_tid("migrate-rename-auto-1"))).to_have_text("Ethernet1/1")
+        expect(page.locator(_tid("migrate-rename-auto-48"))).to_have_text("Ethernet1/48")
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("Ethernet2/1")
+        expect(page.locator(_tid("migrate-rename-why-49"))).to_have_text("uplink 1")
+        expect(page.locator(_tid("migrate-rename-auto-52"))).to_have_text("Ethernet2/4")
+        expect(mp.output).to_contain_text("interface Ethernet2/4")
+
+
+# ---------------------------------------------------------------------------
 # Ports with no place on the target
 # ---------------------------------------------------------------------------
 
