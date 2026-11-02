@@ -799,6 +799,10 @@ timestamp if your timezone matters for an audit.
   describe the same ports as their families.  The EX4300-48T profile
   is now graded `inferred`, for its management port alone: it named
   the hardware guide for `me0`, and no EX4300 text names that port.
+  A Virtual Chassis Fabric (members 0 to 19; Juniper has ended its
+  support) and a Virtual Chassis of two families' models are not
+  described: `docs/vendors/juniper_junos.md` says how to translate a
+  config of one with no device declared.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both
