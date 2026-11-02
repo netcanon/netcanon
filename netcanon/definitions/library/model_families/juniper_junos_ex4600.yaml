@@ -1,0 +1,115 @@
+# Juniper EX4600-40F
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC is the switch: 0 on
+# its own, and in a Virtual Chassis of up to 10 members the member id
+# (HG4600; VCUG).  Juniper does not print the range of member ids of an
+# EX4600 (CLIREF says only that it depends on the number of switches
+# allowed): 0 to 9 is inferred from the ten members.  A switch that
+# leaves a Virtual Chassis keeps its member id in its names (VCUG), so
+# the one mode below covers a switch on its own as well.  The built-in
+# ports are PIC 0: 24 SFP+ ports "0 through 23" and four QSFP+ ports "24
+# through 27" (HG4600; N13QFX, which gives xe for 10G and et for 40G on
+# the EX4600).  The two expansion bays are PIC 1 and PIC 2, and a
+# module's ports count from 0.
+#
+# The four QSFP+ ports "can be configured as either access ports or as
+# uplinks" (HG4600).  They are `uplink` here, as in the EX4600-40F target
+# profile this family must agree with.
+#
+# The management ports are `em0` (C0, RJ-45) and `em1` (C1, SFP): "The
+# management ports, em0 (C0) and em1 (C1)" (HG4600).  The Virtual
+# Chassis management interface is not established for the EX4600 in what
+# Juniper prints, and is not modelled.
+#
+# There is no part number `EX4600-40F` on its own: every part carries an
+# airflow or DC suffix, or `-S` (HG4600, Table 3).  The model key is the
+# name of the model, which is also the key of the target profile.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG4600  Juniper, EX4600 Switch Hardware Guide (2025-08-12): Table 3
+#           (models), the port panel, the expansion modules and the
+#           management panel.
+#   N13QFX  Juniper, Understanding Interface Naming Conventions (QFX
+#           Series and EX4600), Junos OS 13.2 (2014-11-07).
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#   CLIREF  Juniper, CLI Reference, member (Virtual Chassis).
+#
+# Graded inferred, each with its reason: both expansion modules, whose
+# port names no Juniper text prints.  And the two Juniper texts disagree
+# on the EX4600-EM-8F: N13QFX says it "provides 8 40-Gbps QSFP+ ports",
+# HG4600 eight SFP+ ports, and HG4600's total of 56 interfaces with two
+# of them (24 + 16 + 8 + 8) agrees with HG4600.  This file follows
+# HG4600, and the module's caveat says so.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A QSFP+ port broken out into four 10G lanes (`xe-0/0/24:0`): a
+#     lane name does not classify.
+#   * The 104-port system mode, in which ports 0 and 2 of a QFX-EM-4Q
+#     are broken out.
+#   * A Virtual Chassis of EX4600 and EX4300 switches: one family per
+#     declaration.
+schema: 1
+vendor: juniper_junos
+family: EX4600
+display_name: "Juniper EX4600"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the SFP+ cages; no port broken out"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), port panel (twenty-four physical ports, 0 through 23, support 10 Gbps SFP+; four 40 GbE ports, 24 through 27, can be configured as either access ports or as uplinks) and Virtual Chassis (up to 10 members); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (type-fpc/pic/port; on the EX4600 PIC 0 holds the 24 10G ports labeled 0 through 23 and the 4 40G QSFP+ ports labeled 24 through 27; xe is 10-Gigabit Ethernet and et 40-Gigabit Ethernet); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (the FPC of a member is its member ID, and a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    bay_naming:
+      grade: vendor-doc
+      ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), expansion modules (two expansion bays; the switch is configured for the QFX-EM-4Q by default); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (the expansion modules are PIC 1 and PIC 2, and their ports are numbered from 0)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. Juniper does not print the range of member ids of an EX4600: that it is 0 to 9 is inferred from the ten members it allows. The ports of an EX4600 are disabled by default and are enabled one by one in the configuration; the names are the same either way. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP the same port is ge-<fpc>/<pic>/<port>, which is not a port of this inventory. A port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C0"
+    naming: {grade: vendor-doc, ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), management panel (the management ports, em0 (C0) and em1 (C1); C0 is RJ-45 10/100/1000BASE-T)"}
+  - name: em1
+    role: mgmt
+    speed: gig
+    cage: sfp
+    notes: "Management port C1"
+    naming: {grade: vendor-doc, ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), management panel (the management ports, em0 (C0) and em1 (C1); C1 is an SFP 1000BASE-X port)"}
+
+modules:
+  QFX-EM-4Q:
+    description: "4-port QSFP+ expansion module"
+    inventory: {grade: inferred, ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), expansion modules (the QFX-EM-4Q has four 40G QSFP+ ports; the switch is configured for the QFX-EM-4Q by default; 72 interfaces with two of them); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (PIC 1 and PIC 2 each support four 40G QSFP+ ports; et is 40-Gigabit Ethernet)", caveat: "No Juniper text prints a port name of this module: that its ports are et-<fpc>/<pic>/0 to et-<fpc>/<pic>/3 is inferred from the type-fpc/pic/port rule, the et prefix of a 40G port and the module's four ports."}
+    ports:
+      - {role: uplink, count: 4, prefix: et, speed: 40gig, cage: qsfp+}
+
+  EX4600-EM-8F:
+    description: "8-port SFP+ expansion module"
+    inventory: {grade: inferred, ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), expansion modules (the EX4600-EM-8F has eight 10G SFP+ or 1G SFP ports; 56 interfaces with two of them, 24 + 16 + 8 + 8); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (the expansion modules are PIC 1 and PIC 2; xe is 10-Gigabit Ethernet)", caveat: "No Juniper text prints a port name of this module: that its ports are xe-<fpc>/<pic>/0 to xe-<fpc>/<pic>/7 is inferred from the type-fpc/pic/port rule, the xe prefix of a 10G port and the module's eight ports. Juniper's naming page of Junos OS 13.2 says this module provides eight 40G QSFP+ ports; the hardware guide's eight SFP+ ports, and its count of interfaces, are followed here."}
+    ports:
+      - {role: uplink, count: 8, prefix: xe, speed: 10gig, cage: sfp+}
+
+models:
+  EX4600-40F:
+    skus: [EX4600-40F-AFI, EX4600-40F-AFO, EX4600-40F-DC-AFI, EX4600-40F-DC-AFO, EX4600-40F-S]
+    display_name: "Juniper EX4600-40F, 24 SFP+, 4 QSFP+ and two expansion bays (EX4600-40F-AFI)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4600 Switch Hardware Guide (2025-08-12), Table 3 (EX4600-40F-AFI, -AFO, -DC-AFI, -DC-AFO and -S, the same ports) and port panel (twenty-four physical ports, 0 through 23, SFP+; four 40 GbE QSFP+ ports, 24 through 27); Juniper, Understanding Interface Naming Conventions (QFX Series and EX4600), Junos OS 13.2 (2014-11-07) (EX4600 PIC 0: 10G ports labeled 0 through 23 and 40G QSFP+ ports labeled 24 through 27; xe is 10-Gigabit Ethernet and et 40-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 24, prefix: xe, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, prefix: et, speed: 40gig, cage: qsfp+, notes: "Juniper: they can be configured as either access ports or as uplinks"}
+    bays:
+      "1": {accepts: [QFX-EM-4Q, EX4600-EM-8F], label: "Expansion bay (PIC 1)"}
+      "2": {accepts: [QFX-EM-4Q, EX4600-EM-8F], label: "Expansion bay (PIC 2)"}

@@ -1,0 +1,192 @@
+# Juniper EX4300: the 24- and 48-port copper models, the EX4300-48MP and
+# the EX4300-32F
+#
+# A Junos port name is `type-fpc/pic/port` (N13EX).  The FPC is the
+# switch: 0 by default, and in a Virtual Chassis the member id, 0 to 9
+# (HG4300, Table 9).  A switch that leaves a Virtual Chassis keeps its
+# member id in its names (VCUG), so the one mode below covers a switch on
+# its own as well.  The PIC is 0 for the built-in network ports, 1 for
+# the built-in QSFP+ ports and 2 for the uplink module (HG4300, Table 9),
+# and ports count from 0 within their PIC.
+#
+# The EX4300-48MP has 24 gigabit and 24 multigigabit ports on PIC 0,
+# and Juniper's table of its ports names 0 to 23 `ge` and 24 to 47 `mge`
+# (IUG, Table 3).  Its four rear QSFP+ ports are Virtual Chassis ports
+# that cannot be made network ports, and it takes uplink modules of its
+# own, the EX-UM-4SFPP-MR and the EX-UM-2QSFP-MR (HG4300, Table 6).  It
+# can be in a Virtual Chassis with the other EX4300 models (HG4300), so
+# it is of this family.
+#
+# The EX4300-32F has two kinds of port on PIC 0: "In the CLI output, the
+# network ports are numbered 0 through 31 and the SFP+ uplink ports are
+# numbered 32 through 35" (HG4300, Table 9).  The uplinks carry on the
+# panel's numbering; they do not start a PIC of their own.
+#
+# The built-in QSFP+ ports (PIC 1) are Virtual Chassis ports by default
+# (HG4300: "By default, the built-in QSFP+ ports are configured as
+# VCPs"), and a port in that state is no interface at all.  They are left
+# out.
+#
+# The prefix follows the optic: the factory default names each module
+# port twice, `ge-0/2/<n>` and `xe-0/2/<n>`, and only the one the optic
+# selects is an interface.  This file describes SFP+ optics.
+#
+# The management port: Juniper's generic page says the switch creates
+# `me0` (IFF), and the factory default of an EX4300-48P that HG4300
+# prints names `me0.0` in its `junos-defaults` group, but no EX4300 text
+# names the MGMT port: every "Management (me0)" row in HG4300 is another
+# model's, and the EX4300 Quick Start (QS43) calls the port `vme`.
+# `me0` is graded inferred.  In a Virtual Chassis, and in the factory
+# default from 18.3R3, the address is on `vme`, which is not a port of
+# the inventory.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   N13EX   Juniper, Understanding Interface Naming Conventions on EX
+#           Series Switches, Junos OS 13.2 (2014-04-25).
+#   HG4300  Juniper, EX4300 Switch Hardware Guide (2025-08-12): Tables
+#           1 to 4, 6 and 8 (models and uplink modules), Table 9 (CLI
+#           terminology: FPC, PIC), Configuring Junos OS on the EX4300
+#           (factory-default configurations).
+#   IUG     Juniper, Interfaces User Guide for Switches (2026-06-21):
+#           Table 3 (the EX4300-48MP's ports).
+#   IFF     Juniper, Overview of Interface Fundamentals (management
+#           interface me0).
+#   QS43    Juniper, EX4300 Quick Start (2024-05-28).
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#
+# Graded inferred, each with its reason: the EX-UM-2QSFP, EX-UM-8X8SFP
+# and EX-UM-2QSFP-MR modules, whose port names no Juniper text prints;
+# and `me0`.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The built-in QSFP+ ports made network ports
+#     (`request virtual-chassis vc-port delete`): no Juniper text prints
+#     their names.
+#   * A Virtual Chassis of EX4300 and EX4600 switches: one family per
+#     declaration.
+#   * The -TAA parts: none is in HG4300.
+schema: 1
+vendor: juniper_junos
+family: EX4300
+display_name: "Juniper EX4300"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the SFP+ cages; the built-in QSFP+ ports left as Virtual Chassis ports"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (network interfaces are specified as type-fpc/pic/port; ge is Gigabit Ethernet, xe 10-Gigabit Ethernet and et 40-Gigabit Ethernet; the FPC number is 0 by default and is the member ID of the switch in a Virtual Chassis); Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 9 (FPC 0 to 9, the member ID in a Virtual Chassis; PIC 0 the built-in network ports, numbered 0 through 23 or 0 through 47, and on a 32-port model network ports 0 through 31 followed by SFP+ uplink ports numbered 32 through 35 in the CLI; PIC 1 the built-in QSFP+ ports; PIC 2 the uplink module); Juniper, Virtual Chassis User Guide for Switches (2026-09-21), troubleshooting (a switch keeps the member ID it had in a Virtual Chassis after it leaves, and its interfaces keep it)"
+    bay_naming:
+      grade: vendor-doc
+      ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 9 (PIC 2 is the uplink module) and Configuring Junos OS on the EX4300, factory-default configuration of an EX4300-48P, Junos 18.3R3 or later (ge-0/2/0 through ge-0/2/3 and xe-0/2/0 through xe-0/2/3 are SFP/SFP+ uplink module port interfaces)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. An SFP+ cage takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP the same port is ge-<fpc>/<pic>/<port>, which is not a port of this inventory. The built-in QSFP+ ports are Virtual Chassis ports by default and have no interface name in that state; they are not modelled, nor are they once made network ports. The Virtual Chassis lines describe the hardware and are not translated. The management address of a Virtual Chassis, and of the factory default from Junos 18.3R3, is on vme, which is not a port of this inventory."
+
+deployment_ports:
+  - name: me0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port, labelled MGMT"
+    naming: {grade: inferred, ref: "Juniper, Overview of Interface Fundamentals (Junos OS for switches automatically creates the switch's management Ethernet interface, me0); Juniper, EX4300 Switch Hardware Guide (2025-08-12), Configuring Junos OS on the EX4300 (the factory default of an EX4300-48P, Junos 18.3R3 or later, names me0.0 and vme.0 in its junos-defaults group)", caveat: "No EX4300 text names the MGMT port: that it is me0 rests on Juniper's generic page for switches, and the EX4300 Quick Start calls the port vme. In a Virtual Chassis, and in the factory default from Junos 18.3R3, the management address is configured on vme, which is not a port of this inventory."}
+
+modules:
+  EX-UM-4X4SFP:
+    description: "4-port SFP+ uplink module"
+    inventory: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 4 (the EX-UM-4X4SFP fits the EX4300-24T, -24P, -48T and -48P and their twins; four 1G SFP or 10G SFP+ ports) and Configuring Junos OS on the EX4300, factory-default configuration of an EX4300-48P (xe-0/2/0 through xe-0/2/3)"}
+    ports:
+      - {role: uplink, count: 4, prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX-UM-2QSFP:
+    description: "2-port QSFP+ uplink module"
+    inventory: {grade: inferred, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 4 (the EX-UM-2QSFP fits the EX4300-32F; two 40G QSFP+ ports) and Table 9 (PIC 2 is the uplink module); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (et is 40-Gigabit Ethernet; uplink module ports are numbered from 0)", caveat: "No Juniper text prints a port name of this module: that its ports are et-<fpc>/2/0 and et-<fpc>/2/1 is inferred from the type-fpc/pic/port rule, the et prefix of a 40G port and the module's two ports."}
+    ports:
+      - {role: uplink, count: 2, prefix: et, speed: 40gig, cage: qsfp+}
+
+  EX-UM-8X8SFP:
+    description: "8-port SFP+ uplink module"
+    inventory: {grade: inferred, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 4 (the EX-UM-8X8SFP fits the EX4300-32F; eight 1G SFP or 10G SFP+ ports) and Table 9 (PIC 2 is the uplink module); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (xe is 10-Gigabit Ethernet; uplink module ports are numbered from 0)", caveat: "No Juniper text prints a port name of this module: that its ports are xe-<fpc>/2/0 to xe-<fpc>/2/7 is inferred from the type-fpc/pic/port rule, the xe prefix of a 10G port and the module's eight ports."}
+    ports:
+      - {role: uplink, count: 8, prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX-UM-4SFPP-MR:
+    description: "4-port SFP+ uplink module for the EX4300-48MP"
+    inventory: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 6, Uplink Modules for EX4300-48MP and EX4300-48MP-S Switches (the EX-UM-4SFPP-MR takes four SFP or SFP+ transceivers, from Junos 18.2R1; its ports cannot be Virtual Chassis ports); Juniper, Interfaces User Guide for Switches (2026-06-21), Table 3, Autonegotiation and Half-Duplex Support for EX4300-48MP Switches (PIC 2 ports 0 to 3: ge for a 1G SFP and xe for a 10G SFP+)"}
+    ports:
+      - {role: uplink, count: 4, prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX-UM-2QSFP-MR:
+    description: "2-port QSFP+/QSFP28 uplink module for the EX4300-48MP"
+    inventory: {grade: inferred, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 6, Uplink Modules for EX4300-48MP and EX4300-48MP-S Switches (the EX-UM-2QSFP-MR takes two QSFP+ or QSFP28 transceivers, from Junos 18.4R1, two at 100G from 19.3R1; its ports cannot be Virtual Chassis ports); Juniper, Interfaces User Guide for Switches (2026-06-21), Table 3, Autonegotiation and Half-Duplex Support for EX4300-48MP Switches (PIC 2 ports 0 and 1, Uplink 2x40G); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (et is 40-Gigabit Ethernet)", caveat: "No Juniper text prints a port name of this module: Juniper's table of the EX4300-48MP's ports gives PIC 2 ports 0 and 1 for it and no prefix, and that they are et-<fpc>/2/0 and et-<fpc>/2/1 is inferred from the type-fpc/pic/port rule and the et prefix of a 40G or 100G port. With both ports at 100G the switch's four QSFP+ Virtual Chassis ports are disabled."}
+    ports:
+      - {role: uplink, count: 2, prefix: et, speed: 100gig, cage: qsfp28}
+
+models:
+  # --- 24 or 48 copper ports and an uplink module (PIC 2) -------------------------
+  EX4300-24T:
+    skus: [EX4300-24T, EX4300-24T-S]
+    display_name: "Juniper EX4300-24T, 24 RJ-45 and an uplink module (EX4300-24T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Tables 1 and 8 (EX4300-24T and EX4300-24T-S, 24 10/100/1000BASE-T ports) and Table 9 (PIC 0 network ports numbered 0 through 23); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45}
+    bays:
+      "2": {accepts: [EX-UM-4X4SFP], label: "Uplink module (PIC 2)"}
+
+  EX4300-24P:
+    skus: [EX4300-24P, EX4300-24P-S]
+    display_name: "Juniper EX4300-24P, 24 RJ-45 PoE+ and an uplink module (EX4300-24P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Tables 1 and 8 (EX4300-24P and EX4300-24P-S, 24 10/100/1000BASE-T PoE+ ports) and Table 9 (PIC 0 network ports numbered 0 through 23); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX-UM-4X4SFP], label: "Uplink module (PIC 2)"}
+
+  EX4300-48T:
+    skus: [EX4300-48T, EX4300-48T-S, EX4300-48T-AFI, EX4300-48T-DC, EX4300-48T-DC-AFI]
+    display_name: "Juniper EX4300-48T, 48 RJ-45 and an uplink module (EX4300-48T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Tables 1 and 8 (EX4300-48T and its -S, -AFI, -DC and -DC-AFI twins, 48 10/100/1000BASE-T ports) and Table 9 (PIC 0 network ports numbered 0 through 47); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45}
+    bays:
+      "2": {accepts: [EX-UM-4X4SFP], label: "Uplink module (PIC 2)"}
+
+  EX4300-48P:
+    skus: [EX4300-48P, EX4300-48P-S]
+    display_name: "Juniper EX4300-48P, 48 RJ-45 PoE+ and an uplink module (EX4300-48P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Tables 1 and 8 (EX4300-48P and EX4300-48P-S, 48 10/100/1000BASE-T PoE+ ports) and Table 9 (PIC 0 network ports numbered 0 through 47); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX-UM-4X4SFP], label: "Uplink module (PIC 2)"}
+
+  # --- 24 gigabit and 24 multigigabit ports and an uplink module of its own ------
+  EX4300-48MP:
+    skus: [EX4300-48MP, EX4300-48MP-S]
+    display_name: "Juniper EX4300-48MP, 24 RJ-45 PoE+, 24 multigigabit RJ-45 PoE+ and an uplink module (EX4300-48MP)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), the EX4300-48MP and EX4300-48MP-S (24 10/100/1000BASE-T and 24 100/1000/2500/5000/10000BASE-T network ports, all PoE+; the four built-in QSFP+ ports are Virtual Chassis ports and cannot be configured as network ports) and Table 9 (PIC 0 network ports numbered 0 through 47); Juniper, Interfaces User Guide for Switches (2026-06-21), Table 3, Autonegotiation and Half-Duplex Support for EX4300-48MP Switches (PIC 0 ports 0 to 23 are ge, ports 24 to 47 mge)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 24, prefix: mge, speed: 10gig, cage: rj45, poe: true}
+    bays:
+      "2": {accepts: [EX-UM-4SFPP-MR, EX-UM-2QSFP-MR], label: "Uplink module (PIC 2)"}
+
+  # --- 32 SFP, 4 SFP+ uplinks on the same PIC, and an uplink module ---------------
+  EX4300-32F:
+    skus: [EX4300-32F, EX4300-32F-S, EX4300-32F-DC]
+    display_name: "Juniper EX4300-32F, 32 SFP, 4 SFP+ and an uplink module (EX4300-32F)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12), Tables 1 and 8 (EX4300-32F, -32F-S and -32F-DC, 32 1G SFP ports and 4 10G SFP+ uplink ports) and Table 9 (the network ports are labeled 0 through 31 and the SFP+ uplink ports 0 through 3; in the CLI output the network ports are numbered 0 through 31 and the SFP+ uplink ports 32 through 35, on PIC 0); Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (type-fpc/pic/port; ge is Gigabit Ethernet and xe 10-Gigabit Ethernet)"}
+    ports:
+      - {role: access, count: 32, prefix: ge, speed: gig, cage: sfp}
+      - {role: uplink, count: 4, prefix: xe, speed: 10gig, cage: sfp+, notes: "Labelled 0 to 3 on the faceplate; numbered 32 to 35 in the CLI"}
+    bays:
+      "2": {accepts: [EX-UM-2QSFP, EX-UM-8X8SFP], label: "Uplink module (PIC 2)"}

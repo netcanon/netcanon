@@ -1,0 +1,87 @@
+# Juniper EX4650-48Y
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC is the switch: 0 on
+# its own, and in a Virtual Chassis the member id (VCUG).  An EX4650
+# Virtual Chassis has up to 2 members from Junos 19.3R1 and up to 4 from
+# 20.1R1 (VCCOMP); Juniper does not print the range of member ids
+# (CLIREF says only that it depends on the number of switches allowed),
+# and 0 to 3 is inferred from the four members.  The switch has one
+# PIC, 0: 48 SFP28 ports "labeled 0 through 47" and 8 QSFP28 ports 48
+# to 55 (PSEX, Tables 5 and 6).
+#
+# The prefix follows the speed.  The SFP28 ports run at 10G by default,
+# and are set to 25G or 1G four at a time, which makes the four
+# `et-0/0/<n>` or `ge-0/0/<n>` (PSEX, Table 5).  This file describes the
+# default: `xe-`.  The QSFP28 ports are 100G by default and are
+# auto-channelized: a port into which a breakout cable is plugged becomes
+# four lanes, `et-0/0/48:0` and the like (PSEX, Table 6), which are not
+# modelled.
+#
+# The management ports are C0 and C1, two RJ-45 ports on the rear
+# (HG4650).  The guide configures `em0` (`set interfaces em0 unit 0
+# family inet address`) and says neither which port that is nor what
+# the other one is named; that the other is `em1` is inferred.  (The
+# QFX5120-48Y, of the same hardware, has `em0` on C0 and `em1` on C1:
+# a hint, not EX4650 evidence.)
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG4650  Juniper, EX4650 Switch Hardware Guide (2025-07-16).
+#   PSEX    Juniper, Port Speed on EX Series Switches: Tables 3 to 6
+#           (EX4650).
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#   CLIREF  Juniper, CLI Reference, member (Virtual Chassis).
+#   VCCOMP  Juniper, Virtual Chassis Components (the members each
+#           family allows).
+#
+# Graded inferred, with its reason: `em1`, which the guide never names.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A quad of SFP28 ports set to 25G or 1G: the four names change.
+#   * A QSFP28 port broken out into lanes: a lane name does not classify.
+#   * The -TAA parts: none is in HG4650.
+schema: 1
+vendor: juniper_junos
+family: EX4650
+display_name: "Juniper EX4650"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 4 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); each port at its default speed; no port broken out"
+    member_ids: [0, 3]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Port Speed on EX Series Switches, Table 5 (EX4650 SFP28 ports, labeled 0 through 47, 10G by default: xe-0/0/0 and the like; set to 25G or 1G four ports at a time: et-0/0/0 or ge-0/0/0) and Table 6 (EX4650 QSFP28 ports et-0/0/48 to et-0/0/55, 100G by default); Juniper, Virtual Chassis Components (an EX4650 Virtual Chassis has up to 4 members from Junos 20.1R1); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (the FPC of a member is its member ID, and a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. Juniper does not print the range of member ids of an EX4650: that it is 0 to 3 is inferred from the four members it allows from Junos 20.1R1 (two from 19.3R1). A Juniper example of a preprovisioned EX4650 or QFX Series Virtual Chassis renumbers a member to 6; an id outside 0 to 3 is refused here. A port's prefix follows its speed: these names are for each port at its default speed, and a quad of SFP28 ports set to 25G or 1G is named et- or ge- in its place, which is not a port of this inventory. The QSFP28 ports are auto-channelized, and a port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port on the rear panel, C0 or C1: the guide does not say which is em0"
+    naming: {grade: vendor-doc, ref: "Juniper, EX4650 Switch Hardware Guide (2025-07-16), connecting and configuring the switch (set interfaces em0 unit 0 family inet address); Juniper, EX4300 Switch Hardware Guide (2025-08-12), Table 84, Chassis Viewer for EX4650 Switches (the management port (em0))"}
+  - name: em1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "The other management port on the rear panel"
+    naming: {grade: inferred, ref: "Juniper, EX4650 Switch Hardware Guide (2025-07-16), management panel (two RJ-45 management ports, C0 and C1) and connecting and configuring the switch (em0)", caveat: "The guide names two RJ-45 management ports, C0 and C1, and configures only em0: that the other is em1 is inferred, as on Juniper's other switches with two management ports."}
+
+models:
+  EX4650-48Y:
+    skus: [EX4650-48Y-AFO, EX4650-48Y-AFI, EX4650-48Y-DC-AFO, EX4650-48Y-DC-AFI]
+    display_name: "Juniper EX4650-48Y, 48 SFP28 and 8 QSFP28 (EX4650-48Y-AFO)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX4650 Switch Hardware Guide (2025-07-16) (EX4650-48Y-AFO, -AFI, -DC-AFO and -DC-AFI, 48x25G SFP28 and 8x100G QSFP28 uplink ports); Juniper, Port Speed on EX Series Switches, Table 5 (SFP28 ports labeled 0 through 47, 10G by default, xe-0/0/0 and the like) and Table 6 (et-0/0/48 to et-0/0/55)"}
+    ports:
+      - {role: access, count: 48, prefix: xe, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, prefix: et, speed: 100gig, cage: qsfp28}

@@ -1,0 +1,82 @@
+# Juniper QFX5120-48YM
+#
+# A family of its own: a QFX5120 Virtual Chassis is of one model (HG5120,
+# Table 6), and see the QFX5120-48Y family's file for why that makes one
+# family per model.
+#
+# A Junos port name is `type-fpc/pic/port`.  The FPC is the switch: 0 on
+# its own, and in a Virtual Chassis the member id.  Two parts of HG5120
+# disagree on how many: Table 6 gives a 48YM Virtual Chassis up to 4
+# members (Junos 23.1R1), Table 8 the FPC "0 through 1" for every
+# QFX5120.  This file follows Table 6, the one that names the 48YM, and
+# its mode's caveat says so; that the ids are 0 to 3 is inferred from the
+# four members.  A switch that leaves a Virtual Chassis keeps its member
+# id in its names (VCUG).  Every port is on PIC 0: 48 SFP28 ports 0 to
+# 47, 10G by default, and 8 QSFP28 ports 48 to 55 (HG5120).
+#
+# The management ports are `em0` (C0) and `em1` (C1) (HG5120).
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   HG5120  Juniper, QFX5120 Switch Hardware Guide (2026-09-30).
+#   JVD     Juniper Validated Designs, the Juniper/jvd repository on
+#           GitHub: configurations Juniper publishes for its designs.
+#   VCUG    Juniper, Virtual Chassis User Guide for Switches
+#           (2026-09-21).
+#   DS5120  Juniper, QFX5120 Ethernet Switch Datasheet, 1000639-042-EN
+#           (September 2025), Ordering Information.
+#
+# The DC parts are `-DC-AO` and `-DC-AI`, not `-DC-AFO` and `-DC-AFI`
+# as on the other QFX5120 models: HG5120 (Tables 7 and 23) and DS5120
+# both print them so.
+#
+# Nothing is graded inferred but the range of member ids, which the
+# mode's caveat states.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A quad of SFP28 ports set to 25G or 1G, and a QSFP28 port broken
+#     out into lanes (only ports 50 and 52 break out on the 48YM).
+schema: 1
+vendor: juniper_junos
+family: QFX5120-48YM
+display_name: "Juniper QFX5120-48YM"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 4 QFX5120-48YM switches, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); each port at its default speed; no port broken out"
+    member_ids: [0, 3]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30), the QFX5120-48YM port panel (48 SFP28 ports 0 through 47, 10G by default; 8 QSFP28 ports 48 through 55), Table 6 (a QFX5120-48YM Virtual Chassis has up to 4 members, from Junos 23.1R1, of the same model) and Table 8 (PIC 0); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5120-48YM configurations (interfaces xe-0/0/0 to xe-0/0/47 and et-0/0/48 to et-0/0/55); Juniper, Virtual Chassis User Guide for Switches (2026-09-21) (the FPC of a member is its member ID, and a switch keeps the member ID it had in a Virtual Chassis after it leaves)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. The hardware guide gives a QFX5120-48YM Virtual Chassis up to 4 members in Table 6 and the FPC 0 through 1 for every QFX5120 in Table 8: the four members are followed here, and that their ids are 0 to 3 is inferred. A Juniper example of a preprovisioned EX4650 or QFX Series Virtual Chassis renumbers a member to 6; an id outside 0 to 3 is refused here. A port's prefix follows its speed: these names are for each port at its default speed, and a quad of SFP28 ports set to 25G or 1G is named et- or ge- in its place, which is not a port of this inventory. A QSFP28 port broken out into lanes is not modelled. The Virtual Chassis lines describe the hardware and are not translated, and the management interface of a Virtual Chassis is not on this inventory."
+
+deployment_ports:
+  - name: em0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C0"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30), the QFX5120-48YM management panel (C0 is em0 and C1 is em1)"}
+  - name: em1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Management port C1"
+    naming: {grade: vendor-doc, ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30), the QFX5120-48YM management panel (C0 is em0 and C1 is em1)"}
+
+models:
+  QFX5120-48YM:
+    skus: [QFX5120-48YM-AFO, QFX5120-48YM-AFI, QFX5120-48YM-DC-AO, QFX5120-48YM-DC-AI]
+    display_name: "Juniper QFX5120-48YM, 48 SFP28 and 8 QSFP28 (QFX5120-48YM-AFO)"
+    panel: {grade: vendor-doc, ref: "Juniper, QFX5120 Switch Hardware Guide (2026-09-30) (Table 7: QFX5120-48YM-AFO, -AFI, -DC-AO and -DC-AI; 48 SFP28 ports 0 through 47, 10G by default; 8 QSFP28 ports 48 through 55, 100G); Juniper Validated Designs, the Juniper/jvd repository on GitHub, QFX5120-48YM configurations (interfaces xe-0/0/0 to xe-0/0/47 and et-0/0/48 to et-0/0/55)"}
+    ports:
+      - {role: access, count: 48, prefix: xe, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, prefix: et, speed: 100gig, cage: qsfp28}

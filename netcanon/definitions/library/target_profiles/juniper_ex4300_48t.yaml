@@ -11,18 +11,25 @@
 # interfaces until converted, so they are not listed.  Management is
 # `me0` on a standalone switch (`vme` in a Virtual Chassis).
 #
-# Validation: Juniper prints the EX4300-48T factory-default
-# configuration in its hardware guide; every id below is in it.  No
+# Validation: the EX4300 hardware guide numbers the 48 network ports
+# of PIC 0 and puts the uplink module on PIC 2 (Table 9).  The
+# EX4300-48T factory-default configuration it prints has the module's
+# ports as interfaces, both ge-0/2/N and xe-0/2/N, but only ge-0/0/0 to
+# ge-0/0/23 of the network ports, and no me0.  No EX4300 text names the
+# management port: that it is me0 rests on Juniper's generic page for
+# switches and on the junos-defaults group of the EX4300-48P factory
+# default the guide prints, and the EX4300 Quick Start calls the port
+# vme.  So the profile is graded inferred, for that port alone.  No
 # capture of this model is committed here.
 vendor: juniper_junos
 model: EX4300-48T
 display_name: "Juniper EX4300-48T (48x 1G + 4x 10G SFP+)"
 device_class: switch
 stacking: virtual-chassis
-deployment_state: "standalone (FPC 0) with the 4-port SFP+ uplink module fitted"
-evidence: vendor-doc
-evidence_ref: "Juniper EX4300 Hardware Guide, Configuring Junos OS on the EX4300 (prints the EX4300-48T factory-default configuration); EX4300 System Overview (rear QSFP+ ports are VCPs by default)"
-caveat: "xe-0/2/0-3 exist only with the optional uplink module fitted (ge-0/2/N with 1G optics). The rear QSFP+ ports are Virtual Chassis ports by default and are not listed. A Virtual Chassis member N uses N as the first number."
+deployment_state: "standalone (FPC 0) with the 4-port SFP+ uplink module fitted and SFP+ optics in it"
+evidence: inferred
+evidence_ref: "Juniper, EX4300 Switch Hardware Guide (2025-08-12): Table 9 (network ports 0 through 47 on PIC 0; the uplink module on PIC 2) and Configuring Junos OS on the EX4300 (the EX4300-48T factory-default configuration, which names the uplink module ports xe-0/2/0 to xe-0/2/3 and ge-0/2/0 to ge-0/2/3); EX4300 System Overview (rear QSFP+ ports are VCPs by default); Juniper, Overview of Interface Fundamentals (Junos OS for switches automatically creates the switch's management Ethernet interface, me0)"
+caveat: "No EX4300 text names the management port: that it is me0 rests on Juniper's generic page for switches and on the factory default of an EX4300-48P, and the EX4300 Quick Start calls the port vme. Juniper prints every other id here. xe-0/2/0-3 exist only with the optional uplink module fitted (ge-0/2/N with 1G optics). The rear QSFP+ ports are Virtual Chassis ports by default and are not listed. A Virtual Chassis member N uses N as the first number."
 ports:
   - {range: "ge-0/0/0-47", kind: physical, speed: gig, notes: "10/100/1000BASE-T"}
   - {range: "xe-0/2/0-3", kind: uplink, speed: 10gig, sfp: true, notes: "10G SFP+ uplink cage (optional EX-UM-4X4SFP module)"}

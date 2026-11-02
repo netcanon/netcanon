@@ -59,7 +59,8 @@ class TestTargetProfilesList:
     ):
         """The rename modal turns its notice amber on ``inferred`` and
         prints the caveat, so both have to reach the wire.  Exercised on
-        a synthetic profile: no shipped profile carries that grade."""
+        a synthetic profile, so that it holds whatever the shipped
+        profiles are graded."""
         from tests.fixtures.target_profiles import (
             UNVERIFIED_PROFILE_CAVEAT,
             UNVERIFIED_PROFILE_KEY,
@@ -85,7 +86,10 @@ class TestTargetProfilesList:
             f"{p['vendor']}/{p['model']}": p["caveat"] for p in data
             if p["evidence"] == "inferred"
         }
-        assert set(flagged) == {"aruba_aoscx/6300M-48G-PoE4-SFP56"}
+        assert set(flagged) == {
+            "aruba_aoscx/6300M-48G-PoE4-SFP56",
+            "juniper_junos/EX4300-48T",
+        }
         assert all(caveat.strip() for caveat in flagged.values()), flagged
 
     def test_missing_profile_returns_404(self, client: TestClient):

@@ -1755,7 +1755,9 @@ of `notes` says which.  None of these is an error: the answer is a 200
 either way.
 Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
 and Arista EOS configs today; no other vendor has a detector yet.  An
-NX-OS running-config names no model, so a Nexus is declared by hand.
+NX-OS running-config names no model, so a Nexus is declared by hand;
+nor does a Junos configuration, so an EX or QFX switch is declared by
+hand too.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -2087,7 +2089,9 @@ nothing, as before.
   the Aruba CX 6300 and 6200, for the Arista 7050X, 7050X3,
   7060X, 7260X and 7280R3, and for the Cisco Nexus 9300 (the first
   generation, and the EX, FX, FX2, FX3, GX, GX2 and H models, the
-  9332C and the 9364C); `GET /model-families` is the
+  9332C and the 9364C), and for the Juniper EX2300, EX3400, EX4300,
+  EX4400, EX4600, EX4650, QFX5100, QFX5110, QFX5120, QFX5200 and
+  QFX5210; `GET /model-families` is the
   current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
@@ -2112,7 +2116,14 @@ nothing, as before.
   is not modelled either, and comes back as off-inventory; a vPC pair
   is two devices too.  A first-generation Nexus's uplink module is
   module 2 (`Ethernet2/1`); the 4-port CFP2 module is not offered in a
-  93128TX, whose active CFP2 ports Cisco's guide gives two ways.
+  93128TX, whose active CFP2 ports Cisco's guide gives two ways.  A
+  Junos port's name follows the optic in it (`ge-0/2/0` with an SFP,
+  `xe-0/2/0` with an SFP+), and a family names each cage for the
+  optic its mode states: a port that holds another optic comes back
+  as off-inventory, and so do a lane of a port broken out
+  (`xe-0/0/48:0`) and the Virtual Chassis management interface
+  `vme`.  A Junos switch that left a Virtual Chassis keeps its member
+  id in its names (`ge-1/0/0`): declare it with that id.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

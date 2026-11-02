@@ -70,7 +70,8 @@ per-model ``bays:`` mapping; see :class:`ModuleDef` and
 :class:`BayDef`.
 
 Two more fields serve a grammar that names a port by its interface
-type (``catalyst``: ``TenGigabitEthernet1/1/1``).  Every port group
+type (``catalyst``: ``TenGigabitEthernet1/1/1``; ``junos``:
+``xe-0/2/0``).  Every port group
 states its type as ``prefix:``, typed from the vendor's own interface
 lists and never derived from a speed; a rule that puts no type in a
 name refuses one (:attr:`NamingRuleSpec.prefixes`).  And
@@ -364,7 +365,8 @@ class PortGroup(BaseModel):
 
     slot: str = ""
     """Naming bank on the FIXED panel.  Numbering is per slot: each
-    slot counts from one, and a later group in the same slot carries
+    slot counts from the rule's own first number (one, on every
+    grammar but Junos), and a later group in the same slot carries
     on where the earlier one stopped, whatever lies between them.
     Usually empty: an AOS-S 2930F numbers its uplinks ``49-52``
     straight after access ``1-48``.  To the Catalyst rule a slot is the
@@ -372,8 +374,12 @@ class PortGroup(BaseModel):
     slot ``1`` (``GigabitEthernet1/1/1``), and a 2960-X's SFP+ uplinks
     slot ``0``, module 0 like its downlinks but a bank that counts from
     one of its own (``TenGigabitEthernet1/0/1`` beside
-    ``GigabitEthernet1/0/1``).  Must be empty in a module's groups — a
-    module's ports are named by the bay it is fitted in."""
+    ``GigabitEthernet1/0/1``).  To the Junos rule a slot is the PIC,
+    ``""`` is PIC 0, and a slot counts from zero: an EX2300's uplinks
+    are slot ``1`` (``xe-0/1/0``), and an EX4300-32F's SFP+ uplinks
+    carry on in slot ``""`` after its 32 SFP ports (``xe-0/0/32``).
+    Must be empty in a module's groups — a module's ports are named by
+    the bay it is fitted in."""
 
     prefix: str = ""
     """The interface type the name begins with, for a grammar that has
@@ -1001,6 +1007,35 @@ def _nxos_rule(request: PortNameRequest) -> str:
     )
 
 
+def _junos_rule(request: PortNameRequest) -> str:
+    from .codecs.juniper_junos.port_names import ex_qfx_port_name
+
+    # The FPC of an EX or QFX port is the switch's Virtual Chassis
+    # member id, 0 on a switch that has never been in one.
+    if request.member_id is None:
+        raise ValueError(
+            "a Junos port name always carries the FPC, which is the "
+            "switch's Virtual Chassis member id (0 on a switch that is "
+            "alone); the mode must state `member_ids`"
+        )
+    # The panel's own ports are PIC 0, written as no slot; a bank of
+    # the panel or a module bay is PIC 1 or 2.
+    if request.slot and not (
+        request.slot.isascii() and request.slot.isdigit()
+        and int(request.slot) >= 1
+    ):
+        raise ValueError(
+            f"a Junos PIC is numbered, and PIC 0 is the panel's own "
+            f"ports, which state no slot; slot {request.slot!r} is not "
+            f"PIC 1 or 2"
+        )
+    # Ports count from 0 within their PIC.
+    return ex_qfx_port_name(
+        media=request.group.prefix, fpc=request.member_id,
+        pic=int(request.slot or "0"), port=request.index0,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -1054,6 +1089,16 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "`deployment_ports`"
             ),
         ),
+        "junos": NamingRuleSpec(
+            render=_junos_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an EX or QFX switch's management interface (`me0`, or "
+                "`em0` and `em1`) is not one of its numbered ports; it "
+                "is stated under `deployment_ports`"
+            ),
+            prefixes=_junos_media(),
+        ),
     }
 
 
@@ -1061,6 +1106,12 @@ def _catalyst_port_types() -> frozenset[str]:
     from .codecs.cisco_iosxe_cli.port_names import CATALYST_PORT_TYPES
 
     return CATALYST_PORT_TYPES
+
+
+def _junos_media() -> frozenset[str]:
+    from .codecs.juniper_junos.port_names import EX_QFX_MEDIA
+
+    return EX_QFX_MEDIA
 
 
 # ---------------------------------------------------------------------------

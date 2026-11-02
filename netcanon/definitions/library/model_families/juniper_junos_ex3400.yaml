@@ -1,0 +1,108 @@
+# Juniper EX3400: the 24- and 48-port models
+#
+# A Junos port name is `type-fpc/pic/port` (N13EX).  The FPC is the
+# switch: 0 by default, and in a Virtual Chassis the member id, 0 to 9
+# on an EX3400 (HG34, Table 2).  A switch that leaves a Virtual Chassis
+# keeps its member id in its names (VCUG), so a switch on its own can be
+# FPC 4: the one mode below covers both.  The PIC is 0 for the network
+# ports, 1 for the two rear QSFP+ ports and 2 for the four front SFP+
+# uplinks (HG34, Table 2), and ports count from 0 within their PIC.
+#
+# The two rear QSFP+ ports are Virtual Chassis ports by default (HG34:
+# "The QSFP+ uplink ports are configured as Virtual Chassis ports (VCPs)
+# by default"), and a port in that state is no interface at all: no
+# factory default Juniper prints names one.  They are left out.
+#
+# The prefix follows the optic: the factory default names each front
+# uplink twice, `ge-0/2/<n>` and `xe-0/2/<n>`, and only the one the optic
+# selects is an interface.  This file describes SFP+ optics.
+#
+# The management port: as on the EX2300, the factory default names
+# `me0.0` only in its `junos-defaults` group, no EX3400 text configures
+# the MGMT port by name, and the EX3400 Quick Start (QS34) calls the
+# port itself `vme`; `me0` is graded inferred.  In a Virtual Chassis,
+# and in the factory default from 18.2R3, the address is on `vme`
+# (QS34), which is not a port of the inventory.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   N13EX  Juniper, Understanding Interface Naming Conventions on EX
+#          Series Switches, Junos OS 13.2 (2014-04-25).
+#   HG34   Juniper, EX3400 Switch Hardware Guide (2026-01-09): Table 1
+#          (models), Table 2 (CLI terminology: FPC, PIC), EX3400
+#          Default Configuration.
+#   VCUG   Juniper, Virtual Chassis User Guide for Switches
+#          (2026-09-21).
+#   IFF    Juniper, Overview of Interface Fundamentals (management
+#          interface me0).
+#   QS34   Juniper, EX3400 Quick Start (2024-05-28).
+#
+# Graded inferred, with its reason: `me0`.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The rear QSFP+ ports made network ports
+#     (`request virtual-chassis vc-port delete`): Juniper puts them on
+#     PIC 1, but no Juniper text prints their names.
+#   * The -TAA parts: none is in HG34.
+schema: 1
+vendor: juniper_junos
+family: EX3400
+display_name: "Juniper EX3400"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 10 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the front uplink cages; the rear QSFP+ ports left as Virtual Chassis ports"
+    member_ids: [0, 9]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (network interfaces are specified as type-fpc/pic/port; ge is Gigabit Ethernet and xe 10-Gigabit Ethernet; the FPC number is 0 by default and is the member ID of the switch in a Virtual Chassis); Juniper, EX3400 Switch Hardware Guide (2026-01-09), Table 2 (FPC 0 to 9, the member ID in a Virtual Chassis; PIC 0 the network ports, PIC 1 the two rear QSFP+ ports, PIC 2 the four front SFP+ uplink ports) and EX3400 Default Configuration (the uplink ports are listed as ge-0/2/0 to ge-0/2/3 and xe-0/2/0 to xe-0/2/3); Juniper, Virtual Chassis User Guide for Switches (2026-09-21), troubleshooting (a switch keeps the member ID it had in a Virtual Chassis after it leaves, and its interfaces keep it)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. A front uplink takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP the same port is ge-<fpc>/2/<port>, which is not a port of this inventory. The two rear QSFP+ ports are Virtual Chassis ports by default and have no interface name in that state; they are not modelled, nor are they once made network ports. The Virtual Chassis lines describe the hardware and are not translated. The management address of a Virtual Chassis, and of the factory default from Junos 18.2R3, is on vme, which is not a port of this inventory."
+
+deployment_ports:
+  - name: me0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port, labelled MGMT"
+    naming: {grade: inferred, ref: "Juniper, Overview of Interface Fundamentals (Junos OS for switches automatically creates the switch's management Ethernet interface, me0); Juniper, EX3400 Switch Hardware Guide (2026-01-09), EX3400 Default Configuration (the factory default before Junos 18.2R3 names me0.0 and vme.0 in its junos-defaults group)", caveat: "No EX3400 text configures the MGMT port by name: that it is me0 rests on Juniper's generic page for switches, and the EX3400 Quick Start calls the port vme. In a Virtual Chassis, and in the factory default from Junos 18.2R3, the management address is configured on vme, which is not a port of this inventory."}
+
+models:
+  EX3400-24T:
+    skus: [EX3400-24T, EX3400-24T-DC]
+    display_name: "Juniper EX3400-24T, 24 RJ-45 and 4 SFP+ (EX3400-24T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX3400 Switch Hardware Guide (2026-01-09), Table 1 (EX3400-24T and EX3400-24T-DC, 24 network ports labeled 0 through 23), Table 2 (PIC 0 the network ports; PIC 2 four SFP+ uplink ports) and EX3400 Default Configuration (uplink ports ge-0/2/0 to ge-0/2/3 and xe-0/2/0 to xe-0/2/3; the 24-port factory default lists ge-0/0/0 to ge-0/0/23)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "2", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX3400-24P:
+    skus: [EX3400-24P]
+    display_name: "Juniper EX3400-24P, 24 RJ-45 PoE+ and 4 SFP+ (EX3400-24P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX3400 Switch Hardware Guide (2026-01-09), Table 1 (EX3400-24P, 24 network ports with PoE+ on all), Table 2 (PIC 0 the network ports; PIC 2 four SFP+ uplink ports) and EX3400 Default Configuration (the factory default of an EX3400 switch with 24 ports with PoE capability, Junos 18.2R3 or later, lists ge-0/0/0 to ge-0/0/23, ge-0/2/0 to ge-0/2/3 and xe-0/2/0 to xe-0/2/3)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "2", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX3400-48T:
+    skus: [EX3400-48T, EX3400-48T-AFI, EX3400-48T-DC]
+    display_name: "Juniper EX3400-48T, 48 RJ-45 and 4 SFP+ (EX3400-48T)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX3400 Switch Hardware Guide (2026-01-09), Table 1 (EX3400-48T, EX3400-48T-AFI and EX3400-48T-DC, 48 network ports labeled 0 through 47), Table 2 (PIC 0 the network ports; PIC 2 four SFP+ uplink ports) and EX3400 Default Configuration (uplink ports ge-0/2/0 to ge-0/2/3 and xe-0/2/0 to xe-0/2/3; the 48-port factory default lists ge-0/0/0 to ge-0/0/47)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "2", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX3400-48P:
+    skus: [EX3400-48P]
+    display_name: "Juniper EX3400-48P, 48 RJ-45 PoE+ and 4 SFP+ (EX3400-48P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX3400 Switch Hardware Guide (2026-01-09), Table 1 (EX3400-48P, 48 network ports with PoE+ on all), Table 2 (PIC 0 the network ports; PIC 2 four SFP+ uplink ports) and EX3400 Default Configuration (the factory default of an EX3400 switch with 48 ports with PoE capability, before Junos 18.2R3, lists ge-0/0/0 to ge-0/0/47, ge-0/2/0 to ge-0/2/3 and xe-0/2/0 to xe-0/2/3)"}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "2", prefix: xe, speed: 10gig, cage: sfp+}

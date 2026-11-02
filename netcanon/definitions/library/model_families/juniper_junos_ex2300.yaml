@@ -1,0 +1,146 @@
+# Juniper EX2300: the 12-port EX2300-C and the 24- and 48-port models
+#
+# A Junos port name is `type-fpc/pic/port` (N13EX).  The FPC is the
+# switch: 0 by default, and in a Virtual Chassis the member id, 0 to 3
+# on an EX2300 (HG23, Table 2).  A switch that leaves a Virtual Chassis
+# keeps its member id in its names (VCUG, troubleshooting), so a switch
+# on its own can be FPC 2: the one mode below covers both.  The PIC is
+# 0 for the built-in network ports and 1 for the uplinks (HG23, Table
+# 2), and ports count from 0 within their PIC.
+#
+# The prefix follows the optic.  "Uplink ports on EX2300 switches
+# except EX2300-C switches are listed as ge-0/1/0 to ge-0/1/3 and
+# xe-0/1/0 to xe-0/1/3" (HG23, EX2300 Default Configuration): the
+# factory default holds both names of each uplink, and only the one the
+# optic selects is an interface.  This file describes SFP+ optics, and
+# says so in the mode's label.
+#
+# The management port: Juniper's generic page says the switch creates
+# `me0` (IFF), and the factory default names `me0.0` in its
+# `junos-defaults` group, but no EX2300 text configures the MGMT port
+# by name, and the EX2300 Quick Start (QS23) calls the port itself
+# `vme`; `me0` is graded inferred.  In a Virtual Chassis, and in the
+# factory default from 18.2R3, the management address is on `vme`
+# (VCEX; QS23), which is not a port of the inventory.
+#
+# A running-config never names the switch's model, so no detector reads
+# one and no capture is claimed.
+#
+# Which ports are `uplink` follows Juniper's word: the PIC 1 SFP+ ports
+# are its uplinks.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   N13EX  Juniper, Understanding Interface Naming Conventions on EX
+#          Series Switches, Junos OS 13.2 (2014-04-25).
+#   HG23   Juniper, EX2300 Switch Hardware Guide (2025-08-12): Table 1
+#          (models), Table 2 (CLI terminology: FPC, PIC), EX2300
+#          Default Configuration.
+#   HG23-2017  Juniper, EX2300-C and EX2300 Switches Hardware Guide
+#          (modified 2017-07-05): EX2300 Switch Default Configuration,
+#          and the models the edition describes.
+#   QS23   Juniper, EX2300 Quick Start (2025-05-06).
+#   VCUG   Juniper, Virtual Chassis User Guide for Switches
+#          (2026-09-21).
+#   VCEX   Juniper, Configuring an EX2300, EX3400, EX4100, EX4100-F,
+#          EX4300, or EX4400 Virtual Chassis.
+#   IFF    Juniper, Overview of Interface Fundamentals (management
+#          interface me0).
+#
+# Graded inferred, each with its reason: every panel but the 24P's,
+# since Juniper prints the uplink names of every model but the
+# access-port names of one model only; and `me0`.  That model is the
+# EX2300-24P.  The factory default is printed for "an EX2300 switch
+# with 24 ports with PoE capability", and the edition that first printed
+# it (HG23-2017) describes no other 24-port PoE model and no
+# multigigabit one.  Later editions print the same file under the same
+# caption, when the EX2300-24MP is a 24-port PoE model too; its ports
+# include `mge` ones, and the file names none.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The EX2300-24MP and EX2300-48MP.  Juniper says both have `mge` and
+#     `ge` ports, and the prefix is part of the name.  Only the
+#     front-panel figures place them (the 2.5G ports are 0 to 7 on the
+#     24MP and 16 to 31 on the 48MP); no Juniper text prints a name of
+#     either model, and HG23 Table 2 lists the 1G ports first.
+#   * The -TAA parts.  HG23 lists the same ports for each as for its
+#     base model; a TAA part is its own model entry, and is not one yet.
+#   * A port while it is a Virtual Chassis port: no Juniper text for the
+#     EX2300 names it, and the classifier does not read a `vcp-` name.
+schema: 1
+vendor: juniper_junos
+family: EX2300
+display_name: "Juniper EX2300"
+naming: junos
+default_mode: virtual-chassis
+
+modes:
+  virtual-chassis:
+    label: "Virtual Chassis of up to 4 members, or a switch on its own (member 0, or the member id it kept when it left a Virtual Chassis); SFP+ optics in the uplink cages"
+    member_ids: [0, 3]
+    naming:
+      grade: vendor-doc
+      ref: "Juniper, Understanding Interface Naming Conventions on EX Series Switches, Junos OS 13.2 (2014-04-25) (network interfaces are specified as type-fpc/pic/port; ge is Gigabit Ethernet and xe 10-Gigabit Ethernet; the FPC number is 0 by default and is the member ID of the switch in a Virtual Chassis); Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 2 (FPC 0 to 3, the member ID in a Virtual Chassis; PIC 0 the built-in network ports, PIC 1 the uplink ports) and EX2300 Default Configuration (uplink ports are listed as ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to xe-0/1/3, on an EX2300-C ge-0/1/0 to ge-0/1/1 and xe-0/1/0 to xe-0/1/1); Juniper, Virtual Chassis User Guide for Switches (2026-09-21), troubleshooting (a switch keeps the member ID it had in a Virtual Chassis after it leaves, and its interfaces keep it, ge-1/0/0 for a former member 1)"
+    caveat: "Names carry the FPC, which is the member id: 0 on a switch that has never been in a Virtual Chassis, and a switch that left one keeps its id. An uplink takes an SFP or an SFP+, and its name follows the optic: these names are for SFP+ optics, and with an SFP the same port is ge-<fpc>/1/<port>, which is not a port of this inventory. A Virtual Chassis needs the licence the -VC parts carry, which is not checked here, and uses SFP+ uplinks as its Virtual Chassis ports; a port in that state has no interface name and is not modelled. The Virtual Chassis lines describe the hardware and are not translated. The management address of a Virtual Chassis, and of the factory default from Junos 18.2R3, is on vme, which is not a port of this inventory."
+
+deployment_ports:
+  - name: me0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port, labelled MGMT"
+    naming: {grade: inferred, ref: "Juniper, Overview of Interface Fundamentals (Junos OS for switches automatically creates the switch's management Ethernet interface, me0); Juniper, EX2300 Switch Hardware Guide (2025-08-12), EX2300 Default Configuration (the factory default before Junos 18.2R3 names me0.0 and vme.0 in its junos-defaults group)", caveat: "No EX2300 text configures the MGMT port by name: that it is me0 rests on Juniper's generic page for switches, and the EX2300 Quick Start calls the port vme. In a Virtual Chassis, and in the factory default from Junos 18.2R3, the management address is configured on vme, which is not a port of this inventory."}
+
+models:
+  # --- 12 ports and 2 SFP+ uplinks (EX2300-C, compact, fanless) -----------------
+  EX2300-C-12T:
+    skus: [EX2300-C-12T, EX2300-C-12T-VC]
+    display_name: "Juniper EX2300-C-12T, 12 RJ-45 and 2 SFP+ (EX2300-C-12T)"
+    panel: {grade: inferred, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-C-12T and EX2300-C-12T-VC, 12 access ports), Table 2 (12x 10/100/1000 BASE-T on PIC 0; 2x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (EX2300-C uplink ports ge-0/1/0 to ge-0/1/1 and xe-0/1/0 to xe-0/1/1)", caveat: "The uplink names are Juniper's. That the network ports are ge-<fpc>/0/0 to ge-<fpc>/0/11 is inferred from their count and the type-fpc/pic/port rule: no factory default of an EX2300-C is printed."}
+    ports:
+      - {role: access, count: 12, prefix: ge, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX2300-C-12P:
+    skus: [EX2300-C-12P, EX2300-C-12P-VC]
+    display_name: "Juniper EX2300-C-12P, 12 RJ-45 PoE+ and 2 SFP+ (EX2300-C-12P)"
+    panel: {grade: inferred, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-C-12P and EX2300-C-12P-VC, 12 access ports, PoE on all 12), Table 2 (12x 10/100/1000 BASE-T on PIC 0; 2x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (EX2300-C uplink ports ge-0/1/0 to ge-0/1/1 and xe-0/1/0 to xe-0/1/1)", caveat: "The uplink names are Juniper's. That the network ports are ge-<fpc>/0/0 to ge-<fpc>/0/11 is inferred from their count and the type-fpc/pic/port rule: no factory default of an EX2300-C is printed."}
+    ports:
+      - {role: access, count: 12, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}
+
+  # --- 24 or 48 ports and 4 SFP+ uplinks ------------------------------------------
+  EX2300-24T:
+    skus: [EX2300-24T, EX2300-24T-VC, EX2300-24T-DC]
+    display_name: "Juniper EX2300-24T, 24 RJ-45 and 4 SFP+ (EX2300-24T)"
+    panel: {grade: inferred, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-24T, EX2300-24T-VC and EX2300-24T-DC, 24 access ports), Table 2 (24x 10/100/1000 BASE-T on PIC 0; 4x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (uplink ports of every model but the EX2300-C are listed as ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to xe-0/1/3)", caveat: "The uplink names are Juniper's. That the network ports are ge-<fpc>/0/0 to ge-<fpc>/0/23 is inferred from their count and the type-fpc/pic/port rule: the factory default Juniper prints is of a 24-port model with PoE."}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX2300-24P:
+    skus: [EX2300-24P, EX2300-24P-VC]
+    display_name: "Juniper EX2300-24P, 24 RJ-45 PoE+ and 4 SFP+ (EX2300-24P)"
+    panel: {grade: vendor-doc, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-24P and EX2300-24P-VC, 24 access ports, PoE on all 24), Table 2 (PIC 0 network ports; 4x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (the factory default of an EX2300 switch with 24 ports with PoE capability lists ge-0/0/0 to ge-0/0/23, ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to xe-0/1/3); Juniper, EX2300-C and EX2300 Switches Hardware Guide (modified 2017-07-05), EX2300 Switch Default Configuration (the same file under the same caption, in an edition whose only 24-port model with PoE is the EX2300-24P)"}
+    ports:
+      - {role: access, count: 24, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX2300-48T:
+    skus: [EX2300-48T, EX2300-48T-VC]
+    display_name: "Juniper EX2300-48T, 48 RJ-45 and 4 SFP+ (EX2300-48T)"
+    panel: {grade: inferred, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-48T and EX2300-48T-VC, 48 access ports), Table 2 (48x 10/100/1000 BASE-T on PIC 0; 4x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (uplink ports of every model but the EX2300-C are listed as ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to xe-0/1/3)", caveat: "The uplink names are Juniper's. That the network ports are ge-<fpc>/0/0 to ge-<fpc>/0/47 is inferred from their count and the type-fpc/pic/port rule: no factory default of a 48-port EX2300 is printed."}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}
+
+  EX2300-48P:
+    skus: [EX2300-48P, EX2300-48P-VC]
+    display_name: "Juniper EX2300-48P, 48 RJ-45 PoE+ and 4 SFP+ (EX2300-48P)"
+    panel: {grade: inferred, ref: "Juniper, EX2300 Switch Hardware Guide (2025-08-12), Table 1 (EX2300-48P and EX2300-48P-VC, 48 access ports, PoE on all 48), Table 2 (48x 10/100/1000 BASE-T on PIC 0; 4x10G SFP/SFP+ on PIC 1) and EX2300 Default Configuration (uplink ports of every model but the EX2300-C are listed as ge-0/1/0 to ge-0/1/3 and xe-0/1/0 to xe-0/1/3)", caveat: "The uplink names are Juniper's. That the network ports are ge-<fpc>/0/0 to ge-<fpc>/0/47 is inferred from their count and the type-fpc/pic/port rule: no factory default of a 48-port EX2300 is printed."}
+    ports:
+      - {role: access, count: 48, prefix: ge, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, slot: "1", prefix: xe, speed: 10gig, cage: sfp+}

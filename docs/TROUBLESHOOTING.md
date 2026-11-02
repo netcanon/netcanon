@@ -1238,6 +1238,16 @@ for — typed in another letter case than its port, or a unit of a
 unit: it is listed in `unvouched_units` (see "... but the plan does
 not vouch for where they went" above).
 
+A Junos source has a case of its own: a port's name follows the
+optic in it, and a family names each cage for the optic its mode
+states.  A port that holds a 1G SFP in a cage described with SFP+
+names (`ge-0/2/0` where the inventory has `xe-0/2/0`) is
+off-inventory, and so are a lane of a port broken out
+(`xe-0/0/48:0`) and the Virtual Chassis management interface
+`vme`: give each an entry.  And a switch that was once in a Virtual
+Chassis keeps its member id in its names (`ge-1/0/0` is member 1):
+declared as member 0, every one of its ports is off-inventory.
+
 ### "A stack member's config came out on another member"
 
 Two stacks are paired member by member in the ORDER the two

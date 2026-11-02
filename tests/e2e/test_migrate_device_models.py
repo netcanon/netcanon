@@ -441,7 +441,8 @@ class TestSourceDeviceIsReadFromTheConfig:
         self, page: Page, live_server_url: str,
     ) -> None:
         """Nothing reads the hardware lines of a Junos config yet: the
-        picker stays empty, lists that vendor's profiles, and says why."""
+        picker stays empty, lists that vendor's families and profiles,
+        and says why."""
         _translate(page, live_server_url, "juniper_junos", "aruba_aoss", _JUNOS_SRC)
         page.locator(_tid("migrate-rename-open-btn")).click()
         select = page.locator(_tid("migrate-device-source-model-select"))
@@ -455,7 +456,9 @@ class TestSourceDeviceIsReadFromTheConfig:
         )
         values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
         assert "profile:EX4300-48T" in values
-        assert not [v for v in values if v.startswith("fam:")]
+        # A family offers its models to be chosen by hand.
+        assert "fam:EX4300:EX4300-48T" in values
+        assert "fam:QFX5120-48Y:QFX5120-48Y" in values
 
     def test_a_catalyst_is_read_from_its_provision_line(
         self, page: Page, live_server_url: str,
