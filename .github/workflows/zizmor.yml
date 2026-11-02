@@ -39,10 +39,10 @@ on:
     - cron: '17 4 * * 1'
   workflow_dispatch:
 
+# Read-only by default; the one job elevates only what the SARIF upload
+# needs (SECURITY.md: write scopes are declared per job, never per file).
 permissions:
   contents: read
-  security-events: write   # SARIF upload to Code Scanning
-  actions: read            # zizmor reads workflow files via the API
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -51,6 +51,10 @@ jobs:
   zizmor:
     name: zizmor scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # SARIF upload to Code Scanning
+      actions: read            # zizmor reads workflow files via the API
     steps:
       - uses: actions/checkout@v7.0.1
         with:
