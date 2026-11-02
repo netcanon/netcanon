@@ -1,0 +1,90 @@
+# Cisco Nexus 9332C and 9364C: fixed spine switches of QSFP28 ports
+# and two SFP+ ports
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/65`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  The RJ-45 and SFP management connectors of these
+# models are that one interface, and only one is used.
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP28 port is an uplink, and an SFP+ port an access port.  It
+# decides only how the ports of two devices are paired, and says
+# nothing about how a switch is cabled.  So the two SFP+ ports, which
+# follow the QSFP28 ports in number, are `access` ports listed after
+# them.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout, and the ports that take a QSA
+#           adapter.
+#   DSSP    Cisco Nexus 9332C and 9364C Fixed Spine Switches Data
+#           Sheet (C78-739886, Updated January 24, 2023).
+#   G...    Each model's NX-OS Mode Hardware Installation Guide,
+#           Overview.
+#
+# Graded inferred, each with its reason in its caveat: both models,
+# whose SFP+ ports no Cisco text read numbers as SFP+ ports.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.
+schema: 1
+vendor: cisco_nxos
+family: "9332C-9364C"
+display_name: "Cisco Nexus 9332C and 9364C"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/1/1 is not on this inventory. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. The model's SFP management connector is this one interface too, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); each model's NX-OS Mode Hardware Installation Guide, Overview (an RJ-45 and an SFP management port)"}
+
+models:
+  # --- 32 QSFP28 and 2 SFP+ ------------------------------------------------------
+  N9K-C9332C:
+    skus: [N9K-C9332C]
+    display_name: "Cisco Nexus 9332C, 32 QSFP28 and 2 SFP+ (N9K-C9332C)"
+    panel: {grade: inferred, ref: "Cisco Nexus 9332C NX-OS Mode Hardware Installation Guide (First Published 2019-02-15), Overview (32 40/100-Gigabit QSFP28 ports, of which ports 25-32 offer hardware support for MACsec; SFP ports (2)); Cisco Nexus 9332C and 9364C Fixed Spine Switches Data Sheet (C78-739886, Updated January 24, 2023) (32 40/100G QSFP28 and 2 1/10G SFP+)", caveat: "Cisco's texts read give the counts, and number the QSFP28 ports 1-32 only through the MACsec range 25-32. That the two SFP+ ports are 33-34 is inferred from the 9364C, whose SFP+ ports follow its QSFP28 ports."}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 64 QSFP28 and 2 SFP+ ------------------------------------------------------
+  N9K-C9364C:
+    skus: [N9K-C9364C]
+    display_name: "Cisco Nexus 9364C, 64 QSFP28 and 2 SFP+ (N9K-C9364C)"
+    panel: {grade: inferred, ref: "Cisco Nexus 9364C NX-OS Mode Switch Hardware Installation Guide (First Published 2017-11-23, Last Modified 2018-10-19), Overview (ports 1 to 48 in 4 rows of 12 ports; ports 49 to 64 in 4 rows of 4 ports, MACsec capable); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), the ports that take a QSA adapter (Cisco Nexus 9364C switch: ports 65 and 66 only); Cisco Nexus 9332C and 9364C Fixed Spine Switches Data Sheet (C78-739886, Updated January 24, 2023) (64 40/100G QSFP28 and 2 1/10G SFP+)", caveat: "The QSFP28 ports 1-64 are numbered in words by the hardware installation guide. That the two SFP+ ports are 65-66 is inferred: the interfaces guide names ports 65 and 66 of the 9364C in a sentence on QSA adapters without saying they are the SFP+ ports."}
+    ports:
+      - {role: uplink, count: 64, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

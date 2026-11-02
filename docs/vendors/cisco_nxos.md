@@ -420,6 +420,24 @@ translate it again from `show running-config` as the switch prints it.
   source line still names it; the job records the drop and says
   nothing.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+- **Declaring a Nexus switch as the source or target device** -- the
+  Nexus 9300 switches are model families with one mode, `standalone`:
+  a switch on its own.  The two switches of a vPC pair are two
+  devices; declare each, and translate each config on its own.  A
+  port is `Ethernet<module>/<port>`, and a switch's own panel is
+  module 1.  The uplink module of a 9396PX, 9396TX or 93128TX is
+  module 2 (`Ethernet2/1` onward); in a 93128TX the 12-port module
+  has eight active ports, and the 4-port CFP2 module is not offered
+  there, because Cisco's guide gives its two active ports in that
+  switch two ways.  A port broken out into lanes (`Ethernet1/49/1`)
+  is not modelled: its names come back as off-inventory.  The
+  management port is `mgmt0`.  A running-config names no Nexus
+  model, so the source switch is not read from the config: choose it
+  by hand.  A panel Cisco numbers in a figure only, or in no text
+  read, is graded `inferred` and its caveat says why.  The 9300 parts
+  a family leaves out (the 24-port licensed parts, the ACI-only
+  models and others) are listed, with the reason, in its file; no
+  Nexus outside the 9300 line, and no modular chassis, is described.
 
 ## See also
 

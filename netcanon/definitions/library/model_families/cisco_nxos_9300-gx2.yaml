@@ -1,0 +1,113 @@
+# Cisco Nexus 9300-GX2: fixed switches of QSFP-DD ports and two SFP+
+# ports
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/65`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  The RJ-45 and SFP management connectors of these
+# models are that one interface, and only one is used.
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP-DD port is an uplink, and an SFP+ port an access port.  It
+# decides only how the ports of two devices are paired, and says
+# nothing about how a switch is cabled.  So the two SFP+ ports, which
+# follow the uplinks in number, are `access` ports listed after them.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout.
+#   IF106   The same guide, Release 10.6(x), "Configuring Basic
+#           Interface Parameters", Table 4 (the ports that have a
+#           retimer, per model).
+#   DSGX2   Cisco N9300-GX2 Series Fixed Switches Data Sheet (last
+#           updated 07/16/26).
+#   FN74074 Field Notice FN74074 (Revision 1.0, 2024-Sep-06), on the
+#           N9K-C9364D-GX2A: it names the interfaces.
+#   G...    Each model's NX-OS Mode Switch Hardware Installation Guide,
+#           Overview.
+#
+# Graded vendor-doc: the 9364D-GX2A, whose interfaces FN74074 names.
+# Graded inferred, each with its reason in its caveat: the 9348D-GX2A
+# and the 9332D-GX2B models, whose SFP+ ports no NX-OS text numbers.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.
+#   * The N9332D-GX2B-ORV3 (an Open Rack v3 build), which has a guide
+#     of its own that was not read.
+schema: 1
+vendor: cisco_nxos
+family: "9300-GX2"
+display_name: "Cisco Nexus 9300-GX2"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/1/1 is not on this inventory. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. The model's SFP management connector is this one interface too, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); Cisco N9300-GX2 Series Fixed Switches Data Sheet (last updated 07/16/26) (management ports: one 10/100/1000BASE-T and one 1G SFP); each model's NX-OS Mode Switch Hardware Installation Guide, Overview (an RJ-45 and an SFP management port)"}
+
+models:
+  # --- 64 QSFP-DD and 2 SFP+ -----------------------------------------------------
+  N9K-C9364D-GX2A:
+    skus: [N9K-C9364D-GX2A]
+    display_name: "Cisco Nexus 9364D-GX2A, 64 QSFP-DD and 2 SFP+ (N9K-C9364D-GX2A)"
+    panel: {grade: vendor-doc, ref: "Field Notice FN74074, Cisco Nexus Switch N9K-C9364D-GX2A Ports Might Be Link Down With 10.2(x) NXOS Releases (Revision 1.0, 2024-Sep-06) (front-panel interfaces Ethernet 1/1-64; 1/10-Gbps SFP+ ports Ethernet1/65-66); Cisco N9364D-GX2A NX-OS Mode Switch Hardware Installation Guide, Overview (Updated September 16, 2026) (400-Gigabit QSFP-DD ports (64), 10-Gigabit SFP+ ports (2))"}
+    ports:
+      - {role: uplink, count: 64, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 48 QSFP-DD and 2 SFP+ -----------------------------------------------------
+  N9K-C9348D-GX2A:
+    skus: [N9K-C9348D-GX2A]
+    display_name: "Cisco Nexus 9348D-GX2A, 48 QSFP-DD and 2 SFP+ (N9K-C9348D-GX2A)"
+    panel: {grade: inferred, ref: "Cisco N9348D-GX2A NX-OS Mode Switch Hardware Installation Guide, Overview (Updated July 28, 2026); Cisco N9300-GX2 Series Fixed Switches Data Sheet (last updated 07/16/26) (48 400G QSFP-DD and 2 1/10G SFP+); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (N9K-C9348D-GX2A, ports with a retimer: 1-48)", caveat: "Cisco's texts read give the counts, and number the QSFP-DD ports 1-48 only through the retimer table. That the two SFP+ ports are 49-50 is inferred from the 9364D-GX2A, whose SFP+ ports follow its 64 QSFP-DD ports."}
+    ports:
+      - {role: uplink, count: 48, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 32 QSFP-DD and 2 SFP+ -----------------------------------------------------
+  N9K-C9332D-GX2B:
+    skus: [N9K-C9332D-GX2B]
+    display_name: "Cisco Nexus 9332D-GX2B, 32 QSFP-DD and 2 SFP+ (N9K-C9332D-GX2B)"
+    panel: {grade: inferred, ref: "Cisco N9332D-GX2B NX-OS Mode Switch Hardware Installation Guide, Overview (Updated July 16, 2026) (32 400G QSFP-DD and 2 1/10G SFP+; N9K-C9332D-GX2B with 32GB memory and N9K-C9332D-GX2B-M with 64GB memory); Cisco Nexus 9000 ACI-Mode Switches Release Notes, Release 15.2(3), fixed-switch compatibility notes (ports 33 and 34 of the N9K-C9332D-GX2B do not support GLC-T, 100M and other features)", caveat: "Cisco's texts read give the counts. That the QSFP-DD ports are 1-32 is inferred from the count order; that the two SFP+ ports are 33-34 rests on an ACI-mode release note that names ports 33 and 34 without saying they are the SFP+ ports."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  N9K-C9332D-GX2B-M:
+    skus: [N9K-C9332D-GX2B-M]
+    display_name: "Cisco Nexus 9332D-GX2B-M, 32 QSFP-DD and 2 SFP+ (N9K-C9332D-GX2B-M)"
+    panel: {grade: inferred, ref: "Cisco N9332D-GX2B NX-OS Mode Switch Hardware Installation Guide, Overview (Updated July 16, 2026) (N9K-C9332D-GX2B-M, the 64GB memory build, with the ports of the N9K-C9332D-GX2B: 32 400G QSFP-DD and 2 1/10G SFP+); Cisco Nexus 9000 ACI-Mode Switches Release Notes, Release 15.2(3), fixed-switch compatibility notes (ports 33 and 34 of the N9K-C9332D-GX2B do not support GLC-T, 100M and other features)", caveat: "Cisco's texts read give the counts. That the QSFP-DD ports are 1-32 is inferred from the count order; that the two SFP+ ports are 33-34 rests on an ACI-mode release note that names ports 33 and 34 of the N9K-C9332D-GX2B without saying they are the SFP+ ports."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

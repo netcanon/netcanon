@@ -1754,7 +1754,8 @@ the mode allows; and when the vendor has no detector yet.  The first
 of `notes` says which.  None of these is an error: the answer is a 200
 either way.
 Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
-and Arista EOS configs today; no other vendor has a detector yet.
+and Arista EOS configs today; no other vendor has a detector yet.  An
+NX-OS running-config names no model, so a Nexus is declared by hand.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -2083,8 +2084,10 @@ nothing, as before.
 * Model families ship for a first set of Aruba AOS-S switches and
   for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
   9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), for
-  the Aruba CX 6300 and 6200, and for the Arista 7050X, 7050X3,
-  7060X, 7260X and 7280R3; `GET /model-families` is the
+  the Aruba CX 6300 and 6200, for the Arista 7050X, 7050X3,
+  7060X, 7260X and 7280R3, and for the Cisco Nexus 9300 (the first
+  generation, and the EX, FX, FX2, FX3, GX, GX2 and H models, the
+  9332C and the 9364C); `GET /model-families` is the
   current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
@@ -2105,7 +2108,11 @@ nothing, as before.
   (`Ethernet49/1`), and the names of its other lanes come back as
   off-inventory -- on a 7050X a QSFP+ port runs as four 10G
   interfaces until it is set to 40G.  An MLAG pair is two devices:
-  declare each.
+  declare each.  A Nexus port broken out into lanes (`Ethernet1/49/1`)
+  is not modelled either, and comes back as off-inventory; a vPC pair
+  is two devices too.  A first-generation Nexus's uplink module is
+  module 2 (`Ethernet2/1`); the 4-port CFP2 module is not offered in a
+  93128TX, whose active CFP2 ports Cisco's guide gives two ways.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

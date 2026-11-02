@@ -1407,7 +1407,7 @@ class TestPortNamesWithNoDevices:
             name for name in list_public_codecs()
             if not a_device_is_described(request, get_codec(name))
         }
-        assert none == {"cisco_iosxr", "cisco_nxos", "dell_os10", "vyos"}
+        assert none == {"cisco_iosxr", "dell_os10", "vyos"}
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_entries_settle_it_on_every_endpoint(

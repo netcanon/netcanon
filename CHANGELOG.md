@@ -672,6 +672,43 @@ timestamp if your timezone matters for an audit.
   device:` and cannot be read is counted.  Lines in a banner or another
   body that runs to `EOF` are not read.  The detector is
   `codecs/arista_eos/deployment_detect.py`.
+- **Cisco Nexus 9300 switches can be declared as a source or target
+  device.**  Ten model families, each with one mode, `standalone` -- a
+  switch on its own; the two switches of a vPC pair are two devices,
+  each declared.  The first generation is `9300` (the 9372PX, 9372PX-E,
+  9372TX, 9372TX-E, 93120TX, 9332PQ, 9396PX and 9396TX) and `93128TX`;
+  the Cloud Scale switches are `9300-EX`, `9300-FX`, `9300-FX2`,
+  `9300-FX3`, `9300-GX`, `9300-GX2`, `9332C-9364C` and `9300-H` (the
+  9364C-H1, 93400LD-H1 and 9332D-H2R).  Names come from a new `nxos`
+  naming rule: a port is `Ethernet<module>/<port>` (Cisco Nexus 9000
+  Series NX-OS Interfaces Configuration Guide, "Configuring Basic
+  Interface Parameters"), and a switch's own panel is module 1.  A
+  9396PX, 9396TX or 93128TX has one bay for an uplink module, and the
+  module is module 2, its ports `Ethernet2/1` onward (their hardware
+  installation guides): the N9K-M12PQ, M6PQ or M6PQ-E, and in a 9396
+  the N9K-M4PC-CFP2.  In a 93128TX only eight ports of the 12-port
+  module are active, so the switch is a family of its own; the CFP2
+  module is not offered there, because Cisco's guide gives its two
+  active ports in that switch as ports 3 and 4 and, in the same
+  chapter, as ports 1 and 2.  A port broken out into lanes
+  (`Ethernet1/49/1`) is not modelled, and each family's mode says so;
+  the 93180LC-EX is described in its default port mode.  The
+  management port is `mgmt0`, which belongs to no member.  Which ports
+  are uplinks follows the cage, as on the Arista families: a QSFP+,
+  QSFP28, QSFP-DD or CFP2 port is an uplink and an SFP or RJ45 port an
+  access port, which decides only how the ports of two devices are
+  paired; on a GX2, 9332C, 9364C, 9364C-H1 or 9332D-H2R the two SFP+
+  ports are numbered after the uplinks, and listed after them.  A
+  model's key is its product ID (`N9K-C93180YC-FX3`).  A name Cisco
+  numbers in a guide or a table is graded `vendor-doc`; 24 of the 39
+  panels, which Cisco numbers in a figure only or in no text read, are
+  `inferred` and say why, and so are the 6-port and CFP2 modules.  No
+  capture is claimed and nothing reads the switch from the config: an
+  NX-OS running-config names no model, so a Nexus is declared by hand.
+  In the Interface rename modal the target device's vendor is now
+  chosen for a target whose vendor has model families and no flat
+  profile, as NX-OS has; it was chosen from the profiles alone, and the
+  list of models stayed closed until a vendor was picked.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

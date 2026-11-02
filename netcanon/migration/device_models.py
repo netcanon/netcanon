@@ -975,6 +975,32 @@ def _eos_rule(request: PortNameRequest) -> str:
     )
 
 
+def _nxos_rule(request: PortNameRequest) -> str:
+    from .codecs.cisco_nxos.port_names import nexus_port_name
+
+    # A Nexus 9300 stands alone: the two switches of a vPC pair are two
+    # devices, each naming its ports without a member number.
+    if request.member_id is not None:
+        raise ValueError(
+            "a Nexus 9300 names a port without a member number; "
+            "the mode must not state `member_ids`"
+        )
+    # The switch's own panel is module 1.  A first-generation switch's
+    # uplink module is the module of the bay it is fitted in, which is
+    # numbered, from 2.
+    if request.slot and not (
+        request.slot.isascii() and request.slot.isdigit()
+        and int(request.slot) >= 2
+    ):
+        raise ValueError(
+            f"a Nexus 9300's own panel is module 1 and a module bay is "
+            f"numbered from 2; slot {request.slot!r} is not one"
+        )
+    return nexus_port_name(
+        module=int(request.slot or "1"), port=request.index0 + 1,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -1018,6 +1044,15 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "under `deployment_ports`"
             ),
             lanes=True,
+        ),
+        "nxos": NamingRuleSpec(
+            render=_nxos_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "a Nexus switch's management interface, `mgmt0`, is not "
+                "one of its numbered Ethernet ports; it is stated under "
+                "`deployment_ports`"
+            ),
         ),
     }
 

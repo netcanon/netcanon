@@ -1,0 +1,97 @@
+# Cisco Nexus 9300-GX: fixed switches of QSFP-DD and QSFP28 ports
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/29`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  The RJ-45 and SFP management connectors of these
+# models are that one interface, and only one is used (each model's
+# hardware installation guide).
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Every port of these models
+# is a QSFP28 or QSFP-DD port, so every port is an `uplink`, as in the
+# Arista families.  It decides only how the ports of two devices are
+# paired, and says nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout, and the ports that take a QSA
+#           adapter.
+#   DSGX    Cisco Nexus 9300-GX Series Switches Data Sheet (Updated
+#           September 16, 2025).
+#   G...    Each model's NX-OS Mode Hardware Installation Guide,
+#           Overview.
+#
+# Every panel of this file is graded vendor-doc: a Cisco text numbers
+# each model's ports in words.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.  On the 9364C-GX, breaking out an
+#     odd port of a quad removes the even ports of that quad (IF104);
+#     on the 93600CD-GX, a 4x10G or 4x25G breakout of an odd port of
+#     1-23 makes its even partner inactive (its guide).
+schema: 1
+vendor: cisco_nxos
+family: "9300-GX"
+display_name: "Cisco Nexus 9300-GX"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/1/1 is not on this inventory. On the 9364C-GX, breaking out an odd port of a quad removes the even ports of that quad. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. The model's SFP management connector is this one interface too, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); Cisco Nexus 9300-GX Series Switches Data Sheet (Updated September 16, 2025) (management ports: 1 RJ-45 and 1 SFP); each model's NX-OS Mode Hardware Installation Guide (an RJ-45 and an SFP out-of-band management port; the switch does not support the use of both)"}
+
+models:
+  # --- 16 QSFP-DD ----------------------------------------------------------------
+  N9K-C9316D-GX:
+    skus: [N9K-C9316D-GX]
+    display_name: "Cisco Nexus 9316D-GX, 16 QSFP-DD (N9K-C9316D-GX)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 9316D-GX NX-OS Mode Hardware Installation Guide (First Published 2019-10-21, Last Modified 2023-09-12), Overview (16 x 400/100-Gbps QSFP-DD ports); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x) (for N9K-C9316D-GX, ports 1-16 support 400G/100G/40G, and 10G with QSA)"}
+    ports:
+      - {role: uplink, count: 16, speed: 400gig, cage: qsfp-dd}
+
+  # --- 28 QSFP28 and 8 QSFP-DD ---------------------------------------------------
+  N9K-C93600CD-GX:
+    skus: [N9K-C93600CD-GX]
+    display_name: "Cisco Nexus 93600CD-GX, 28 QSFP28 and 8 QSFP-DD (N9K-C93600CD-GX)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 93600CD-GX NX-OS Mode Hardware Installation Guide (First Published 2019-12-23, Last Modified 2026-07-28), Overview (28 10/40/100-Gigabit QSFP28 ports, ports 1-28; 8 10/40/100/400-Gigabit QSFP-DD ports, ports 29-36); Cisco Nexus 9300-GX Series Switches Data Sheet (Updated September 16, 2025) (28 100/40G QSFP28 and 8 400/100G QSFP-DD)"}
+    ports:
+      - {role: uplink, count: 28, speed: 100gig, cage: qsfp28}
+      - {role: uplink, count: 8, speed: 400gig, cage: qsfp-dd}
+
+  # --- 64 QSFP28 -----------------------------------------------------------------
+  N9K-C9364C-GX:
+    skus: [N9K-C9364C-GX]
+    display_name: "Cisco Nexus 9364C-GX, 64 QSFP28 (N9K-C9364C-GX)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 9364C-GX NX-OS Mode Switch Hardware Installation Guide (First Published 2019-12-23), Overview (64 100-Gigabit QSFP28 ports, in quads 1-4, 5-8 and so on of ports 1 through 64); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (the quads of the N9K-C9364C-GX's ports 1 through 64)"}
+    ports:
+      - {role: uplink, count: 64, speed: 100gig, cage: qsfp28}

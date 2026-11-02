@@ -1,0 +1,125 @@
+# Cisco Nexus 9300-FX2: the 9336C-FX2 of 36 QSFP28 ports, and the
+# switches of 48 or 96 SFP28 or 10GBASE-T ports and 12 QSFP28 uplinks
+#
+# A fixed switch that stands alone: the two switches of a vPC pair are
+# two devices, and neither puts a member number in a name.  How a name
+# is made is Cisco's (IF93, "Configuring Basic Interface Parameters",
+# Information Needed to Identify an Interface for Configurations): an
+# Ethernet port is `ethernet slot/port`, printed `Ethernet1/49`, and a
+# fixed switch's own ports are module 1.  A port broken out into lanes
+# is `Ethernet1/<port>/<lane>` (IF104, breakout) and is not modelled
+# yet: the mode's caveat says so.
+#
+# The management port is `mgmt0` (IF93), declared once under
+# `deployment_ports`.  The RJ-45 and SFP management connectors of these
+# models are that one interface, and only one is used (each model's
+# hardware installation guide).
+#
+# A running-config never names the switch's model, so no detector
+# reads one and no capture is claimed: no committed capture is of a
+# named physical Nexus 9300.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the cage, as in the Arista families: a
+# QSFP28 port is an uplink, and an SFP28 or RJ45 port an access port.
+# It decides only how the ports of two devices are paired, and says
+# nothing about how a switch is cabled (the 93240YC-FX2's guide says
+# its QSFP28 ports can be configured as downlinks).
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IF93    Cisco Nexus 9000 Series NX-OS Interfaces Configuration
+#           Guide, Release 9.3(x), "Configuring Basic Interface
+#           Parameters".
+#   IF104   The same guide, Release 10.4(x) (First Published
+#           2023-08-18): breakout, the SFP-10G-T-X default port maps,
+#           the ports that take a QSA adapter, and autonegotiation.
+#   IF106   The same guide, Release 10.6(x), "Configuring Basic
+#           Interface Parameters", Table 4 (the ports that have a
+#           retimer, per model).
+#   DSFX2   Cisco Nexus 9300-FX2 Series Switches Data Sheet
+#           (C78-742282, August 19, 2025).
+#   G...    Each model's NX-OS Mode Hardware Installation Guide,
+#           Overview.
+#
+# The 93360YC-FX2's port numbers are read from two tables of IF104 and
+# IF106 that each name ports of it, not from one list: graded
+# vendor-doc, with a caveat that says so.
+#
+# Graded inferred, each with its reason in its caveat: the 93240YC-FX2's
+# and 93216TC-FX2's port numbers, which their guides give in a figure
+# only.  They are taken from the count order that every model numbered
+# in words follows.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * A port broken out into lanes.
+#   * The N9K-C93240YC-FX2-Z, which Cisco's interfaces guides name
+#     beside the 93240YC-FX2 and its data sheet's ordering table does
+#     not list.
+schema: 1
+vendor: cisco_nxos
+family: "9300-FX2"
+display_name: "Cisco Nexus 9300-FX2"
+naming: nxos
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters, Information Needed to Identify an Interface for Configurations (an Ethernet port is identified by its I/O module slot number and its port number on the module, written ethernet slot/port, no space required between the two); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), breakout (a broken-out port is Ethernet slot/front-panel-port/breakout-port, as Ethernet 1/2/1 to 1/2/4, and the command names a fixed switch's ports as module 1: interface breakout module 1 port <n> map 10g-4x)"
+    caveat: "Each port is listed as one interface, Ethernet1/<port>. A port broken out into lanes (interface breakout module 1 port <n> map 10g-4x) is an interface for each lane, Ethernet1/<port>/<lane>, and those are not modelled: a source port Ethernet1/49/1 is not on this inventory. The two switches of a vPC pair are two devices: declare each."
+
+deployment_ports:
+  - name: mgmt0
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band management port. The model's SFP management connector is this one interface too, and only one of them is used"
+    naming: {grade: vendor-doc, ref: "Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 9.3(x), Configuring Basic Interface Parameters (for the management interface, use mgmt0; the management interface is either mgmt0 or mgmt 0); each model's NX-OS Mode Hardware Installation Guide (an RJ-45 and an SFP out-of-band management port; the switch does not support the use of both)"}
+
+models:
+  # --- 36 QSFP28 -----------------------------------------------------------------
+  N9K-C9336C-FX2:
+    skus: [N9K-C9336C-FX2]
+    display_name: "Cisco Nexus 9336C-FX2, 36 QSFP28 (N9K-C9336C-FX2)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 9336C-FX2 NX-OS Mode Hardware Installation Guide (Last Modified 2018-11-01), Overview (36 40/100-Gigabit QSFP28 ports; 10-Gigabit with a QSA adapter on ports 1-36 and 1-Gigabit with a QSA adapter on ports 7-32); Cisco Nexus 9300-FX2 Series Switches Data Sheet (C78-742282, August 19, 2025), ordering (36 40/100G QSFP28)"}
+    ports:
+      - {role: uplink, count: 36, speed: 100gig, cage: qsfp28}
+
+  N9K-C9336C-FX2-E:
+    skus: [N9K-C9336C-FX2-E]
+    display_name: "Cisco Nexus 9336C-FX2-E, 36 QSFP28 (N9K-C9336C-FX2-E)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 9300-FX2 Series Switches Data Sheet (C78-742282, August 19, 2025), ordering (N9K-C9336C-FX2-E, 36 40/100G QSFP28); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), the ports that take a QSA adapter (N9K-C9336C-FX2-E: 1-Gigabit on ports 9-36, from 10.1(1)); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (ports with a retimer: 1-8)"}
+    ports:
+      - {role: uplink, count: 36, speed: 100gig, cage: qsfp28}
+
+  # --- 48 SFP28 and 12 QSFP28 ----------------------------------------------------
+  N9K-C93240YC-FX2:
+    skus: [N9K-C93240YC-FX2]
+    display_name: "Cisco Nexus 93240YC-FX2, 48 SFP28 and 12 QSFP28 (N9K-C93240YC-FX2)"
+    panel: {grade: inferred, ref: "Cisco Nexus 93240YC-FX2 NX-OS Mode Hardware Installation Guide (Last Modified 2020-07-22), Overview (48 1/10/25-Gigabit Ethernet SFP28 ports and 12 40/100-Gigabit Ethernet QSFP28 ports); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), the SFP-10G-T-X default port map (SFP ports up to 48) and autonegotiation (ports 51-54); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (ports with a retimer: 51-54)", caveat: "Cisco's texts read give the counts, and number no port of this model but SFP ports within 1-48 and QSFP28 ports 51-54. That the SFP28 ports are 1-48 and the QSFP28 ports 49-60 is inferred from those and the count order."}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 12, speed: 100gig, cage: qsfp28}
+
+  # --- 96 SFP28 or 10GBASE-T and 12 QSFP28 ---------------------------------------
+  N9K-C93360YC-FX2:
+    skus: [N9K-C93360YC-FX2]
+    display_name: "Cisco Nexus 93360YC-FX2, 96 SFP28 and 12 QSFP28 (N9K-C93360YC-FX2)"
+    panel: {grade: vendor-doc, ref: "Cisco Nexus 93360YC-FX2 NX-OS Mode Hardware Installation Guide, Overview (96 10/25-Gigabit SFP28 ports and 12 40/100-Gigabit QSFP28 ports); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.4(x), the SFP-10G-T-X default port map (N9K-C93360YC-FX2: SFP ports up to 96); Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide, Release 10.6(x), Configuring Basic Interface Parameters, Table 4 (N9K-C93360YC-FX2, ports with a retimer: 97-108)", caveat: "No Cisco text read numbers this model's ports in one list: ports 1-96 and 97-108 are read from two tables of the interfaces guides that each name ports of it."}
+    ports:
+      - {role: access, count: 96, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 12, speed: 100gig, cage: qsfp28}
+
+  N9K-C93216TC-FX2:
+    skus: [N9K-C93216TC-FX2]
+    display_name: "Cisco Nexus 93216TC-FX2, 96 10GBASE-T and 12 QSFP28 (N9K-C93216TC-FX2)"
+    panel: {grade: inferred, ref: "Cisco Nexus 93216TC-FX2 NX-OS Mode Hardware Installation Guide (First Published 2019-09-16), Overview (96 100M/1G/10G RJ45 ports, 12 40/100-Gigabit QSFP28 ports, 2 management ports: one RJ-45 port and one SFP port); Cisco Nexus 9300-FX2 Series Switches Data Sheet (C78-742282, August 19, 2025)", caveat: "Cisco's texts read give the counts and number no port of this model. That the 10GBASE-T ports are 1-96 and the QSFP28 ports 97-108 is inferred from the count order, which every Nexus 9300 numbered in words follows."}
+    ports:
+      - {role: access, count: 96, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 12, speed: 100gig, cage: qsfp28}
