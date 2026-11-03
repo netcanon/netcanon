@@ -1,0 +1,59 @@
+# Cisco NCS 540 large density routers on IOS XR, the models of Cisco's
+# "Cisco NCS 540 Large Density Routers Hardware Installation Guide": the
+# N540-24Q2C2DD-SYS.
+#
+# A fixed router stands alone, as rack 0, slot 0.  A port is
+# <Type>0/0/0/<port> (the guide, Cisco NCS 540 Large Density Routers
+# Overview: "The interface-path-id is rack/slot/module/port"), counting
+# from 0.  The management port is MgmtEth0/RP0/CPU0/0, declared once
+# under `deployment_ports`.
+#
+# The guide numbers the ports and gives each the speeds it runs at, but
+# prints no interface type for them.  This file names each port at its
+# top speed, none broken out (that is the mode's label), by the IOS XR
+# type of that speed, and grades the panel `inferred` for it.
+#
+# `ports:` lists are in PORT-NUMBER order: on this router the QSFP-class
+# ports come first.  A port is an `uplink` when it is of the model's
+# fastest class of cage, the QSFP-class ports; the SFP28 ports are
+# access ports.  It says nothing about how a router is cabled.
+#
+# An IOS XR running-config names no model, so a router is declared by
+# hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The N540-24Q8L2DD-SYS, whose SFP56 ports 2 to 9 run at 50G: the
+#     interface type of a 50G port is not one this rule names.
+#   * Any port broken out, and any port named at a speed below its top.
+schema: 1
+vendor: cisco_iosxr
+family: "NCS540-large-density"
+display_name: "Cisco NCS 540 large density"
+naming: iosxr
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its top speed and none broken out, each named whole (<Type>0/0/0/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco NCS 540 Large Density Routers Hardware Installation Guide, Cisco NCS 540 Large Density Routers Overview (the interface-path-id is rack/slot/module/port; each model's Port Numbering table)"
+      caveat: "Each port is listed once, under the interface type of its top speed. The type follows the optic fitted: a QSFP56-DD port holding a 100G optic is HundredGigE0/0/0/<port>, not FourHundredGigE0/0/0/<port>, and such a source port is not on this inventory by its own name. A fixed router is rack 0, slot 0: declare each router."
+
+deployment_ports:
+  - name: MgmtEth0/RP0/CPU0/0
+    role: mgmt
+    notes: "Out-of-band management port"
+    naming: {grade: inferred, ref: "Interface and Hardware Component Configuration Guide for Cisco NCS 5500 Series Routers, IOS XR Release 7.8.x, Advanced Configuration and Modification of the Management Ethernet Interface (interface MgmtEth 0/RP0/CPU0/0); Cisco's published Agile Metro design configurations (github.com/ios-xr/design, directory Agile-Metro) of NCS 540 routers, which configure MgmtEth0/RP0/CPU0/0", caveat: "No Cisco text read names the management port of a large density router. That it is MgmtEth0/RP0/CPU0/0 is inferred from the NCS 5500 guide and from Cisco's configurations of other NCS 540 routers."}
+
+models:
+  # --- 2 QSFP56-DD, 2 QSFP28 and 24 SFP28 ---------------------------------------
+  N540-24Q2C2DD-SYS:
+    skus: [N540-24Q2C2DD-SYS]
+    display_name: "Cisco NCS 540, 2 QSFP56-DD, 2 QSFP28 and 24 SFP28 (N540-24Q2C2DD-SYS)"
+    panel: {grade: inferred, ref: "Cisco NCS 540 Large Density Routers Hardware Installation Guide, Cisco NCS 540 Large Density Routers Overview, Table 3 (Port Numbering: 40G/100G/200G/400G QSFP56-DD ports 0 and 1, 40G/100G QSFP28 ports 2 and 3, 1G/10G/25G SFP28 ports 4 to 27) and Table 4 (Maximum Number of Interfaces for Cisco N540-24Q2C2DD-SYS: 400GE 0/0-0/1, 100GE 0/0-0/3, 25GE 0/4-0/27)", caveat: "The guide numbers each port and gives its speeds, not its interface type. That ports 0 and 1 are FourHundredGigE, ports 2 and 3 HundredGigE and ports 4 to 27 TwentyFiveGigE, the IOS XR type of each port's top speed, is inferred."}
+    ports:
+      - {role: uplink, count: 2, prefix: FourHundredGigE, speed: 400gig, cage: qsfp-dd}
+      - {role: uplink, count: 2, prefix: HundredGigE, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 24, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}

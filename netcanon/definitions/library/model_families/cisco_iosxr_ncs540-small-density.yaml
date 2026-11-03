@@ -1,0 +1,83 @@
+# Cisco NCS 540 small density routers on IOS XR, the models of Cisco's
+# "Cisco Network Convergence System 540 Small Density Routers Hardware
+# Installation Guide": the N540X-6Z18G-SYS-A/D, the N540X-4Z14G2Q-A/D
+# and the N540X-6Z6G-SYS.
+#
+# A fixed router stands alone, as rack 0, slot 0.  A port is
+# <Type>0/0/0/<port> (the guide, Cisco NCS 540 Small Density Routers
+# Overview: "The interface-path-id is rack / slot / module / port"),
+# counting from 0.  The management port is MgmtEth0/RP0/CPU0/0,
+# declared once under `deployment_ports`.
+#
+# The interface type names the speed a port runs at, and that follows
+# the optic fitted: the guide lists the N540X-6Z6G-SYS's ports 6 to 11
+# as "GigE/TenGigE".  This file names each port at its top speed, none
+# broken out: that is the mode's label.  The guide writes GigE for the
+# GigabitEthernet type.
+#
+# `ports:` lists are in PORT-NUMBER order.  These routers have no
+# QSFP-class port, so a port is an `uplink` when it is of the model's
+# top speed, and the others are access ports.  It says nothing about
+# how a router is cabled.
+#
+# Part numbers.  The key of each model is its first part number; the
+# -A and -D variants (AC and DC power) list the same ports.  An IOS XR
+# running-config names no model, so a router is declared by hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The N540X-8Z16G-SYS-A/D, whose ports 9, 10, 13, 14, 17, 18, 21
+#     and 22 are enabled only with CSFP optical modules (the guide,
+#     Table 3): which of its ports exist depends on the optics, and one
+#     inventory cannot say it.
+#   * Any port broken out, and any port named at a speed below its top.
+schema: 1
+vendor: cisco_iosxr
+family: "NCS540-small-density"
+display_name: "Cisco NCS 540 small density"
+naming: iosxr
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its top speed and none broken out, each named whole (<Type>0/0/0/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco Network Convergence System 540 Small Density Routers Hardware Installation Guide, Cisco NCS 540 Small Density Routers Overview (the interface-path-id is rack/slot/module/port; each model's Port Numbering table)"
+      caveat: "Each port is listed once, under the interface type of its top speed. The type follows the optic fitted: an SFP+ port holding a 1G optic is GigabitEthernet0/0/0/<port>, not TenGigE0/0/0/<port>, and such a source port is not on this inventory by its own name. A fixed router is rack 0, slot 0: declare each router."
+
+deployment_ports:
+  - name: MgmtEth0/RP0/CPU0/0
+    role: mgmt
+    notes: "Out-of-band management port"
+    naming: {grade: inferred, ref: "Interface and Hardware Component Configuration Guide for Cisco NCS 5500 Series Routers, IOS XR Release 7.8.x, Advanced Configuration and Modification of the Management Ethernet Interface (interface MgmtEth 0/RP0/CPU0/0); Cisco's published Agile Metro design configurations (github.com/ios-xr/design, directory Agile-Metro) of NCS 540 routers, which configure MgmtEth0/RP0/CPU0/0", caveat: "No Cisco text read names the management port of a small density router. That it is MgmtEth0/RP0/CPU0/0 is inferred from the NCS 5500 guide and from Cisco's configurations of other NCS 540 routers."}
+
+models:
+  # --- 18 SFP and 6 SFP+ ------------------------------------------------------
+  N540X-6Z18G-SYS-A:
+    skus: [N540X-6Z18G-SYS-A, N540X-6Z18G-SYS-D]
+    display_name: "Cisco NCS 540, 18 1G and 6 SFP+ (N540X-6Z18G-SYS-A, -D)"
+    panel: {grade: vendor-doc, ref: "Cisco Network Convergence System 540 Small Density Routers Hardware Installation Guide, Cisco NCS 540 Small Density Routers Overview, Table 1 (Port Numbering of the N540X-6Z18G-SYS-A/D: 1G ports 0/0 to 0/17, 1G/10G dual rate SFP+ ports 0/18 to 0/23; GigE 0/0/0/0 - 0/0/0/17, TenGigE 0/0/0/18 - 0/0/0/23)", caveat: "The guide calls the 1G ports SFP in the table and SFP+ in its list of the router's network interfaces, so their cage is not stated here."}
+    ports:
+      - {role: access, count: 18, prefix: GigabitEthernet, speed: gig}
+      - {role: uplink, count: 6, prefix: TenGigE, speed: 10gig, cage: sfp+}
+
+  # --- 4 combo, 10 SFP, 4 SFP+ and 2 SFP28 -------------------------------------
+  N540X-4Z14G2Q-A:
+    skus: [N540X-4Z14G2Q-A, N540X-4Z14G2Q-D]
+    display_name: "Cisco NCS 540, 4 1G combo, 10 SFP, 4 SFP+ and 2 SFP28 (N540X-4Z14G2Q-A, -D)"
+    panel: {grade: inferred, ref: "Cisco Network Convergence System 540 Small Density Routers Hardware Installation Guide, Cisco NCS 540 Small Density Routers Overview, Table 5 (Port Numbering of the N540X-4Z14G2Q-A/D: 1G copper/SFP combo ports 0/0 to 0/3, 1G SFP ports 0/4 to 0/13, 10G SFP+ ports 0/14 to 0/17, 25G SFP28 ports 0/18 and 0/19; 1GE Combo 0/0/0/0-0/0/0/3, 1GE SFP 0/0/0/4-0/0/0/13, 10GE 0/0/0/14-0/0/0/17, 25GE 0/0/0/18-0/0/0/19)", caveat: "The table gives each port's speed and path, not its interface type. That the ports are GigabitEthernet, TenGigE and TwentyFiveGigE, the IOS XR type of each speed, is inferred."}
+    ports:
+      - {role: access, count: 4, prefix: GigabitEthernet, speed: gig, cage: combo}
+      - {role: access, count: 10, prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: access, count: 4, prefix: TenGigE, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+
+  # --- 6 SFP and 6 SFP+ --------------------------------------------------------
+  N540X-6Z6G-SYS:
+    skus: [N540X-6Z6G-SYS]
+    display_name: "Cisco NCS 540, 6 SFP and 6 SFP+ (N540X-6Z6G-SYS)"
+    panel: {grade: vendor-doc, ref: "Cisco Network Convergence System 540 Small Density Routers Hardware Installation Guide, Cisco NCS 540 Small Density Routers Overview, Table 7 (Port Numbering of the N540X-6Z6G-SYS: 1G SFP ports 0/0 to 0/5, 1G/10G dual rate SFP+ ports 0/6 to 0/11; GigE 0/0/0/0 - 0/0/0/5, GigE/TenGigE 0/0/0/6 - 0/0/0/11)", caveat: "The guide gives the part number as N540X-6Z6G-SYS in its list of variants and as N540X-6Z6G-SYS-A/D in its list of the router's network interfaces; this model is the first."}
+    ports:
+      - {role: access, count: 6, prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 6, prefix: TenGigE, speed: 10gig, cage: sfp+}

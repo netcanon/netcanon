@@ -1,0 +1,125 @@
+# Cisco Network Convergence System 540 fixed routers on IOS XR, the
+# models of Cisco's "Cisco NCS 540 Router Hardware Installation Guide":
+# the N540-24Z8Q2C-SYS (and the N540X-ACC-SYS and N540-ACC-SYS, which
+# the guide lists as its variants), the N540-28Z4C-SYS-A/D, the
+# N540-12Z20G-SYS-A/D, the N540X-12Z16G-SYS-A/D, the N540X-16Z4G8Q2C-A/D
+# and the N540X-16Z8Q2C-D.
+#
+# A fixed router stands alone, as rack 0, slot 0.  A port is
+# <Type>0/0/<module>/<port> (the guide, Interface Naming: "The
+# interface-path-id is rack/ slot/ module/ port"), counting from 0
+# within its module.  The panel's ports are module 0, except the two
+# QSFP28 ports of an N540-24Z8Q2C-SYS, which are module 1 (`slot: "1"`
+# on their group).  The management port is MgmtEth0/RP0/CPU0/0,
+# declared once under `deployment_ports`.
+#
+# The interface type names the speed a port runs at, and that follows
+# the optic fitted, not the cage: the guide lists a dual-rate port under
+# each type it runs at (an N540-24Z8Q2C-SYS's ports 0 to 23 as GigE and
+# as TenGigE).  This file names each port at its top speed, none broken
+# out: that is the mode's label.  The guide writes GigE for the
+# GigabitEthernet type.
+#
+# `ports:` lists are in PORT-NUMBER order.  A port is an `uplink` when
+# it is of the model's fastest class of cage -- its QSFP-class ports
+# where it has any, otherwise the ports of its top speed -- and the
+# others are access ports.  It says nothing about how a router is
+# cabled.
+#
+# Sources.  Each `ref` names its document in full, because the refs are
+# served to API clients who cannot read this comment.  Cisco publishes
+# the configurations of its Agile Metro design (github.com/ios-xr/design,
+# directory Agile-Metro); one of them is of an N540X-16Z4G8Q2C-A, states
+# that part number, and names every one of its ports.
+#
+# Part numbers.  The key of each model is its first part number; the
+# -A and -D variants (AC and DC power) list the same ports.  An IOS XR
+# running-config names no model, so a router is declared by hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * Any port broken out (named by lane, <Type>0/0/0/<port>/<lane>),
+#     and any port named at a speed below its top.
+#   * The routers of Cisco's other NCS 540 guides: the small density and
+#     large density routers are families of their own; the fronthaul and
+#     the passive-cooled routers are not modelled.
+schema: 1
+vendor: cisco_iosxr
+family: "NCS540"
+display_name: "Cisco NCS 540"
+naming: iosxr
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its top speed and none broken out, each named whole (<Type>0/0/<module>/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Interface Naming (the interface-path-id is rack/slot/module/port) and the Port Numbering table of each model (each port by interface type, as TenGigE 0/0/0/0 - 0/0/0/27, a dual-rate port listed under each type it runs at)"
+      caveat: "Each port is listed once, under the interface type of its top speed. The type follows the optic fitted: an SFP+ port holding a 1G optic is GigabitEthernet0/0/0/<port>, not TenGigE0/0/0/<port>, and such a source port is not on this inventory by its own name. A port broken out is named by lane (<Type>0/0/0/<port>/<lane>), and those names are not modelled. A fixed router is rack 0, slot 0: declare each router."
+
+deployment_ports:
+  - name: MgmtEth0/RP0/CPU0/0
+    role: mgmt
+    notes: "Out-of-band management port"
+    naming: {grade: inferred, ref: "Cisco's published Agile Metro design configurations (github.com/ios-xr/design, directory Agile-Metro), of an N540X-16Z4G8Q2C-A and of an N540-24Z8Q2C router, each of which configures its management port as MgmtEth0/RP0/CPU0/0", caveat: "Cisco's configurations show the name on two models of this family. That every model of it names its one management port so is inferred from them; no Cisco text read pairs the port on each model's panel with the name."}
+
+models:
+  # --- 24 SFP+, 8 SFP28 and 2 QSFP28 (module 1) -------------------------------
+  N540-24Z8Q2C-SYS:
+    skus: [N540-24Z8Q2C-SYS, N540X-ACC-SYS, N540-ACC-SYS]
+    display_name: "Cisco NCS 540, 24 SFP+, 8 SFP28 and 2 QSFP28 (N540-24Z8Q2C-SYS)"
+    panel: {grade: vendor-doc, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 1 (Cisco NCS 540 Variants) and Table 2 (Port Numbering: 1G/10G dual rate SFP+ ports 0/0 to 0/23, 1G/10G/25G dual rate SFP28 ports 0/24 to 0/31, 40G/100G QSFP28 ports 1/0 and 1/1; GigE and TenGigE 0/0/0/0 - 0/0/0/31, TwentyFiveGigE 0/0/0/24 - 0/0/0/31, FortyGigE and HundredGigE 0/0/1/0 - 0/0/1/1)"}
+    ports:
+      - {role: access, count: 24, prefix: TenGigE, speed: 10gig, cage: sfp+}
+      - {role: access, count: 8, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, slot: "1", prefix: HundredGigE, speed: 100gig, cage: qsfp28, notes: "Module 1: HundredGigE0/0/1/0 and HundredGigE0/0/1/1"}
+
+  # --- 28 SFP+ and 4 QSFP28 ---------------------------------------------------
+  N540-28Z4C-SYS-A:
+    skus: [N540-28Z4C-SYS-A, N540-28Z4C-SYS-D]
+    display_name: "Cisco NCS 540, 28 SFP+ and 4 QSFP28 (N540-28Z4C-SYS-A, -D)"
+    panel: {grade: vendor-doc, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 4 (Port Numbering of Cisco N540-28Z4C-SYS-A/D: 1G/10G dual rate SFP+ ports 0/0 to 0/27, 100G QSFP28 ports 0/28 to 0/31; GigE and TenGigE 0/0/0/0 - 0/0/0/27, HundredGigE 0/0/0/28 - 0/0/0/31)"}
+    ports:
+      - {role: access, count: 28, prefix: TenGigE, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, prefix: HundredGigE, speed: 100gig, cage: qsfp28}
+
+  # --- 20 SFP and 12 SFP+ -----------------------------------------------------
+  N540-12Z20G-SYS-A:
+    skus: [N540-12Z20G-SYS-A, N540-12Z20G-SYS-D]
+    display_name: "Cisco NCS 540, 20 SFP and 12 SFP+ (N540-12Z20G-SYS-A, -D)"
+    panel: {grade: vendor-doc, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 6 (Port Numbering of Cisco N540-12Z20G-SYS-A/D: 1G ports 0/0 to 0/31, 1G/10G dual rate ports 0/20 to 0/31; GigE 0/0/0/0 - 0/0/0/31, TenGigE 0/0/0/20 - 0/0/0/31) and its list of the router's network interfaces (20 x 1G ports and 12 x 1G/10G ports)", caveat: "The table gives every port as a 1G port and ports 20 to 31 also as 10G ones; that ports 0 to 19 are the 1G-only ports follows from the 20 x 1G and 12 x 1G/10G of the list. The guide calls the 1G ports SFP in the table and SFP+ in the list, so their cage is not stated here."}
+    ports:
+      - {role: access, count: 20, prefix: GigabitEthernet, speed: gig}
+      - {role: uplink, count: 12, prefix: TenGigE, speed: 10gig, cage: sfp+}
+
+  # --- 4 copper, 12 SFP and 12 SFP+ -------------------------------------------
+  N540X-12Z16G-SYS-A:
+    skus: [N540X-12Z16G-SYS-A, N540X-12Z16G-SYS-D]
+    display_name: "Cisco NCS 540, 4 1G copper, 12 SFP and 12 SFP+ (N540X-12Z16G-SYS-A, -D)"
+    panel: {grade: inferred, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 5 (Port Numbering of Cisco N540X-12Z16G-SYS-A/D: 1G copper ports 0/0 to 0/3, 1G SFP ports 0/4 to 0/15, 10G SFP+ ports 0/16 to 0/27; GigE 0/0/0/4 - 0/0/0/15, TenGigE 0/0/0/16 - 0/0/0/27)", caveat: "The table gives no interface type for the copper ports 0 to 3. That they are GigabitEthernet0/0/0/0 to GigabitEthernet0/0/0/3 is inferred from their speed, and from Cisco's published Agile Metro configuration of an N540X-16Z4G8Q2C-A, whose copper ports 0 to 3 are so named."}
+    ports:
+      - {role: access, count: 4, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: access, count: 12, prefix: GigabitEthernet, speed: gig, cage: sfp}
+      - {role: uplink, count: 12, prefix: TenGigE, speed: 10gig, cage: sfp+}
+
+  # --- 4 copper, 16 SFP+, 8 SFP28 and 2 QSFP28 --------------------------------
+  N540X-16Z4G8Q2C-A:
+    skus: [N540X-16Z4G8Q2C-A, N540X-16Z4G8Q2C-D]
+    display_name: "Cisco NCS 540, 4 1G copper, 16 SFP+, 8 SFP28 and 2 QSFP28 (N540X-16Z4G8Q2C-A, -D)"
+    panel: {grade: vendor-doc, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 7 (Port Numbering of Cisco N540X-16Z4G8Q2C-A/D: 1G copper ports 0/0 to 0/3, 1G/10G dual rate SFP+ ports 0/4 to 0/19, 1G/10G/25G dual rate SFP28 ports 0/20 to 0/27, 100G QSFP28 ports 0/28 and 0/29); Cisco's published Agile Metro design configuration of an N540X-16Z4G8Q2C-A (github.com/ios-xr/design, directory Agile-Metro), which names GigabitEthernet0/0/0/0 to 0/0/0/3, TenGigE0/0/0/4 to 0/0/0/19, TwentyFiveGigE0/0/0/20 to 0/0/0/27 and HundredGigE0/0/0/28 and 0/0/0/29", caveat: "Table 7's interface list gives TenGigE only for ports 20 to 27, where its column headings make ports 4 to 19 the 1G/10G SFP+ ports; that ports 4 to 19 are TenGigE follows the headings and Cisco's configuration."}
+    ports:
+      - {role: access, count: 4, prefix: GigabitEthernet, speed: gig, cage: rj45}
+      - {role: access, count: 16, prefix: TenGigE, speed: 10gig, cage: sfp+}
+      - {role: access, count: 8, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, prefix: HundredGigE, speed: 100gig, cage: qsfp28}
+
+  # --- 16 SFP+, 8 SFP28 and 2 QSFP28, no ports 0 to 3 --------------------------
+  N540X-16Z8Q2C-D:
+    skus: [N540X-16Z8Q2C-D]
+    display_name: "Cisco NCS 540, 16 SFP+, 8 SFP28 and 2 QSFP28 (N540X-16Z8Q2C-D)"
+    panel: {grade: inferred, ref: "Cisco NCS 540 Router Hardware Installation Guide, Cisco NCS 540 Router Overview, Table 8 (Port Numbering of Cisco N540X-16Z8Q2C-D: 1G/10G dual rate SFP+ ports 0/4 to 0/19, 1G/10G/25G dual rate SFP28 ports 0/20 to 0/27, 100G QSFP28 ports 0/28 and 0/29; GigE 0/0/0/4 - 0/0/0/27, TenGigE 0/0/0/20 - 0/0/0/27, TwentyFiveGigE 0/0/0/20 - 0/0/0/27, HundredGigE 0/0/0/28 - 0/0/0/29)", caveat: "The table numbers the ports from 4: the router has no ports 0 to 3. Its interface list gives TenGigE only for ports 20 to 27, where its column headings make ports 4 to 19 the 1G/10G SFP+ ports; that ports 4 to 19 are TenGigE is inferred from the headings."}
+    ports:
+      - {role: access, count: 16, skip: 4, prefix: TenGigE, speed: 10gig, cage: sfp+, notes: "Ports 4 to 19; the router has no ports 0 to 3"}
+      - {role: access, count: 8, prefix: TwentyFiveGigE, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, prefix: HundredGigE, speed: 100gig, cage: qsfp28}

@@ -1,0 +1,63 @@
+# Cisco 8200 series fixed routers on IOS XR: the Cisco 8201 (8201-SYS),
+# 24 400G QSFP-DD ports and 12 100G QSFP28 ports.
+#
+# A fixed router stands alone, as rack 0, slot 0.  A port is
+# <Type>0/0/0/<port> (Cisco's command reference for the 8000 series: "To
+# specify a physical interface, the notation for the interface-path-id
+# is rack/ slot/ module/ port"), counting from 0.  The management port
+# is MgmtEth0/RP0/CPU0/0, declared once under `deployment_ports`.
+#
+# Cisco's installation guide numbers the 8201's ports and gives each its
+# speeds, but prints no interface type for them.  This file names each
+# port at its top speed, none broken out (that is the mode's label), by
+# the IOS XR type of that speed.  Cisco's published Converged SDN
+# Transport configurations (github.com/ios-xr/design, directory
+# Converged-SDN-Transport/v5) include two of 8201 routers, by their file
+# names, that name every port so; neither states a model, and the design
+# guide they belong to lists those routers as another model, so the
+# panel is graded `inferred`.
+#
+# `ports:` lists are in PORT-NUMBER order.  Every port of the 8201 is of
+# a QSFP class, so every port is an `uplink`.  It says nothing about how
+# a router is cabled.
+#
+# An IOS XR running-config names no model, so a router is declared by
+# hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The 8201-32FH, 8201-24H8FH, 8202, 8202-32FH-M and 8212-48FH-M:
+#     Cisco's installation guide shows their panels, and no Cisco text
+#     read numbers their ports by speed.
+#   * The 8100 and 8010 series, and the 8700 series.
+#   * Any port broken out, and any port named at a speed below its top.
+schema: 1
+vendor: cisco_iosxr
+family: "8200"
+display_name: "Cisco 8200"
+naming: iosxr
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its top speed and none broken out, each named whole (<Type>0/0/0/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Component Command Reference for Cisco 8000 Series Routers, Ethernet Interface Commands (to specify a physical interface, the notation for the interface-path-id is rack/slot/module/port; rack is the chassis number, slot the physical slot number of the line card, module the module number, always 0, port the physical port number of the interface)"
+      caveat: "Each port is listed once, under the interface type of its top speed. The type follows the optic fitted: a QSFP-DD port holding a 100G optic is HundredGigE0/0/0/<port>, not FourHundredGigE0/0/0/<port>, and such a source port is not on this inventory by its own name. A port broken out is named by lane (<Type>0/0/0/<port>/<lane>), and those names are not modelled. A fixed router is rack 0, slot 0: declare each router."
+
+deployment_ports:
+  - name: MgmtEth0/RP0/CPU0/0
+    role: mgmt
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Cisco 8000 Series Routers Hardware Installation Guide for fixed-port routers, Connect Router to the Network, Create the Initial Router Configuration (the IP address and netmask needed for the Management interfaces: MgmtEth0/RP0/CPU0/0)", caveat: "The guide's chapter is for the fixed-port routers of the series and pairs no port on a model's panel with the name."}
+
+models:
+  # --- 24 QSFP-DD and 12 QSFP28 -----------------------------------------------
+  8201-SYS:
+    skus: [8201-SYS]
+    display_name: "Cisco 8201, 24 QSFP-DD and 12 QSFP28 (8201-SYS)"
+    panel: {grade: inferred, ref: "Cisco 8000 Series Routers Hardware Installation Guide for fixed-port routers, Connect Router to the Network, Figure 1 (Cisco 8201 Fixed Port Router - Front View: 400G ports, port 0 to port 23, supporting 40GE, 100GE, 200GE and 400GE; 100G ports, port 24 to port 35, supporting 100G and 40G); End-of-Sale and End-of-Life Announcement for the Cisco Select 8K 1st Gen Products (8201-SYS: Cisco 8201 Chassis with 24x400GE QSFP56-DD and 12x100GE QSFP28); Cisco's published Converged SDN Transport configurations (github.com/ios-xr/design, directory Converged-SDN-Transport/v5) of two 8201 routers, which name FourHundredGigE0/0/0/0 to FourHundredGigE0/0/0/23 and HundredGigE0/0/0/24 to HundredGigE0/0/0/35", caveat: "The installation guide numbers each port and gives its speeds, not its interface type. That ports 0 to 23 are FourHundredGigE and ports 24 to 35 HundredGigE, the IOS XR type of each port's top speed, is inferred; Cisco's configurations name them so, and state no model."}
+    ports:
+      - {role: uplink, count: 24, prefix: FourHundredGigE, speed: 400gig, cage: qsfp-dd}
+      - {role: uplink, count: 12, prefix: HundredGigE, speed: 100gig, cage: qsfp28}

@@ -833,6 +833,41 @@ timestamp if your timezone matters for an audit.
   S4248FB and S4248FBL, the S5448F and S5148F, and the N3200 models
   other than the N3248TE; nor is the E3224F, whose ports no Dell text
   read gives.
+- **Cisco IOS XR routers can be declared as a source or target
+  device.**  Five model families: the NCS 540 (N540-24Z8Q2C-SYS,
+  N540-28Z4C-SYS, N540-12Z20G-SYS, N540X-12Z16G-SYS, N540X-16Z4G8Q2C
+  and N540X-16Z8Q2C-D), the NCS 540 small density (N540X-6Z18G-SYS,
+  N540X-4Z14G2Q and N540X-6Z6G-SYS), the NCS 540 large density
+  (N540-24Q2C2DD-SYS), the NCS 5500 fixed-port (NCS-5501-SE and
+  NCS-55A1-36H) and the 8200 (8201-SYS).  Each has one mode,
+  `standalone`: a router on its own, rack 0, slot 0.  Names come from
+  a new `iosxr` naming rule (`iosxr_port_name` beside the IOS XR
+  codec): a port is `<Type>0/0/<module>/<port>`, counting from 0
+  (Cisco's guides give the interface-path-id as
+  rack/slot/module/port), and the rule refuses a member id and a group
+  `slot` of 0, the panel's own run of ports.  The N540-24Z8Q2C-SYS's
+  QSFP28 ports and the NCS-5501-SE's are module 1
+  (`HundredGigE0/0/1/0`).  The type follows the optic, and a family
+  names every port whole, by the type of its top speed; a port that
+  holds a slower optic, or a lane of a port broken out, comes back as
+  off-inventory.  The management port is `MgmtEth0/RP0/CPU0/0`.  A
+  port is an uplink when it is of the router's fastest class of cage:
+  its QSFP-class ports, or, on a router with none, the ports of its
+  top speed.  A panel that Cisco's installation guide numbers with
+  each port's type is `vendor-doc`; one it numbers without the type,
+  or whose numbering comes from Cisco's published design
+  configurations, which state no model, is `inferred`, and says why.
+  No capture is claimed, and nothing reads the router from the config:
+  an IOS XR running-config names no model.  Not described, each for a
+  reason its family's file gives: the N540X-8Z16G-SYS, the
+  N540-24Q8L2DD-SYS, the NCS-5501, NCS-5502, NCS-5502-SE,
+  NCS-55A1-24H, NCS-55A1-48Q6H and NCS-55A1-24Q6H-S, the NCS-55A2-MOD
+  routers, the 8201-32FH, 8201-24H8FH, 8202, 8202-32FH-M and
+  8212-48FH-M, and the 8100, 8010 and 8700 series.  With IOS XR
+  described, VyOS is the one vendor of which no device can be
+  declared, and a job's sentence offers both devices for an IOS XR
+  job where a hardware port is among what it lists and the other
+  side's vendor has a device too.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

@@ -1074,6 +1074,36 @@ def _os10_rule(request: PortNameRequest) -> str:
     return os10_port_name(port=request.index0 + 1)
 
 
+def _iosxr_rule(request: PortNameRequest) -> str:
+    from .codecs.cisco_iosxr.port_names import iosxr_port_name
+
+    # A fixed IOS XR router stands alone, as rack 0, slot 0: its port
+    # names carry no member number.
+    if request.member_id is not None:
+        raise ValueError(
+            "a fixed IOS XR router names a port as rack 0, slot 0, "
+            "with no member number; the mode must not state "
+            "`member_ids`"
+        )
+    # The panel's ports are module 0, written as no slot; a run of
+    # them numbered apart (an N540-24Z8Q2C-SYS's QSFP28 ports) is
+    # module 1.
+    if request.slot and not (
+        request.slot.isascii() and request.slot.isdigit()
+        and int(request.slot) >= 1
+    ):
+        raise ValueError(
+            f"an IOS XR module is numbered, and module 0 is the "
+            f"panel's own run of ports, which states no slot; slot "
+            f"{request.slot!r} is not module 1 or above"
+        )
+    # Ports count from 0 within their module.
+    return iosxr_port_name(
+        port_type=request.group.prefix, module=int(request.slot or "0"),
+        port=request.index0,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -1146,6 +1176,16 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "under `deployment_ports`"
             ),
         ),
+        "iosxr": NamingRuleSpec(
+            render=_iosxr_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an IOS XR router's management interface, "
+                "`MgmtEth0/RP0/CPU0/0`, is not one of its numbered "
+                "ports; it is stated under `deployment_ports`"
+            ),
+            prefixes=_iosxr_port_types(),
+        ),
     }
 
 
@@ -1159,6 +1199,12 @@ def _junos_media() -> frozenset[str]:
     from .codecs.juniper_junos.port_names import EX_QFX_MEDIA
 
     return EX_QFX_MEDIA
+
+
+def _iosxr_port_types() -> frozenset[str]:
+    from .codecs.cisco_iosxr.port_names import IOSXR_PORT_TYPES
+
+    return IOSXR_PORT_TYPES
 
 
 # ---------------------------------------------------------------------------

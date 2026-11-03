@@ -24,6 +24,10 @@ from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
     CATALYST_PORT_TYPES,
     catalyst_port_name,
 )
+from netcanon.migration.codecs.cisco_iosxr.port_names import (
+    classify_port_name as classify_iosxr_port_name,
+)
+from netcanon.migration.codecs.cisco_iosxr.port_names import iosxr_port_name
 from netcanon.migration.codecs.cisco_nxos.port_names import nexus_port_name
 from netcanon.migration.codecs.dell_os10.port_names import (
     classify_port_name as classify_os10_port_name,
@@ -735,6 +739,153 @@ class TestAGroupThatSkipsPortNumbers:
             DeviceModelRegistry([_family(data)]),
         )
         assert inv.names() == [f"ethernet1/1/{n}" for n in range(1, 7)]
+
+
+# ---------------------------------------------------------------------------
+# The IOS XR naming rule
+# ---------------------------------------------------------------------------
+
+
+def _iosxr_request(
+    index0: int, *, prefix: str = "TenGigE", slot: str = "", member_id=None,
+) -> dm.PortNameRequest:
+    group = dm.PortGroup(role="uplink", count=1, prefix=prefix)
+    return dm.PortNameRequest(
+        mode="standalone", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+#: A made-up family in the IOS XR grammar: four ports on the panel, and
+#: two on module 1.  None of this is a claim about real hardware.
+XRBOX_YAML = """
+schema: 1
+vendor: cisco_iosxr
+family: Xrbox
+naming: iosxr
+default_mode: standalone
+modes:
+  standalone: {label: "standalone", naming: {grade: vendor-doc}}
+models:
+  XB-6:
+    panel: {grade: vendor-doc}
+    ports:
+      - {role: access, count: 4, prefix: TenGigE}
+      - {role: uplink, count: 2, slot: "1", prefix: HundredGigE}
+"""
+
+
+class TestIosXrPortName:
+    @pytest.mark.parametrize(
+        ("port_type", "module", "port", "printed"),
+        [
+            # Cisco NCS 540 Router Hardware Installation Guide, Interface
+            # Naming, of an N540-24Z8Q2C-SYS: its first SFP+ port, and
+            # the second of the two QSFP28 ports of its module 1
+            # (`HundredGigE0/0/1/0-1`).
+            ("TenGigE", 0, 0, "TenGigE0/0/0/0"),
+            ("HundredGigE", 1, 1, "HundredGigE0/0/1/1"),
+            # Cisco's published Agile Metro design configuration of an
+            # N540X-16Z4G8Q2C-A (github.com/ios-xr/design, directory
+            # Agile-Metro): its first copper port and its first SFP28
+            # port.
+            ("GigabitEthernet", 0, 0, "GigabitEthernet0/0/0/0"),
+            ("TwentyFiveGigE", 0, 20, "TwentyFiveGigE0/0/0/20"),
+            # Cisco's published Converged SDN Transport configurations
+            # (github.com/ios-xr/design, directory
+            # Converged-SDN-Transport/v5): the last QSFP-DD port of an
+            # 8201, and the last QSFP28 port of a router whose QSFP28
+            # ports are module 1.
+            ("FourHundredGigE", 0, 23, "FourHundredGigE0/0/0/23"),
+            ("HundredGigE", 1, 3, "HundredGigE0/0/1/3"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, port_type, module, port, printed):
+        assert iosxr_port_name(port_type=port_type, module=module, port=port) == printed
+        # And the codec reads it back: the slot (0) as the stack, the
+        # module and the port.
+        identity = classify_iosxr_port_name(printed)
+        assert (identity.kind, identity.stack, identity.module, identity.port) == (
+            "physical", 0, module, port,
+        )
+
+    @pytest.mark.parametrize("port_type", ["Ethernet", "MgmtEth", "tengige", ""])
+    def test_a_type_that_is_not_a_port_type_is_refused(self, port_type):
+        with pytest.raises(ValueError, match="is not an IOS XR port type"):
+            iosxr_port_name(port_type=port_type, module=0, port=0)
+
+    @pytest.mark.parametrize("module", [-1, 10])
+    def test_a_module_is_0_to_9(self, module):
+        with pytest.raises(ValueError, match="from 0 to 9"):
+            iosxr_port_name(port_type="TenGigE", module=module, port=0)
+
+    def test_a_port_counts_from_0(self):
+        with pytest.raises(ValueError, match="counts from 0"):
+            iosxr_port_name(port_type="TenGigE", module=0, port=-1)
+
+    def test_the_rule_names_a_port_by_its_type_module_and_number(self):
+        rule = dm._naming_rules()["iosxr"]
+        assert rule.render(_iosxr_request(0)) == "TenGigE0/0/0/0"
+        assert rule.render(_iosxr_request(39)) == "TenGigE0/0/0/39"
+        assert rule.render(_iosxr_request(3, prefix="HundredGigE", slot="1")) == (
+            "HundredGigE0/0/1/3"
+        )
+
+    @pytest.mark.parametrize("member_id", [0, 1, 2])
+    def test_a_router_names_no_member(self, member_id):
+        """A fixed router stands alone, as rack 0, slot 0: a member
+        number -- the first or any other -- is refused rather than
+        dropped from the name."""
+        with pytest.raises(ValueError, match="with no member number"):
+            dm._naming_rules()["iosxr"].render(_iosxr_request(0, member_id=member_id))
+
+    def test_a_mode_that_numbers_members_fails_at_load(self):
+        data = _data(XRBOX_YAML)
+        data["modes"]["standalone"]["member_ids"] = [1, 2]
+        with pytest.raises(DeviceModelLoadError, match="with no member number"):
+            DeviceModelRegistry([_family(data)])
+
+    @pytest.mark.parametrize("slot", ["0", "a", "1a", "-1", chr(0xFF11)])
+    def test_a_module_is_numbered_from_1(self, slot):
+        """Module 0 is the panel's own run of ports, which states no
+        slot; a slot is module 1 or above, in ASCII digits."""
+        with pytest.raises(ValueError, match="is not module 1 or above"):
+            dm._naming_rules()["iosxr"].render(_iosxr_request(0, slot=slot))
+
+    def test_a_group_with_module_0_fails_at_load(self):
+        data = _data(XRBOX_YAML)
+        data["models"]["XB-6"]["ports"][1]["slot"] = "0"
+        with pytest.raises(DeviceModelLoadError, match="is not module 1 or above"):
+            DeviceModelRegistry([_family(data)])
+
+    @pytest.mark.parametrize("prefix", ["Ethernet", None])
+    def test_every_group_states_a_port_type(self, prefix):
+        data = _data(XRBOX_YAML)
+        if prefix is None:
+            del data["models"]["XB-6"]["ports"][0]["prefix"]
+        else:
+            data["models"]["XB-6"]["ports"][0]["prefix"] = prefix
+        with pytest.raises(ValueError, match="every group states"):
+            _family(data)
+
+    def test_a_family_compiles_module_by_module(self):
+        inv = compile_deployment(
+            Deployment(vendor="cisco_iosxr", members=[MemberSpec(model="XB-6")]),
+            DeviceModelRegistry([_family(XRBOX_YAML)]),
+        )
+        assert inv.names() == [
+            "TenGigE0/0/0/0", "TenGigE0/0/0/1", "TenGigE0/0/0/2", "TenGigE0/0/0/3",
+            "HundredGigE0/0/1/0", "HundredGigE0/0/1/1",
+        ]
+        assert inv.names(role="uplink") == ["HundredGigE0/0/1/0", "HundredGigE0/0/1/1"]
+
+    def test_the_management_interface_is_not_a_numbered_port(self):
+        rule = dm._naming_rules()["iosxr"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`MgmtEth0/RP0/CPU0/0`" in rule.why_not
+        assert rule.prefixes == frozenset({
+            "FastEthernet", "GigabitEthernet", "TenGigE", "TwentyFiveGigE",
+            "FortyGigE", "HundredGigE", "TwoHundredGigE", "FourHundredGigE",
+        })
 
 
 # ---------------------------------------------------------------------------

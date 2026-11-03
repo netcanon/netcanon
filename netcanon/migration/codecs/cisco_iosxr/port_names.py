@@ -35,6 +35,11 @@ warning).  ``Null0`` is NOT classified here — in the v1 corpus it only
 ever appears as a static-route next-hop (``<prefix> Null0``), which the
 parser keeps on :attr:`CanonicalStaticRoute.interface`, never as an
 ``interface`` stanza.
+
+:func:`iosxr_port_name` is the other direction for a DECLARED device:
+the name the ``iosxr`` naming rule of
+:mod:`netcanon.migration.device_models` gives a numbered port of a
+model family under ``definitions/library/model_families/cisco_iosxr_*``.
 """
 
 from __future__ import annotations
@@ -63,6 +68,11 @@ _SPEED_PREFIXES: tuple[tuple[str, str], ...] = (
 _PREFIX_TO_SPEED: dict[str, str] = {p.lower(): s for p, s in _SPEED_PREFIXES}
 #: canonical speed → XR-cased prefix (used by format; cross-vendor).
 _SPEED_TO_PREFIX: dict[str, str] = {s: p for p, s in _SPEED_PREFIXES}
+
+#: The interface types a port name begins with, each the name of a
+#: speed (``TenGigE``, ``HundredGigE``).  A model family states one
+#: for each group of ports (:func:`iosxr_port_name`).
+IOSXR_PORT_TYPES: frozenset[str] = frozenset(p for p, _ in _SPEED_PREFIXES)
 
 # ---------------------------------------------------------------------------
 # Regex patterns — module-level so they compile once per import.
@@ -129,6 +139,43 @@ def a_sub_interface_needs_a_tag(name: str) -> bool:
         and number.isdigit()
         and classify_port_name(parent).kind in ("physical", "mgmt", "lag")
     )
+
+
+def iosxr_port_name(*, port_type: str, module: int, port: int) -> str:
+    """The name IOS XR gives port *port* of module *module* of a fixed
+    router, the port running at its top speed and not broken out.
+
+    "The interface-path-id is rack/ slot/ module/ port" (Cisco NCS
+    540 Router Hardware Installation Guide, Cisco NCS 540 Router
+    Overview, Interface Naming), and a fixed router is rack 0, slot
+    0: the first SFP+ port of an N540-24Z8Q2C-SYS is
+    ``TenGigE0/0/0/0``, and its two QSFP28 ports are module 1,
+    ``HundredGigE0/0/1/0`` and ``HundredGigE0/0/1/1`` (the same guide,
+    Port Numbering).  Ports count from 0 within their module.
+
+    The type names the speed the port runs at, not its cage: the same
+    guide gives that router's dual-rate ports 0 to 23 both as GigE
+    and as TenGigE.  So a name here is the port's with an optic of
+    its top speed fitted.  A port broken out is named by lane
+    (``TenGigE0/0/0/20/0``), and is not named here.
+
+    Raises:
+        ValueError: *port_type* is not an IOS XR port type, *module*
+            is not 0 to 9 (all this names), or *port* is negative.
+    """
+    if port_type not in IOSXR_PORT_TYPES:
+        raise ValueError(
+            f"{port_type!r} is not an IOS XR port type; one of "
+            f"{', '.join(sorted(IOSXR_PORT_TYPES))}"
+        )
+    if not 0 <= module <= 9:
+        raise ValueError(
+            f"a module of a fixed IOS XR router is named here from 0 "
+            f"to 9, not {module}"
+        )
+    if port < 0:
+        raise ValueError(f"an IOS XR port counts from 0, not {port}")
+    return f"{port_type}0/0/{module}/{port}"
 
 
 def classify_port_name(name: str) -> PortIdentity:
