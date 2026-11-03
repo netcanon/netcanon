@@ -1498,6 +1498,10 @@ switch-port profile: its default turns ports 27 and 28 off), a family
 describes one setting, in the mode's label, and the group after the
 gap states how many numbers it passes over (`skip`), from the
 vendor's own port list; position in a slot runs on past them.
+Where each interface type counts from 1 on its own (RouterOS:
+`ether1` to `ether49`, then `sfp-sfpplus1`), the rule says so
+(`counts_by_type`), and a port's position is counted among the
+ports of its type.
 A port of the WHOLE deployment — a C9300
 stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under
@@ -1506,7 +1510,13 @@ every member's ports.  A flat profile's management port is read the
 same way, so that the two pair.  Such a port is graded `capture` only
 where a proven claim shows the whole deployment, every member of it:
 a capture of one switch does not show the management port of a stack
-it is a member of.
+it is a member of.  A management port that only some models of a
+family have, at a number of their own (`ether1` on one RouterOS
+model, `ether49` on another), is a `mgmt` group of the model's panel
+instead.  It is compiled as a port of the whole deployment all the
+same (rank `None`), and so is allowed only where the deployment is
+that one device: the loader refuses it in a mode that numbers its
+members, and beside a management port under `deployment_ports`.
 
 **Pairing policy** (`port_mapping.py`):
 

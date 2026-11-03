@@ -253,6 +253,10 @@ EXPECTED_CLAIMS: dict[str, tuple[str, str, str, list[tuple]]] = {
         "arista_eos/7050X3", "standalone", "! device: r2-site1-leaf1 (dcs-7050sx3-48yc8, eos-4.32.1f)",
         [("DCS-7050SX3-48YC8", None, {})],
     ),
+    "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc": (
+        "mikrotik_routeros/CRS3xx", "standalone", "# model = crs310-8g+2s+",
+        [("CRS310-8G+2S+", None, {})],
+    ),
 }
 
 
@@ -1364,6 +1368,80 @@ def _xr_port_key(name: str) -> tuple[int, int]:
     assert match, name
     return int(match.group(1)), int(match.group(2))
 
+
+# MikroTik RouterOS -- typed by hand from the family files' sources
+# (MikroTik's table of each model's interfaces), each model's port
+# groups as (interface type, first port, count, role).  A port is its
+# type and a number counted from 1 within that type, with no member and
+# no slot, and a QSFP port is named by its first lane.  A management
+# port on the panel is pinned apart, in EXPECTED_PANEL_MGMT.
+_MT = "mikrotik_routeros"
+_ETH, _SFPP, _SFP28, _QSFPP, _QSFP28 = "ether", "sfp-sfpplus", "sfp28-", "qsfpplus", "qsfp28-"
+
+
+def _mt(*groups: tuple[str, int, int, str]) -> tuple[list[str], list[str]]:
+    access: list[str] = []
+    uplinks: list[str] = []
+    for kind, first, count, role in groups:
+        lane = "-1" if kind in (_QSFPP, _QSFP28) else ""
+        names = [f"{kind}{port}{lane}" for port in range(first, first + count)]
+        (access if role == _ACC else uplinks).extend(names)
+    return access, uplinks
+
+
+_MT_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # CRS3xx.  A model of SFP+ ports and one copper management port has
+    # no QSFP-class port, so its uplinks are the SFP+ ports, all of them.
+    "CRS305-1G-4S+": _mt((_SFPP, 1, 4, _UP)),
+    "CRS309-1G-8S+": _mt((_SFPP, 1, 8, _UP)),
+    "CRS317-1G-16S+": _mt((_SFPP, 1, 16, _UP)),
+    "CRS310-8G+2S+": _mt((_ETH, 1, 8, _ACC), (_SFPP, 1, 2, _UP)),
+    "CRS326-24G-2S+": _mt((_ETH, 1, 24, _ACC), (_SFPP, 1, 2, _UP)),
+    "CRS328-24P-4S+": _mt((_ETH, 1, 24, _ACC), (_SFPP, 1, 4, _UP)),
+    "CRS326-24S+2Q+": _mt((_SFPP, 1, 24, _ACC), (_QSFPP, 1, 2, _UP)),
+    # The CRS354's management port is ether49: it does not move the
+    # count of the SFP+ ports, which start at 1.
+    "CRS354-48G-4S+2Q+": _mt((_ETH, 1, 48, _ACC), (_SFPP, 1, 4, _ACC), (_QSFPP, 1, 2, _UP)),
+    "CRS354-48P-4S+2Q+": _mt((_ETH, 1, 48, _ACC), (_SFPP, 1, 4, _ACC), (_QSFPP, 1, 2, _UP)),
+    # CRS5xx
+    "CRS504-4XQ": _mt((_QSFP28, 1, 4, _UP)),
+    "CRS510-8XS-2XQ": _mt((_SFP28, 1, 8, _ACC), (_QSFP28, 1, 2, _UP)),
+    "CRS518-16XS-2XQ": _mt((_SFP28, 1, 16, _ACC), (_QSFP28, 1, 2, _UP)),
+    # CCR2000
+    "CCR2004-1G-12S+2XS": _mt((_SFPP, 1, 12, _ACC), (_SFP28, 1, 2, _UP)),
+    "CCR2004-16G-2S+": _mt((_ETH, 1, 16, _ACC), (_SFPP, 1, 2, _UP)),
+    "CCR2216-1G-12XS-2XQ": _mt((_SFP28, 1, 12, _ACC), (_QSFP28, 1, 2, _UP)),
+}
+for _model, _ports in _MT_PANELS.items():
+    EXPECTED_INVENTORIES[(_MT, _model, "standalone", ())] = _ports
+
+#: ``(vendor, model key)`` -> the management port on the model's PANEL.
+#: A naming rule names it like any other port, and it belongs to the
+#: deployment as a whole, which is the one device: RouterOS sets no
+#: port apart by its name, and the CRS354's is ether49, after its 48
+#: copper switch ports.
+EXPECTED_PANEL_MGMT: dict[tuple[str, str], list[str]] = {
+    **{
+        (_MT, model): ["ether1"]
+        for model in (
+            "CRS305-1G-4S+", "CRS309-1G-8S+", "CRS317-1G-16S+", "CRS326-24S+2Q+",
+            "CRS504-4XQ", "CRS510-8XS-2XQ", "CRS518-16XS-2XQ",
+            "CCR2004-1G-12S+2XS", "CCR2216-1G-12XS-2XQ",
+        )
+    },
+    (_MT, "CRS354-48G-4S+2Q+"): ["ether49"],
+    (_MT, "CRS354-48P-4S+2Q+"): ["ether49"],
+}
+
+_MT_PORT = re.compile(r"^(ether|sfp-sfpplus|sfp28-|qsfpplus|qsfp28-)(\d+)(?:-1)?$")
+_MT_TYPE_ORDER = ("ether", "sfp-sfpplus", "sfp28-", "qsfpplus", "qsfp28-")
+
+
+def _mt_port_key(name: str) -> tuple[int, int]:
+    match = _MT_PORT.match(name)
+    assert match, name
+    return _MT_TYPE_ORDER.index(match.group(1)), int(match.group(2))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -1442,7 +1520,9 @@ class TestExactInventories:
         vendor, model, mode, fitted = combo
         access, uplinks = EXPECTED_INVENTORIES[combo]
         family = REGISTRY.resolve(vendor, model)[0]
-        mgmt = EXPECTED_DEPLOYMENT_PORTS.get(family.key, [])
+        mgmt = EXPECTED_DEPLOYMENT_PORTS.get(family.key, []) + EXPECTED_PANEL_MGMT.get(
+            (vendor, model), [],
+        )
         inventory = _compile(vendor, mode, {"model": model, "modules": dict(fitted)})
         assert inventory.names(role="access") == access
         assert inventory.names(role="uplink") == uplinks
@@ -1479,6 +1559,11 @@ class TestExactInventories:
             assert inventory.names() == (
                 sorted(access + uplinks, key=_xr_port_key) + mgmt
             )
+        elif vendor == _MT:
+            # And a RouterOS device, type by type, its management port
+            # among them: on a CRS354, ether49 comes after the 48 copper
+            # ports and before the SFP+ ones.
+            assert inventory.names() == sorted(access + uplinks + mgmt, key=_mt_port_key)
         else:
             assert inventory.names() == access + uplinks + mgmt
 
@@ -1487,6 +1572,20 @@ class TestExactInventories:
             family.key: [p.name for p in family.deployment_ports]
             for family in REGISTRY.families.values() if family.deployment_ports
         } == EXPECTED_DEPLOYMENT_PORTS
+
+    def test_every_panel_management_port_is_pinned(self) -> None:
+        """A management port on a panel is the deployment's, with no
+        member rank, so that it pairs with the management port of the
+        other side and with no access port."""
+        compiled = {}
+        for family, model in _every_model():
+            if not any(group.role == "mgmt" for group in model.ports):
+                continue
+            inventory = _compile(family.vendor, family.default_mode, {"model": model.model})
+            mgmt = [p for p in inventory.ports if p.role == "mgmt"]
+            assert {p.member_rank for p in mgmt} == {None}, model.model
+            compiled[(family.vendor, model.model)] = [p.name for p in mgmt]
+        assert compiled == EXPECTED_PANEL_MGMT
 
     @pytest.mark.parametrize(
         ("family", "model"),
@@ -1637,6 +1736,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "junos": "juniper_junos",
     "os10": "dell_os10",
     "iosxr": "cisco_iosxr",
+    "routeros": "mikrotik_routeros",
 }
 
 
@@ -1663,10 +1763,13 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                 family.vendor, mode_name,
                 {"model": model.model, "modules": modules},
             )
+            typed_whole = {p.name for p in family.deployment_ports}
             for port in inventory.ports:
-                if port.member_rank is None:
+                if port.name in typed_whole:
                     # A port of the whole deployment is typed whole in
-                    # the family file; no rule made it.
+                    # the family file; no rule made it.  A management
+                    # port on a panel has no member rank either, and a
+                    # rule did make it.
                     continue
                 identity = codec.classify_port_name(port.name)
                 where = (model.model, mode_name, port.name)
@@ -1694,6 +1797,21 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     assert identity.kind == "physical", (*where, identity.kind)
                     assert (identity.stack, port.member_id) == (1, None), where
                     assert (identity.module, port.slot) == (1, ""), where
+                    assert identity.port == port.index + 1, where
+                    checked += 1
+                    continue
+                if family.naming == "routeros":
+                    # A RouterOS port is its type and a number counted
+                    # from 1 within that type, with no member and no
+                    # slot.  The classifier reads a port named by its
+                    # first lane as lane 1 of that port; whether the
+                    # port is named so is read from the family file's
+                    # group.
+                    by_lane = {g.prefix: g.multi_lane for g in model.ports}
+                    prefix = max((p for p in by_lane if port.name.startswith(p)), key=len)
+                    expected = ("breakout", 1) if by_lane[prefix] else ("physical", None)
+                    assert (identity.kind, identity.breakout_lane) == expected, where
+                    assert (identity.stack, port.member_id, port.slot) == (None, None, ""), where
                     assert identity.port == port.index + 1, where
                     checked += 1
                     continue
@@ -1791,6 +1909,11 @@ PROFILE_AGREES_WITH: dict[str, dict] = {
     },
     "juniper_junos/QFX5120-48Y": {
         "mode": "virtual-chassis", "members": [{"model": "QFX5120-48Y-AFO2", "id": 0}],
+    },
+    # A MikroTik profile states a device on its own.
+    **{
+        f"mikrotik_routeros/{model}": {"mode": "standalone", "members": [{"model": model}]}
+        for model in ("CCR2004-1G-12S+2XS", "CRS310-8G+2S+")
     },
 }
 
@@ -2186,6 +2309,9 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     **{(_D, model): model for model in _OS10_PANELS},
     # Cisco IOS XR: the first part number is the model key.
     **{(_XR, model): model for model in _XR_PANELS},
+    # MikroTik: the name RouterOS prints on its `# model =` line is the
+    # model key.
+    **{(_MT, model): model for model in _MT_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -2371,6 +2497,15 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "cisco_iosxr/NCS5500 / panel / NCS-5501-SE",
     "cisco_iosxr/NCS5500 / panel / NCS-55A1-36H-S",
     "cisco_iosxr/8200 / panel / 8201-SYS",
+    # RouterOS: a panel whose 10/100 port no MikroTik text read calls a
+    # management port, and the CRS326-24G-2S+, whose second SFP+ port
+    # MikroTik's table and the exports of the model name differently.
+    "mikrotik_routeros/CRS3xx / panel / CRS326-24G-2S+",
+    "mikrotik_routeros/CRS3xx / panel / CRS326-24S+2Q+",
+    "mikrotik_routeros/CRS3xx / panel / CRS354-48G-4S+2Q+",
+    "mikrotik_routeros/CRS3xx / panel / CRS354-48P-4S+2Q+",
+    "mikrotik_routeros/CRS5xx / panel / CRS510-8XS-2XQ",
+    "mikrotik_routeros/CRS5xx / panel / CRS518-16XS-2XQ",
 }
 
 
@@ -3927,3 +4062,150 @@ class TestCiscoIosXr:
                 continue
             caveat = family.modes["standalone"].naming.caveat
             assert "follows the optic" in caveat and "declare each router" in caveat, family.key
+
+
+class TestMikroTikRouterOs:
+    #: Every part number of the RouterOS families -> its model, typed by
+    #: hand from MikroTik's product pages.  The key is the name RouterOS
+    #: prints on its `# model =` line; the product code adds -RM or -IN.
+    PARTS = {
+        "CRS305-1G-4S+": "CRS305-1G-4S+",
+        "CRS305-1G-4S+IN": "CRS305-1G-4S+",
+        "CRS309-1G-8S+": "CRS309-1G-8S+",
+        "CRS309-1G-8S+IN": "CRS309-1G-8S+",
+        "CRS317-1G-16S+": "CRS317-1G-16S+",
+        "CRS317-1G-16S+RM": "CRS317-1G-16S+",
+        "CRS310-8G+2S+": "CRS310-8G+2S+",
+        "CRS310-8G+2S+IN": "CRS310-8G+2S+",
+        "CRS326-24G-2S+": "CRS326-24G-2S+",
+        "CRS326-24G-2S+RM": "CRS326-24G-2S+",
+        "CRS328-24P-4S+": "CRS328-24P-4S+",
+        "CRS328-24P-4S+RM": "CRS328-24P-4S+",
+        "CRS326-24S+2Q+": "CRS326-24S+2Q+",
+        "CRS326-24S+2Q+RM": "CRS326-24S+2Q+",
+        "CRS354-48G-4S+2Q+": "CRS354-48G-4S+2Q+",
+        "CRS354-48G-4S+2Q+RM": "CRS354-48G-4S+2Q+",
+        "CRS354-48P-4S+2Q+": "CRS354-48P-4S+2Q+",
+        "CRS354-48P-4S+2Q+RM": "CRS354-48P-4S+2Q+",
+        "CRS504-4XQ": "CRS504-4XQ",
+        "CRS504-4XQ-IN": "CRS504-4XQ",
+        "CRS510-8XS-2XQ": "CRS510-8XS-2XQ",
+        "CRS510-8XS-2XQ-IN": "CRS510-8XS-2XQ",
+        "CRS518-16XS-2XQ": "CRS518-16XS-2XQ",
+        "CRS518-16XS-2XQ-RM": "CRS518-16XS-2XQ",
+        "CCR2004-1G-12S+2XS": "CCR2004-1G-12S+2XS",
+        "CCR2004-16G-2S+": "CCR2004-16G-2S+",
+        "CCR2216-1G-12XS-2XQ": "CCR2216-1G-12XS-2XQ",
+    }
+
+    #: Devices the family files say are not modelled.  Each is named
+    #: there, so that nobody adds it by guessing, and none resolves.
+    NOT_MODELLED = (
+        "CRS312-4C+8XG", "CRS328-4C-20S-4S+", "CRS326-4C+20G+2Q+", "CRS520-4XS-16XQ",
+        "CRS504-4XQ-OUT", "CCR2116-12G-4S+", "CCR2004-16G-2S+PC", "CCR2004-1G-2XS-PCIe",
+    )
+
+    #: A token of a MikroTik product name -> the ports it counts, as
+    #: (speed, cage, PoE): ``24P`` is 24 Gigabit PoE-out ports, ``8G+``
+    #: eight 2.5 Gigabit ones, ``XS`` and ``XQ`` 25G SFP28 and 100G
+    #: QSFP28.  A 10/100 port is in no token.
+    TOKENS = {
+        "G": ("gig", "rj45", False),
+        "P": ("gig", "rj45", True),
+        "G+": ("2.5gig", "rj45", False),
+        "S+": ("10gig", "sfp+", False),
+        "XS": ("25gig", "sfp28", False),
+        "Q+": ("40gig", "qsfp+", False),
+        "XQ": ("100gig", "qsfp28", False),
+    }
+    _TOKEN = re.compile(r"(\d+)(G\+|XS|XQ|S\+|Q\+|G|P)")
+
+    def _models(self) -> list[ModelDef]:
+        return [model for family, model in _every_model() if family.vendor == _MT]
+
+    def test_every_part_number_is_its_model(self) -> None:
+        for sku, key in self.PARTS.items():
+            hit = REGISTRY.resolve(_MT, sku)
+            assert hit is not None and hit[1].model == key, (sku, key)
+        assert {sku for model in self._models() for sku in model.skus} == set(self.PARTS)
+
+    def test_what_is_not_modelled_is_said_and_does_not_resolve(self) -> None:
+        said = "\n".join(
+            path.read_text(encoding="utf-8") for path in FAMILY_FILES
+            if path.name.startswith(f"{_MT}_")
+        )
+        for pid in self.NOT_MODELLED:
+            assert REGISTRY.resolve(_MT, pid) is None, pid
+            assert re.search(rf"(?<![\w-]){re.escape(pid)}(?![\w-])", said), pid
+
+    def test_the_name_counts_every_port_but_a_10_100_one(self) -> None:
+        """``CRS354-48G-4S+2Q+`` is 48 Gigabit, four SFP+ and two QSFP+
+        ports, and its 10/100 port is in no token.  A group of the
+        wrong count, speed, cage or PoE fails here."""
+        for model in self._models():
+            rest = model.model.split("-", 1)[1]
+            assert re.fullmatch(r"(?:-?\d+(?:G\+|XS|XQ|S\+|Q\+|G|P))+", rest), model.model
+            named: dict[tuple, int] = {}
+            for count, token in self._TOKEN.findall(rest):
+                named[self.TOKENS[token]] = named.get(self.TOKENS[token], 0) + int(count)
+            panel: dict[tuple, int] = {}
+            for group in model.ports:
+                if group.speed != "fast":
+                    kind = (group.speed, group.cage, group.poe)
+                    panel[kind] = panel.get(kind, 0) + group.count
+            assert panel == named, model.model
+
+    def test_an_uplink_is_of_the_models_fastest_class_of_cage(self) -> None:
+        """The QSFP-class ports where a device has any, otherwise the
+        ports of its top speed; the management port is neither."""
+        for model in self._models():
+            data = [group for group in model.ports if group.role != "mgmt"]
+            qsfp = any(group.cage.startswith("qsfp") for group in data)
+            top = max(SPEED_RANK[group.speed] for group in data)
+            for group in data:
+                fastest = (
+                    group.cage.startswith("qsfp") if qsfp
+                    else SPEED_RANK[group.speed] == top
+                )
+                assert (group.role == "uplink") == fastest, (model.model, group.prefix)
+
+    def test_the_management_port_is_one_ethernet_port_apart(self) -> None:
+        """A 10/100 port is never a switch port here, and a Gigabit
+        management port is the ``1G`` of a name like ``CRS305-1G-4S+``:
+        the model's only copper port."""
+        for model in self._models():
+            assert all(
+                group.role == "mgmt" for group in model.ports if group.speed == "fast"
+            ), model.model
+            mgmt = [group for group in model.ports if group.role == "mgmt"]
+            if not mgmt:
+                continue
+            (group,) = mgmt
+            assert (group.count, group.prefix, group.cage) == (1, "ether", "rj45"), model.model
+            if group.speed != "fast":
+                assert group.speed == "gig" and "-1G-" in model.model, model.model
+                assert [g for g in model.ports if g.prefix == "ether"] == [group], model.model
+
+    def test_the_model_line_of_an_export_is_the_key(self) -> None:
+        """A RouterOS export prints ``# model = CRS310-8G+2S+``, with no
+        -IN: that is the key a device is declared by.  The RouterBOARD
+        routers of the other committed exports are not modelled."""
+        resolved = {}
+        for path in sorted((REPO_ROOT / "tests/fixtures/real/mikrotik").glob("*.rsc")):
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.startswith("# model = "):
+                    hit = REGISTRY.resolve(_MT, line.removeprefix("# model = "))
+                    resolved[path.name] = hit[1].model if hit else None
+        assert resolved == {
+            "ntc_ip_address_export.rsc": None,
+            "routeros_diff_verbose_export.rsc": None,
+            "user_contrib_crs310_ros7.rsc": "CRS310-8G+2S+",
+        }
+
+    def test_the_mode_says_what_is_not_modelled(self) -> None:
+        for family in REGISTRY.families.values():
+            if family.vendor != _MT:
+                continue
+            caveat = family.modes["standalone"].naming.caveat
+            assert "broken out" in caveat and "default-name" in caveat, family.key
+            assert "RouterOS names no member and no slot" in caveat, family.key

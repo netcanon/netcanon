@@ -1,0 +1,74 @@
+# MikroTik Cloud Router Switch CRS5xx on RouterOS: the CRS504-4XQ,
+# CRS510-8XS-2XQ and CRS518-16XS-2XQ.
+#
+# A RouterOS device names a port by its type and a number, counted from
+# 1 within that type, with no member and no slot: ether1, sfp28-1 to
+# sfp28-16, qsfp28-1-1 and qsfp28-2-1.  A QSFP28 port is named by its
+# first lane; run as one link it is configured through that
+# sub-interface.  Every name below is in MikroTik's own table of each
+# model's interfaces ("MTU in RouterOS").
+#
+# A port the operator renamed keeps its factory name in `default-name`,
+# and the factory name is the one listed here.
+#
+# The management port.  Each model has one 10/100 Ethernet port, ether1.
+# The CRS504-4XQ's product page says it is for management.  The
+# CRS510's and CRS518's pages give the port and do not say what it is
+# for; MikroTik's MTU table gives it an L2MTU of 2028 on all three,
+# where every switch port has 10218, so those two panels are graded
+# `inferred`.
+#
+# `ports:` lists are in PORT-NUMBER order within each type.  A port is
+# an `uplink` when it is a QSFP28 port; the SFP28 ports are access
+# ports.  It says nothing about how a switch is cabled.
+#
+# Part numbers.  The key of each model is the name RouterOS prints on
+# its `# model =` line, which has no -RM or -IN suffix; the product
+# code with its suffix is listed beside it.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The CRS520-4XS-16XQ, the CRS504-4XQ-OUT and any model not listed.
+#   * Any QSFP28 port broken out (its lanes 2 to 4), and any port run
+#     below its full speed.
+schema: 1
+vendor: mikrotik_routeros
+family: "CRS5xx"
+display_name: "MikroTik CRS5xx Cloud Router Switch"
+naming: routeros
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, every port at its full speed and none broken out; each type numbered from 1 (ether1, sfp28-1), a QSFP28 port by its first lane (qsfp28-1-1)"
+    naming:
+      grade: vendor-doc
+      ref: "MikroTik RouterOS documentation, MTU in RouterOS (the table of each model's interfaces names every port by its factory name, each type counted from 1: on the CRS510-8XS-2XQ-IN, ether1, sfp28-1 - sfp28-8, qsfp28-1-1 - qsfp28-2-4); MikroTik documentation, MikroTik wired interface compatibility (a QSFP port run as one link is configured through its first sub-interface)"
+      caveat: "Each port is named at its full speed, as one link. A QSFP28 port broken out uses its other sub-interfaces (lanes 2 to 4), which are not modelled. A port the operator renamed keeps its factory name in default-name, which is the name listed here. RouterOS names no member and no slot: declare each switch."
+
+models:
+  CRS504-4XQ:
+    skus: [CRS504-4XQ, CRS504-4XQ-IN]
+    display_name: "MikroTik CRS504-4XQ, 4 QSFP28 (CRS504-4XQ-IN)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS504-4XQ-IN (four 100G QSFP28 ports and one 10/100 Ethernet port, an Ethernet port for management purposes); MikroTik RouterOS documentation, MTU in RouterOS (CRS504-4XQ-IN: ether1, qsfp28-1-1 - qsfp28-4-4)"}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether1, the management port"}
+      - {role: uplink, count: 4, prefix: qsfp28-, speed: 100gig, cage: qsfp28, multi_lane: true, notes: "qsfp28-1-1 to qsfp28-4-1, each as one link"}
+
+  CRS510-8XS-2XQ:
+    skus: [CRS510-8XS-2XQ, CRS510-8XS-2XQ-IN]
+    display_name: "MikroTik CRS510-8XS-2XQ, 8 SFP28 and 2 QSFP28 (CRS510-8XS-2XQ-IN)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS510-8XS-2XQ-IN (one 10/100 Ethernet port, eight 25G SFP28 ports and two 100G QSFP28 ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS510-8XS-2XQ-IN: sfp28-1 - sfp28-8 and qsfp28-1-1 - qsfp28-2-4 at L2MTU 10218, ether1 at 2028)", caveat: "The names and counts are MikroTik's. That ether1 is a management port is not stated by MikroTik for this model: it is the one 10/100 port, and the MTU table gives it an L2MTU of 2028 where every switch port has 10218, as it does the CRS504-4XQ's Ethernet port, which that model's product page says is for management."}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether1, the 10/100 port"}
+      - {role: access, count: 8, prefix: sfp28-, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, prefix: qsfp28-, speed: 100gig, cage: qsfp28, multi_lane: true, notes: "qsfp28-1-1 and qsfp28-2-1, each as one link"}
+
+  CRS518-16XS-2XQ:
+    skus: [CRS518-16XS-2XQ, CRS518-16XS-2XQ-RM]
+    display_name: "MikroTik CRS518-16XS-2XQ, 16 SFP28 and 2 QSFP28 (CRS518-16XS-2XQ-RM)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS518-16XS-2XQ-RM (one 10/100 Ethernet port, sixteen 25G SFP28 ports and two 100G QSFP28 ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS518-16XS-2XQ: sfp28-1 - sfp28-16 and qsfp28-1-1 - qsfp28-2-4 at L2MTU 10218, ether1 at 2028)", caveat: "The names and counts are MikroTik's. That ether1 is a management port is not stated by MikroTik for this model: it is the one 10/100 port, and the MTU table gives it an L2MTU of 2028 where every switch port has 10218, as it does the CRS504-4XQ's Ethernet port, which that model's product page says is for management."}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether1, the 10/100 port"}
+      - {role: access, count: 16, prefix: sfp28-, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, prefix: qsfp28-, speed: 100gig, cage: qsfp28, multi_lane: true, notes: "qsfp28-1-1 and qsfp28-2-1, each as one link"}
