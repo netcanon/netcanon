@@ -925,18 +925,17 @@ vlan 1
    exit
 """
 
-#: An AOS-S switch of two ports and two VLANs, and no address: onto
-#: OS10 its ports are ``ethernet1/1/1`` and ``ethernet1/1/2``, and
-#: nothing is listed.
+#: An AOS-S switch of two ports, each with a name and nothing else:
+#: onto VyOS its ports are ``eth1`` and ``eth2``, and nothing is
+#: listed.  (A VLAN on a port would make the job ``partial`` there, a
+#: router having no VLAN membership.)
 _AOSS_TWO_PORTS = """; J9999A Configuration Editor; Created on release #WC.16.11.0001
 hostname "sw"
-vlan 1
-   name "DEFAULT_VLAN"
-   untagged 1-2
+interface 1
+   name "a"
    exit
-vlan 20
-   name "users"
-   tagged 2
+interface 2
+   name "b"
    exit
 """
 
@@ -1786,10 +1785,10 @@ class TestRenameModalWhereDevicesSettleNothing:
     def test_no_pair_for_a_target_with_no_device(
         self, page: Page, live_server_url: str,
     ):
-        """Two ports of an AOS-S switch written as one on OS10.
+        """Two ports of an AOS-S switch written as one on VyOS.
         The source has devices to choose from and the target has
         none: there is still no pair."""
-        _open_modal_on(page, live_server_url, "aruba_aoss", "dell_os10", _AOSS_TWO_ON_ONE)
+        _open_modal_on(page, live_server_url, "aruba_aoss", "vyos", _AOSS_TWO_ON_ONE)
         assert "status: partial" in _status_line(page)
         expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_enabled()
         assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
@@ -1801,10 +1800,10 @@ class TestRenameModalWhereDevicesSettleNothing:
         )
 
     def test_no_target_device_to_choose(self, page: Page, live_server_url: str):
-        """The source device is declared and the target is OS10,
+        """The source device is declared and the target is VyOS,
         which has no device to choose: the hint does not say to
         choose one."""
-        _open_modal_on(page, live_server_url, "aruba_aoss", "dell_os10", _AOSS_TWO_PORTS)
+        _open_modal_on(page, live_server_url, "aruba_aoss", "vyos", _AOSS_TWO_PORTS)
         assert "status: completed" in _status_line(page)
         page.locator(_tid("migrate-device-source-model-select")).select_option(
             value="fam:2930F:2930F-48G-PoEP-4SFPP"

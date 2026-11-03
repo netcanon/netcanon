@@ -89,6 +89,12 @@ multi-lane port configured as one interface.  A rule that names no
 lane refuses the field (:attr:`NamingRuleSpec.lanes`); a port broken
 out into several interfaces is not modelled yet.
 
+And one serves a panel whose numbers have a GAP in the state a mode
+describes: ``skip:`` on a group passes over port numbers the device
+does not have before it (a Dell S4148F-ON's default switch-port
+profile turns ports 27 and 28 off, so its ports 29-30 state
+``skip: 2``; :attr:`PortGroup.skip`).
+
 Evidence.  How well a port's name is established is graded with the
 vocabulary of :data:`~netcanon.migration.target_profiles.ProfileEvidence`,
 but not per model: a name is the product of separately evidenced
@@ -400,6 +406,18 @@ class PortGroup(BaseModel):
     at 40G only is a cage of four lanes with one name and no lane in
     it.  Refused by a rule that names no lane
     (:attr:`NamingRuleSpec.lanes`)."""
+
+    skip: StrictInt = Field(default=0, ge=0, le=_MAX_GROUP_PORTS)
+    """Port numbers of this group's slot that the device does not
+    have, in the state the mode describes, between the group before
+    it in the slot (or the slot's first number) and this group.  A
+    Dell S4148F-ON in its default switch-port profile turns its two
+    QSFP+ ports 27 and 28 off, so its QSFP28 pair 29-30 states
+    ``skip: 2`` after the pair 25-26; with no skip, the group would
+    be numbered 27-28, ports that switch does not have in that state.
+    Stated by hand from the vendor's own port list, never to make a
+    panel agree with a guess.  A port the device has and nobody uses
+    is a port: it is counted, not skipped."""
 
     speed: PortSpeed = ""
     cage: PortCage = ""
@@ -1036,6 +1054,26 @@ def _junos_rule(request: PortNameRequest) -> str:
     )
 
 
+def _os10_rule(request: PortNameRequest) -> str:
+    from .codecs.dell_os10.port_names import os10_port_name
+
+    # OS10 has no stacking: the two switches of a VLT pair are two
+    # devices, and every switch is node 1.
+    if request.member_id is not None:
+        raise ValueError(
+            "an OS10 switch names a port without a member number (OS10 "
+            "has no stacking, and every switch is node 1); the mode "
+            "must not state `member_ids`"
+        )
+    # A fixed switch's ports are all slot 1, in one run.
+    if request.slot:
+        raise ValueError(
+            f"an OS10 fixed switch numbers its ports in one run, all in "
+            f"slot 1; slot {request.slot!r} is not one"
+        )
+    return os10_port_name(port=request.index0 + 1)
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -1098,6 +1136,15 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
                 "is stated under `deployment_ports`"
             ),
             prefixes=_junos_media(),
+        ),
+        "os10": NamingRuleSpec(
+            render=_os10_rule,
+            roles=frozenset({"access", "uplink"}),
+            why_not=(
+                "an OS10 switch's management interface, `mgmt1/1/1`, is "
+                "not one of its numbered Ethernet ports; it is stated "
+                "under `deployment_ports`"
+            ),
         ),
     }
 
@@ -1355,8 +1402,9 @@ def _member_ports(
     are kept.  A capture proves NAMES, so it retires the caveat of
     the naming fact and keeps the caveat of the panel or module
     fact: what a port is for is not something a config shows.
-    Position within a slot runs on through every group of that slot;
-    the per-role ordinal runs on through the whole member.
+    Position within a slot runs on through every group of that slot,
+    past the port numbers a group's ``skip`` says the device does not
+    have; the per-role ordinal runs on through the whole member.
     """
     # (group, slot, module sku, the two facts that establish its names)
     groups: list[tuple[PortGroup, str, str, tuple[Grade, Grade]]] = [
@@ -1387,6 +1435,9 @@ def _member_ports(
             refs.extend(fact.ref for fact in facts)
             caveats.extend(fact.caveat for fact in facts)
             evidence = _weaker_grade(*facts).grade
+        # Port numbers the device does not have in this state are
+        # passed over, so that the group is numbered where it is.
+        next_index[slot] = next_index.get(slot, 0) + group.skip
         for _ in range(group.count):
             index0 = next_index.get(slot, 0)
             next_index[slot] = index0 + 1

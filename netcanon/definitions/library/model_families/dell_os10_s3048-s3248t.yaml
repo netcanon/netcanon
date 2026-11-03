@@ -1,0 +1,78 @@
+# Dell PowerSwitch S3048-ON and S3248T-ON on SmartFabric OS10: 48
+# 1000BASE-T ports and four SFP+, and on the S3248T-ON two QSFP28 after
+# them
+#
+# A fixed switch that stands alone.  OS10 has no stacking (UG56, the
+# N3248TE platform note: "Stacking is not supported in SmartFabric
+# OS10"), so every switch is node 1, slot 1: a port is
+# `ethernet1/1/<port>` (UG56, Interfaces: `ethernet
+# node/slot/port[:subport]`), and the management port is `mgmt1/1/1`,
+# declared once under `deployment_ports`.
+#
+# This file describes every port in its factory-default mode, not
+# broken out: that is the mode's label.  A QSFP28 port of the S3248T-ON
+# broken out is named by lane, and that is not modelled.
+#
+# `ports:` lists are in PORT-NUMBER order.  Dell calls the SFP+ ports
+# of the S3048-ON "uplinks" (SS3048) and the QSFP28 ports of the
+# S3248T-ON "uplink ports" (SS3248T), so those are `uplink`; every
+# other port is `access`.  It says nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56     Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#            May 2026).
+#   SS3048   Dell PowerSwitch S3048-ON Spec Sheet.
+#   SS3248T  Dell PowerSwitch S3248T-ON Spec Sheet.
+#
+# No Dell text read numbers the ports of either model.  Each model is
+# therefore graded `inferred`, its 1000BASE-T ports taken to be 1 to 48
+# and the ports after them numbered on from 49.
+#
+# Part numbers.  The key of each model is the name the switch prints
+# as its `System Type` in `show version`.  The ordering variants of a
+# model (airflow, TAA) list the same ports and print the same name, so
+# each model has one entry.  An OS10 running-config names no model, so
+# a switch is declared by hand.
+schema: 1
+vendor: dell_os10
+family: "S3048-S3248T"
+display_name: "Dell PowerSwitch S3048-ON and S3248T-ON"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out, every port named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]; for a standalone switch, enter 1/1 for node/slot) and the N3248TE platform note (stacking is not supported in SmartFabric OS10)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has when it is not broken out. A port broken out is named by lane, and those names are not modelled: such a source port is not on this inventory. OS10 has no stacking: each switch is a device of its own. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1)", caveat: "That every model of this family names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on each model's panel with the name."}
+
+models:
+  S3048-ON:
+    skus: [S3048-ON]
+    display_name: "Dell PowerSwitch S3048-ON, 48 1000BASE-T and 4 SFP+ (S3048-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S3048-ON Spec Sheet, 48 x 1000BASE-T and 4 x SFP+ (four 10GbE SFP+ uplinks)", caveat: "No Dell text read numbers this model's ports. That the 1000BASE-T ports are 1 to 48 and the SFP+ ports 49 to 52 is inferred."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  S3248T-ON:
+    skus: [S3248T-ON]
+    display_name: "Dell PowerSwitch S3248T-ON, 48 1000BASE-T, 4 SFP+ and 2 QSFP28 (S3248T-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S3248T-ON Spec Sheet, 48 line-rate RJ45 1GbE ports and four integrated 10GbE SFP+ ports, and two 100GbE QSFP28 uplink ports", caveat: "No Dell text read numbers this model's ports. That the RJ45 ports are 1 to 48, the SFP+ ports 49 to 52 and the QSFP28 ports 53 and 54, each named whole, is inferred."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}

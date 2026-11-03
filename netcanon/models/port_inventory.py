@@ -116,7 +116,9 @@ class PhysicalPort(BaseModel):
     a fixed bank's name, or the bay name for a module port."""
 
     index: int = 0
-    """0-based position within :attr:`slot`."""
+    """0-based position within :attr:`slot`, counting the port numbers
+    a model family's group passes over
+    (:attr:`netcanon.migration.device_models.PortGroup.skip`)."""
 
     module: str = ""
     """SKU of the module that contributes the port; ``""`` for the

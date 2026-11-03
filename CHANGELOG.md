@@ -803,6 +803,36 @@ timestamp if your timezone matters for an audit.
   support) and a Virtual Chassis of two families' models are not
   described: `docs/vendors/juniper_junos.md` says how to translate a
   config of one with no device declared.
+- **Dell PowerSwitch switches on SmartFabric OS10 can be declared as a
+  source or target device.**  Six model families: the S5200 (S5212F,
+  S5224F, S5232F, S5248F and S5296F), the Z9 (Z9100, Z9264F, Z9332F
+  and Z9432F), the S4100 (S4148F, S4148T, S4128F, S4128T, S4112F and
+  S4112T), the S4048 (S4048 and S4048T), the S3048 and S3248T, and the
+  N3200 (N3248TE).  Each has one mode, `standalone`: OS10 has no
+  stacking, and the two switches of a VLT pair are two devices.  Names
+  come from a new `os10` naming rule (`os10_port_name` beside the OS10
+  codec): a port is `ethernet1/1/<port>`, node 1 and slot 1 (Dell's
+  user guide, Interfaces), and the rule refuses a member id and any
+  slot.  The management port is `mgmt1/1/1`.  Every port is named
+  whole; a port broken out into lanes (`ethernet1/1/25:1`) is not
+  modelled.  A port group can now state `skip`: port numbers the
+  device does not have, in the state the mode describes, passed over
+  before the group.  An S4148 is described in its default switch-port
+  profile, profile-1, which turns its QSFP+ ports 27 and 28 off, so its
+  second QSFP28 pair states `skip: 2` and is numbered 29 and 30.  A
+  model's key is the name the switch prints as its `System Type`
+  (`S4148F-ON`).  Which ports are uplinks follows Dell where it says
+  (the S3048's SFP+ uplinks, the S4148's QSFP ports) and the cage
+  elsewhere, as on the other vendors' families.  The S5232F, S5248F,
+  S4148F, Z9100 and Z9264F panels are `vendor-doc`; every other panel
+  is `inferred`, for no Dell text read numbers its ports, and each
+  says why.  No capture is claimed, and nothing reads the switch from
+  the config: an OS10 running-config names no model, so a switch is
+  declared by hand.  Not described, each for a reason its family's
+  file gives: the Z9664F, S6010, S6100 and Z9964F, the S4148U, S4148FE,
+  S4248FB and S4248FBL, the S5448F and S5148F, and the N3200 models
+  other than the N3248TE; nor is the E3224F, whose ports no Dell text
+  read gives.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

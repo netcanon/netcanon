@@ -1,0 +1,115 @@
+# Dell PowerSwitch Z9 series on SmartFabric OS10: the Z9100-ON (32
+# QSFP28), the Z9264F-ON (64 QSFP28), and the Z9332F-ON and Z9432F-ON
+# (32 QSFP56-DD at 400G), each with two more ports after them
+#
+# A fixed switch that stands alone.  OS10 has no stacking (UG56, the
+# N3248TE platform note: "Stacking is not supported in SmartFabric
+# OS10"), so the two switches of a VLT pair are two devices, and every
+# switch is node 1, slot 1.  A port is `ethernet<node>/<slot>/<port>`
+# (UG56, Interfaces: `ethernet node/slot/port[:subport]`), so a port of
+# one of these switches is `ethernet1/1/<port>`, and the management
+# port is `mgmt1/1/1`, declared once under `deployment_ports`.
+#
+# A port broken out is named by lane (`ethernet1/1/3:2`, UG56, port
+# mode Eth).  The Z9264F-ON and Z9432F-ON pair each odd port with the
+# even port after it in a port group, whose profile is `unrestricted`
+# by default (UG56, profile); a `restricted` group disables its even
+# port on the Z9264F-ON.  The Z9100-ON and Z9332F-ON break a port out
+# with `interface breakout`.  This file describes every port in its
+# factory-default mode, not broken out: that is the mode's label.  A
+# port named by lane is not modelled yet.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the switches of other vendors that are
+# described here: a QSFP28 or QSFP56-DD port is an uplink and the two
+# small ports after them are access ports.  It says nothing about how
+# a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56   Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#          May 2026).
+#   IG64   Dell EMC PowerSwitch Z9264F-ON Installation Guide (Rev. A09,
+#          March 2022).
+#   IG32   Dell EMC PowerSwitch Z9332F-ON Installation Guide (Rev. A04,
+#          March 2022).
+#   SS432  Dell PowerSwitch Z9432F-ON Spec Sheet.
+#   GS100  Dell Z9100-Open Networking (ON) Getting Started Guide (Rev.
+#          A00, August 2015).
+#
+# Part numbers.  The key of each model is the name the switch prints
+# as its `System Type` in `show version`.  The ordering variants of a
+# model (airflow, AC or DC power, TAA) list the same ports and print
+# the same name, so each model has one entry.  An OS10 running-config
+# names no model, so a switch is declared by hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The Z9664F-ON: no Dell text read states its port count.
+#   * The S6010-ON (32 QSFP+), which the OS10 10.6.0.10 release notes
+#     do not list among the switches they support.
+#   * The Z9964F-ON, whose spec sheet names Enterprise SONiC as its
+#     operating system, and the S6100-ON, which no OS10 text read
+#     names.
+#   * Any port named by lane: a broken-out port, or a port of a
+#     restricted Z9264F-ON group (whose names in Dell's printout are
+#     not all whole).
+schema: 1
+vendor: dell_os10
+family: "Z9"
+display_name: "Dell PowerSwitch Z9"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out (every port group unrestricted), every port named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]; for a standalone switch, enter 1/1 for node/slot; the profile command's default is unrestricted; the port mode Eth example names lane 2 of port 1/1/3 interface ethernet1/1/3:2) and the N3248TE platform note (stacking is not supported in SmartFabric OS10)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has when it is not broken out. A port broken out is named by lane (ethernet1/1/3:2), and those names are not modelled: such a source port is not on this inventory. OS10 has no stacking: each switch of a VLT pair is a device of its own, its ports named ethernet1/1/<port>. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1); Dell EMC PowerSwitch Z9264F-ON Installation Guide (Rev. A09, March 2022) and Dell PowerSwitch Z9432F-ON Spec Sheet (one 10/100/1000BASE-T management port)", caveat: "That every model of this family names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on each model's panel with the name."}
+
+models:
+  # --- 32 or 64 QSFP28, and two more ------------------------------------------
+  Z9100-ON:
+    skus: [Z9100-ON]
+    display_name: "Dell PowerSwitch Z9100-ON, 32 QSFP28 and 2 more ports (Z9100-ON)"
+    panel: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port to port-pipe and MMU mapping, Z9100-ON output example of show qos port-map details (Eth 1/1/1 to Eth 1/1/34, each whole); the same guide, interface breakout (the no version resets a port to its default speed, 40G or 100G); Dell Z9100-Open Networking (ON) Getting Started Guide (Rev. A00, August 2015), 32 fixed QSFP ports that support both QSFP+ and QSFP28", caveat: "Ports 33 and 34 are named in Dell's printout, but no Dell text read says what cage or speed they have, so neither is stated."}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, notes: "Two ports numbered after the QSFP28 ports; their cage and speed are not stated in any Dell text read"}
+
+  Z9264F-ON:
+    skus: [Z9264F-ON]
+    display_name: "Dell PowerSwitch Z9264F-ON, 64 QSFP28 and 2 SFP+ (Z9264F-ON)"
+    panel: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port to port-pipe and MMU mapping, Z9264F-ON output example of show qos port-map details (Eth 1/1/65 and Eth 1/1/66 after Eth 1/1/64), Z9264F-ON port-group profiles (each odd port and the even port after it are a port group) and profile (default unrestricted, which applies to both ports of a group), and the SyncE notes (the SFP+ ports 65 and 66 of the Z9264F-ON); Dell EMC PowerSwitch Z9264F-ON Installation Guide (Rev. A09, March 2022), sixty-four QSFP28 ports and two SFP+ ports", caveat: "Dell's printout shows some ports of restricted groups by lane; that every port of an unrestricted group in 100g-1x is named whole rests on the pairs of the printout that are both whole."}
+    ports:
+      - {role: uplink, count: 64, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 32 QSFP56-DD at 400G and 2 SFP+ -----------------------------------------
+  Z9332F-ON:
+    skus: [Z9332F-ON]
+    display_name: "Dell PowerSwitch Z9332F-ON, 32 QSFP56-DD and 2 SFP+ (Z9332F-ON)"
+    panel: {grade: inferred, ref: "Dell EMC PowerSwitch Z9332F-ON Installation Guide (Rev. A04, March 2022), 32 x 400 GbE QSFP56-DD ports and two SFP+ ports (1G and 10G), and its breakout table (a 400G port breaks out to 1); High-Power Optics for SmartFabric OS10, Dell EMC PowerSwitch Z9332F-ON and Z9432F-ON (Rev. A02, July 2021), ports 1 to 32", caveat: "No Dell text read prints this model's interface names. That a QSFP56-DD port at 400G is named whole (ethernet1/1/1, not ethernet1/1/1:1), and that the SFP+ ports are 33 and 34, are inferred from the other Z9 models."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}
+
+  Z9432F-ON:
+    skus: [Z9432F-ON]
+    display_name: "Dell PowerSwitch Z9432F-ON, 32 QSFP56-DD and 2 SFP+ (Z9432F-ON)"
+    panel: {grade: inferred, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Z9432F-ON port-group profiles (port groups 1/1/1 to 1/1/16, each an odd port and the even port after it; ports 1/1/1 to 1/1/32 shown unrestricted in 400g-1x) and the SyncE notes (the SFP+ ports 33 and 34 of the Z9432F-ON); Dell PowerSwitch Z9432F-ON Spec Sheet, 32x400GbE QSFP56-DD ports + 2xSFP+ 10GbE", caveat: "The port numbers are Dell's. No Dell text read prints this model's interface names, so that a port in 400g-1x is named whole (ethernet1/1/1, not ethernet1/1/1:1) is inferred from the other Z9 models."}
+    ports:
+      - {role: uplink, count: 32, speed: 400gig, cage: qsfp-dd}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

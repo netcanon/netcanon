@@ -1,0 +1,79 @@
+# Dell PowerSwitch S4048-ON and S4048T-ON on SmartFabric OS10: 48 10G
+# ports (SFP+ on the S4048-ON, 10GBASE-T on the S4048T-ON) and six
+# 40GbE QSFP+
+#
+# A fixed switch that stands alone.  OS10 has no stacking (UG56, the
+# N3248TE platform note: "Stacking is not supported in SmartFabric
+# OS10"), so every switch is node 1, slot 1: a port is
+# `ethernet1/1/<port>` (UG56, Interfaces: `ethernet
+# node/slot/port[:subport]`), and the management port is `mgmt1/1/1`,
+# declared once under `deployment_ports`.
+#
+# A QSFP+ port broken out to four 10G ports is named by lane
+# (`ethernet1/1/49:1`), and that is not modelled.  This file describes
+# every port in its factory-default mode, not broken out: that is the
+# mode's label.
+#
+# `ports:` lists are in PORT-NUMBER order.  Dell calls the QSFP+ ports
+# of the S4048-ON "uplinks" (SS4048), so they are `uplink`, and the 10G
+# ports are `access`.  It says nothing about how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56    Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#           May 2026).
+#   SS4048  Dell EMC Networking S4048-ON Spec Sheet.
+#   IG4048T Dell EMC PowerSwitch S4048T-ON Installation Guide (Rev. A06,
+#           March 2021).
+#
+# No Dell text read numbers the ports of either model: the installation
+# guides number them in figures only.  Each model is therefore graded
+# `inferred`, its 10G ports taken to be 1 to 48 and its QSFP+ ports 49
+# to 54.
+#
+# Part numbers.  The key of each model is the name the switch prints
+# as its `System Type` in `show version`.  The ordering variants of a
+# model (airflow, AC or DC power) list the same ports and print the
+# same name, so each model has one entry.  An OS10 running-config names
+# no model, so a switch is declared by hand.
+schema: 1
+vendor: dell_os10
+family: "S4048"
+display_name: "Dell PowerSwitch S4048-ON"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no QSFP+ port broken out, every port named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]; for a standalone switch, enter 1/1 for node/slot) and the N3248TE platform note (stacking is not supported in SmartFabric OS10)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has when it is not broken out. A QSFP+ port broken out is named by lane (ethernet1/1/49:1), and those names are not modelled: such a source port is not on this inventory. OS10 has no stacking: each switch of a VLT pair is a device of its own. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1)", caveat: "That every model of this family names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on each model's panel with the name."}
+
+models:
+  S4048-ON:
+    skus: [S4048-ON]
+    display_name: "Dell PowerSwitch S4048-ON, 48 SFP+ and 6 QSFP+ (S4048-ON)"
+    panel: {grade: inferred, ref: "Dell EMC Networking S4048-ON Spec Sheet, 48 dual-speed 1/10GbE (SFP+) ports as well as six 40GbE QSFP+ uplinks (each 40GbE QSFP+ uplink can also support four 10GbE ports)", caveat: "No Dell text read numbers this model's ports. That the SFP+ ports are 1 to 48 and the QSFP+ ports 49 to 54, each named whole, is inferred."}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+}
+
+  S4048T-ON:
+    skus: [S4048T-ON]
+    display_name: "Dell PowerSwitch S4048T-ON, 48 10GBASE-T and 6 QSFP+ (S4048T-ON)"
+    panel: {grade: inferred, ref: "Dell EMC PowerSwitch S4048T-ON Installation Guide (Rev. A06, March 2021), 48 fixed 10GBase-T ports and six fixed QSFP+ ports", caveat: "No Dell text read numbers this model's ports; the guide numbers them in figures only. That the 10GBASE-T ports are 1 to 48 and the QSFP+ ports 49 to 54, each named whole, is inferred."}
+    ports:
+      - {role: access, count: 48, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 6, speed: 40gig, cage: qsfp+}

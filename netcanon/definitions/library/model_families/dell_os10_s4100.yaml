@@ -1,0 +1,134 @@
+# Dell PowerSwitch S4100-ON series on SmartFabric OS10: the S4148F-ON
+# and S4148T-ON (48 10G, 2 QSFP+ and 4 QSFP28), the S4128F-ON and
+# S4128T-ON (28 10G and 2 QSFP28) and the S4112F-ON and S4112T-ON (12
+# 10G and 3 QSFP28).  The F has SFP+ cages, the T 10GBASE-T.
+#
+# A fixed switch that stands alone.  OS10 has no stacking (UG56, the
+# N3248TE platform note: "Stacking is not supported in SmartFabric
+# OS10"), so every switch is node 1, slot 1: a port is
+# `ethernet1/1/<port>` (UG56, Interfaces: `ethernet
+# node/slot/port[:subport]`), and the management port is `mgmt1/1/1`,
+# declared once under `deployment_ports`.
+#
+# The S4148 has a switch-port profile, and which of its ports exist
+# depends on it (UG56, switch-port-profile, which states each profile
+# by port number: a profile adds or removes a port and never renumbers
+# one).
+# Its default, profile-1, enables the SFP+ (or 10GBASE-T) ports 1-24
+# and 31-54 and the QSFP28 ports 25-26 and 29-30, and turns the QSFP+
+# ports 27 and 28 off, so a factory S4148 has no ports 27 and 28: the
+# second QSFP28 pair is a group that passes over them (`skip: 2`).  A
+# port broken out is named by lane (`ethernet1/1/25:1`), and that is
+# not modelled.  This file describes a switch in profile-1 with no port
+# broken out: that is the mode's label.  No switch-port profile is
+# documented for the S4128 or the S4112.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows Dell, which calls the QSFP+ and QSFP28
+# ports of the S4148 "uplink ports" (UG56, S4148-ON Series port
+# profiles); the 10G ports are access ports.  It says nothing about how
+# a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56   Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#          May 2026).
+#   SS     Dell PowerSwitch S4100-ON Series Spec Sheet.
+#
+# Part numbers.  The key of each model is the name the switch prints
+# as its `System Type` in `show version`.  The ordering variants of a
+# model (airflow, TAA) list the same ports and print the same name, so
+# each model has one entry.  An OS10 running-config names no model, so
+# a switch is declared by hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The S4148U-ON, whose SFP+ unified port groups operate in Fibre
+#     Channel mode in its default profile (UG56, switch-port-profile):
+#     a Fibre Channel port has a name of its own that this file does
+#     not give.
+#   * The S4148FE-ON, which Dell groups with the S4148F and S4148T but
+#     whose ports no Dell text read describes.
+#   * The S4248FB-ON and S4248FBL-ON (the S4200-ON series).
+#   * An S4148 in any profile other than profile-1, and any port named
+#     by lane.
+schema: 1
+vendor: dell_os10
+family: "S4100"
+display_name: "Dell PowerSwitch S4100-ON"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no port broken out and an S4148 in its default switch-port profile (profile-1, the QSFP+ ports 27 and 28 off), every port named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]), switch-port-profile (for a standalone switch, enter 1/1; S4148-ON Series default profile-1: SFP+ 10G ports 1-24 and 31-54 and QSFP28 100G ports 25-26 and 29-30 are enabled) and the N3248TE platform note (stacking is not supported in SmartFabric OS10)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has when it is not broken out. A port broken out is named by lane (ethernet1/1/25:1), and those names are not modelled: such a source port is not on this inventory. An S4148 in another switch-port profile has other ports (profile-2 enables the QSFP+ ports 27 and 28 and leaves out ports 51 to 54). OS10 has no stacking: each switch of a VLT pair is a device of its own. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1); Dell PowerSwitch S4100-ON Series Spec Sheet (one RJ45 out-of-band management port)", caveat: "That every model of this family names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on each model's panel with the name."}
+
+models:
+  # --- 48 x 10G, 2 x QSFP+ (off in profile-1) and 4 x QSFP28 ------------------
+  S4148F-ON:
+    skus: [S4148F-ON]
+    display_name: "Dell PowerSwitch S4148F-ON, 48 SFP+ and 4 QSFP28 in profile-1 (S4148F-ON)"
+    panel: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), switch-port-profile (S4148-ON Series profile-1, the default: SFP+ 10G ports 1-24 and 31-54 and QSFP28 100G ports 25-26 and 29-30 are enabled), S4148-ON Series port profiles (in profile-1 the QSFP+ ports 27 and 28 are deactivated; the QSFP+ and QSFP28 ports are uplink ports) and show inventory (S4148F-ON 48x10GbE, 2x40GbE QSFP+, 4x100GbE QSFP28 Interface); Dell PowerSwitch S4100-ON Series Spec Sheet, 48x 10GbE SFP+, 2x QSFP+, 4x 100GbE QSFP28", caveat: "The guide's port-profile topic says profile-1 enables 4x10G breakouts on the QSFP28 ports, where its switch-port-profile text says they are 100G ports that support breakouts; that a QSFP28 port is named whole at the factory follows the second."}
+    ports:
+      - {role: access, count: 24, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}
+      - {role: uplink, count: 2, skip: 2, speed: 100gig, cage: qsfp28, notes: "Ports 29 and 30; the QSFP+ ports 27 and 28 are off in profile-1"}
+      - {role: access, count: 24, speed: 10gig, cage: sfp+}
+
+  S4148T-ON:
+    skus: [S4148T-ON]
+    display_name: "Dell PowerSwitch S4148T-ON, 48 10GBASE-T and 4 QSFP28 in profile-1 (S4148T-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S4100-ON Series Spec Sheet, 48x 10GBASE-T, 2x QSFP+, 4x 100GbE QSFP28; Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), switch-port-profile (S4148-ON Series profile-1: SFP+ 10G ports 1-24 and 31-54 and QSFP28 100G ports 25-26 and 29-30 are enabled)", caveat: "Dell's profile text is for the S4148-ON Series without listing its members, and speaks of SFP+ ports; that the S4148T numbers its 10GBASE-T ports as the S4148F numbers its SFP+ ports, and that its QSFP+ ports 27 and 28 are off in profile-1, is inferred."}
+    ports:
+      - {role: access, count: 24, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}
+      - {role: uplink, count: 2, skip: 2, speed: 100gig, cage: qsfp28, notes: "Ports 29 and 30; the QSFP+ ports 27 and 28 are off in profile-1"}
+      - {role: access, count: 24, speed: 10gig, cage: rj45}
+
+  # --- 28 x 10G and 2 x QSFP28 ------------------------------------------------
+  S4128F-ON:
+    skus: [S4128F-ON]
+    display_name: "Dell PowerSwitch S4128F-ON, 28 SFP+ and 2 QSFP28 (S4128F-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S4100-ON Series Spec Sheet, 28x 10GbE SFP+, 2x 100GbE QSFP28", caveat: "No Dell text read numbers this model's ports. That the SFP+ ports are 1 to 28 and the QSFP28 ports 29 and 30, each named whole, is inferred from the S4148."}
+    ports:
+      - {role: access, count: 28, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}
+
+  S4128T-ON:
+    skus: [S4128T-ON]
+    display_name: "Dell PowerSwitch S4128T-ON, 28 10GBASE-T and 2 QSFP28 (S4128T-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S4100-ON Series Spec Sheet, 28x 10GBASE-T, 2x 100GbE QSFP28", caveat: "No Dell text read numbers this model's ports. That the 10GBASE-T ports are 1 to 28 and the QSFP28 ports 29 and 30, each named whole, is inferred from the S4148."}
+    ports:
+      - {role: access, count: 28, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}
+
+  # --- 12 x 10G and 3 x QSFP28 (half width) -----------------------------------
+  S4112F-ON:
+    skus: [S4112F-ON]
+    display_name: "Dell PowerSwitch S4112F-ON, 12 SFP+ and 3 QSFP28 (S4112F-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S4100-ON Series Spec Sheet, 12x 10GbE SFP+, 3x 100GbE QSFP28 (a half-rack width model)", caveat: "No Dell text read numbers this model's ports. That the SFP+ ports are 1 to 12 and the QSFP28 ports 13 to 15, each named whole, is inferred from the S4148."}
+    ports:
+      - {role: access, count: 12, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 3, speed: 100gig, cage: qsfp28}
+
+  S4112T-ON:
+    skus: [S4112T-ON]
+    display_name: "Dell PowerSwitch S4112T-ON, 12 10GBASE-T and 3 QSFP28 (S4112T-ON)"
+    panel: {grade: inferred, ref: "Dell PowerSwitch S4100-ON Series Spec Sheet, 12x 10GBASE-T, 3x 100GbE QSFP28 (a half-rack width model)", caveat: "No Dell text read numbers this model's ports. That the 10GBASE-T ports are 1 to 12 and the QSFP28 ports 13 to 15, each named whole, is inferred from the S4148."}
+    ports:
+      - {role: access, count: 12, speed: 10gig, cage: rj45}
+      - {role: uplink, count: 3, speed: 100gig, cage: qsfp28}
