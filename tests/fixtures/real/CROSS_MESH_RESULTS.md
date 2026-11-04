@@ -33,8 +33,8 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg | WARN 18/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
 | aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 |
 | aruba_aoss/aruba_central_5memberstack_rendered.cfg | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
-| aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
-| aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 |
+| aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg | WARN 19/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
+| aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
 | aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 |
 | aruba_aoss/hpe_community_5406rzl2_kb1515.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
 | aruba_aoss/user_contrib_2930m_wc1611.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
@@ -176,7 +176,7 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 
 ## Per-cell drill-downs — real captures
 
-One section per non-OK real-capture cell (1149 total).  Sections are ordered by source fixture then target codec.
+One section per non-OK real-capture cell (1151 total).  Sections are ordered by source fixture then target codec.
 
 ### arista_eos/batfish_duplicateprivate_eos4211.txt → aruba_aoscx  (WARN 19/21)
 
@@ -1782,19 +1782,27 @@ One section per non-OK real-capture cell (1149 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → arista_eos  (WARN 20/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → arista_eos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → aruba_aoscx  (WARN 18/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → aruba_aoscx  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"... |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "Gast", "description": "", "tagged_ports": [], "untagged_ports": [], ... | {"vlans[0] {'id': 1, 'name': 'LAN'}": {"ipv4_addresses": {"source": [{"ip": "192.168.176.35", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac": ""}],... |
 | snmp | DRIFT | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": ["192.168.176.16"], "v3_users": []} | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts"]} |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
+
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → aruba_aoss  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
 ### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_iosxe  (WARN 20/21)
 
@@ -1805,83 +1813,101 @@ One section per non-OK real-capture cell (1149 total).  Sections are ordered by 
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.176.35", "prefix_length": 24, "is_secondary": false, "virtual_gateway_addre... | count drift: 2 → 1 (vlans) |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "192.168.176.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | snmp | UNSUPPORTED (by design) | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": ["192.168.176.16"], "v3_users": []} |  | snmp: {'community': 'xxxx', 'location': '1OG', 'contact': 'IT', 'trap_hosts': ['192.168.176.16'], 'v3_users': []} → None |
+| local_users | UNSUPPORTED (by design) | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_iosxe_cli  (WARN 20/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_iosxe_cli  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_iosxr  (WARN 18/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_iosxr  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"... |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [] | all 2 vlans dropped |
 | snmp | DRIFT | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": ["192.168.176.16"], "v3_users": []} |  | snmp: {'community': 'xxxx', 'location': '1OG', 'contact': 'IT', 'trap_hosts': ['192.168.176.16'], 'v3_users': []} → None |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_nxos  (WARN 20/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → cisco_nxos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → dell_os10  (WARN 20/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | count drift: 49 → 50 (interfaces) |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → fortigate_cli  (WARN 19/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → fortigate_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | count drift: 49 → 50 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [{"id": 1, "name": "Vlan1", "description": "LAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "vlan2", "description": "Gast", "tagged_ports": [], "untagged_po... | {"vlans[0] {'id': 1, 'name': 'LAN'}": {"description": {"source": "", "target": "LAN"}, "ipv4_addresses": {"source": [{"ip": "192.168.176.35", "prefix_length": 24, "is_secondary": false, "virtual_ga... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → juniper_junos  (WARN 20/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → juniper_junos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → mikrotik_routeros  (WARN 19/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → mikrotik_routeros  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | count drift: 49 → 51 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [{"id": 1, "name": "Vlan1", "description": "LAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "vlan2", "description": "Gast", "tagged_ports": [], "untagged_po... | {"vlans[0] {'id': 1, 'name': 'LAN'}": {"description": {"source": "", "target": "LAN"}, "ipv4_addresses": {"source": [{"ip": "192.168.176.35", "prefix_length": 24, "is_secondary": false, "virtual_ga... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → opnsense  (WARN 18/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → opnsense  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | count drift: 49 → 50 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [] | all 2 vlans dropped |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.176.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → vyos  (WARN 18/21)
+### aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg → vyos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_... | [{"name": "1", "default_name": "", "description": "AP - 1. OG Grossraumbuero", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"source": [1, ... |
 | vlans | DRIFT | [{"id": 1, "name": "LAN", "description": "", "tagged_ports": [], "untagged_ports": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "2... | [] | all 2 vlans dropped |
 | snmp | DRIFT | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": ["192.168.176.16"], "v3_users": []} | {"community": "xxxx", "location": "1OG", "contact": "IT", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts"]} |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}, {"name": "operator", "privilege_level": 1, "hashed_password": "", "role": "operator"}] | [] | all 2 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → arista_eos  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → arista_eos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | {"vlans[6] {'id': 4, 'name': 'internet sdsl'}": {"name": {"source": "internet sdsl", "target": "internet_sdsl"}}, "vlans[9] {'id': 7, 'name': 'printer leraarskamer'}": {"name": {"source": "printer ... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → aruba_aoscx  (WARN 18/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → aruba_aoscx  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["192.168.2.11"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "acce... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tagged_ports": [], "untagged_po... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"untagged_ports": {"source": ["48", "49", "50", "... and 2 more"], "target": []}}, "vlans[1] {'id': 10, 'name': 'wifi'}": {"ipv4_addresses": {"source... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
+
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → aruba_aoss  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
 ### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_iosxe  (WARN 20/21)
 
@@ -1893,71 +1919,81 @@ One section per non-OK real-capture cell (1149 total).  Sections are ordered by 
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 10, "name": "wifi", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "10.1.0.27", "prefix_length": 16, "is_secondary": false, "virtual_gateway_address"... | count drift: 12 → 9 (vlans) |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metri... | [] | all 4 static_routes dropped |
 | snmp | UNSUPPORTED (by design) | {"community": "public", "location": "", "contact": "netadmin@example.test", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': 'netadmin@example.test', 'trap_hosts': [], 'v3_users': []} → None |
+| local_users | UNSUPPORTED (by design) | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_iosxe_cli  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_iosxe_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | {"vlans[6] {'id': 4, 'name': 'internet sdsl'}": {"name": {"source": "internet sdsl", "target": "internet_sdsl"}}, "vlans[9] {'id': 7, 'name': 'printer leraarskamer'}": {"name": {"source": "printer ... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_iosxr  (WARN 18/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_iosxr  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "acce... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [] | all 12 vlans dropped |
 | snmp | DRIFT | {"community": "public", "location": "", "contact": "netadmin@example.test", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': 'netadmin@example.test', 'trap_hosts': [], 'v3_users': []} → None |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_nxos  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → cisco_nxos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | {"vlans[6] {'id': 4, 'name': 'internet sdsl'}": {"name": {"source": "internet sdsl", "target": "internet_sdsl"}}, "vlans[9] {'id': 7, 'name': 'printer leraarskamer'}": {"name": {"source": "printer ... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → dell_os10  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["192.168.2.11"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | count drift: 61 → 64 (interfaces) |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → fortigate_cli  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → fortigate_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | count drift: 61 → 64 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "vlan1", "description": "DEFAULT_VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "Vlan10", "description": "wifi", "tagged_ports": [], "... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"description": {"source": "", "target": "DEFAULT_VLAN"}, "name": {"source": "DEFAULT_VLAN", "target": "vlan1"}, "untagged_ports": {"source": ["48", "... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → juniper_junos  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → juniper_junos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metri... | [{"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "192.168.0.0/24", "gateway": "192.168.0.27", "interface": "", "... | count drift: 4 → 3 (static_routes) |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → mikrotik_routeros  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → mikrotik_routeros  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | count drift: 61 → 65 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "vlan1", "description": "DEFAULT_VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "Vlan10", "description": "wifi", "tagged_ports": [], "... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"description": {"source": "", "target": "DEFAULT_VLAN"}, "name": {"source": "DEFAULT_VLAN", "target": "vlan1"}, "untagged_ports": {"source": ["48", "... |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → opnsense  (WARN 18/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → opnsense  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | count drift: 61 → 64 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [] | all 12 vlans dropped |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "192.168.2.11", "interface": "", "metri... | [] | all 4 static_routes dropped |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → vyos  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → vyos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "target"... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [] | all 12 vlans dropped |
+| local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
 ### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → arista_eos  (WARN 20/21)
 

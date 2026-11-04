@@ -837,7 +837,16 @@ in rendered output find every such site.
      and `sha256` also `password non-plaintext-sha256`; both change how
      the switch keeps every credential, so neither is written, and one
      review line above the accounts (and one job warning) says what
-     the switch needs.  See
+     the switch needs.  As a source, the parser reads the last line
+     of each role, as the switch does (an earlier one is a row of
+     `dropped_tier3_sections`); the bare `password manager` marker a
+     switch prints without `include-credentials`, as an account of
+     the role's default name that holds no secret (a review line on
+     every target, by item 7); and each `aaa authentication
+     local-user` account, at the privilege level of its `Level-N`
+     group and at 1 in any other group, which a row says.  It used
+     to read the full `password <role> user-name` line only, and
+     every one of them.  See
      [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
   7. No target writes an account that has no password.  A user the
      source gives none -- nothing, or a tag with nothing after it

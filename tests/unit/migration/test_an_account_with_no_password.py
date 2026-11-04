@@ -470,7 +470,7 @@ def test_every_committed_input_onto_every_target() -> None:
     # The inputs that hold such accounts, by source codec: one that no
     # longer reaches here leaves a guard that reads nothing.
     assert sources >= {
-        "arista_eos", "fortigate_cli", "juniper_junos",
+        "arista_eos", "aruba_aoss", "fortigate_cli", "juniper_junos",
         "mikrotik_routeros", "opnsense", "vyos",
     }, sources
     assert asked["read"] > 0 and asked["not rendered"] == 0, asked

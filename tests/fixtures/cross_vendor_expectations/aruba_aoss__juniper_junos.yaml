@@ -582,9 +582,11 @@ per_field_expectation:
       either; Junos accepts ``$1$`` (MD5 legacy), ``$5$``
       (SHA-256), ``$6$`` (SHA-512 default since 17.2 per KB31903)
       but none match AOS-S's forms.  Measured over the committed
-      inputs: none of the 4 accounts arrive across the 3 cells that
-      populate local users -- 3 carry an AOS-S `sha1:` digest and 1
-      a password as typed, each a review comment in place of the
+      inputs: none of the 7 accounts arrive across the 5 cells that
+      populate local users -- 3 carry an AOS-S `sha1:` digest, 1 a
+      password as typed and 3 no secret (a bare `password manager` /
+      `password operator` marker, printed without
+      `include-credentials`), each a review comment in place of the
       account.  Cross-vendor migration requires re-setting
       passwords on the target.  SSH public-key authentication on
       Junos has no Aruba analogue in the canonical

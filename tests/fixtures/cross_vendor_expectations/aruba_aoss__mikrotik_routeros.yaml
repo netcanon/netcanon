@@ -310,9 +310,12 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      1 of 4 accounts arrive across the 3 cells that populate local users; the
-      list shrinks on 3 of them. The 3 accounts that vanish carry 3 AOS-S
-      `sha1:` digest. RouterOS can consume a genuine plaintext password only (it
+      1 of 7 accounts arrive across the 5 cells that populate local users; the
+      list shrinks on 5 of them. Of the 6 accounts that vanish, 3 carry an
+      AOS-S `sha1:` digest and 3 hold no secret (a bare `password manager` /
+      `password operator` marker, printed without `include-credentials`),
+      which no target writes as an account.
+      RouterOS can consume a genuine plaintext password only (it
       hashes the password itself); anything else is refused with a review
       comment naming the account, in place of the account. Up to 0.7.7 such an
       account was written as `/user add` with no `password=`, which RouterOS

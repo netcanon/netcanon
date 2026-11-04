@@ -28,6 +28,33 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **The AOS-S parser reads every account the switch prints.**  It
+  read the `password <role> user-name ...` line only, and every one
+  of them: a config with two `password manager` lines -- which the
+  switch takes without an error, keeping the last -- was two
+  managers, and every other target wrote both as live accounts,
+  the one the switch had replaced included.  It did not read the
+  bare `password manager` marker a switch prints without
+  `include-credentials`, nor an `aaa authentication local-user`
+  account: such accounts were not in the translation, and nothing
+  said so.  The parser now keeps the last line of each role, as the
+  switch does, and says an earlier one in a row of
+  `dropped_tier3_sections` that names no user and no value; reads a
+  bare marker as an account of the role's default name that holds
+  no secret, which every target writes as a review line in place of
+  an account (below); and reads each local user, its hash wrapped
+  onto the next line or not, at the privilege level of the switch's
+  own group `Level-0` to `Level-15`, and at 1 in any other group,
+  which a row says.  A later line of a user replaces it, and a
+  local-user line that sets no account (a password policy) is a
+  row.  The manager comes first in the tree, then the operator,
+  then the local users, so that an AOS-S target gives the manager
+  slot to the switch's manager and not to a `Level-15` user printed
+  above it.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_every_account_form.py`,
+  which also reads every committed AOS-S input for its accounts with
+  a reader of its own and holds the parse to it.
+
 - **No target writes an account that has no password.**  A local user
   the source gives no password -- nothing, or a tag with nothing after
   it (`sha1:`, `5 `) -- was written by every target but AOS-S: IOS-XE
@@ -5411,13 +5438,14 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **AOS-S credentials: two forms the parser does not read.**  As a
-  source, the parser does not read the bare `password manager` marker
-  a switch prints without `include-credentials`, nor an `aaa
-  authentication local-user` account: such accounts are not in the
-  translation.  As a target, an output does not write
+- **AOS-S credentials.**  As a target, an output does not write
   `include-credentials` or `password non-plaintext-sha256`, which a
-  hashed account line needs; a review line says so.
+  hashed account line needs; a review line says so.  As a source, a
+  bare `password manager` marker is read under the role's default
+  name, though a switch whose account was given another name prints
+  the same marker; and a local user in a group other than `Level-0`
+  to `Level-15` (the groups `manager` and `operator` among them) is
+  read at privilege level 1, its group's rules not translated.
 - **A sub-interface's number is bounded onto Junos alone.**  On the
   other targets that write a unit's number in its name (IOS-XE, IOS
   XR, NX-OS, EOS and the like) a sub-interface keeps its number from

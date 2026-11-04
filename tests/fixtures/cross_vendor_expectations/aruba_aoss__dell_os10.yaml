@@ -248,32 +248,32 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
-      sides empty on 4.
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
     references: [aoss-os10-surface]
 
   local_users[].hashed_password:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
-      sides empty on 4.
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
     references: [aoss-os10-surface]
 
   local_users[].name:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
-      sides empty on 4.
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
     references: [aoss-os10-surface]
 
   local_users[].role:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
-      sides empty on 4.
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
     references: [aoss-os10-surface]
 
   ntp_servers:
