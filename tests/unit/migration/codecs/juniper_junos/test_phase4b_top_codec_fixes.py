@@ -43,14 +43,11 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-def test_junos_user_with_empty_hashed_password_emits_class_line() -> None:
+def test_junos_user_with_empty_hashed_password_is_a_review_line() -> None:
     """A local user whose ``hashed_password`` is the empty string is
-    NOT a security regression to emit on Junos: the bare ``class`` line
-    creates a console-only / no-password account that the operator can
-    rotate later by attaching ssh-rsa keys or running ``set
-    authentication plain-text-password``.  The render path must emit
-    just the class line (no encrypted-password line, no review
-    comment).
+    not written: the bare ``class`` line is an account with no
+    password, which Junos commits.  A review line names it instead
+    (``tests/unit/migration/test_an_account_with_no_password.py``).
     """
     intent = CanonicalIntent(
         hostname="empty-hash-user",
@@ -63,12 +60,9 @@ def test_junos_user_with_empty_hashed_password_emits_class_line() -> None:
         ],
     )
     out = render_intent(intent)
-    # Class line is present — Junos accepts the no-password form.
-    assert "set system login user ops class super-user" in out
-    # No encrypted-password line for this user (no hash material).
+    assert "set system login user ops" not in out
     assert "authentication encrypted-password" not in out
-    # And no review comment — empty isn't unmigratable, it's just empty.
-    assert "review:" not in out
+    assert '# user "ops" -- review: no password' in out
 
 
 def test_junos_user_with_md5crypt_hash_emits_auth_line() -> None:

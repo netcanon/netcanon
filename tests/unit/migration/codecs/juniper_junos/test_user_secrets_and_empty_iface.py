@@ -7,7 +7,7 @@ Two related fixes from ``user_smoke_findings.md``:
   unconditionally, leaking Cisco type-9 (scrypt) hashes that
   Junos cannot consume.  The new policy gates emit through
   ``netcanon.migration._user_secrets.is_migratable("juniper_junos")``
-  and falls back to a ``# password manager user-name "X" -- review:``
+  and falls back to a ``# user "X" -- review:``
   comment line when the source hash format isn't one Junos
   accepts.  Native Junos hashes (``junos:`` prefix) and foreign
   ``$1$`` (md5crypt) / ``$6$`` (sha512crypt) hashes pass through.
@@ -61,7 +61,7 @@ def test_unmigratable_cisco_type_9_emits_comment_review() -> None:
     out = render_intent(intent)
     # The review-comment line is present, naming the user.
     assert (
-        '# password manager user-name "netadmin" -- review: '
+        '# user "netadmin" -- review: '
         "9 hash from source vendor cannot be re-used on Junos"
     ) in out
     # The dangerous payload never appears anywhere in the output.
@@ -102,8 +102,8 @@ def test_junos_unmigratable_hash_drops_user_declaration_entirely() -> None:
     renderer must NOT emit a bare ``set system login user X class Y``
     line — that creates a passwordless account at Junos commit
     time, strictly worse than the source state.  Mirror Cisco
-    IOS-XE's full-drop pattern: only the ``# password manager ..
-    -- review:`` comment line remains, signalling the operator to
+    IOS-XE's full-drop pattern: only the ``# user ".." -- review:``
+    comment line remains, signalling the operator to
     reset the password manually.
     """
     intent = CanonicalIntent(
@@ -123,7 +123,7 @@ def test_junos_unmigratable_hash_drops_user_declaration_entirely() -> None:
     # Review comment IS present, naming the user + the source
     # algorithm + the per-codec target label.
     assert (
-        '# password manager user-name "root" -- review: '
+        '# user "root" -- review: '
     ) in out
     assert "cannot be re-used on Junos" in out
     # Crucially, NO ``set system login user root`` declaration

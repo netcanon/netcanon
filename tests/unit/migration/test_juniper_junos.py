@@ -731,7 +731,10 @@ class TestRenderUsers:
         """Privilege 15 with no explicit role → super-user on render."""
         intent = CanonicalIntent(
             local_users=[
-                CanonicalLocalUser(name="admin", privilege_level=15),
+                CanonicalLocalUser(
+                    name="admin", privilege_level=15,
+                    hashed_password="junos:$6$abcd$fake",
+                ),
             ],
         )
         out = JunosCodec().render(intent)
@@ -740,7 +743,10 @@ class TestRenderUsers:
     def test_render_read_only_from_privilege(self):
         intent = CanonicalIntent(
             local_users=[
-                CanonicalLocalUser(name="auditor", privilege_level=1),
+                CanonicalLocalUser(
+                    name="auditor", privilege_level=1,
+                    hashed_password="junos:$6$abcd$fake",
+                ),
             ],
         )
         out = JunosCodec().render(intent)
@@ -755,6 +761,7 @@ class TestRenderUsers:
                     name="admin",
                     role="super-user",
                     privilege_level=1,  # nonsense, but role must win
+                    hashed_password="junos:$6$abcd$fake",
                 ),
             ],
         )

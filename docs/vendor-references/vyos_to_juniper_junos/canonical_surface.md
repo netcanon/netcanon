@@ -1,5 +1,8 @@
 # VyOS → Juniper Junos: measured canonical surface
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the Junos render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as `set system login user <name> class <class>` with no `authentication` statement.  It now writes one review comment IN PLACE of the account, `# user "<name>" -- review: no password for this account was read from the source, and an account written for Junos without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, and the job carries one warning naming each such account.  Measured on this pair: **1** such account across 1 cell (one real capture).  It used to arrive, and it does not now: `local_users` in/out over the 13 cells that populate users goes from **17 / 17** to **17 / 16**.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__juniper_junos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/vyos__juniper_junos.yaml`.
 

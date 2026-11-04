@@ -1,5 +1,8 @@
 # VyOS → MikroTik RouterOS: measured canonical surface
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the RouterOS render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as `/user add group=<group> name=<name>` with no `password=`, which RouterOS gives an empty password.  It now writes one review comment IN PLACE of the account, under `/user`, `# user "<name>" -- review: no password for this account was read from the source, and an account written for RouterOS without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, and the job carries one warning naming each such account.  Measured on this pair: **1** such account across 1 cell (one real capture).  It used to arrive, and it does not now: `local_users` in/out over the 13 cells that populate users goes from **17 / 1** to **17 / 0**.  The other 16 accounts are review lines for a secret RouterOS cannot take, as before.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__mikrotik_routeros.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/vyos__mikrotik_routeros.yaml`.
 
@@ -163,7 +166,7 @@ carries no password in the source at all.
 
 **Half two — and the hash is written out anyway.** The RouterOS renderer has a
 deliberate guard against exactly this (`codecs/mikrotik_routeros/render.py`,
-`is_migratable(...)` gating plus a `# password manager … -- review:` comment
+`is_migratable(...)` gating plus a `# user "…" -- review:` comment
 for unmigratable hashes), and on this pair **the guard never fires**. The
 central classifier `classify_hash()` in `netcanon/migration/_user_secrets.py`
 recognises *tagged* forms — `arista:sha512:…`, `cisco:type9:…`, the bare-digit
@@ -180,7 +183,7 @@ Measured across all 13 renders:
 |---|---|
 | `/user add` lines carrying a crypt-shaped `password=` value | **16** |
 | `/user add` lines with no `password=` at all | **1** |
-| `# password manager … review:` comments emitted | **0** |
+| `# user "…" -- review:` comments emitted | **0** |
 
 Confirming the classifier boundary directly, with a **synthetic** value that
 appears in no fixture:

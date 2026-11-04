@@ -40,7 +40,13 @@ from __future__ import annotations
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_no_secret_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _prefix_to_mask, ip_mtu_written, mtu_written, same_vendor_version
 from . import port_names as _port_names
@@ -174,16 +180,21 @@ def _render_local_user(user) -> list[str]:
     ``secret 0 <value>`` — the CLEARTEXT marker — so a foreign digest
     became the literal password.  A secret IOS-XR cannot consume now drops
     the whole ``username`` block (a block with no secret is a passwordless
-    account) and leaves a review comment.
+    account) and leaves a review comment, and so does an account the
+    source gives no password.
     """
     role = user.role or (
         "root-lr" if user.privilege_level >= 15 else "operator"
     )
     # Name, group and secret are one word each; the block is left out
     # whole rather than altered.  Policy: :mod:`netcanon.migration._one_value`.
-    payload = (
-        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
-    )
+    # An account the source gives no password is a review line,
+    # never the account without one.
+    if holds_no_secret(user.hashed_password):
+        return [format_no_secret_comment(
+            user.name, comment_syntax="exclamation", target_label="Cisco IOS-XR",
+        )]
+    payload = classify_hash(user.hashed_password)[1]
     # A secret this target cannot take at all is the hash gate's to
     # say (below); this asks only of one it would write.
     if splits(user.name) or splits(role) or (
@@ -191,17 +202,18 @@ def _render_local_user(user) -> list[str]:
         and is_migratable(user.hashed_password, "cisco_iosxr")
     ):
         return ["! " + left_out(f"username {user.name}", "Cisco IOS-XR")]
-    block = [f"username {user.name}", f" group {role}"]
-    if user.hashed_password:
-        algorithm, payload = classify_hash(user.hashed_password)
-        if not is_migratable(user.hashed_password, "cisco_iosxr"):
-            return [format_review_comment(
-                user.name, algorithm,
-                comment_syntax="exclamation", target_label="Cisco IOS-XR",
-            )]
-        block.append(f" {_IOSXR_SECRET_FORM[algorithm]} {payload}")
-    block.append("!")
-    return block
+    algorithm, payload = classify_hash(user.hashed_password)
+    if not is_migratable(user.hashed_password, "cisco_iosxr"):
+        return [format_review_comment(
+            user.name, algorithm,
+            comment_syntax="exclamation", target_label="Cisco IOS-XR",
+        )]
+    return [
+        f"username {user.name}",
+        f" group {role}",
+        f" {_IOSXR_SECRET_FORM[algorithm]} {payload}",
+        "!",
+    ]
 
 
 def _render_vrf(ri: CanonicalRoutingInstance) -> list[str]:

@@ -75,6 +75,8 @@ class CiscoIOSXECLICodec(CodecBase):
     """
 
     name: ClassVar[str] = "cisco_iosxe_cli"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Cisco IOS-XE"
     version_hint: ClassVar[str | None] = "15.x / 16.x / 17.x"
     input_format: ClassVar[str] = "cli-ios"
     direction: ClassVar[str] = "bidirectional"

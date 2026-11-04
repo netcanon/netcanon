@@ -539,18 +539,17 @@ per_field_expectation:
   local_users:
     disposition: unsupported
     reason: >
-      THE headline loss on this pair, and a whole-record one: 0 preserved /
-      1 drifted, "all 3 local_users dropped".  RouterOS `/export` never
-      surfaces `/user` password material, so `hashed_password` arrives empty;
-      the NX-OS renderer then takes its no-password branch and emits a bare
-      `username <name> role <role>` line, which the NX-OS parser does not
-      recognise (its `username` grammar requires the `password <type> <hash>`
-      clause).  The accounts therefore do not exist on the far side of the
+      THE headline loss on this pair, and a whole-record one: 0 preserved / 1
+      drifted, "all 3 local_users dropped". RouterOS `/export` never surfaces
+      `/user` password material, so `hashed_password` arrives empty; the NX-OS
+      render then writes a review comment naming each account, in place of the
+      account, since an account written with no password could log in with
+      none. The accounts therefore do not exist on the far side of the
       migration at all — nothing is re-keyable because nothing survives.
       Combined with `radius_servers` below, a Nexus cut over from this config
-      has NO local and NO remote authentication source.  Re-create every
-      account (name, role, password) on the target before cutover, out of
-      band from this migration.
+      has NO local and NO remote authentication source. Re-create every
+      account (name, role, password) on the target before cutover, out of band
+      from this migration.
     references: [routeros-nxos-surface]
 
   radius_servers:

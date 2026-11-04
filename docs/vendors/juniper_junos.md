@@ -42,7 +42,10 @@ welcome.
 - RADIUS — `set system radius-server`
 - DHCP server pools (where present)
 - Local users with hashed passwords — `$1$` / `$5$` / `$6$` / `$9$`
-  form-preserving migration
+  form-preserving migration.  A user with no `authentication` (a
+  `remote` template for RADIUS or TACACS+ login) is a `review:` line
+  on every target, Junos included: no target writes an account with
+  no password
 - **`apply-groups`** + group content — preserved byte-for-byte
   through round-trip (Junos-specific structural primitive)
 - Routing instances + VRFs

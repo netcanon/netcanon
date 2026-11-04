@@ -66,10 +66,10 @@ class TestIssue1aHashPolicy:
         return FortiGateCLICodec().render(tree)
 
     def test_unmigratable_hash_emits_review_comment(self) -> None:
-        """Cisco type-9 (``9 $9$..``) must produce a ``# password
-        manager`` review comment naming the source algorithm."""
+        """Cisco type-9 (``9 $9$..``) must produce a ``# user
+        "<name>"`` review comment naming the source algorithm."""
         out = self._render_with_user("9 $9$fakeSaltAdmin1$realisticPayload")
-        assert '# password manager user-name "netadmin"' in out
+        assert '# user "netadmin" -- review:' in out
         assert "review:" in out
         assert "9 hash from source vendor" in out
         # The literal ENC + payload form must NOT appear.

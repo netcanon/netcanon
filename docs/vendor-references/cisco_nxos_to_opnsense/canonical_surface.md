@@ -113,7 +113,7 @@ elided for length):
   <hostname>nxos-kitchensink</hostname>
   <user>
     <name>admin</name>
-    <!-- password manager user-name "admin" - review: 5 hash from source
+    <!-- user "admin" - review: 5 hash from source
          vendor cannot be re-used on OPNsense; reset this user password
          manually -->
     <scope>system</scope>

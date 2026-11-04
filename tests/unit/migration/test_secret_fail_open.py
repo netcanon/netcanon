@@ -317,8 +317,8 @@ def test_aoscx_ciphertext_is_not_retyped_as_an_aos_s_plaintext_password() -> Non
 #: models no AAA subtree and is deliberately absent.
 _USER_RENDERING_TARGETS = (
     "arista_eos", "aruba_aoss", "aruba_aoscx", "cisco_iosxe_cli", "cisco_iosxr",
-    "cisco_nxos", "fortigate_cli", "juniper_junos", "mikrotik_routeros",
-    "opnsense", "vyos",
+    "cisco_nxos", "dell_os10", "fortigate_cli", "juniper_junos",
+    "mikrotik_routeros", "opnsense", "vyos",
 )
 
 

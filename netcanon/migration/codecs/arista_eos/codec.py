@@ -62,6 +62,8 @@ class AristaEOSCodec(CodecBase):
     """Bidirectional codec for Arista EOS ``show running-config``."""
 
     name: ClassVar[str] = "arista_eos"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Arista EOS"
     version_hint: ClassVar[str | None] = "EOS 4.20+"
     input_format: ClassVar[str] = "cli-arista"
     direction: ClassVar[str] = "bidirectional"

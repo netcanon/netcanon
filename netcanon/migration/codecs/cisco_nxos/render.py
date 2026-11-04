@@ -32,7 +32,13 @@ from __future__ import annotations
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_no_secret_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from ...canonical.transforms import synthesize_svis_from_vlan_l3
@@ -378,9 +384,13 @@ def _render_local_user(user) -> str:
     # word of a password is read as the next keyword (`secret scrypt` sets
     # the password `secret`).  The account is left out whole rather than
     # altered.  Policy: :mod:`netcanon.migration._one_value`.
-    payload = (
-        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
-    )
+    # An account the source gives no password is a review line,
+    # never the account without one.
+    if holds_no_secret(user.hashed_password):
+        return format_no_secret_comment(
+            user.name, comment_syntax="exclamation", target_label="Cisco NX-OS",
+        )
+    payload = classify_hash(user.hashed_password)[1]
     # A secret this target cannot take at all is the hash gate's to
     # say (below); this asks only of one it would write.
     if splits(user.name) or splits(role) or (
@@ -388,8 +398,6 @@ def _render_local_user(user) -> str:
         and is_migratable(user.hashed_password, "cisco_nxos")
     ):
         return "! " + left_out(f"username {user.name}", "Cisco NX-OS")
-    if not user.hashed_password:
-        return f"username {user.name} role {role}"
     algorithm, payload = classify_hash(user.hashed_password)
     if not is_migratable(user.hashed_password, "cisco_nxos"):
         return format_review_comment(

@@ -296,8 +296,10 @@ def test_opnsense_to_routeros_admin_user_maps_to_full_group() -> None:
     (not the safe-default ``group=read``).  Pre-fix this rendered
     as read because privilege_level=1 was the parser default.
 
-    The user states no password: a bcrypt one is refused on RouterOS,
-    and the account goes with it (``test_secret_fail_open.py``)."""
+    The user states no password, and is given a typed one: a bcrypt
+    one is refused on RouterOS, and the account goes with it
+    (``test_secret_fail_open.py``), and an account with none is not
+    written at all (``test_an_account_with_no_password.py``)."""
     raw = """<?xml version="1.0"?>
 <opnsense>
   <system>
@@ -311,6 +313,10 @@ def test_opnsense_to_routeros_admin_user_maps_to_full_group() -> None:
 </opnsense>
 """
     intent = OPNsenseCodec().parse(raw)
+    assert intent.local_users[0].privilege_level == 15
+    intent.local_users[0] = intent.local_users[0].model_copy(
+        update={"hashed_password": "Typed-pw1"},
+    )
     out = MikroTikRouterOSCodec().render(intent)
     assert "add group=full name=root" in out, out
     # And the read-group safe default must NOT have leaked.

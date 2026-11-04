@@ -97,7 +97,13 @@ exists in the ``cisco_nxos`` render for the same reason.
 from __future__ import annotations
 
 from ..._one_value import left_out, one_value_tree, splits
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_no_secret_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from .._helpers import (
@@ -268,9 +274,13 @@ def _render_local_user(user) -> str:
     # Name, password and role are one word each (OS10 documents them as
     # alphanumeric); the account is left out whole rather than altered.
     # Policy: :mod:`netcanon.migration._one_value`.
-    payload = (
-        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
-    )
+    # An account the source gives no password is a review line,
+    # never the account without one.
+    if holds_no_secret(user.hashed_password):
+        return format_no_secret_comment(
+            user.name, comment_syntax="exclamation", target_label="Dell OS10",
+        )
+    payload = classify_hash(user.hashed_password)[1]
     # A secret this target cannot take at all is the hash gate's to
     # say (below); this asks only of one it would write.
     if splits(user.name) or splits(role) or (
@@ -278,11 +288,6 @@ def _render_local_user(user) -> str:
         and is_migratable(user.hashed_password, "dell_os10")
     ):
         return "! " + left_out(f"username {user.name}", "Dell OS10")
-    if not user.hashed_password:
-        # A cross-vendor account with no secret.  The parser reads this
-        # form back (the password clause is optional), so the account
-        # survives instead of vanishing.
-        return f"username {user.name} role {role} priv-lvl {user.privilege_level}"
     algorithm, payload = classify_hash(user.hashed_password)
     if not is_migratable(user.hashed_password, "dell_os10"):
         return format_review_comment(

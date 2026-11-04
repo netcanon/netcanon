@@ -31,11 +31,11 @@
 #
 #   * local_users.hashed_password: FortiGate -> RouterOS is lossy
 #     because RouterOS does not surface password material in /export.
-#     RouterOS -> FortiGate is similarly lossy but for the inverse
-#     reason: RouterOS source carries NO hashed_password at all (the
-#     codec parses none), so the FortiGate render emits no ``set
-#     password`` line and the migrated admin will be locked out
-#     until an operator sets a password interactively.
+#     RouterOS -> FortiGate loses the accounts themselves, for the
+#     inverse reason: RouterOS source carries NO hashed_password at
+#     all (the codec parses none), so the FortiGate render writes a
+#     review comment in place of each admin and none arrives
+#     (`local_users` unsupported).
 
 meta:
   source_vendor: mikrotik_routeros
@@ -306,23 +306,25 @@ per_field_expectation:
     references: [lags]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      RouterOS named groups (``full`` / ``write`` / ``read`` /
-      custom) map to FortiOS named accprofile strings (default:
-      full -> super_admin, write -> prof_admin, read -> prof_admin
-      with note).  Custom RouterOS groups lose their permission
-      semantics on FortiGate without operator-curated ``config
-      system accprofile`` re-creation.  CRITICAL: RouterOS does NOT
-      surface its hashed password material in /export — the MikroTik
-      codec parses no ``hashed_password`` for any user, so canonical
-      ``hashed_password`` is empty.  FortiOS render therefore emits
-      no ``set password ENC ...`` line and the migrated admin will
-      be locked out at first login.  Operators MUST set passwords
-      interactively on the FortiGate target after migration.  Per-
-      user IP-restriction (RouterOS ``address=<CIDR>``; FortiOS
-      ``set trusthost1``) is not currently parsed into canonical and
-      drops.
+      RouterOS named groups (``full`` / ``write`` / ``read`` / custom) map to
+      FortiOS named accprofile strings (default: full -> super_admin, write ->
+      prof_admin, read -> prof_admin with note). Custom RouterOS groups lose
+      their permission semantics on FortiGate without operator-curated
+      ``config system accprofile`` re-creation. CRITICAL: RouterOS does NOT
+      surface its hashed password material in /export — the MikroTik codec
+      parses no ``hashed_password`` for any user, so canonical
+      ``hashed_password`` is empty. The FortiOS render therefore writes a
+      review comment naming each account, in place of the account, since an
+      admin written with no password could log in with none: no account
+      arrives (0 of 3 on the 1 cell that populates local users). Operators
+      MUST create the admins with passwords, or as accounts for remote (RADIUS
+      or TACACS+) login, on the FortiGate target after migration. Per- user
+      IP-restriction (RouterOS ``address=<CIDR>``; FortiOS ``set trusthost1``)
+      is not currently parsed into canonical and drops. Recorded `unsupported`
+      rather than `lossy`: no account can arrive from a RouterOS export,
+      because it prints no passwords, so the record vanishes entirely (#436).
     references: [local_users]
 
   radius_servers:
@@ -445,12 +447,12 @@ per_field_expectation:
 #     ipv4_addresses list preserves all entries but FortiOS render
 #     emits only the first.
 #
-#   * Local user passwords are medium-confidence lossy on this
-#     direction for an inverse reason from FortiGate -> RouterOS:
-#     RouterOS source carries NO hashed password material at all
-#     (the codec parses none because /export does not include
-#     password material), so FortiOS render emits no ``set password``
-#     line and the migrated admin will be locked out at first login.
+#   * Local users are unsupported on this direction for an inverse
+#     reason from FortiGate -> RouterOS: RouterOS source carries NO
+#     hashed password material at all (the codec parses none because
+#     /export does not include password material), so the FortiOS
+#     render writes a review comment in place of each admin and no
+#     account arrives.
 #
 #   * SNMPv3 USM is medium-confidence lossy: algorithm-set divergence
 #     plus engineID-salted passphrases mean cross-vendor v3

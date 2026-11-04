@@ -569,17 +569,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      10 of 12 accounts arrive across the 6 cells that populate local users; the
-      list shrinks on 2 of them. The 2 accounts that vanish carry 2 MD5 crypt
-      (Cisco type 5). OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
-      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
-      else is refused with a review comment naming the account, in place of the
-      account. Up to 0.7.7 such an account was written as a `<user>` element
-      with no `<password>`; a refused secret now drops the whole account, as on
-      every other target. The survivors are 7 carrying 7 SHA-512 crypt (`$6$`)
-      and 3 with no stored secret. Recorded `lossy` rather than `unsupported`:
-      which account survives is decided by its secret form, and accounts with a
-      consumable secret do arrive. Before cutover, list the source accounts,
+      10 of 15 accounts arrive across the 8 cells that populate local users;
+      the list shrinks on 2 of them. The 2 accounts refused for their secret
+      carry 2 MD5 crypt (Cisco type 5). OPNsense can consume bcrypt (`$2y$` /
+      `$2b$`) or SHA-512 crypt (`$6$`) in `<password>`, or a genuine plaintext
+      password; anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was
+      written as a `<user>` element with no `<password>`; a refused secret now
+      drops the whole account, as on every other target. 3 further accounts
+      with no stored secret also vanish: the OPNsense render writes a review
+      comment naming each, in place of the account, since an account written
+      with no password could log in with none. The survivors are 10 carrying
+      10 SHA-512 crypt (`$6$`). Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with
+      a consumable secret do arrive. Before cutover, list the source accounts,
       search the render for `review:` comments, and re-create each refused
       account on the target with a fresh password.
     references: [opnsense-users, arista-user-security]

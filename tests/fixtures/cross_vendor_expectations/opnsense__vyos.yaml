@@ -597,37 +597,41 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      6 of 14 accounts arrive across the 7 cells that populate local users; the
-      list shrinks on 5 of them. The 8 accounts that vanish carry 8 bcrypt
-      (`$2y$` / `$2b$`). VyOS can consume a Linux crypt(3) string (`$1$` / `$5$`
-      / `$6$`) in `encrypted-password`, or a genuine plaintext password in
-      `plaintext-password`; anything else is refused with a review comment
+      2 of 14 accounts arrive across the 7 cells that populate local users;
+      the list shrinks on 5 of them. The 8 accounts that vanish carry 8 bcrypt
+      (`$2y$` / `$2b$`). VyOS can consume a Linux crypt(3) string (`$1$` /
+      `$5$` / `$6$`) in `encrypted-password`, or a genuine plaintext password
+      in `plaintext-password`; anything else is refused with a review comment
       naming the account and no user entry. Before #462 the classifier trusted
-      OPNsense's unconditional `bcrypt:` tag, so the `$6$` SHA-512 crypt secrets
-      on the HA fixtures were refused as if they were bcrypt; it now reads the
-      crypt id inside the tag. The survivors are 2 carrying 2 SHA-512 crypt
-      (`$6$`) and 4 with no stored secret. Recorded `lossy` rather than
-      `unsupported`: which account survives is decided by its secret form, and
-      accounts with a consumable secret do arrive. Before cutover, list the
-      source accounts, search the render for `review:` comments, and re-create
-      each refused account on the target with a fresh password.
+      OPNsense's unconditional `bcrypt:` tag, so the `$6$` SHA-512 crypt
+      secrets on the HA fixtures were refused as if they were bcrypt; it now
+      reads the crypt id inside the tag. 4 further accounts with no stored
+      secret also vanish: the VyOS render writes a review comment naming each,
+      in place of the account, since an account written with no password could
+      log in with none. The survivors are 2 carrying 2 SHA-512 crypt (`$6$`).
+      Recorded `lossy` rather than `unsupported`: which account survives is
+      decided by its secret form, and accounts with a consumable secret do
+      arrive. Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target
+      with a fresh password.
     references: [opnsense-vyos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      On the 6 accounts that survive, the role changes: `user` -> `admin` on 4,
-      with the companion field moving `1` -> `15` on 4. Mechanism: the vyos
-      parser assigns every `system login user` `role="admin"` and
-      `privilege_level=15`, because VyOS login accounts carry no role or numeric
-      privilege in the common case (vyos declares
+      On the 2 accounts that survive, the role is unchanged. Up to 0.7.7 the 4
+      accounts with no stored secret, `user` on the source, also arrived, as
+      `admin`, with the companion field moving `1` -> `15`; they now vanish
+      (see `local_users[].name`). For an account that does arrive the mapping
+      stands. Mechanism: the vyos parser assigns every `system login user`
+      `role="admin"` and `privilege_level=15`, because VyOS login accounts
+      carry no role or numeric privilege in the common case (vyos declares
       `/local-users/user/privilege-level` lossy for exactly this). This fails
       OPEN: a less-privileged account arrives with more authority. Re-apply
-      least privilege on the target before cutover. The audit cannot book this
-      change on this key: the cell where it happens also loses accounts, and
-      that record-count drift is claimed first by `local_users[].name`, which
-      reclassifies this key STRUCTURAL_ONLY. Recorded `good` for that mechanical
-      reason only; the change above is real.
+      least privilege on the target before cutover. Recorded `good`: on this
+      corpus no account that arrives changes role, and where a list shrinks
+      the record-count change is claimed first by `local_users[].name`, which
+      reclassifies this key STRUCTURAL_ONLY there.
     references: [opnsense-vyos-surface]
 
   "local_users[].hashed_password":

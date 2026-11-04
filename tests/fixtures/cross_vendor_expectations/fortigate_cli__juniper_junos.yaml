@@ -619,22 +619,26 @@ per_field_expectation:
   # ── Tier 2 — local users ──
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      FortiGate's named accprofile strings (``super_admin`` /
-      ``prof_admin`` / ``super_admin_readonly`` / custom) collapse
-      to Junos's named ``class super-user`` / ``operator`` /
-      ``read-only`` via the FortiGate codec's role mapping.
-      ``super_admin`` -> ``super-user`` (privilege 15); other
-      profiles -> ``operator`` (privilege 1) by default with the
-      profile name preserved in canonical ``role``.  Hash formats
-      are NOT cross-compatible: FortiOS ``ENC <opaque-base64>`` is
-      not a Junos-accepted format; Junos uses ``$1$`` (MD5) / ``$5$``
-      (SHA-256) / ``$6$`` (SHA-512, default since 17.2).  Cross-
-      vendor migration of admin accounts therefore requires re-
-      setting passwords on the target.  Both codecs preserve hashes
-      verbatim with vendor tags so the loss surfaces in the
-      validation report.
+      FortiGate's named accprofile strings (``super_admin`` / ``prof_admin`` /
+      ``super_admin_readonly`` / custom) collapse to Junos's named ``class
+      super-user`` / ``operator`` / ``read-only`` via the FortiGate codec's
+      role mapping. ``super_admin`` -> ``super-user`` (privilege 15); other
+      profiles -> ``operator`` (privilege 1) by default with the profile name
+      preserved in canonical ``role``. Hash formats are NOT cross-compatible:
+      FortiOS ``ENC <opaque-base64>`` is not a Junos-accepted format; Junos
+      uses ``$1$`` (MD5) / ``$5$`` (SHA-256) / ``$6$`` (SHA-512, default since
+      17.2). Cross- vendor migration of admin accounts therefore requires re-
+      setting passwords on the target. Both codecs preserve hashes verbatim
+      with vendor tags so the loss surfaces in the validation report. No
+      account arrives: 0 of 8 across the 4 cells that populate local users; 6
+      are refused for their FortiOS `ENC` secret and 2 hold no stored secret,
+      and each is a review comment in place of the account. Recorded
+      `unsupported` rather than `lossy`: no account arrives on this corpus, so
+      the record vanishes entirely (#436). Which account would arrive is
+      decided by its secret's form, so a source holding a secret this target
+      can take would carry it.
     references: [fortios-local-users, junos-password-cli, junos-kb-password-format]
 
   # ── Tier 2 — RADIUS ──

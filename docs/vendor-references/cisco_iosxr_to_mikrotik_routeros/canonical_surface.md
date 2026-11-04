@@ -241,7 +241,7 @@ intentionally omits password hashes … `hashed_password` will be empty from thi
 parser."* The render side behaves well: when the source hash is not re-usable on
 RouterOS it deliberately **does not** emit it as `password=` — that would set
 the user's password to the literal hash string — and instead emits a
-`# password manager user-name "…" -- review: … reset this user password manually`
+`# user "…" -- review: … reset this user password manually`
 comment. So the credential is lost loudly, not silently.
 
 Role fares slightly better but still coerces: the IOS-XR task-group `root-lr`

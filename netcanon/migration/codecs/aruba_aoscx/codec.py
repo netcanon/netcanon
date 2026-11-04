@@ -80,6 +80,8 @@ class ArubaAOSCXCodec(CodecBase):
     """
 
     name: ClassVar[str] = "aruba_aoscx"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "ArubaOS-CX"
     version_hint: ClassVar[str | None] = "10.x"
     input_format: ClassVar[str] = "cli-aoscx"
     direction: ClassVar[str] = "bidirectional"

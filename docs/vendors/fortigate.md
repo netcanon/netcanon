@@ -154,7 +154,10 @@ firewall translation is your primary need, see
 - DHCP servers — `config system dhcp server` with per-pool subnet,
   range, gateway, dns-server, options
 - Local admin / user accounts — `config system admin` with
-  `set password ENC ...` form-preserving migration
+  `set password ENC ...` form-preserving migration.  An admin with no
+  password of its own (one that authenticates through a remote
+  server) is a `review:` line on every target, FortiOS included: no
+  target writes an account with no password
 
 ## L3 redundancy: VRRP (no anycast)
 

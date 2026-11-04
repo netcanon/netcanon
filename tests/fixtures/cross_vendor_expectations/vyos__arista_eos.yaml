@@ -50,7 +50,8 @@ meta:
     an Arista EOS device carrying the same routed interfaces, static routes,
     SNMP and VRF identity.  Hostname, domain, DNS, the addressing and admin
     state of every configured port, static routes, SNMP v1/v2c, the VXLAN
-    VNI-to-VLAN binding, VRF names and local-user identity all survive.
+    VNI-to-VLAN binding, VRF names and every local account that holds a
+    password all survive (one that holds none is a review comment).
     What does not is every local-user password — re-emitted under EOS's
     cleartext `secret 0` tag on 16 of 16 records — the SNMPv3 engineID that
     the surviving USM passphrases were localized against, and the LAG's
@@ -525,24 +526,25 @@ per_field_expectation:
   # -- Identity -- where the credentials go ----------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      No account is lost: 17 user records in, 17 out, identical name sets on
-      all 13 cells.  Both matrices declare `/local-users/user/name`
-      supported, and the render emits a `username` line for every account.
-      Stated explicitly because the sibling pair behaves differently:
-      `cisco_iosxr__arista_eos` silently drops 5 accounts whose secret is
-      type-7.  Nothing analogous happens here — VyOS secrets are all `$6$`
-      crypt, `is_migratable()` accepts them for arista_eos, and no account
-      falls through to the review-comment path.
-      The credential loss is universal on this pair and is recorded ONCE,
-      under `local_users[].hashed_password`.
+    disposition: lossy
+    reason: >
+      16 of 17 accounts arrive across the 13 cells that populate local users;
+      the list shrinks on 1 of them. The one that vanishes is the account with
+      no stored secret: the EOS render writes a review comment naming it, in
+      place of the account, since an account written for EOS with no password
+      could log in with none. Up to 0.7.7 it was written as a `username` line
+      ending `nopassword`. Every account that holds a password arrives.
+      Recorded `lossy` rather than `unsupported`: an account is left out only
+      where the source holds no secret for it, and the rest arrive. Before
+      cutover, search the render for `review:` comments and re-create each
+      such account on the target with a password, or as an account for remote
+      (RADIUS or TACACS+) login.
     references: [vyos-arista-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every user record on every cell — `admin` stays
+      Role is preserved on every user record that arrives — `admin` stays
       `admin`, rendered as `username <name> privilege 15 role admin`, zero
       role drift measured anywhere.  Both matrices declare
       `/local-users/user/role` supported.
@@ -571,7 +573,7 @@ per_field_expectation:
       line yields a canonical `hashed_password` prefixed `arista:0:`.
       Measured: 16 of 16 password-bearing records, across 12 of 13 cells,
       take this path.  Not one exception.  The seventeenth account has no
-      password in the source and renders `nopassword`.
+      password in the source and does not arrive (see `local_users[].name`).
       Two consequences, both worth acting on.  The credential does not
       migrate AS a credential — EOS has a `sha512` secret tag in the very
       same dispatch table and the untagged VyOS payload never reaches it.

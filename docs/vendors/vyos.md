@@ -41,7 +41,9 @@ via `dropped_tier3_sections`, **not** translated.
 translatable with caveats:
 
 - Local users — `system login user` (name + role +
-  `encrypted-password` hash)
+  `encrypted-password` hash).  A user with no `authentication` is a
+  `review:` line on every target, VyOS included: no target writes an
+  account with no password
 - LAGs — `interfaces bonding bondN` (members + `lag-member-of`
   back-link).  Members are read as VyOS prints them — one bare
   `interface ethN` line each under `member`, or `member interface

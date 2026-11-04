@@ -1,5 +1,8 @@
 # OPNsense → AOS-CX: measured canonical surface
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the ArubaOS-CX render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as `user <name> group <group>` with no password clause.  It now writes one review comment IN PLACE of the account, `! user "<name>" -- review: no password for this account was read from the source, and an account written for ArubaOS-CX without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, and the job carries one warning naming each such account.  Measured on this pair: **4** such accounts across 1 cell (one real capture).  The AOS-CX parser never read that line back, so `local_users` in/out over the 7 cells that populate users is **14 / 0** before and after this change; what changed is that the output no longer holds an account that could log in with no password.  The other 10 accounts are review lines for a secret ArubaOS-CX cannot take, as before.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__aruba_aoscx.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/opnsense__aruba_aoscx.yaml`.
 

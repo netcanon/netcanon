@@ -44,6 +44,7 @@ from typing import Any
 
 import pytest
 
+from netcanon.migration._user_secrets import holds_no_secret
 from netcanon.migration.canonical.intent import CanonicalIntent
 
 # Side-effect imports to register every codec.  Mirrors
@@ -335,6 +336,11 @@ def _compare(intent: CanonicalIntent) -> dict[str, Any]:
     # (missing both), so a second Tier-3 stanza would have failed here while
     # passing the real harness.  Both are pure relaxations -> green stays green.
     d.pop("dropped_tier3_sections", None)
+    # As there: an account with no password is not written.
+    d["local_users"] = [
+        u for u in d["local_users"]
+        if not holds_no_secret(u["hashed_password"])
+    ]
     for key, id_key in [
         ("interfaces", "name"),
         ("vlans", "id"),

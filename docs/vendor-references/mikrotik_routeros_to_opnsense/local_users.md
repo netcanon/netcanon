@@ -1,5 +1,8 @@
 # Local users: MikroTik RouterOS versus OPNsense
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the OPNsense render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as a `<user>` element with no `<password>`.  It now writes one review comment IN PLACE of the account, inside `<system>`, `<!--user "<name>" - review: no password for this account was read from the source, and an account written for OPNsense without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login-->`, and the job carries one warning naming each such account.  A RouterOS `/user` export holds no passwords, so every account from this source is such a line.  Measured on this pair: **3** such accounts across 1 cell (the synthetic kitchen sink).  All 3 used to arrive, and none does now: `local_users` in/out over the 1 cell that populates users goes from **3 / 3** to **3 / 0**.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__opnsense.yaml`.
+
 ## MikroTik RouterOS
 
 Source: [User — RouterOS](https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User)

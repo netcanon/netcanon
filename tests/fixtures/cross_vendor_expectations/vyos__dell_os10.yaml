@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 13 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 27, 'lossy': 4, 'not_applicable': 2}
+# Dispositions: {'unsupported': 13, 'good': 25, 'lossy': 6, 'not_applicable': 2}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/vyos_to_dell_os10/
@@ -204,31 +204,45 @@ per_field_expectation:
     references: [vyos-os10-surface]
 
   local_users:
-    disposition: good
-    note: >
-      Preserved on 13 of 13 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      16 of 17 accounts arrive across the 13 cells that populate local users;
+      the list shrinks on 1 of them. The one that vanishes is the account with
+      no stored secret: the OS10 render writes a review comment naming it, in
+      place of the account, since an account written for OS10 with no password
+      could log in with none. Up to 0.7.7 it was written as `username <name>
+      role <role> priv-lvl <n>` with no password clause. Every account that
+      holds a password arrives. Recorded `lossy` rather than `unsupported`: an
+      account is left out only where the source holds no secret for it, and
+      the rest arrive. Before cutover, search the render for `review:`
+      comments and re-create each such account on the target with a password,
+      or as an account for remote (RADIUS or TACACS+) login.
+    references: [vyos-os10-surface]
+
+  local_users[].name:
+    disposition: lossy
+    reason: >
+      The same account as under `local_users`: 16 of 17 names arrive, and the
+      one that does not is the account with no stored secret, which the OS10
+      render writes as a review comment in place of the account. This key,
+      ahead of the others on the record, carries the record-count change; it
+      is one loss, recorded `lossy` for the reason given under `local_users`.
     references: [vyos-os10-surface]
 
   local_users[].hashed_password:
     disposition: good
     note: >
-      Preserved on 12 of 13 cells; no cell drifts. Both codecs model
-      this surface.
-    references: [vyos-os10-surface]
-
-  local_users[].name:
-    disposition: good
-    note: >
-      Preserved on 13 of 13 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 12 of 13 cells. On the 13th the list shrinks by the account
+      with no stored secret, counted under `local_users[].name`; nothing else
+      drifts. Both codecs model this surface.
     references: [vyos-os10-surface]
 
   local_users[].role:
     disposition: good
     note: >
-      Preserved on 13 of 13 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 12 of 13 cells. On the 13th the list shrinks by the account
+      with no stored secret, counted under `local_users[].name`; nothing else
+      drifts. Both codecs model this surface.
     references: [vyos-os10-surface]
 
   ntp_servers:

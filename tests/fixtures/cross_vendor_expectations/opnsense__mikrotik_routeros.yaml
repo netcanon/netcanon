@@ -497,21 +497,25 @@ per_field_expectation:
     references: [opnsense-laggs, mikrotik_bonding]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      4 of 14 accounts arrive across the 7 cells that populate local users; the
-      list shrinks on 7 of them. The 10 accounts that vanish carry 8 bcrypt
-      (`$2y$` / `$2b$`), 2 SHA-512 crypt (`$6$`). RouterOS can consume a genuine
-      plaintext password only (it hashes the password itself); anything else is
-      refused with a review comment naming the account, in place of the account.
-      Up to 0.7.7 such an account was written as `/user add` with no
+      No account arrives: 0 of 14 across the 7 cells that populate local
+      users. The 10 accounts refused for their secret carry 8 bcrypt (`$2y$` /
+      `$2b$`), 2 SHA-512 crypt (`$6$`). RouterOS can consume a genuine
+      plaintext password only (it hashes the password itself); anything else
+      is refused with a review comment naming the account, in place of the
+      account. Up to 0.7.7 such an account was written as `/user add` with no
       `password=`, which RouterOS gives a blank password; a refused secret now
-      drops the whole account, as on every other target. The survivors are 4
-      with no stored secret. Recorded `lossy` rather than `unsupported`: which
-      account survives is decided by its secret form, and accounts with a
-      consumable secret do arrive. Before cutover, list the source accounts,
-      search the render for `review:` comments, and re-create each refused
-      account on the target with a fresh password.
+      drops the whole account, as on every other target. The 4 accounts with
+      no stored secret, which up to 0.7.7 arrived, now vanish too: the
+      RouterOS render writes a review comment naming each, in place of the
+      account, since an account written with no password could log in with
+      none. Recorded `unsupported` rather than `lossy`: no account arrives on
+      this corpus, so the record vanishes entirely (#436). Which account would
+      arrive is decided by its secret's form, so a source holding a secret
+      this target can take would carry it. Before cutover, list the source
+      accounts, search the render for `review:` comments, and re-create each
+      refused account on the target with a fresh password.
     references: [opnsense-users, mikrotik_user]
 
   radius_servers:
@@ -622,9 +626,10 @@ per_field_expectation:
 #     wires through ``<dhcpd>`` AND RouterOS render advertises
 #     ``/dhcp/pool``.  Both ends carry weight.
 #
-#   * Hash incompatibility is documented and confidently lossy:
+#   * Hash incompatibility is documented and confidently unsupported:
 #     OPNsense bcrypt arrives in canonical but RouterOS does not
-#     accept foreign hash material.  Operator re-key required.
+#     accept foreign hash material, so no account arrives.  Operator
+#     re-key required.
 #
 #   * The router/firewall versus router-with-bridge role mismatch
 #     manifests as ``not_applicable`` here (source has no data to

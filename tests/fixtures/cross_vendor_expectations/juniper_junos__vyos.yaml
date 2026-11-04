@@ -618,38 +618,45 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      9 of 13 accounts arrive across the 8 cells that populate local users; the
-      list shrinks on 1 of them. The 4 accounts that vanish carry 4
+      8 of 13 accounts arrive across the 8 cells that populate local users;
+      the list shrinks on 2 of them. The 4 accounts that vanish carry 4
       `junos:`-wrapped value with no crypt id (a sanitisation placeholder in
       this corpus). VyOS can consume a Linux crypt(3) string (`$1$` / `$5$` /
       `$6$`) in `encrypted-password`, or a genuine plaintext password in
       `plaintext-password`; anything else is refused with a review comment
       naming the account and no user entry. Before #462 the classifier trusted
-      the `junos:` envelope every Junos secret is stored in instead of the crypt
-      id inside it, so every Junos account was refused on every other vendor; it
-      now reads the id, and the `$1$` / `$6$` secrets route to a form the target
-      consumes. The survivors are 8 carrying 4 SHA-512 crypt (`$6$`), 4 MD5
-      crypt (`$1$`) and 1 with no stored secret. Recorded `lossy` rather than
-      `unsupported`: which account survives is decided by its secret form, and
-      accounts with a consumable secret do arrive. Before cutover, list the
-      source accounts, search the render for `review:` comments, and re-create
-      each refused account on the target with a fresh password.
+      the `junos:` envelope every Junos secret is stored in instead of the
+      crypt id inside it, so every Junos account was refused on every other
+      vendor; it now reads the id, and the `$1$` / `$6$` secrets route to a
+      form the target consumes. 1 further account with no stored secret also
+      vanishes: the VyOS render writes a review comment naming it, in place of
+      the account, since an account written with no password could log in with
+      none. The survivors are 8 carrying 4 SHA-512 crypt (`$6$`) and 4 MD5
+      crypt (`$1$`). Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [junos-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the 9 accounts that survive, the role changes: `super-user` -> `admin`
-      on 7, `operator` -> `admin` on 1, `read-only` -> `admin` on 1, with the
-      companion field moving `1` -> `15` on 2. Mechanism: the vyos parser
-      assigns every `system login user` `role="admin"` and `privilege_level=15`,
-      because VyOS login accounts carry no role or numeric privilege in the
-      common case (vyos declares `/local-users/user/privilege-level` lossy for
-      exactly this). This fails OPEN: a less-privileged account arrives with
-      more authority. Re-apply least privilege on the target before cutover.
-      Accounts refused for their secret vanish with their role and are counted
-      once, under `local_users[].name`; this key is about the value on accounts
-      that survive.
+      On the accounts that arrive the role changes to `admin`: measured per
+      record on the 6 cells whose list is stable, `super-user` -> `admin` on
+      6; on the 2 cells whose list shrinks the record-count change is booked
+      under `local_users[].name` and roles are not compared there. Up to 0.7.7
+      the one account with no stored secret, `read-only` on the source, also
+      arrived, as `admin`; it now vanishes (see `local_users[].name`).
+      Mechanism: the vyos parser assigns every `system login user`
+      `role="admin"` and `privilege_level=15`, because VyOS login accounts
+      carry no role or numeric privilege in the common case (vyos declares
+      `/local-users/user/privilege-level` lossy for exactly this). This fails
+      OPEN: a less-privileged account arrives with more authority. Re-apply
+      least privilege on the target before cutover. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [junos-vyos-surface]
 
   "local_users[].hashed_password":

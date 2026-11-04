@@ -49,8 +49,9 @@ meta:
     A VyOS software router re-homed onto a Cisco IOS-XR platform carrying the
     same routed edge.  Hostname, domain, DNS servers, the full interface
     inventory with its descriptions, admin state, MTU and IPv4/IPv6
-    addressing, static routes, the VRF and every local-user account with its
-    role and password hash all survive.  What does not is the whole SNMP
+    addressing, static routes, the VRF and every local-user account that
+    holds a password, with its role and password hash, all survive (one
+    that holds none is a review comment).  What does not is the whole SNMP
     block (dropped outright, communities and SNMPv3 USM users with it), the
     VXLAN overlay (dropped outright), the DHCP-client addressing method on
     WAN ports, and the identity of the LAG — which arrives renamed
@@ -524,25 +525,32 @@ per_field_expectation:
   # -- Identity -- clean at the canonical level, with one render caveat ------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Zero accounts dropped: 17 user records across all 13 cells, 17 after the
-      round-trip, identical name sets on every cell.  Both matrices declare
-      `/local-users/user/name` supported.  Unlike several other pairs in this
-      mesh there is no hash-format-dependent account loss here — every vyos
-      account is SHA-512 crypt and every one survives.
+    disposition: lossy
+    reason: >
+      16 of 17 accounts arrive across the 13 cells that populate local users;
+      the list shrinks on 1 of them. The one that vanishes is the account with
+      no stored secret: the IOS-XR render writes a review comment naming it,
+      in place of the account, since an account written for IOS-XR with no
+      password could log in with none. Up to 0.7.7 it was written as a
+      `username` with its `group` and no secret. Every account that holds a
+      password arrives. Recorded `lossy` rather than `unsupported`: an account
+      is left out only where the source holds no secret for it, and the rest
+      arrive. Before cutover, search the render for `review:` comments and
+      re-create each such account on the target with a password, or as an
+      account for remote (RADIUS or TACACS+) login.
     references: [vyos-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Preserved on 17 of 17 records — `admin` in, `admin` out, zero drift on
-      any cell.  Both matrices declare `/local-users/user/role` supported; the
+      Preserved on all 16 records that arrive — `admin` in, `admin` out,
+      zero drift on any cell.  Both matrices declare `/local-users/user/role` supported; the
       render emits ` group <role>` and the IOS-XR parser maps the task-group
       back to `role` verbatim.
       One thing this key does NOT cover, said here so the `good` is not read
       as broader than it is: the numeric `privilege_level` DOES degrade, 15 ->
-      1 on all 17 records, because the IOS-XR parser maps only `root-lr` and
+      1 on all 16 records that arrive, because the IOS-XR parser maps only
+      `root-lr` and
       `root-system` to privilege 15.  The audited key set has no key for
       `privilege_level`, so it is documented in the reference doc rather than
       claimed here.  An operator diffing roles will see nothing wrong; check

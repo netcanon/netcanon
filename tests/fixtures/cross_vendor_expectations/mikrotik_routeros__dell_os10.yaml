@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 5 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 20, 'lossy': 11, 'not_applicable': 2}
+# Dispositions: {'unsupported': 15, 'good': 19, 'lossy': 10, 'not_applicable': 2}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/mikrotik_routeros_to_dell_os10/
@@ -236,32 +236,50 @@ per_field_expectation:
     references: [routeros-os10-surface]
 
   local_users:
-    disposition: good
-    note: >
-      Preserved on 1 of 5 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 3 on the 1 cell that populates local users. A
+      RouterOS export holds no password and the parser reads none, so every
+      account reaches the OS10 render with no stored secret; the render writes
+      a review comment naming each, in place of the account, since an account
+      written for OS10 with no password could log in with none. Up to 0.7.7
+      each was written as `username <name> role <role> priv-lvl <n>` with no
+      password clause. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and a `lossy` warning would understate a
+      target with no local accounts. It is a property of the source export,
+      not a gap in the OS10 user model. Create a console admin on the target
+      out of band before cutover; then search the render for `review:`
+      comments and re-create each account with a password, or as an account
+      for remote (RADIUS or TACACS+) login.
+    references: [routeros-os10-surface]
+
+  local_users[].name:
+    disposition: unsupported
+    reason: >
+      The same accounts as under `local_users`: 0 of 3 names arrive, each
+      replaced by a review comment because the source holds no password for
+      it. This key, ahead of the others on the record, carries the
+      record-count change; it is one loss, recorded `unsupported` for the
+      reason given under `local_users`.
     references: [routeros-os10-surface]
 
   local_users[].hashed_password:
     disposition: good
     note: >
-      No cell populates this field on either side (5 of 5 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
-    references: [routeros-os10-surface]
-
-  local_users[].name:
-    disposition: good
-    note: >
-      Preserved on 1 of 5 cells; no cell drifts. Both codecs model
-      this surface.
+      No source record populates this field: a RouterOS export holds no
+      password. On the 1 cell with accounts none arrives (see
+      `local_users[].name`), and that is the only drift; the other 4 cells
+      hold no accounts. Neither codec declares the surface unsupported, so
+      nothing more is claimed lost here.
     references: [routeros-os10-surface]
 
   local_users[].role:
     disposition: good
     note: >
-      Preserved on 1 of 5 cells; no cell drifts. Both codecs model
-      this surface.
+      No account arrives on this pair (see `local_users[].name`), so there is
+      no role on the target to compare; the only drift is the record-count
+      change counted under `local_users[].name`. The other 4 cells hold no
+      accounts.
     references: [routeros-os10-surface]
 
   ntp_servers:

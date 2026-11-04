@@ -503,22 +503,23 @@ per_field_expectation:
   "local_users[].name":
     disposition: unsupported
     reason: >
-      No account arrives: 0 of 14 across all 7 cells that populate local users.
-      The stored secrets on this corpus: 10 `bcrypt:`-tagged OPNsense hash.
-      NX-OS can consume a `$5$` or `$1$` crypt string under `password 5`, or a
-      genuine plaintext password; anything else is refused on purpose (#461)
-      with a review comment naming the account and no user entry. Before that
-      change the value was written behind `password 0`, the NX-OS cleartext
-      marker, so the account either carried the source's stored secret as its
-      literal password or could not authenticate at all. 4 further accounts with
-      no stored secret also vanish: the NX-OS render has no passwordless form
-      its own parser reads back. Recorded `unsupported` rather than `lossy`
-      because the record vanishes entirely (#436) and a `lossy` warning would
-      understate a target with no local accounts. It is a property of the
-      source's secret form, not a gap in the NX-OS user model: an account whose
-      secret NX-OS can consume would still migrate. Create a console admin on
-      the target out of band before cutover, then re-create every account with a
-      native credential.
+      No account arrives: 0 of 14 across all 7 cells that populate local
+      users. The stored secrets on this corpus: 10 `bcrypt:`-tagged OPNsense
+      hash. NX-OS can consume a `$5$` or `$1$` crypt string under `password
+      5`, or a genuine plaintext password; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `password 0`, the NX-OS
+      cleartext marker, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. 4
+      further accounts with no stored secret also vanish: the NX-OS render
+      writes a review comment naming each, in place of the account, since an
+      account written with no password could log in with none. Recorded
+      `unsupported` rather than `lossy` because the record vanishes entirely
+      (#436) and a `lossy` warning would understate a target with no local
+      accounts. It is a property of the source's secret form, not a gap in the
+      NX-OS user model: an account whose secret NX-OS can consume would still
+      migrate. Create a console admin on the target out of band before
+      cutover, then re-create every account with a native credential.
     references: [opnsense-nxos-surface]
 
   "local_users[].privilege_level":

@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+from netcanon.migration._user_secrets import holds_no_secret
 from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 
 pytestmark = pytest.mark.unit
@@ -319,9 +320,12 @@ def test_round_trip_stable(codec, raw_text):
     def user_key(u):
         return (u.name, u.privilege_level, u.role, u.hashed_password)
 
-    assert {user_key(u) for u in intent1.local_users} == {
-        user_key(u) for u in intent2.local_users
-    }
+    # An account with no password is not written, on EOS too
+    # (test_an_account_with_no_password.py).
+    assert {
+        user_key(u) for u in intent1.local_users
+        if not holds_no_secret(u.hashed_password)
+    } == {user_key(u) for u in intent2.local_users}
 
     # SNMP — community / location / contact / trap-hosts / v3 users.
     assert intent2.snmp is not None

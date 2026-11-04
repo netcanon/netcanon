@@ -585,80 +585,86 @@ per_field_expectation:
   # -- Identity -- names and credentials cross; authority does not ----------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      2 of 8 accounts arrive across the 4 cells that populate local users; the
-      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
-      `ENC` ciphertext. VyOS can consume a Linux crypt(3) string (`$1$` / `$5$`
-      / `$6$`) in `encrypted-password`, or a genuine plaintext password in
+      No account arrives: 0 of 8 across the 4 cells that populate local users.
+      The 6 accounts refused for their secret carry 6 FortiOS `ENC`
+      ciphertext. VyOS can consume a Linux crypt(3) string (`$1$` / `$5$` /
+      `$6$`) in `encrypted-password`, or a genuine plaintext password in
       `plaintext-password`; anything else is refused on purpose (#461) with a
       review comment naming the account and no user entry. Before that change
-      the value was written into `encrypted-password`, a leaf that only holds a
-      Linux crypt string, so the account either carried the source's stored
-      secret as its literal password or could not authenticate at all. The
-      survivors are 2 with no stored secret. Recorded `lossy` rather than
-      `unsupported`: which account survives is decided by its secret form, and
-      accounts with a consumable secret do arrive. Before cutover, list the
-      source accounts, search the render for `review:` comments, and re-create
-      each refused account on the target with a fresh password.
+      the value was written into `encrypted-password`, a leaf that only holds
+      a Linux crypt string, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. The 2
+      accounts with no stored secret, which up to 0.7.7 arrived, now vanish
+      too: the VyOS render writes a review comment naming each, in place of
+      the account, since an account written with no password could log in with
+      none. Recorded `unsupported` rather than `lossy`: no account arrives on
+      this corpus, so the record vanishes entirely (#436). Which account would
+      arrive is decided by its secret's form, so a source holding a secret
+      this target can take would carry it. Before cutover, list the source
+      accounts, search the render for `review:` comments, and re-create each
+      refused account on the target with a fresh password.
     references: [fgt-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the 2 accounts that survive, the role changes: `fortigate_admins` ->
+      No account arrives on this pair now (see `local_users[].name`), so this
+      corpus no longer measures the role. Up to 0.7.7 the 2 accounts with no
+      stored secret arrived, and the role changed: `fortigate_admins` ->
       `admin` on 1, `fortigate_ro` -> `admin` on 1, with the companion field
-      moving `1` -> `15` on 2. Mechanism: the vyos parser assigns every `system
-      login user` `role="admin"` and `privilege_level=15`, because VyOS login
-      accounts carry no role or numeric privilege in the common case (vyos
-      declares `/local-users/user/privilege-level` lossy for exactly this). This
-      fails OPEN: a less-privileged account arrives with more authority.
-      Re-apply least privilege on the target before cutover. Accounts refused
-      for their secret vanish with their role and are counted once, under
-      `local_users[].name`; this key is about the value on accounts that
-      survive.
+      moving `1` -> `15` on 2. Mechanism: the vyos parser assigns every
+      `system login user` `role="admin"` and `privilege_level=15`, because
+      VyOS login accounts carry no role or numeric privilege in the common
+      case (vyos declares `/local-users/user/privilege-level` lossy for
+      exactly this). This fails OPEN: a less-privileged account arrives with
+      more authority. Re-apply least privilege on the target before cutover.
+      Accounts refused for their secret vanish with their role and are counted
+      once, under `local_users[].name`; this key is about the value on
+      accounts that arrive, which take that mapping.
     references: [fgt-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      No secret is written in a form VyOS cannot consume. 6 accounts are refused
-      for their secret (6 FortiOS `ENC` ciphertext) and vanish with it; that
-      loss is recorded once, under `local_users[].name`. The accounts that
-      arrive carry no stored secret, so there is no value to compare. Before
-      #461 this key read preserved because the value was written into
+      No secret is written in a form VyOS cannot consume. 6 accounts are
+      refused for their secret (6 FortiOS `ENC` ciphertext) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. The 2
+      accounts with no stored secret do not arrive either (see
+      `local_users[].name`), so there is no value to compare. Before #461 this
+      key read preserved because the value was written into
       `encrypted-password`, a leaf that only holds a Linux crypt string; that
-      preservation was a leak or a dead credential, not a working one. Recorded
-      `good` rather than `lossy`: the only drift on this key is the parent
-      record-count collapse, which the audit attributes to `local_users[].name`
-      and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key
-      could never be evidenced. No secret value is quoted here or in the
-      reference doc; only shapes and counts.
+      preservation was a leak or a dead credential, not a working one.
+      Recorded `good` rather than `lossy`: the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a
+      declared loss on this key could never be evidenced. No secret value is
+      quoted here or in the reference doc; only shapes and counts.
     references: [fgt-vyos-surface]
 
   radius_servers:
     disposition: unsupported
     reason: >
-      A total drop, measured on the 2 cells that carry RADIUS: 3 servers
-      (1 on `user_contrib_fg100e_fos7213.conf`, 2 on `kitchen_sink.conf`)
-      become 0.  fortigate_cli declares no `/radius-servers/*` path at any
-      level yet populates the canonical field from `config user radius`;
-      vyos declares BOTH `/radius-servers/server/host` and
-      `/radius-servers/server/key` unsupported — "Render emits no RADIUS
-      config; the RADIUS shared secret is dropped on migration".
-      Recorded `unsupported` because the records vanish with no target
-      grammar (#436).  Unlike most gaps on this pair, re-authoring RADIUS on
-      the VyOS side will NOT stick either — configure AAA outside the
-      migration path.
-      One operational consequence, stated here as a CONSEQUENCE and
-      deliberately not as evidence for this key or any other: on
-      `user_contrib_fg100e_fos7213.conf` the accounts `radius_ro_admin` and
-      `radius_super_admin` carry no local credential because they are
-      RADIUS-backed.  After the round-trip they exist on the target with an
-      empty password, role `admin`, and no RADIUS server to authenticate
-      them.  Three separate losses meet on those two accounts; each is
-      recorded on the key where it is measured, and this is the join an
-      operator needs before cutover.
+      A total drop, measured on the 2 cells that carry RADIUS: 3 servers (1 on
+      `user_contrib_fg100e_fos7213.conf`, 2 on `kitchen_sink.conf`) become 0.
+      fortigate_cli declares no `/radius-servers/*` path at any level yet
+      populates the canonical field from `config user radius`; vyos declares
+      BOTH `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported — "Render emits no RADIUS config; the RADIUS shared secret
+      is dropped on migration". Recorded `unsupported` because the records
+      vanish with no target grammar (#436). Unlike most gaps on this pair,
+      re-authoring RADIUS on the VyOS side will NOT stick either — configure
+      AAA outside the migration path. One operational consequence, stated here
+      as a CONSEQUENCE and deliberately not as evidence for this key or any
+      other: on `user_contrib_fg100e_fos7213.conf` the accounts
+      `radius_ro_admin` and `radius_super_admin` carry no local credential
+      because they are RADIUS-backed. After the round-trip neither exists on
+      the target: each holds no password, so each is a review comment in its
+      place, and there is no RADIUS server to authenticate them either. Two
+      separate losses meet on those two accounts; each is recorded on the key
+      where it is measured, and this is the join an operator needs before
+      cutover.
     references: [fgt-vyos-surface]
 
   # -- Fabric -- absent on the source side -----------------------------------

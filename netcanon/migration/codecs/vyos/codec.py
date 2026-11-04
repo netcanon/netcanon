@@ -74,6 +74,8 @@ class VyOSCodec(CodecBase):
     """Bidirectional codec for VyOS ``config.boot`` curly-brace text."""
 
     name: ClassVar[str] = "vyos"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "VyOS"
     version_hint: ClassVar[str | None] = "1.3/1.4"
     input_format: ClassVar[str] = "cli-vyos"
     direction: ClassVar[str] = "bidirectional"

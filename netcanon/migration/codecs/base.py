@@ -12,7 +12,9 @@ Every vendor adapter subclasses :class:`CodecBase` and ships:
     * ``render(tree)`` — emit a raw config string from the tree.
     * ``render_warnings(tree)`` — optional: a warning for each thing
       ``render`` leaves out for a reason of the target's own, which
-      the pipeline adds to the job (default: none).
+      the pipeline adds to the job (default: one for each local user
+      with no password, for a codec that sets
+      ``local_user_target_label``).
 
 The contract's key invariant is the round-trip::
 
@@ -38,6 +40,7 @@ from pydantic import ValidationError
 from ...models.migration import CapabilityMatrix
 from .._long_numbers import first_long_run, first_long_run_line, parse_refused, render_refused
 from .._one_line import first_control_character, first_line_break
+from .._user_secrets import no_secret_warnings
 from ..limits import census, metered
 
 if TYPE_CHECKING:
@@ -208,6 +211,14 @@ class CodecBase(ABC):
     #: ``False``.  Filtered by
     #: :func:`netcanon.migration.codecs.registry.list_public_codecs`.
     hidden: ClassVar[bool] = False
+
+    #: The target's name in the review line written in place of a local
+    #: user, for a codec that renders local users (``None`` for one
+    #: that renders none).  Every such renderer writes a review line,
+    #: never the account, for a user that holds no password
+    #: (:func:`netcanon.migration._user_secrets.holds_no_secret`); the
+    #: default :meth:`render_warnings` says so under this name.
+    local_user_target_label: ClassVar[str | None] = None
 
     #: Human-readable description of what :meth:`parse` expects.  Shown
     #: in the /migrate UI's format-hint banner.  One short paragraph,
@@ -543,9 +554,17 @@ class CodecBase(ABC):
 
         Returns:
             One sentence a record, naming it and never a secret of it.
-            The default: none.
+            The default: one for each local user that holds no
+            password, where :attr:`local_user_target_label` is set
+            (:func:`netcanon.migration._user_secrets.no_secret_warnings`);
+            none otherwise.
         """
-        return []
+        label = self.local_user_target_label
+        if not label:
+            return []
+        return no_secret_warnings(
+            getattr(tree, "local_users", None) or [], label,
+        )
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield canonical xpaths for every leaf in *tree*.

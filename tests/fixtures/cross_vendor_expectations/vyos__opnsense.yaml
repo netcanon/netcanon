@@ -48,7 +48,9 @@ meta:
     carrying the same interfaces, addressing and local operator accounts.
     Hostname, domain, DNS, the full interface inventory with its IPv4/IPv6
     addressing, MTU, admin state and descriptions, the LACP bundle, SNMP
-    v1/v2c and local user identity all survive. What does not is everything
+    v1/v2c and the identity of every local user that holds a password all
+    survive (one that holds none is a review comment). What does not is
+    everything
     that is router rather than firewall — the NTP client, the whole static
     route table, VXLAN VNIs and the VRF — plus the SNMPv3 user store, which
     OPNsense keeps outside config.xml. Local accounts arrive with their
@@ -467,21 +469,26 @@ per_field_expectation:
   # -- Identity -- where the credentials go ----------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives.  17 local-user records across all 13 cells,
-      17 after parse -> render -> re-parse, identical names in identical
-      order — zero drift on any cell.  Both matrices declare
-      `/local-users/user/name` supported.
-      No account silently disappears on this pair, which is the failure mode
-      worth checking first on any migration.  The credential problem is real
-      but it lives on `hashed_password`, not here.
+    disposition: lossy
+    reason: >
+      16 of 17 accounts arrive across the 13 cells that populate local users;
+      the list shrinks on 1 of them. The one that vanishes is the account with
+      no stored secret: the OPNsense render writes a review comment naming it,
+      in place of the account, since an account written for OPNsense with no
+      password could log in with none. Up to 0.7.7 it was written as a
+      `<user>` element with no `<password>`. Every account that holds a
+      password arrives. Recorded `lossy` rather than `unsupported`: an account
+      is left out only where the source holds no secret for it, and the rest
+      arrive. Before cutover, search the render for `review:` comments and
+      re-create each such account on the target with a password, or as an
+      account for remote (RADIUS or TACACS+) login.
     references: [vyos-opnsense-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every one of the 17 records — zero role drift on
+      Role is preserved on every one of the 16 records that arrive — zero
+      role drift on
       any cell.  Both matrices declare `/local-users/user/role` supported,
       and opnsense re-derives admin status symmetrically on re-parse
       (`groupname=admins`, or `scope=system` / `page-all` privilege).

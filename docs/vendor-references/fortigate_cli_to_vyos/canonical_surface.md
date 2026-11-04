@@ -1,5 +1,8 @@
 # FortiGate CLI → VyOS: measured canonical surface
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the VyOS render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as a bare `user <name> { }` under `login`, with no `authentication` node.  It now writes one review comment IN PLACE of the account, inside `login`, `/* user "<name>" -- review: no password for this account was read from the source, and an account written for VyOS without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login */`, and the job carries one warning naming each such account.  On this source the two such accounts are admins for remote (RADIUS) login that hold no local secret; an account meant for remote login is a review line too.  Measured on this pair: **2** such accounts across 1 cell (one real capture).  Both used to arrive, and none does now: `local_users` in/out over the 4 cells that populate users goes from **8 / 2** to **8 / 0**.  The other 6 accounts are review lines for a secret VyOS cannot take, as before.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__vyos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/fortigate_cli__vyos.yaml`.
 

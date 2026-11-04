@@ -72,6 +72,8 @@ class CiscoNXOSCodec(CodecBase):
     """
 
     name: ClassVar[str] = "cisco_nxos"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Cisco NX-OS"
     version_hint: ClassVar[str | None] = "9.x / 10.x"
     input_format: ClassVar[str] = "cli-nxos"
     direction: ClassVar[str] = "bidirectional"

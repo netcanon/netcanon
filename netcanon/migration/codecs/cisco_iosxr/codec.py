@@ -76,6 +76,8 @@ class CiscoIOSXRCodec(CodecBase):
     """Bidirectional codec for Cisco IOS-XR ``show running-config`` output."""
 
     name: ClassVar[str] = "cisco_iosxr"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Cisco IOS-XR"
     version_hint: ClassVar[str | None] = "6.x / 7.x"
     input_format: ClassVar[str] = "cli-iosxr"
     direction: ClassVar[str] = "bidirectional"

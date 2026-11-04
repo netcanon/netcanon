@@ -58,7 +58,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ..._one_value import breaks_its_quotes
-from ..._user_secrets import classify_hash, is_migratable
+from ..._user_secrets import classify_hash, holds_no_secret, is_migratable
 from ...canonical.intent import CanonicalLocalUser
 
 #: Hash algorithms AOS-S accepts in the ``password manager user-name
@@ -102,9 +102,14 @@ def _split_aos_hash(hashed: str) -> tuple[str, str]:
 
     The sentinel ``"__unmigratable__"`` makes the account a comment
     rather than a syntactically-correct but operationally-broken
-    ``plaintext "..."`` line.  An empty secret comes back as
-    ``("plaintext", "")``; :func:`aoss_accounts` gives it no account.
+    ``plaintext "..."`` line.  A value that holds no secret -- nothing,
+    or a tag with nothing after it (``sha1:``, ``arista:sha512:``,
+    ``5 ``; :func:`holds_no_secret`) -- comes back as
+    ``("plaintext", "")``, and :func:`aoss_accounts` gives it no
+    account: a tag alone is no hash to re-use.
     """
+    if holds_no_secret(hashed):
+        return "plaintext", ""
     alg, payload = classify_hash(hashed)
     # Aruba-native algorithm — emit verbatim using the AOS-S
     # ``password manager <alg> <hash>`` form.  ``_AOS_KNOWN_ALGORITHMS``

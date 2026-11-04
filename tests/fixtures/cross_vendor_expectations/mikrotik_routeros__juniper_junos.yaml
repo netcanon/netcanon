@@ -626,21 +626,23 @@ per_field_expectation:
   # ── Tier 2 — local users ──
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      RouterOS named groups (``full`` / ``write`` / ``read``) map
-      to Junos named classes via codec policy: ``full`` ->
-      ``super-user``, ``write`` -> ``operator``, ``read`` ->
-      ``read-only``.  RouterOS custom groups have no clean Junos
-      analogue — fall back to ``read-only`` with banner.  Hash
-      formats: RouterOS does NOT surface password hashes in
-      `/export` at all (vendor-private internal format).  Canonical
-      ``hashed_password`` is typically empty after RouterOS parse,
-      so Junos render emits no ``authentication encrypted-password``
-      line — the Junos user account lands WITHOUT a password.
-      Operator MUST re-set passwords on the target before login is
-      possible.  SSH public-key auth (RouterOS `/user ssh-keys`)
-      is outside canonical scope.
+      RouterOS named groups (``full`` / ``write`` / ``read``) map to Junos
+      named classes via codec policy: ``full`` -> ``super-user``, ``write`` ->
+      ``operator``, ``read`` -> ``read-only``. RouterOS custom groups have no
+      clean Junos analogue — fall back to ``read-only`` with banner. Hash
+      formats: RouterOS does NOT surface password hashes in `/export` at all
+      (vendor-private internal format). Canonical ``hashed_password`` is
+      typically empty after RouterOS parse, so the Junos render writes a
+      review comment naming each account, in place of the account, since an
+      account written with no password could log in with none: no account
+      arrives (0 of 3 on the 1 cell that populates local users). Operator MUST
+      create the accounts with passwords, or as accounts for remote (RADIUS or
+      TACACS+) login, on the target. SSH public-key auth (RouterOS `/user
+      ssh-keys`) is outside canonical scope. Recorded `unsupported` rather
+      than `lossy`: no account can arrive from a RouterOS export, because it
+      prints no passwords, so the record vanishes entirely (#436).
     references: [mikrotik-user, junos-password-cli, junos-kb-password-format]
 
   # ── Tier 2 — RADIUS ──

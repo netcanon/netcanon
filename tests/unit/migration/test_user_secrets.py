@@ -204,7 +204,7 @@ def test_universally_unmigratable_membership() -> None:
 
 def test_format_review_comment_hash_syntax() -> None:
     line = format_review_comment("netadmin", "9", "hash")
-    assert line.startswith("# password manager")
+    assert line.startswith('# user "netadmin" -- review:')
     assert '"netadmin"' in line
     assert "9 hash" in line
     assert "reset" in line
@@ -212,19 +212,19 @@ def test_format_review_comment_hash_syntax() -> None:
 
 def test_format_review_comment_semicolon_syntax() -> None:
     line = format_review_comment("netadmin", "sha512", "semicolon")
-    assert line.startswith("; password manager")
+    assert line.startswith('; user "netadmin" -- review:')
     assert "sha512 hash" in line
 
 
 def test_format_review_comment_slash_syntax() -> None:
     line = format_review_comment("netadmin", "bcrypt", "slash")
-    assert line.startswith("/* password manager")
+    assert line.startswith('/* user "netadmin" -- review:')
     assert line.endswith(" */")
 
 
 def test_format_review_comment_xml_syntax() -> None:
     line = format_review_comment("admin", "fortios", "xml")
-    assert line.startswith("<!-- password manager")
+    assert line.startswith('<!-- user "admin" - review:')
     assert line.endswith(" -->")
 
 
@@ -266,13 +266,13 @@ def test_format_review_comment_non_xml_keeps_double_hyphen() -> None:
 
 def test_format_review_comment_default_is_hash() -> None:
     line = format_review_comment("admin", "9")
-    assert line.startswith("# password manager")
+    assert line.startswith('# user "admin"')
 
 
 def test_format_review_comment_unknown_syntax_falls_back_to_hash() -> None:
     """Unknown comment_syntax values silently fall back to hash form."""
     line = format_review_comment("admin", "9", "klingon")
-    assert line.startswith("# password manager")
+    assert line.startswith('# user "admin"')
 
 
 def test_format_review_comment_target_label_default_is_this_target() -> None:

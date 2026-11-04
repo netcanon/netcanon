@@ -38,6 +38,17 @@ should emit a ``format_review_comment`` line in the appropriate
 comment syntax for that vendor and skip the password command — never
 fall back to plaintext (would leak the hash literal as the password).
 
+Before that it asks :func:`holds_no_secret`.  An account the source
+gives no password is not written either: written without one it is
+an account that can log in with none -- ``nopassword`` on EOS and
+IOS-XE (Cisco: "No password is required for this user to log in"),
+a blank password on RouterOS and FortiOS -- and the tree
+cannot say whether the source meant that or only held no password
+it could print (a RouterOS export holds none, a FortiOS admin for
+remote login has none).  :func:`format_no_secret_comment` is the
+line written in its place, :func:`no_secret_warnings` the job's
+warning for it (the default of ``CodecBase.render_warnings``).
+
 See also:
 - netcanon/migration/codecs/aruba_aoss/render.py — original implementation
 - tests/fixtures/real/user_smoke_findings.md issue #1 — bug report
@@ -52,6 +63,10 @@ Public surface:
   emit a ``password`` line or a review-comment line.
 * :func:`format_review_comment` — vendor-correct comment-syntax
   formatter for the review line emitted when a hash can't be migrated.
+* :func:`holds_no_secret` — predicate: does this value hold no
+  password at all?  Such an account is not written on any target.
+* :func:`format_no_secret_comment` — the review line written in its
+  place; :func:`no_secret_warnings` — the job's warning for each.
 
 Configuration surface:
 
@@ -373,12 +388,14 @@ def format_review_comment(
 ) -> str:
     """Build a one-line review comment naming an unmigratable hash.
 
-    The body follows the wording Aruba already uses so cross-vendor
-    diffs read consistently::
+    The body names the account in no target's own syntax::
 
-        password manager user-name "<name>" -- review: <alg> hash from
-        source vendor cannot be re-used on <target_label>; reset this
-        user password manually
+        user "<name>" -- review: <alg> hash from source vendor cannot
+        be re-used on <target_label>; reset this user password manually
+
+    (It began with AOS-S's ``password manager user-name`` on every
+    target, whatever the account's role.  AOS-S writes its own lines:
+    :mod:`netcanon.migration.codecs.aruba_aoss.accounts`.)
 
     ``comment_syntax`` selects the comment delimiter:
 
@@ -420,15 +437,74 @@ def format_review_comment(
         # A typed password is not a hash, and saying "plaintext hash"
         # would send the operator looking for one.  Never the value.
         body = (
-            f'password manager user-name "{user_name}" {separator} review: '
+            f'user "{user_name}" {separator} review: '
             f"the source holds this password as typed, and {target_label} "
             f"takes a password into its config only as a hash; the account "
             f"is left out: add it on the device and set its password there"
         )
         return comment(body, comment_syntax)
     body = (
-        f'password manager user-name "{user_name}" {separator} review: '
+        f'user "{user_name}" {separator} review: '
         f"{algorithm} hash from source vendor cannot be re-used on "
         f"{target_label}; reset this user password manually"
     )
     return comment(body, comment_syntax)
+
+
+def holds_no_secret(hashed: str) -> bool:
+    """Return True if ``hashed`` holds no password at all.
+
+    Empty, or a tag with nothing after it (``sha1:``, ``5 ``): the
+    payload :func:`classify_hash` finds is empty.  Every renderer of
+    local users asks this first, and writes
+    :func:`format_no_secret_comment` in place of such an account,
+    whatever the target and the source -- the same platform included,
+    since the tree does not say whether the source MEANT an account
+    with no password or only printed none.
+    """
+    return not classify_hash(hashed)[1]
+
+
+def format_no_secret_comment(
+    user_name: str,
+    comment_syntax: str = "hash",
+    target_label: str = "this target",
+) -> str:
+    """The review line written in place of an account with no password::
+
+        user "<name>" -- review: no password for this account was read
+        from the source, and an account written for <target_label>
+        without one could log in with none; it is left out: add it on
+        the device with a password, or as an account for remote (RADIUS
+        or TACACS+) login
+
+    ``comment_syntax`` and the XML separator are as for
+    :func:`format_review_comment`.  "Could": what an account with no
+    password may do is the target's (on IOS-XE it logs in with none,
+    on EOS from the console, on RouterOS with an empty password).
+    """
+    separator = "-" if comment_syntax == "xml" else "--"
+    body = (
+        f'user "{user_name}" {separator} review: no password for this '
+        f"account was read from the source, and an account written "
+        f"for {target_label} without one could log in with none; it is "
+        f"left out: add it on the device with a password, or as an "
+        f"account for remote (RADIUS or TACACS+) login"
+    )
+    return comment(body, comment_syntax)
+
+
+def no_secret_warnings(users, target_label: str) -> list[str]:
+    """The job's warning for each of ``users`` that holds no password.
+
+    One sentence a user, naming it (never a secret: it has none), for
+    the account :func:`format_no_secret_comment` stands in for.
+    """
+    return [
+        f'Local user "{user.name}" is not written for {target_label}: '
+        f"no password for it was read from the source, and an "
+        f"account written without one could log in with none.  It is "
+        f"a review comment; add it on the device with a password."
+        for user in users
+        if holds_no_secret(user.hashed_password)
+    ]

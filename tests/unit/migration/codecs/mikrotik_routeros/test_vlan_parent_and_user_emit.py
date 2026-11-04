@@ -291,7 +291,9 @@ def test_loopback_excluded_from_parent_candidates():
 def test_user_with_privilege_15_maps_to_full_group():
     intent = CanonicalIntent(
         local_users=[
-            CanonicalLocalUser(name="root", privilege_level=15),
+            CanonicalLocalUser(
+                name="root", privilege_level=15, hashed_password="Typed-pw1",
+            ),
         ],
     )
     out = render_intent(intent)
@@ -301,7 +303,9 @@ def test_user_with_privilege_15_maps_to_full_group():
 def test_user_with_privilege_10_maps_to_write_group():
     intent = CanonicalIntent(
         local_users=[
-            CanonicalLocalUser(name="ops", privilege_level=10),
+            CanonicalLocalUser(
+                name="ops", privilege_level=10, hashed_password="Typed-pw1",
+            ),
         ],
     )
     out = render_intent(intent)
@@ -312,7 +316,9 @@ def test_user_with_low_privilege_maps_to_read_group():
     """privilege=1 (the canonical default) → ``read``."""
     intent = CanonicalIntent(
         local_users=[
-            CanonicalLocalUser(name="guest", privilege_level=1),
+            CanonicalLocalUser(
+                name="guest", privilege_level=1, hashed_password="Typed-pw1",
+            ),
         ],
     )
     out = render_intent(intent)
@@ -432,7 +438,7 @@ def test_user_with_foreign_hash_emits_no_password_field():
 
 def test_mikrotik_unmigratable_hash_emits_review_comment():
     """Foreign bcrypt hash from OPNsense → RouterOS render emits a
-    ``# password manager user-name "<n>" -- review: bcrypt hash …``
+    ``# user "<n>" -- review: bcrypt hash …``
     line IN PLACE of the ``add group=... name=<n>`` line.  Surfaced
     as issue #18 in ``tests/fixtures/real/user_smoke_findings.md``.
 
@@ -455,7 +461,7 @@ def test_mikrotik_unmigratable_hash_emits_review_comment():
     out = render_intent(intent)
 
     expected_comment = (
-        '# password manager user-name "root" -- review: bcrypt hash '
+        '# user "root" -- review: bcrypt hash '
         "from source vendor cannot be re-used on RouterOS; reset "
         "this user password manually"
     )
@@ -467,11 +473,12 @@ def test_mikrotik_unmigratable_hash_emits_review_comment():
     assert "name=root" not in out, out
 
 
-def test_mikrotik_user_with_no_hashed_password_no_comment():
-    """A user with an empty ``hashed_password`` (canonical default)
-    has no hash to review — emit the ``add`` line cleanly without
-    a spurious comment.  Regression guard so we don't pollute the
-    output when the source genuinely had no password.
+def test_mikrotik_user_with_no_hashed_password_is_a_review_line():
+    """A user with an empty ``hashed_password`` -- the canonical
+    default, and every user a RouterOS export holds -- is not added:
+    RouterOS gives a user added with no password a blank one.  A
+    review line names it
+    (``tests/unit/migration/test_an_account_with_no_password.py``).
     """
     intent = CanonicalIntent(
         local_users=[
@@ -479,9 +486,8 @@ def test_mikrotik_user_with_no_hashed_password_no_comment():
         ],
     )
     out = render_intent(intent)
-    assert "add group=full name=bare" in out
-    # No review comment at all.
-    assert "review:" not in out, out
+    assert "name=bare" not in out, out
+    assert '# user "bare" -- review: no password' in out, out
     assert "password manager" not in out, out
 
 
@@ -528,9 +534,9 @@ def test_mikrotik_review_comment_uses_routeros_label():
     assert "cannot be re-used on RouterOS" in out, out
 
 
-def test_user_with_empty_hash_emits_no_password_field():
-    """An empty ``hashed_password`` (canonical default) skips the
-    password field — there's nothing to emit.
+def test_user_with_empty_hash_is_not_added_with_a_blank_password():
+    """No line but the review comment names the user: not an ``add``
+    line with a ``password=`` field, nor one without.
     """
     intent = CanonicalIntent(
         local_users=[
@@ -538,11 +544,9 @@ def test_user_with_empty_hash_emits_no_password_field():
         ],
     )
     out = render_intent(intent)
-    assert "add group=full name=bare" in out
-    # No password field at all.
     for line in out.splitlines():
-        if "name=bare" in line:
-            assert "password=" not in line, line
+        if not line.lstrip().startswith("#"):
+            assert "bare" not in line, line
 
 
 # ---------------------------------------------------------------------------

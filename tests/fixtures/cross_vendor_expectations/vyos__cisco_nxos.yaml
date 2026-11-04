@@ -30,8 +30,9 @@
 #
 # The real losses on this pair are: a uniform interface type-hint fabrication
 # (large but harmless), the LAG identity rename that strands the bundle's
-# addressing, one passwordless local account that disappears at re-parse, and
-# the SNMPv3 privacy-cipher token.
+# addressing, every local account (16 refused for their `$6$` secret and
+# one with no password, a review comment in place of each), and the SNMPv3
+# privacy-cipher token.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
 # a 13-cell round-trip over the committed corpus (0 render errors, 0 re-parse
@@ -54,12 +55,13 @@ meta:
     Cisco Nexus carrying the same routed interfaces, static routes, SNMP, VRF
     identity and VXLAN overlay.  Hostname, domain, DNS, the FULL interface
     inventory with its addressing, MTU, description and admin state, static
-    routes, SNMP v1/v2c, the VNI-to-VLAN binding, VRF names and 16 of 17
-    local-user records all survive.  What does not: the interface type hint
+    routes, SNMP v1/v2c, the VNI-to-VLAN binding and VRF names all survive.
+    What does not: the interface type hint
     (fabricated on the target for all 56 records), the LAG identity — renamed
     `bond0` -> `port-channel0` while the bundle's L3 stays behind on a stanza
-    called `bond0` that the render never turns into a port-channel — a single
-    passwordless account that the NX-OS parser cannot read back, the SNMPv3
+    called `bond0` that the render never turns into a port-channel — every
+    local account (a review comment in place of each: 16 are refused for
+    their `$6$` secret, one has no password), the SNMPv3
     privacy-cipher token, and a stray brace pair the VyOS parser attached to
     one cell's NTP servers.  Timezone, DHCP pools and RADIUS die in transit:
     both codecs declare them unsupported.
@@ -522,22 +524,23 @@ per_field_expectation:
   "local_users[].name":
     disposition: unsupported
     reason: >
-      No account arrives: 0 of 17 across all 13 cells that populate local users.
-      The stored secrets on this corpus: 16 SHA-512 crypt (`$6$`). NX-OS can
-      consume a `$5$` or `$1$` crypt string under `password 5`, or a genuine
-      plaintext password; anything else is refused on purpose (#461) with a
-      review comment naming the account and no user entry. Before that change
-      the value was written behind `password 0`, the NX-OS cleartext marker, so
-      the account either carried the source's stored secret as its literal
-      password or could not authenticate at all. 1 further account with no
-      stored secret also vanishes: the NX-OS render has no passwordless form its
-      own parser reads back. Recorded `unsupported` rather than `lossy` because
-      the record vanishes entirely (#436) and a `lossy` warning would understate
-      a target with no local accounts. It is a property of the source's secret
-      form, not a gap in the NX-OS user model: an account whose secret NX-OS can
-      consume would still migrate. Create a console admin on the target out of
-      band before cutover, then re-create every account with a native
-      credential.
+      No account arrives: 0 of 17 across all 13 cells that populate local
+      users. The stored secrets on this corpus: 16 SHA-512 crypt (`$6$`).
+      NX-OS can consume a `$5$` or `$1$` crypt string under `password 5`, or a
+      genuine plaintext password; anything else is refused on purpose (#461)
+      with a review comment naming the account and no user entry. Before that
+      change the value was written behind `password 0`, the NX-OS cleartext
+      marker, so the account either carried the source's stored secret as its
+      literal password or could not authenticate at all. 1 further account
+      with no stored secret also vanishes: the NX-OS render writes a review
+      comment naming it, in place of the account, since an account written
+      with no password could log in with none. Recorded `unsupported` rather
+      than `lossy` because the record vanishes entirely (#436) and a `lossy`
+      warning would understate a target with no local accounts. It is a
+      property of the source's secret form, not a gap in the NX-OS user model:
+      an account whose secret NX-OS can consume would still migrate. Create a
+      console admin on the target out of band before cutover, then re-create
+      every account with a native credential.
     references: [vyos-nxos-surface]
 
   "local_users[].role":

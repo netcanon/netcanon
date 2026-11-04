@@ -44,7 +44,13 @@ import re
 
 from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_no_secret_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ...canonical.intent import CanonicalIntent
 from .._helpers import one_mtu_written, same_vendor_version
 
@@ -351,8 +357,8 @@ def _render_login(users: list) -> list[str]:
 
     Each user emits ``user <name> { authentication { encrypted-password
     <hash> } }``.  Sorted by name for stable output (the round-trip
-    compares local_users by name).  A user with no stored hash renders
-    the bare ``user <name> { }`` form.
+    compares local_users by name).  A user with no stored hash is a
+    review comment, as a refused one is, never a bare ``user <name>``.
 
     The secret passes the shared :func:`is_migratable` gate first.
     ``encrypted-password`` only holds a Linux crypt(3) string; this codec
@@ -366,6 +372,11 @@ def _render_login(users: list) -> list[str]:
         return []
     out = ["    login {"]
     for u in sorted(users, key=lambda x: x.name):
+        if holds_no_secret(u.hashed_password):
+            out.append("        " + format_no_secret_comment(
+                u.name, comment_syntax="slash", target_label="VyOS",
+            ))
+            continue
         if u.hashed_password and not is_migratable(u.hashed_password, "vyos"):
             algorithm, _payload = classify_hash(u.hashed_password)
             out.append("        " + format_review_comment(
@@ -450,8 +461,9 @@ def _snmp_v3_review(name: str, source_vendor: str) -> str:
     """One-line VyOS comment naming a USM user whose key cannot be re-used.
 
     Kept local rather than using ``_user_secrets.format_review_comment``:
-    that helper's body names a login account ("password manager user-name"),
-    which would misdescribe an SNMPv3 USM key.  No key material is quoted.
+    that helper's body names a login account and its password ("reset
+    this user password"), which would misdescribe an SNMPv3 USM key.  No
+    key material is quoted.
     """
     origin = f"{source_vendor} " if source_vendor else ""
     return "        " + _review(
