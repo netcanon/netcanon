@@ -36,6 +36,11 @@ orchestrator raises a review warning rather than inventing a target name.
 
 Unrecognised names return ``kind="unknown"`` (verbatim fallback with a
 warning).
+
+:func:`os10_port_name` is the other direction for a DECLARED device: the
+name the ``os10`` naming rule of
+:mod:`netcanon.migration.device_models` gives a front-panel port of a
+model family under ``definitions/library/model_families/dell_os10_*``.
 """
 
 from __future__ import annotations
@@ -85,6 +90,31 @@ def mtu_is_a_frame(name: str) -> bool:
     read, is copied as it stands.
     """
     return classify_port_name(name).kind in ("physical", "breakout", "mgmt", "lag", "svi")
+
+
+def os10_port_name(*, port: int) -> str:
+    """The name OS10 gives front-panel port *port* of a fixed switch,
+    the port in its factory-default mode.
+
+    The interface is ``ethernet node/slot/port[:subport]`` (Dell
+    SmartFabric OS10 User Guide, Release 10.5.6, Interfaces), printed
+    ``ethernet1/1/5`` in a running-config, and a fixed switch is node
+    1, slot 1 ("For a standalone switch, enter 1/1", the same guide,
+    switch-port-profile).  OS10 has no stacking ("Stacking is not
+    supported in SmartFabric OS10", the same guide), so a VLT pair is
+    two devices, each with its own ``ethernet1/1/<port>``.  A port in
+    its default mode is named whole; a port broken out, or put into a
+    mode other than its port group's own, is named by its lane
+    (``ethernet1/1/56:1``) and is not named here.  Which port numbers
+    a model has is the model's to say
+    (:attr:`netcanon.migration.device_models.PortGroup.skip`).
+
+    Raises:
+        ValueError: *port* is not a port number (OS10 counts from 1).
+    """
+    if port < 1:
+        raise ValueError(f"an OS10 port number counts from 1, not {port}")
+    return f"ethernet1/1/{port}"
 
 
 def classify_port_name(name: str) -> PortIdentity:

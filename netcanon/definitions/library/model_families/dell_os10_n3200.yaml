@@ -1,0 +1,78 @@
+# Dell PowerSwitch N3248TE-ON on SmartFabric OS10: 48 1000BASE-T, four
+# 10G and two QSFP28
+#
+# A fixed switch that stands alone.  On OS10 the N3248TE-ON does not
+# stack, and every one of its ports is an Ethernet port, the two QSFP28
+# that are stacking ports on Dell's other operating system included
+# (UG56, the N3248TE platform note: "SmartFabric OS10 supports 48 x 1
+# Gig, 4 x 10 Gig, and 2 x 100 Gig interfaces ... Stacking is not
+# supported in SmartFabric OS10. Therefore, all ports on the N3200
+# series switch running SmartFabric OS10 are exclusively Ethernet
+# ports").  So every switch is node 1, slot 1: a port is
+# `ethernet1/1/<port>` (UG56, Interfaces: `ethernet
+# node/slot/port[:subport]`), and the management port is `mgmt1/1/1`,
+# declared once under `deployment_ports`.
+#
+# A QSFP28 port broken out (4 x 10G or 4 x 25G, the same note) is named
+# by lane, and that is not modelled.  This file describes every port in
+# its factory-default mode, not broken out: that is the mode's label.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the switches of other vendors that are
+# described here: a QSFP28 port is an uplink.  It says nothing about
+# how a switch is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56   Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#          May 2026).
+#   IG     Dell EMC PowerSwitch N3200-ON Series Installation Guide (Rev.
+#          A03, December 2020).
+#   SS     Dell PowerSwitch N3200-ON Series Spec Sheet.
+#
+# Dell's two texts disagree on the 10G cage: SS says SFP+, IG says
+# SFP28.  The cage is left unstated.  No Dell text read numbers the
+# ports, so the model is graded `inferred`.
+#
+# Part numbers.  The key is the name the switch prints as its `System
+# Type` in `show version`.  The ordering variants (airflow, AC or DC
+# power) list the same ports and print the same name, so the model has
+# one entry.  An OS10 running-config names no model, so a switch is
+# declared by hand.
+#
+# Not modelled: the other N3200-ON models, which the OS10 10.6.0.10
+# release notes do not list among the switches they support.
+schema: 1
+vendor: dell_os10
+family: "N3200"
+display_name: "Dell PowerSwitch N3200-ON"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, no QSFP28 port broken out, every port named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]; for a standalone switch, enter 1/1 for node/slot) and the N3248TE platform note (stacking is not supported in SmartFabric OS10; all ports on the N3200 series switch running SmartFabric OS10 are exclusively Ethernet ports)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has when it is not broken out. A QSFP28 port broken out is named by lane, and those names are not modelled: such a source port is not on this inventory. OS10 has no stacking: each switch is a device of its own. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1); Dell PowerSwitch N3200-ON Series Spec Sheet (an out-of-band 10/100/1000BASE-T management port)", caveat: "That this model names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on its panel with the name."}
+
+models:
+  N3248TE-ON:
+    skus: [N3248TE-ON]
+    display_name: "Dell PowerSwitch N3248TE-ON, 48 1000BASE-T, 4 10G and 2 QSFP28 (N3248TE-ON)"
+    panel: {grade: inferred, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), the N3248TE platform note (48 x 1 Gig, 4 x 10 Gig and 2 x 100 Gig interfaces, all of them Ethernet ports on SmartFabric OS10); Dell EMC PowerSwitch N3200-ON Series Installation Guide (Rev. A03, December 2020), 48 ports 1G BASE-T RJ45, four ports 10G SFP28 and two 100G QSFP28 ports; Dell PowerSwitch N3200-ON Series Spec Sheet, 48x RJ45 10/100/1000Mb auto-sensing ports and 4x 10G SFP+ ports", caveat: "No Dell text read numbers this model's ports. That the RJ45 ports are 1 to 48, the 10G ports 49 to 52 and the QSFP28 ports 53 and 54, each named whole, is inferred. Dell's spec sheet calls the 10G cages SFP+ and its installation guide SFP28, so the cage is not stated."}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: 10gig, notes: "Four 10G ports; Dell's spec sheet calls the cage SFP+, its installation guide SFP28"}
+      - {role: uplink, count: 2, speed: 100gig, cage: qsfp28}

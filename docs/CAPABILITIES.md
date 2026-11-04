@@ -1163,9 +1163,8 @@ not held for them.  So the job's sentence offers the devices only
 where a hardware port is among what it lists, and says so where
 they would decide only some of it -- and only where a device is
 described of the source's vendor and of the target's (a model
-family or a target profile), as the rename modal does.  For NX-OS,
-IOS-XR, OS10 and VyOS none ships, and the sentence ends with the
-entries.
+family or a target profile), as the rename modal does.  For IOS-XR
+and VyOS none ships, and the sentence ends with the entries.
 
 The same body gives the same status and the same fields on `/plan`
 and on every per-pane endpoint, and every one of them applies the
@@ -1757,7 +1756,7 @@ Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
 and Arista EOS configs today; no other vendor has a detector yet.  An
 NX-OS running-config names no model, so a Nexus is declared by hand;
 nor does a Junos configuration, so an EX or QFX switch is declared by
-hand too.
+hand too, and nor does an OS10 one, so a Dell PowerSwitch is as well.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -2091,8 +2090,10 @@ nothing, as before.
   generation, and the EX, FX, FX2, FX3, GX, GX2 and H models, the
   9332C and the 9364C), and for the Juniper EX2300, EX3400, EX4300,
   EX4400, EX4600, EX4650, QFX5100, QFX5110, QFX5120, QFX5200 and
-  QFX5210; `GET /model-families` is the
-  current list.  A part graded `inferred`
+  QFX5210, and for the Dell PowerSwitch S5200, Z9100, Z9264F, Z9332F,
+  Z9432F, S4100, S4048, S3048, S3248T and N3248TE on SmartFabric OS10
+  (each port named whole, in the default port profile on an S4148);
+  `GET /model-families` is the current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
   declared yet.  A Catalyst stack, or a 9500's StackWise Virtual pair,

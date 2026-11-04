@@ -25,6 +25,10 @@ from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
     catalyst_port_name,
 )
 from netcanon.migration.codecs.cisco_nxos.port_names import nexus_port_name
+from netcanon.migration.codecs.dell_os10.port_names import (
+    classify_port_name as classify_os10_port_name,
+)
+from netcanon.migration.codecs.dell_os10.port_names import os10_port_name
 from netcanon.migration.codecs.juniper_junos.port_names import (
     classify_port_name as classify_junos_port_name,
 )
@@ -602,6 +606,135 @@ class TestJunosPortName:
         assert rule.roles == frozenset({"access", "uplink"})
         assert "`me0`" in rule.why_not and "`em0`" in rule.why_not
         assert rule.prefixes == frozenset({"ge", "mge", "xe", "et"})
+
+
+# ---------------------------------------------------------------------------
+# The OS10 naming rule
+# ---------------------------------------------------------------------------
+
+
+def _os10_request(index0: int, *, slot="", member_id=None) -> dm.PortNameRequest:
+    group = dm.PortGroup(role="uplink", count=1)
+    return dm.PortNameRequest(
+        mode="standalone", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+#: A made-up family in the OS10 grammar, whose ports 3 and 4 are off, as
+#: an S4148's 27 and 28 are in its default profile.  None of this is a
+#: claim about real hardware.
+GAPBOX_YAML = """
+schema: 1
+vendor: dell_os10
+family: Gapbox
+naming: os10
+default_mode: standalone
+modes:
+  standalone: {label: "standalone", naming: {grade: vendor-doc}}
+models:
+  GB-6:
+    panel: {grade: vendor-doc}
+    ports:
+      - {role: access, count: 2}
+      - {role: uplink, count: 2, skip: 2}
+      - {role: access, count: 2}
+"""
+
+
+class TestOs10PortName:
+    @pytest.mark.parametrize(
+        ("port", "printed"),
+        [
+            # Dell SmartFabric OS10 User Guide, Release 10.5.6,
+            # Interfaces, the auto-negotiation notes: `show
+            # configuration` prints `interface ethernet1/1/50`.
+            (50, "ethernet1/1/50"),
+            # The same guide, Sample Multi-hop FSB configuration:
+            # `interface ethernet1/1/33`.
+            (33, "ethernet1/1/33"),
+            # The same guide, QoS VXLAN examples, QoS configurations:
+            # `show running-configuration interface ethernet 1/1/25`
+            # prints `interface ethernet1/1/25`.
+            (25, "ethernet1/1/25"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, port, printed):
+        assert os10_port_name(port=port) == printed
+        # And the codec reads it back as node 1, slot 1 and the port.
+        identity = classify_os10_port_name(printed)
+        assert (identity.kind, identity.stack, identity.module, identity.port) == (
+            "physical", 1, 1, port,
+        )
+
+    @pytest.mark.parametrize("port", [0, -1])
+    def test_a_port_counts_from_1(self, port):
+        with pytest.raises(ValueError, match="counts from 1"):
+            os10_port_name(port=port)
+
+    def test_the_rule_names_a_port_by_its_number(self):
+        rule = dm._naming_rules()["os10"]
+        assert rule.render(_os10_request(0)) == "ethernet1/1/1"
+        assert rule.render(_os10_request(49)) == "ethernet1/1/50"
+
+    @pytest.mark.parametrize("member_id", [1, 2])
+    def test_a_switch_names_no_member(self, member_id):
+        """OS10 has no stacking: the switches of a VLT pair are two
+        devices, each node 1, so a member number -- the first or any
+        other -- is refused rather than dropped from the name."""
+        with pytest.raises(ValueError, match="without a member number"):
+            dm._naming_rules()["os10"].render(_os10_request(0, member_id=member_id))
+
+    def test_a_mode_that_numbers_members_fails_at_load(self):
+        data = _data(GAPBOX_YAML)
+        data["modes"]["standalone"]["member_ids"] = [1, 2]
+        with pytest.raises(DeviceModelLoadError, match="without a member number"):
+            DeviceModelRegistry([_family(data)])
+
+    @pytest.mark.parametrize("slot", ["1", "2"])
+    def test_a_fixed_switch_has_no_bay(self, slot):
+        with pytest.raises(ValueError, match="all in slot 1"):
+            dm._naming_rules()["os10"].render(_os10_request(0, slot=slot))
+
+    def test_the_management_interface_is_not_a_numbered_port(self):
+        rule = dm._naming_rules()["os10"]
+        assert rule.roles == frozenset({"access", "uplink"})
+        assert "`mgmt1/1/1`" in rule.why_not
+
+
+class TestAGroupThatSkipsPortNumbers:
+    def _inventory(self) -> Inventory:
+        return compile_deployment(
+            Deployment(vendor="dell_os10", members=[MemberSpec(model="GB-6")]),
+            DeviceModelRegistry([_family(GAPBOX_YAML)]),
+        )
+
+    def test_the_numbers_passed_over_are_no_port(self):
+        inv = self._inventory()
+        assert inv.names() == [f"ethernet1/1/{n}" for n in (1, 2, 5, 6, 7, 8)]
+        assert inv.names(role="uplink") == ["ethernet1/1/5", "ethernet1/1/6"]
+
+    def test_index_counts_the_gap_and_ordinal_does_not(self):
+        """``index`` is the port's number less one, so the gap is in it;
+        ``ordinal`` is the port's place among its role, so it is not."""
+        inv = self._inventory()
+        assert [p.index for p in inv.ports] == [0, 1, 4, 5, 6, 7]
+        assert [p.ordinal for p in inv.ports if p.role == "access"] == [0, 1, 2, 3]
+        assert [p.ordinal for p in inv.ports if p.role == "uplink"] == [0, 1]
+
+    def test_a_skip_below_0_is_refused(self):
+        data = _data(GAPBOX_YAML)
+        data["models"]["GB-6"]["ports"][1]["skip"] = -1
+        with pytest.raises(ValueError, match="skip"):
+            _family(data)
+
+    def test_no_skip_is_no_gap(self):
+        data = _data(GAPBOX_YAML)
+        del data["models"]["GB-6"]["ports"][1]["skip"]
+        inv = compile_deployment(
+            Deployment(vendor="dell_os10", members=[MemberSpec(model="GB-6")]),
+            DeviceModelRegistry([_family(data)]),
+        )
+        assert inv.names() == [f"ethernet1/1/{n}" for n in range(1, 7)]
 
 
 # ---------------------------------------------------------------------------

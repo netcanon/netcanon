@@ -534,6 +534,31 @@ established, so another vendor's IP MTU of its own (IOS-XE or AOS-CX
 `ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet mtu`) is not in the
 output, and the job's report says it is lost.
 
+**Declaring a Dell switch as the source or target device.**  The
+PowerSwitch S5200 (S5212F, S5224F, S5232F, S5248F and S5296F), the
+Z9100, Z9264F, Z9332F and Z9432F, the S4100 (S4148F, S4148T, S4128F,
+S4128T, S4112F and S4112T), the S4048 and S4048T, the S3048 and
+S3248T, and the N3248TE are model families with one mode,
+`standalone`: a switch on its own.  OS10 has no stacking, and the
+two switches of a VLT pair are two devices; declare each, and
+translate each config on its own.  A port is `ethernet1/1/<port>`,
+named whole: a port broken out into lanes (`ethernet1/1/25:1`) is not
+modelled, and its names come back as off-inventory.  An S4148 is
+described in its default switch-port profile, profile-1, which turns
+its QSFP+ ports 27 and 28 off, so the inventory goes from port 26 to
+port 29; a switch in another profile has other ports.  The management
+port is `mgmt1/1/1`.  A running-config names no model, so the switch
+is not read from the config: choose it by hand.  A panel no Dell text
+read numbers is graded `inferred`, and its caveat says why.  Not
+described, each for a reason its family's file gives: the Z9664F (no
+port count stated), the S6010 (not in the 10.6.0.10 release notes'
+list of switches), the Z9964F (its spec sheet names Enterprise SONiC)
+and the S6100; the S4148U (its unified ports are Fibre Channel in the
+default profile), the S4148FE, and the S4248FB and S4248FBL; the
+S5448F and S5148F; and the N3200 models other than the N3248TE.  The E3224F,
+which the release notes list, is not described either: no Dell text
+read here gives its ports.
+
 ## Two things that would have been silent bugs
 
 Recorded here because they change how you should read a migration report:

@@ -1492,7 +1492,12 @@ number from the group's `slot`, which on that grammar counts from
 zero; and where the member number is an id the switch keeps (a Junos
 FPC is the Virtual Chassis member id, and a switch that left one
 keeps it), the mode states the ids it allows (`member_ids`) and a
-switch on its own is declared with the id it has.
+switch on its own is declared with the id it has.  Where a setting
+decides which ports exist without renumbering any (a Dell S4148's
+switch-port profile: its default turns ports 27 and 28 off), a family
+describes one setting, in the mode's label, and the group after the
+gap states how many numbers it passes over (`skip`), from the
+vendor's own port list; position in a slot runs on past them.
 A port of the WHOLE deployment — a C9300
 stack's one management interface, `GigabitEthernet0/0`, whichever
 switch is active — is listed by its literal name under

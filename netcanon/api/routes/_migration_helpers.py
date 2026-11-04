@@ -855,7 +855,7 @@ def a_device_is_described(request: Request, codec: CodecBase) -> bool:
 
     A job's sentence offers "declare both devices" only where this
     holds for both sides: for a vendor nobody has described a
-    device of (IOS XR, OS10, VyOS as shipped) the offer was
+    device of (IOS XR and VyOS as shipped) the offer was
     advice nobody could take.
     """
     vendor = codec.capabilities.vendor_id

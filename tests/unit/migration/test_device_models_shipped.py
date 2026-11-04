@@ -1252,6 +1252,62 @@ def _junos_port_key(name: str) -> tuple[int, int, int]:
     assert match, name
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
+
+# Dell SmartFabric OS10 -- typed by hand from the family files' sources,
+# each model's port groups in PORT-NUMBER order, as (first port, count,
+# role).  A port is `ethernet1/1/<port>`: OS10 has no stacking, so every
+# switch is node 1, slot 1.  The S4148's ports 27 and 28 are off in its
+# default profile, so they are in no group.
+_D = "dell_os10"
+
+
+def _os10(*groups: tuple[int, int, str]) -> tuple[list[str], list[str]]:
+    access: list[str] = []
+    uplinks: list[str] = []
+    for first, count, role in groups:
+        (access if role == _ACC else uplinks).extend(_run(first, count, "ethernet1/1/"))
+    return access, uplinks
+
+
+_OS10_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # S5200
+    "S5212F-ON": _os10((1, 12, _ACC), (13, 3, _UP)),
+    "S5224F-ON": _os10((1, 24, _ACC), (25, 4, _UP)),
+    "S5248F-ON": _os10((1, 48, _ACC), (49, 8, _UP)),
+    "S5296F-ON": _os10((1, 96, _ACC), (97, 8, _UP)),
+    "S5232F-ON": _os10((1, 32, _UP), (33, 2, _ACC)),
+    # Z9
+    "Z9100-ON": _os10((1, 32, _UP), (33, 2, _ACC)),
+    "Z9264F-ON": _os10((1, 64, _UP), (65, 2, _ACC)),
+    "Z9332F-ON": _os10((1, 32, _UP), (33, 2, _ACC)),
+    "Z9432F-ON": _os10((1, 32, _UP), (33, 2, _ACC)),
+    # S4100: profile-1 on the S4148.
+    "S4148F-ON": _os10((1, 24, _ACC), (25, 2, _UP), (29, 2, _UP), (31, 24, _ACC)),
+    "S4148T-ON": _os10((1, 24, _ACC), (25, 2, _UP), (29, 2, _UP), (31, 24, _ACC)),
+    "S4128F-ON": _os10((1, 28, _ACC), (29, 2, _UP)),
+    "S4128T-ON": _os10((1, 28, _ACC), (29, 2, _UP)),
+    "S4112F-ON": _os10((1, 12, _ACC), (13, 3, _UP)),
+    "S4112T-ON": _os10((1, 12, _ACC), (13, 3, _UP)),
+    # S4048
+    "S4048-ON": _os10((1, 48, _ACC), (49, 6, _UP)),
+    "S4048T-ON": _os10((1, 48, _ACC), (49, 6, _UP)),
+    # S3048 and S3248T: Dell calls the S3048's SFP+ ports uplinks.
+    "S3048-ON": _os10((1, 48, _ACC), (49, 4, _UP)),
+    "S3248T-ON": _os10((1, 48, _ACC), (49, 4, _ACC), (53, 2, _UP)),
+    # N3200
+    "N3248TE-ON": _os10((1, 48, _ACC), (49, 4, _ACC), (53, 2, _UP)),
+}
+for _model, _ports in _OS10_PANELS.items():
+    EXPECTED_INVENTORIES[(_D, _model, "standalone", ())] = _ports
+
+_OS10_PORT = re.compile(r"^ethernet1/1/(\d+)$")
+
+
+def _os10_port_number(name: str) -> int:
+    match = _OS10_PORT.match(name)
+    assert match, name
+    return int(match.group(1))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -1292,6 +1348,10 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
         )
     },
     **{f"{_J}/{family}": ["em0"] for family in ("QFX5120-48T", "QFX5120-32C", "QFX5210")},
+    **{
+        f"{_D}/{family}": ["mgmt1/1/1"]
+        for family in ("S5200", "Z9", "S4100", "S4048", "S3048-S3248T", "N3200")
+    },
 }
 
 
@@ -1344,6 +1404,12 @@ class TestExactInventories:
             # SFP+ access ports are numbered after the 32 uplinks.
             assert inventory.names() == (
                 sorted(access + uplinks, key=_junos_port_key) + mgmt
+            )
+        elif vendor == _D:
+            # And an OS10 switch: on an S4148 the QSFP28 uplinks sit
+            # between two runs of access ports, with ports 27 and 28 off.
+            assert inventory.names() == (
+                sorted(access + uplinks, key=_os10_port_number) + mgmt
             )
         else:
             assert inventory.names() == access + uplinks + mgmt
@@ -1501,6 +1567,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "eos": "arista_eos",
     "nxos": "cisco_nxos",
     "junos": "juniper_junos",
+    "os10": "dell_os10",
 }
 
 
@@ -1547,6 +1614,17 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     expected = ("breakout", 1) if by_lane[port.index] else ("physical", None)
                     assert (identity.kind, identity.breakout_lane) == expected, where
                     assert (identity.stack, port.member_id, port.slot) == (None, None, ""), where
+                    assert identity.port == port.index + 1, where
+                    checked += 1
+                    continue
+                if family.naming == "os10":
+                    # A fixed switch is node 1, slot 1, and has no member
+                    # number: the classifier reads the node as the stack.
+                    # The port's number counts the ports a group passes
+                    # over (the S4148's 27 and 28).
+                    assert identity.kind == "physical", (*where, identity.kind)
+                    assert (identity.stack, port.member_id) == (1, None), where
+                    assert (identity.module, port.slot) == (1, ""), where
                     assert identity.port == port.index + 1, where
                     checked += 1
                     continue
@@ -2022,6 +2100,8 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     # Juniper: the model's name is its key, and its first part number is
     # that name or, where every part carries a suffix, the first of them.
     **{(_J, _JUNOS_FIRST_PART.get(model, model)): model for model in _JUNOS_PANELS},
+    # Dell: the name a switch prints as its System Type is the model key.
+    **{(_D, model): model for model in _OS10_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -2176,6 +2256,24 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "juniper_junos/EX4400 / panel / EX4400-48MXP",
     # The EX4650's other management port, which its guide never names.
     "juniper_junos/EX4650 / deployment port / em1",
+    # Dell switches whose names no Dell text read establishes: their
+    # port numbers, or that a port is named whole, are inferred, and
+    # each caveat says which.
+    "dell_os10/S5200 / panel / S5212F-ON",
+    "dell_os10/S5200 / panel / S5224F-ON",
+    "dell_os10/S5200 / panel / S5296F-ON",
+    "dell_os10/Z9 / panel / Z9332F-ON",
+    "dell_os10/Z9 / panel / Z9432F-ON",
+    "dell_os10/S4100 / panel / S4148T-ON",
+    "dell_os10/S4100 / panel / S4128F-ON",
+    "dell_os10/S4100 / panel / S4128T-ON",
+    "dell_os10/S4100 / panel / S4112F-ON",
+    "dell_os10/S4100 / panel / S4112T-ON",
+    "dell_os10/S4048 / panel / S4048-ON",
+    "dell_os10/S4048 / panel / S4048T-ON",
+    "dell_os10/S3048-S3248T / panel / S3048-ON",
+    "dell_os10/S3048-S3248T / panel / S3248T-ON",
+    "dell_os10/N3200 / panel / N3248TE-ON",
 }
 
 

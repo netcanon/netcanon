@@ -1,0 +1,129 @@
+# Dell PowerSwitch S5200-ON series on SmartFabric OS10: the S5212F-ON,
+# S5224F-ON, S5248F-ON and S5296F-ON (SFP28 and QSFP28 ports) and the
+# S5232F-ON (32 QSFP28 and 2 SFP+)
+#
+# A fixed switch that stands alone.  OS10 has no stacking (UG56, the
+# N3248TE platform note: "Stacking is not supported in SmartFabric
+# OS10"), so the two switches of a VLT pair are two devices, and every
+# switch is node 1, slot 1.  A port is `ethernet<node>/<slot>/<port>`
+# (UG56, Interfaces: `ethernet node/slot/port[:subport]`), so a port of
+# one of these switches is `ethernet1/1/<port>`, and the management
+# port is `mgmt1/1/1`, declared once under `deployment_ports`.
+#
+# A port's name depends on its port group's MODE.  On the S5212F-ON,
+# S5224F-ON, S5248F-ON and S5296F-ON a port group's mode applies to
+# every port of the group (UG56, Port-groups on S5200F-ON switches).
+# A group in its native mode keeps its ports' names (`ethernet1/1/9`);
+# after a change to another mode its ports are named by lane
+# (`ethernet1/1/9:1`) (VX47, Appendix B and Table 20, for the
+# S5248F-ON).  The S5232F-ON has no port groups: a port is broken out
+# with `interface breakout`, after which it is named by lane (VX47U,
+# Appendix D.3).  This file describes every port in its factory-default
+# mode, named whole: that is the mode's label.  A port named by lane is
+# not modelled yet.
+#
+# `ports:` lists are in PORT-NUMBER order.  Which ports are `uplink`
+# and which `access` follows the switches of other vendors that are
+# described here: a QSFP28 or QSFP28-DD port is an uplink and an SFP28
+# or SFP+ port is an access port.  It says nothing about how a switch
+# is cabled.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   UG56   Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03,
+#          May 2026).
+#   VX47   Dell EMC SmartFabric OS10 Switch Configuration Guide for
+#          VxRail 4.7 (August 2019).
+#   VX47U  Dell EMC Networking OS10 Enterprise Edition Switch
+#          Configuration Guide for VxRail featuring S5248F-ON,
+#          S5232F-ON and S5148F-ON (March 2019).
+#   SS     Dell EMC Networking S5200-ON Series spec sheet: the
+#          ordering list.
+#
+# Part numbers.  The key of each model is the name the switch prints
+# as its `System Type` in `show version`.  The ordering variants of a
+# model (airflow, AC or DC power, TAA) list the same ports in SS and
+# print the same name, so each model has one entry.  An OS10
+# running-config names no model, so a switch is declared by hand.
+#
+# Captures.  The committed DellGEOS lab configs of an S5212F-ON name
+# the model only in their file names and their host names, and keep
+# their ports in `interface range` lines, which the parser does not
+# read: they grant no capture.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The S5448F-ON: no Dell text read gives the port numbers of its
+#     QSFP56-DD and SFP56-DD cages or of its two SFP+ ports.
+#   * Any port named by lane: a broken-out port, a port group outside
+#     its native mode, or (on the S5232F-ON) the switch-port profile
+#     profile-2, in which SFP+ port 34 is not available.
+#   * The S5148F-ON, which the OS10 release notes no longer list.
+schema: 1
+vendor: dell_os10
+family: "S5200"
+display_name: "Dell PowerSwitch S5200-ON"
+naming: os10
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, every port in its factory-default mode and named whole (ethernet1/1/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Interfaces (an Ethernet interface is ethernet node/slot/port[:subport]; for a standalone switch, enter 1/1 for node/slot) and the N3248TE platform note (stacking is not supported in SmartFabric OS10); Dell EMC SmartFabric OS10 Switch Configuration Guide for VxRail 4.7 (August 2019), Appendix B and Table 20, S5248F-ON port-group configuration options (a port group in its native mode keeps the names eth 1/1/x; after a change to another mode the names become eth 1/1/x:n)"
+      caveat: "Each port is listed whole, as ethernet1/1/<port>, the name it has in its factory-default mode. A port broken out, or one whose port group is put into a mode other than its native one, is named by lane (ethernet1/1/9:1), and those names are not modelled: such a source port is not on this inventory. OS10 has no stacking: each switch of a VLT pair is a device of its own, its ports named ethernet1/1/<port>. Declare each."
+
+deployment_ports:
+  - name: mgmt1/1/1
+    role: mgmt
+    speed: gig
+    cage: rj45
+    notes: "Out-of-band 10/100/1000BASE-T management port"
+    naming: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Management interface (configured with interface mgmt 1/1/1) and ntp source interface (mgmt node/slot/port: the default is 1/1/1); Dell EMC Networking OS10 Enterprise Edition Switch Configuration Guide for VxRail featuring S5248F-ON, S5232F-ON and S5148F-ON (March 2019), Appendix D (interface mgmt1/1/1 in the printed running-configurations)", caveat: "That every model of this family names its one management port mgmt1/1/1 rests on the guide's statement for every OS10 switch; no Dell text read pairs the port on each model's panel with the name."}
+
+models:
+  # --- 12, 24, 48 or 96 SFP28, and QSFP28 -----------------------------------
+  S5212F-ON:
+    skus: [S5212F-ON]
+    display_name: "Dell PowerSwitch S5212F-ON, 12 SFP28 and 3 QSFP28 (S5212F-ON)"
+    panel: {grade: inferred, ref: "Dell EMC Networking S5200-ON Series spec sheet, ordering (S5212F-ON, 12x25GbE SFP28 + 3x 100GbE QSFP28); Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port-groups on S5200F-ON switches, Table 45 and the show port-group printout beside it (port groups 1/1/1 to 1/1/3 hold ports 1 to 12, each in 25g-4x or 10g-4x; groups 1/1/4 to 1/1/6 hold ports 13, 14 and 15)", caveat: "The port numbers are Dell's. That each port is named whole by default is not established: Dell's printout of this model shows its SFP28 groups in 10g-4x, its table lists 25g-4x and 10g-4x, and no Dell text read says which is a group's native mode. On the S5248F-ON a group outside its native mode names its ports by lane (ethernet1/1/1:1), names this inventory does not list. The QSFP28 ports are taken to be whole in 100g-1x, as on the S5248F-ON."}
+    ports:
+      - {role: access, count: 12, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 3, speed: 100gig, cage: qsfp28}
+
+  S5224F-ON:
+    skus: [S5224F-ON]
+    display_name: "Dell PowerSwitch S5224F-ON, 24 SFP28 and 4 QSFP28 (S5224F-ON)"
+    panel: {grade: inferred, ref: "Dell EMC Networking S5200-ON Series spec sheet, ordering (S5224F-ON, 24x25GbE SFP28 + 4x 100GbE QSFP28); Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port-groups on S5200F-ON switches, Table 46 (port groups 1/1/1 to 1/1/6 hold ports 1 to 24, each in 25g-4x or 10g-4x; groups 1/1/7 to 1/1/10 hold ports 25 to 28)", caveat: "The port numbers are Dell's. That each port is named whole by default is not established: Dell's printout of this model shows its SFP28 groups in 10g-4x, its table lists 25g-4x and 10g-4x, and no Dell text read says which is a group's native mode. On the S5248F-ON a group outside its native mode names its ports by lane (ethernet1/1/1:1), names this inventory does not list. The QSFP28 ports are taken to be whole in 100g-1x, as on the S5248F-ON."}
+    ports:
+      - {role: access, count: 24, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 4, speed: 100gig, cage: qsfp28}
+
+  S5248F-ON:
+    skus: [S5248F-ON]
+    display_name: "Dell PowerSwitch S5248F-ON, 48 SFP28, 2 QSFP28-DD and 4 QSFP28 (S5248F-ON)"
+    panel: {grade: vendor-doc, ref: "Dell EMC SmartFabric OS10 Switch Configuration Guide for VxRail 4.7 (August 2019), Appendix B, Table 20, S5248F-ON port-group configuration options (native interface names Eth 1/1/1 to 1/1/48 at 25g-4x, Eth 1/1/49-1/1/50 and Eth 1/1/51-1/1/52 at 100g-2x, Eth 1/1/53 to 1/1/56 at 100g-1x); Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port-groups on S5200F-ON switches, Table 47 and the show port-group printout beside it (the same ports and modes); Dell EMC Networking S5200-ON Series spec sheet, ordering (S5248F-ON, 48x 25GbE SFP28 + 2x 200GbE QSFP28-DD + 4x 100GbE QSFP28)", caveat: "Each QSFP28-DD cage is two port numbers, both 100G interfaces in the native 100g-2x mode (49 and 50, 51 and 52); which cage holds which pair is shown in figures only."}
+    ports:
+      - {role: access, count: 48, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 4, speed: 100gig, cage: qsfp-dd, notes: "Two QSFP28-DD cages of two 100G interfaces each: ports 49 and 50, and 51 and 52"}
+      - {role: uplink, count: 4, speed: 100gig, cage: qsfp28}
+
+  S5296F-ON:
+    skus: [S5296F-ON]
+    display_name: "Dell PowerSwitch S5296F-ON, 96 SFP28 and 8 QSFP28 (S5296F-ON)"
+    panel: {grade: inferred, ref: "Dell EMC Networking S5200-ON Series spec sheet, ordering (S5296F-ON, 96x 25GbE SFP28 + 8x 100GbE QSFP28); Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), Port-groups on S5200F-ON switches, Table 48 and the show port-group printout beside it (port groups 1/1/1 to 1/1/24 hold ports 1 to 96 in 25g-4x; groups 1/1/25 to 1/1/32 hold ports 97 to 104 in 100g-1x)", caveat: "The port numbers and the modes of Dell's printout are Dell's. That a port is named whole in those modes rests on the S5248F-ON's table of native modes (25g-4x for an SFP28 group, 100g-1x for a QSFP28 port), which no Dell text read states for this model. A group outside its native mode names its ports by lane, names this inventory does not list."}
+    ports:
+      - {role: access, count: 96, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 8, speed: 100gig, cage: qsfp28}
+
+  # --- 32 QSFP28 and 2 SFP+ ----------------------------------------------------
+  S5232F-ON:
+    skus: [S5232F-ON]
+    display_name: "Dell PowerSwitch S5232F-ON, 32 QSFP28 and 2 SFP+ (S5232F-ON)"
+    panel: {grade: vendor-doc, ref: "Dell SmartFabric OS10 User Guide, Release 10.5.6 (Rev. A03, May 2026), switch-port-profile, S5232F-ON port profiles (profile-1, the default: QSFP28 ports 1 to 32 operate in 100 GbE mode by default, and SFP+ ports 33 and 34 in 10 GbE mode); Dell EMC Networking OS10 Enterprise Edition Switch Configuration Guide for VxRail featuring S5248F-ON, S5232F-ON and S5148F-ON (March 2019), Appendix D.3 (show interface status of an S5232F-ON: a port broken out with interface breakout 1/1/1 map 25g-4x is Eth 1/1/1:1 to 1/1/1:4, the ports beside it Eth 1/1/2, 1/1/3 and 1/1/4); Dell EMC Networking S5200-ON Series spec sheet, ordering (S5232F-ON, 32x 100 GbE QSFP28 + 2x 10GbE SFP+)", caveat: "No Dell printout read names ports 5 to 34 of this model: their names follow from the port numbers the guide states and the OS10 grammar."}
+    ports:
+      - {role: uplink, count: 32, speed: 100gig, cage: qsfp28}
+      - {role: access, count: 2, speed: 10gig, cage: sfp+}

@@ -93,10 +93,10 @@ class TestModelFamilies:
         ]
         assert model["ports"] == [
             {"role": "access", "count": 48, "slot": "", "prefix": "",
-             "multi_lane": False, "speed": "gig", "cage": "rj45", "poe": False,
+             "multi_lane": False, "skip": 0, "speed": "gig", "cage": "rj45", "poe": False,
              "notes": ""},
             {"role": "uplink", "count": 4, "slot": "", "prefix": "",
-             "multi_lane": False, "speed": "gig", "cage": "sfp", "poe": False,
+             "multi_lane": False, "skip": 0, "speed": "gig", "cage": "sfp", "poe": False,
              "notes": ""},
         ]
 
@@ -1407,7 +1407,7 @@ class TestPortNamesWithNoDevices:
             name for name in list_public_codecs()
             if not a_device_is_described(request, get_codec(name))
         }
-        assert none == {"cisco_iosxr", "dell_os10", "vyos"}
+        assert none == {"cisco_iosxr", "vyos"}
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_entries_settle_it_on_every_endpoint(

@@ -36,6 +36,7 @@ rule turns them into names for one stated deployment:
 | a **module** | what a bay can hold, and the ports it contributes |
 | a group's **`prefix`** | the interface type a grammar that names by type puts in front of the number (`TenGigabitEthernet`) |
 | a group's **`multi_lane`** | the ports are a grammar's multi-lane ports, each configured as one interface and named by its first lane (`Ethernet49/1`) |
+| a group's **`skip`** | port numbers the device does not have, in the state the mode describes, passed over before the group (a Dell S4148F-ON's default port profile turns ports 27 and 28 off) |
 | a **deployment port** | a port of the whole deployment rather than of one member, by its literal name (a C9300 stack's one `GigabitEthernet0/0`) |
 | a **capture claim** | a committed real capture, and the exact deployment it is of |
 
@@ -54,9 +55,12 @@ in
 [`codecs/arista_eos/port_names.py`](../netcanon/migration/codecs/arista_eos/port_names.py)),
 every Cisco Nexus 9300 the `nxos` rule (`nexus_port_name` in
 [`codecs/cisco_nxos/port_names.py`](../netcanon/migration/codecs/cisco_nxos/port_names.py)),
-and every Juniper EX and QFX switch the `junos` rule
+every Juniper EX and QFX switch the `junos` rule
 (`ex_qfx_port_name` in
-[`codecs/juniper_junos/port_names.py`](../netcanon/migration/codecs/juniper_junos/port_names.py)).
+[`codecs/juniper_junos/port_names.py`](../netcanon/migration/codecs/juniper_junos/port_names.py)),
+and every Dell PowerSwitch on SmartFabric OS10 the `os10` rule
+(`os10_port_name` in
+[`codecs/dell_os10/port_names.py`](../netcanon/migration/codecs/dell_os10/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -111,6 +115,24 @@ names are for.  A port the switch holds as a Virtual Chassis port by
 default is no interface, and is left out.  A Virtual Chassis is of
 the models one family describes, so models that cannot share one
 (each QFX5120) are families of their own.
+
+A Dell PowerSwitch on SmartFabric OS10 names a port
+`ethernet1/1/<port>`: node 1, slot 1 and the port's number (Dell's
+user guide gives an Ethernet interface as `ethernet
+node/slot/port[:subport]`, with 1/1 for a switch on its own).  OS10
+has no stacking -- each switch of a VLT pair is a device of its own --
+so the rule refuses a member id and any slot, and an OS10 mode states
+no `member_ids`.  The management port, `mgmt1/1/1`, is a deployment
+port.  A port broken out is named by lane (`ethernet1/1/25:1`), which
+is not modelled: a family describes every port whole, and its mode's
+label says so.  Which ports exist can depend on a setting: an S4148's
+switch-port profile adds or removes ports by number and never
+renumbers one, and its default turns the QSFP+ ports 27 and 28 off.
+So a family describes one profile, in the mode's label, and the group
+after such a gap states how many numbers it passes over (`skip: 2`
+before ports 29 and 30).  `skip` is for a number the device does not
+have in that state, stated from the vendor's own port list; a port
+the device has and nobody uses is a port, and is counted.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
@@ -403,6 +425,9 @@ these are load errors, not surprises later:
   a `prefix` that rule does not take, or a `prefix` under a rule that
   puts no type in a name;
 * `multi_lane` on a group under a rule that puts no lane in a name;
+* a negative `skip`;
+* a mode that states `member_ids` under a rule whose names carry no
+  member number (`os10`);
 * a model key or part number another model already uses;
 * more port groups, ports in a group, or bay-and-module combinations
   than the loader will build (the limits are constants at the top of
