@@ -70,12 +70,17 @@ def _smallest_capture(codec: str) -> str:
     return min(found, key=lambda p: (p.stat().st_size, p.name)).read_text(encoding="utf-8")
 
 
-def _with_one_line_long(text: str) -> Iterator[tuple[int, str]]:
+def _with_one_line_long(
+    text: str, *, from_the_last: bool = False,
+) -> Iterator[tuple[int, str]]:
     """(line number, *text* with that line's first run of digits made
     too long), for each line that holds a run -- lines counted as
-    :meth:`str.splitlines` counts them, from 1."""
+    :meth:`str.splitlines` counts them, from 1 -- from the first line,
+    or from the last.  Each text is made as it is asked for."""
     lines = text.splitlines(keepends=True)
-    for index, line in enumerate(lines):
+    order = range(len(lines) - 1, -1, -1) if from_the_last else range(len(lines))
+    for index in order:
+        line = lines[index]
         start = next((i for i, ch in enumerate(line) if ch.isdecimal()), None)
         if start is None:
             continue
@@ -87,6 +92,14 @@ def _with_one_line_long(text: str) -> Iterator[tuple[int, str]]:
 
 
 _CODECS = list_public_codecs()
+
+#: The public codecs whose parser reads such a run as a number in these
+#: texts: without the check, each reaches Python's limit.  A parser that
+#: starts or stops reading one changes this set.
+_READ_AS_A_NUMBER = {
+    "arista_eos", "aruba_aoscx", "aruba_aoss", "cisco_nxos", "dell_os10",
+    "fortigate_cli", "juniper_junos",
+}
 
 
 class TestTheText:
@@ -107,12 +120,17 @@ class TestTheText:
 
     def test_the_check_sees_the_old_reading(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without the check the same texts reach the limit inside the
-        parsers: the interpreter's ``ValueError``, not a ``ParseError``."""
+        parsers: the interpreter's ``ValueError``, not a ``ParseError``.
+
+        The lines are tried from the last.  Each try parses the whole
+        capture, and the one line of the FortiGate capture that reaches
+        the limit is near its end, after thousands of lines that hold a
+        number: tried from the first, this test took minutes."""
         monkeypatch.setattr(base, "first_long_run_line", lambda raw: None)
         failed: set[str] = set()
         for codec in _CODECS:
             parser = get_codec(codec)
-            for _, text in _with_one_line_long(_smallest_capture(codec)):
+            for _, text in _with_one_line_long(_smallest_capture(codec), from_the_last=True):
                 try:
                     parser.parse(text)
                 except ParseError:
@@ -121,7 +139,7 @@ class TestTheText:
                     assert "integer string conversion" in str(exc)
                     failed.add(codec)
                     break
-        assert len(failed) >= 4, failed
+        assert failed == _READ_AS_A_NUMBER
 
     def test_no_committed_input_is_refused(self) -> None:
         held = [
