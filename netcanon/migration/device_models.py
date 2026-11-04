@@ -95,6 +95,19 @@ does not have before it (a Dell S4148F-ON's default switch-port
 profile turns ports 27 and 28 off, so its ports 29-30 state
 ``skip: 2``; :attr:`PortGroup.skip`).
 
+And a grammar that numbers each interface TYPE on its own (``routeros``:
+``ether1`` and ``sfp-sfpplus1`` on one switch) counts a group's ports
+among the earlier groups of its own ``prefix``
+(:attr:`NamingRuleSpec.counts_by_type`): a CRS354-48G-4S+2Q+'s 10/100
+port, a group of one after its 48 copper ports, is ``ether49``.  On
+such a device the management port is a port of the panel, numbered
+among the others, not a name stated apart: a group of role ``mgmt`` in
+a model's ``ports``, which only a rule that can name one allows, where
+every mode the model takes is one device and the family states no
+management port under ``deployment_ports``; a module cannot have one.  The port belongs to the deployment as
+a whole (``member_rank`` ``None``), as a stack's does, so that it pairs
+with another device's management port.
+
 Evidence.  How well a port's name is established is graded with the
 vocabulary of :data:`~netcanon.migration.target_profiles.ProfileEvidence`,
 but not per model: a name is the product of separately evidenced
@@ -294,6 +307,9 @@ PROVEN_CAPTURE_CLAIMS: frozenset[ClaimKey] = frozenset({
     ("arista_eos/7050X3",
      "tests/fixtures/real/arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt",
      "standalone", (("DCS-7050SX3-48YC8", None, ()),)),
+    ("mikrotik_routeros/CRS3xx",
+     "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc",
+     "standalone", (("CRS310-8G+2S+", None, ()),)),
 })
 
 #: The family-file schema this module reads.
@@ -729,6 +745,12 @@ class FamilyDef(BaseModel):
 
         for sku, module in self.modules.items():
             check_roles(f"module {sku!r}", module.ports)
+            if any(group.role == "mgmt" for group in module.ports):
+                raise ValueError(
+                    f"module {sku!r}: a module's ports belong to the member "
+                    f"it is fitted in, and a management port belongs to the "
+                    f"deployment as a whole; a module cannot have one"
+                )
         for key, model in self.models.items():
             check_roles(f"model {key!r}", model.ports)
             fixed = {g.slot for g in model.ports}
@@ -761,6 +783,8 @@ class FamilyDef(BaseModel):
                     )
             if model.modes is not None and not model.modes:
                 raise ValueError(f"model {key!r}: `modes` lists no mode")
+            if any(group.role == "mgmt" for group in model.ports):
+                self._a_panel_mgmt_port_is_the_devices(key, model)
         for claim in self.captures:
             if claim.mode not in self.modes:
                 raise ValueError(
@@ -776,6 +800,32 @@ class FamilyDef(BaseModel):
                     f"capture shows"
                 )
         return self
+
+    def _a_panel_mgmt_port_is_the_devices(self, key: str, model: ModelDef) -> None:
+        """A management port on a model's panel is compiled once, with
+        no member rank (:attr:`PhysicalPort.member_rank` ``None``), as
+        the port of the deployment as a whole.  That is right only
+        where the deployment is this one device: a mode with no member
+        ids takes one member, and a mode that numbers them would give
+        every member the port.  And a deployment has one management
+        port, stated in one place."""
+        numbered = sorted(
+            name for name, mode in self.modes.items()
+            if mode.member_ids is not None and self.supports(model, name)
+        )
+        if numbered:
+            raise ValueError(
+                f"model {key!r} has a management port on its panel, which "
+                f"belongs to the deployment as a whole and so to a "
+                f"deployment of one device; mode {numbered[0]!r} numbers "
+                f"its members"
+            )
+        if any(port.role == "mgmt" for port in self.deployment_ports):
+            raise ValueError(
+                f"model {key!r} has a management port on its panel, and "
+                f"`deployment_ports` states one as well; a device's "
+                f"management port is stated in one place"
+            )
 
     def supports(self, model: ModelDef, mode_name: str) -> bool:
         return model.modes is None or mode_name in model.modes
@@ -887,7 +937,9 @@ class PortNameRequest:
     banked fixed group; the bay name for a module port."""
 
     index0: int
-    """0-based position within :attr:`slot`.  The rule applies the
+    """0-based position within :attr:`slot` -- and within the group's
+    type, under a rule that counts by type
+    (:attr:`NamingRuleSpec.counts_by_type`).  The rule applies the
     vendor's own index base."""
 
     group: PortGroup
@@ -927,6 +979,14 @@ class NamingRuleSpec:
     (EOS: ``Ethernet49/1``).  A group that states
     :attr:`PortGroup.multi_lane` is refused at load by a rule that
     does not."""
+
+    counts_by_type: bool = False
+    """Whether this grammar numbers each interface type from its own
+    first number (RouterOS: ``ether1`` and ``sfp-sfpplus1`` on one
+    switch).  A port's place is then counted per slot AND
+    :attr:`PortGroup.prefix`: a group carries on where the last group
+    of its own type stopped, whatever lies between them, and
+    :attr:`PortNameRequest.index0` is its place among its type."""
 
 
 def _aoss_rule(request: PortNameRequest) -> str:
@@ -1104,6 +1164,28 @@ def _iosxr_rule(request: PortNameRequest) -> str:
     )
 
 
+def _routeros_rule(request: PortNameRequest) -> str:
+    from .codecs.mikrotik_routeros.port_names import routeros_port_name
+
+    # A RouterOS device stands alone: its port names carry no member
+    # number and no slot, only the type and its number.
+    if request.member_id is not None:
+        raise ValueError(
+            "a RouterOS device names a port with no member number; the "
+            "mode must not state `member_ids`"
+        )
+    if request.slot:
+        raise ValueError(
+            f"a RouterOS device numbers each interface type in one run "
+            f"of its own, with no slot; slot {request.slot!r} is not one"
+        )
+    # Each type counts from 1 (the rule counts by type).
+    return routeros_port_name(
+        port_type=request.group.prefix, number=request.index0 + 1,
+        lane=request.group.multi_lane,
+    )
+
+
 def _naming_rules() -> dict[str, NamingRuleSpec]:
     """The naming-rule table.
 
@@ -1186,6 +1268,16 @@ def _naming_rules() -> dict[str, NamingRuleSpec]:
             ),
             prefixes=_iosxr_port_types(),
         ),
+        # A RouterOS device's management port is one of its numbered
+        # ports (``ether1``, or a CRS354's ``ether49``), so the rule
+        # names it, on the model's panel.
+        "routeros": NamingRuleSpec(
+            render=_routeros_rule,
+            roles=frozenset({"access", "uplink", "mgmt"}),
+            prefixes=_routeros_port_types(),
+            lanes=True,
+            counts_by_type=True,
+        ),
     }
 
 
@@ -1205,6 +1297,12 @@ def _iosxr_port_types() -> frozenset[str]:
     from .codecs.cisco_iosxr.port_names import IOSXR_PORT_TYPES
 
     return IOSXR_PORT_TYPES
+
+
+def _routeros_port_types() -> frozenset[str]:
+    from .codecs.mikrotik_routeros.port_names import ROUTEROS_PORT_TYPES
+
+    return ROUTEROS_PORT_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -1448,9 +1546,13 @@ def _member_ports(
     are kept.  A capture proves NAMES, so it retires the caveat of
     the naming fact and keeps the caveat of the panel or module
     fact: what a port is for is not something a config shows.
-    Position within a slot runs on through every group of that slot,
+    Position within a slot runs on through every group of that slot
+    -- of that slot and type, under a rule that counts by type --
     past the port numbers a group's ``skip`` says the device does not
-    have; the per-role ordinal runs on through the whole member.
+    have; the per-role ordinal runs on through the whole member.  A
+    management port on the panel belongs to the deployment as a whole
+    (``member_rank`` ``None``), which the family file guarantees is one
+    device.
     """
     # (group, slot, module sku, the two facts that establish its names)
     groups: list[tuple[PortGroup, str, str, tuple[Grade, Grade]]] = [
@@ -1466,7 +1568,7 @@ def _member_ports(
     ports: list[PhysicalPort] = []
     refs: list[str] = []
     caveats: list[str] = []
-    next_index: dict[str, int] = {}
+    next_index: dict[tuple[str, str], int] = {}
     next_ordinal: dict[str, int] = {}
     for group, slot, module_sku, facts in groups:
         fixture = _captured(member, slot if module_sku else "", claims)
@@ -1481,12 +1583,15 @@ def _member_ports(
             refs.extend(fact.ref for fact in facts)
             caveats.extend(fact.caveat for fact in facts)
             evidence = _weaker_grade(*facts).grade
+        # Under a rule that numbers each type on its own, a group is
+        # counted among the groups of its type.
+        bank = (slot, group.prefix if rule.counts_by_type else "")
         # Port numbers the device does not have in this state are
         # passed over, so that the group is numbered where it is.
-        next_index[slot] = next_index.get(slot, 0) + group.skip
+        next_index[bank] = next_index.get(bank, 0) + group.skip
         for _ in range(group.count):
-            index0 = next_index.get(slot, 0)
-            next_index[slot] = index0 + 1
+            index0 = next_index.get(bank, 0)
+            next_index[bank] = index0 + 1
             ordinal = next_ordinal.get(group.role, 0)
             next_ordinal[group.role] = ordinal + 1
             try:
@@ -1501,7 +1606,9 @@ def _member_ports(
                 ) from exc
             ports.append(PhysicalPort(
                 name=name,
-                member_rank=rank,
+                # A management port on the panel is the deployment's,
+                # which is one device (:class:`FamilyDef` sees to it).
+                member_rank=None if group.role == "mgmt" else rank,
                 member_id=member.member_id,
                 role=group.role,
                 ordinal=ordinal,

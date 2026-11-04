@@ -126,6 +126,57 @@ def is_factory_port_name(name: str) -> bool:
     return _FACTORY_PORT_RE.fullmatch(name) is not None
 
 
+#: The interface types a model family may state for a group of ports
+#: (:func:`routeros_port_name`).  The QSFP56 types are factory names as
+#: well (:func:`is_factory_port_name`) and are left out:
+#: :func:`classify_port_name` does not read them.
+ROUTEROS_PORT_TYPES: frozenset[str] = frozenset({
+    "ether", "combo", "sfp", "sfp-sfpplus", "sfp28-", "qsfpplus", "qsfp28-",
+})
+
+#: The types whose ports are named by port and lane.
+_BY_LANE: frozenset[str] = frozenset({"qsfpplus", "qsfp28-"})
+
+
+def routeros_port_name(*, port_type: str, number: int, lane: bool) -> str:
+    """The factory name a RouterOS device gives port *number* of its
+    ports of type *port_type*.
+
+    Each type counts from 1 on its own: the RouterOS manual's table of
+    every model's interfaces ("MTU in RouterOS") gives a
+    CRS354-48G-4S+2Q+ ``ether1-ether48``, ``ether49``,
+    ``sfp-sfpplus1-sfp-sfpplus4`` and ``qsfpplus1-1-qsfpplus2-4``.  A
+    QSFP+ or QSFP28 port is four interfaces, one for each lane, the
+    second number counting the lanes ("MikroTik wired interface
+    compatibility", naming convention), and a port at its full speed is
+    configured on the first: "In single-link mode, only the first
+    QSFP28 sub-interface needs to be configured".  So with *lane* the
+    name is that first lane's (``qsfp28-1-1``).  The other lanes of a
+    port broken out are not named here.
+
+    Raises:
+        ValueError: *port_type* is not one of :data:`ROUTEROS_PORT_TYPES`,
+            *number* is below 1, or *lane* is not stated for a type whose
+            ports are named by lane, or is stated for one whose are not.
+    """
+    if port_type not in ROUTEROS_PORT_TYPES:
+        raise ValueError(
+            f"{port_type!r} is not a RouterOS port type; one of "
+            f"{', '.join(sorted(ROUTEROS_PORT_TYPES))}"
+        )
+    if number < 1:
+        raise ValueError(f"a RouterOS port counts from 1, not {number}")
+    if lane != (port_type in _BY_LANE):
+        raise ValueError(
+            f"a {port_type!r} port is named by its first lane, so its "
+            f"group states `multi_lane`"
+            if port_type in _BY_LANE else
+            f"a {port_type!r} port has no lane in its name, so its group "
+            f"cannot state `multi_lane`"
+        )
+    return f"{port_type}{number}-1" if lane else f"{port_type}{number}"
+
+
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a RouterOS port name into a :class:`PortIdentity`.
 

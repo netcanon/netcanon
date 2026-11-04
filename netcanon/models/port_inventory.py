@@ -90,8 +90,9 @@ class PhysicalPort(BaseModel):
     second member" is an ordinal, not an id.  ``None`` is reserved for
     a port that belongs to the deployment as a whole rather than to one
     member: a stack's single management interface (a family's
-    ``deployment_ports``), and a flat profile's management port, so
-    that the two pair."""
+    ``deployment_ports``), a management port on the panel of a device
+    that is a deployment of its own (a RouterOS switch's ``ether1``),
+    and a flat profile's management port, so that they pair."""
 
     member_id: int | None = None
     """The vendor's member id that went into the name.  ``None`` when
@@ -116,8 +117,10 @@ class PhysicalPort(BaseModel):
     a fixed bank's name, or the bay name for a module port."""
 
     index: int = 0
-    """0-based position within :attr:`slot`, counting the port numbers
-    a model family's group passes over
+    """0-based position within :attr:`slot` -- and within the port's
+    interface type, under a naming rule that numbers each type on its
+    own (RouterOS) -- counting the port numbers a model family's group
+    passes over
     (:attr:`netcanon.migration.device_models.PortGroup.skip`)."""
 
     module: str = ""

@@ -37,6 +37,13 @@ from netcanon.migration.codecs.juniper_junos.port_names import (
     classify_port_name as classify_junos_port_name,
 )
 from netcanon.migration.codecs.juniper_junos.port_names import ex_qfx_port_name
+from netcanon.migration.codecs.mikrotik_routeros.port_names import (
+    classify_port_name as classify_routeros_port_name,
+)
+from netcanon.migration.codecs.mikrotik_routeros.port_names import (
+    is_factory_port_name as is_routeros_factory_name,
+)
+from netcanon.migration.codecs.mikrotik_routeros.port_names import routeros_port_name
 from netcanon.migration.device_models import (
     SPEED_RANK,
     Deployment,
@@ -412,8 +419,12 @@ class TestEosPortName:
         assert rule.roles == frozenset({"access", "uplink"})
         assert "`Management1`" in rule.why_not
 
-    def test_only_the_eos_rule_names_lanes(self):
-        assert {name for name, rule in dm._naming_rules().items() if rule.lanes} == {"eos"}
+    def test_only_the_eos_and_routeros_rules_name_lanes(self):
+        """A RouterOS QSFP port is named by its first lane as well
+        (``qsfp28-1-1``)."""
+        assert {name for name, rule in dm._naming_rules().items() if rule.lanes} == {
+            "eos", "routeros",
+        }
 
     def test_a_rule_that_names_no_lane_refuses_a_multi_lane_group(self):
         """An AOS-S name has no lane in it, so a group that says its
@@ -886,6 +897,265 @@ class TestIosXrPortName:
             "FastEthernet", "GigabitEthernet", "TenGigE", "TwentyFiveGigE",
             "FortyGigE", "HundredGigE", "TwoHundredGigE", "FourHundredGigE",
         })
+
+
+# ---------------------------------------------------------------------------
+# The RouterOS naming rule
+# ---------------------------------------------------------------------------
+
+
+def _routeros_request(
+    index0: int, *, prefix: str = "ether", multi_lane: bool = False, slot: str = "",
+    member_id=None,
+) -> dm.PortNameRequest:
+    group = dm.PortGroup(role="access", count=1, prefix=prefix, multi_lane=multi_lane)
+    return dm.PortNameRequest(
+        mode="standalone", member_id=member_id, slot=slot, index0=index0, group=group,
+    )
+
+
+#: A made-up family in the RouterOS grammar: four copper ports, a
+#: copper management port, two SFP+ ports and two QSFP28 ports.  None
+#: of this is a claim about real hardware.
+ROSBOX_YAML = """
+schema: 1
+vendor: mikrotik_routeros
+family: Rosbox
+naming: routeros
+default_mode: standalone
+modes:
+  standalone: {label: "standalone", naming: {grade: vendor-doc}}
+models:
+  RB-9:
+    panel: {grade: vendor-doc}
+    ports:
+      - {role: access, count: 4, prefix: ether}
+      - {role: mgmt, count: 1, prefix: ether}
+      - {role: access, count: 2, prefix: sfp-sfpplus}
+      - {role: uplink, count: 2, prefix: qsfp28-, multi_lane: true}
+"""
+
+
+def _rosbox(data: dict | str = ROSBOX_YAML, model: str = "RB-9") -> Inventory:
+    return compile_deployment(
+        Deployment(vendor="mikrotik_routeros", members=[MemberSpec(model=model)]),
+        DeviceModelRegistry([_family(data)]),
+    )
+
+
+class TestRouterOsPortName:
+    @pytest.mark.parametrize(
+        ("port_type", "number", "lane", "printed"),
+        [
+            # MikroTik's table of each model's interfaces ("MTU in
+            # RouterOS"): the CRS305-1G-4S+'s copper port; the last
+            # copper switch port of a CRS328-24P-4S+ (whose product page
+            # gives "PoE-out ports Ether1-Ether24") and of a CRS354,
+            # and the CRS354's 10/100 port after them.
+            ("ether", 1, False, "ether1"),
+            ("ether", 24, False, "ether24"),
+            ("ether", 48, False, "ether48"),
+            ("ether", 49, False, "ether49"),
+            # The same table: the SFP+ ports of a CRS317-1G-16S+, the
+            # SFP and combo ports of a CRS328-4C-20S-4S+, and the SFP28
+            # ports of a CCR2216-1G-12XS-2XQ.
+            ("sfp-sfpplus", 1, False, "sfp-sfpplus1"),
+            ("sfp-sfpplus", 16, False, "sfp-sfpplus16"),
+            ("sfp", 1, False, "sfp1"),
+            ("sfp", 20, False, "sfp20"),
+            ("combo", 1, False, "combo1"),
+            ("combo", 4, False, "combo4"),
+            ("sfp28-", 1, False, "sfp28-1"),
+            ("sfp28-", 12, False, "sfp28-12"),
+            # And the first lane of a QSFP port: qsfpplus1-1 to
+            # qsfpplus2-4 on a CRS326-24S+2Q+, qsfp28-1-1 to qsfp28-4-4
+            # on a CRS504-4XQ.
+            ("qsfpplus", 1, True, "qsfpplus1-1"),
+            ("qsfpplus", 2, True, "qsfpplus2-1"),
+            ("qsfp28-", 1, True, "qsfp28-1-1"),
+            ("qsfp28-", 4, True, "qsfp28-4-1"),
+        ],
+    )
+    def test_the_vendors_printed_examples(self, port_type, number, lane, printed):
+        assert routeros_port_name(port_type=port_type, number=number, lane=lane) == printed
+        # A factory name, and the codec reads it back: the port's
+        # number, and the first lane of a port named by lane.
+        assert is_routeros_factory_name(printed)
+        identity = classify_routeros_port_name(printed)
+        assert (identity.kind, identity.port, identity.breakout_lane) == (
+            ("breakout", number, 1) if lane else ("physical", number, None)
+        )
+        assert identity.stack is None
+
+    @pytest.mark.parametrize("port_type", ["Ether", "sfpplus", "qsfp56-", "sfp28", "eth", ""])
+    def test_a_type_that_is_not_a_port_type_is_refused(self, port_type):
+        with pytest.raises(ValueError, match="is not a RouterOS port type"):
+            routeros_port_name(port_type=port_type, number=1, lane=False)
+
+    @pytest.mark.parametrize("number", [0, -1])
+    def test_a_port_counts_from_1(self, number):
+        with pytest.raises(ValueError, match="counts from 1"):
+            routeros_port_name(port_type="ether", number=number, lane=False)
+
+    def test_a_qsfp_port_is_named_by_its_first_lane(self):
+        with pytest.raises(ValueError, match="is named by its first lane"):
+            routeros_port_name(port_type="qsfp28-", number=1, lane=False)
+        with pytest.raises(ValueError, match="has no lane in its name"):
+            routeros_port_name(port_type="sfp-sfpplus", number=1, lane=True)
+
+    def test_the_rule_names_a_port_by_its_type_and_number(self):
+        rule = dm._naming_rules()["routeros"]
+        assert rule.render(_routeros_request(0)) == "ether1"
+        assert rule.render(_routeros_request(48)) == "ether49"
+        assert rule.render(_routeros_request(3, prefix="sfp-sfpplus")) == "sfp-sfpplus4"
+        assert rule.render(_routeros_request(1, prefix="qsfp28-", multi_lane=True)) == (
+            "qsfp28-2-1"
+        )
+
+    @pytest.mark.parametrize("member_id", [0, 1, 2])
+    def test_a_device_names_no_member(self, member_id):
+        """A RouterOS device stands alone: a member number -- the first
+        or any other -- is refused rather than dropped from the name."""
+        with pytest.raises(ValueError, match="with no member number"):
+            dm._naming_rules()["routeros"].render(_routeros_request(0, member_id=member_id))
+
+    def test_a_mode_that_numbers_members_fails_at_load(self):
+        data = _data(ROSBOX_YAML)
+        data["models"]["RB-9"]["ports"].pop(1)
+        data["modes"]["standalone"]["member_ids"] = [1, 2]
+        with pytest.raises(DeviceModelLoadError, match="with no member number"):
+            DeviceModelRegistry([_family(data)])
+
+    @pytest.mark.parametrize("slot", ["0", "1", "A"])
+    def test_a_port_has_no_slot(self, slot):
+        with pytest.raises(ValueError, match="with no slot"):
+            dm._naming_rules()["routeros"].render(_routeros_request(0, slot=slot))
+
+    def test_a_group_with_a_slot_fails_at_load(self):
+        data = _data(ROSBOX_YAML)
+        data["models"]["RB-9"]["ports"][2]["slot"] = "1"
+        with pytest.raises(DeviceModelLoadError, match="with no slot"):
+            DeviceModelRegistry([_family(data)])
+
+    @pytest.mark.parametrize("prefix", ["sfpplus", "Ether", None])
+    def test_every_group_states_a_port_type(self, prefix):
+        data = _data(ROSBOX_YAML)
+        if prefix is None:
+            del data["models"]["RB-9"]["ports"][0]["prefix"]
+        else:
+            data["models"]["RB-9"]["ports"][0]["prefix"] = prefix
+        with pytest.raises(ValueError, match="every group states"):
+            _family(data)
+
+    def test_each_type_counts_from_1_on_its_own(self):
+        """The management port is the fifth copper port, ether5, and
+        does not move the count of the SFP+ ports."""
+        inv = _rosbox()
+        assert inv.names() == [
+            "ether1", "ether2", "ether3", "ether4", "ether5",
+            "sfp-sfpplus1", "sfp-sfpplus2", "qsfp28-1-1", "qsfp28-2-1",
+        ]
+        assert inv.names(role="access") == [
+            "ether1", "ether2", "ether3", "ether4", "sfp-sfpplus1", "sfp-sfpplus2",
+        ]
+        assert inv.names(role="mgmt") == ["ether5"]
+        assert inv.names(role="uplink") == ["qsfp28-1-1", "qsfp28-2-1"]
+        # ``index`` is the port's number less one, within its type.
+        assert [p.index for p in inv.ports] == [0, 1, 2, 3, 4, 0, 1, 0, 1]
+
+    def test_a_skip_passes_over_numbers_of_its_own_type(self):
+        data = _data(ROSBOX_YAML)
+        data["models"]["RB-9"]["ports"][2]["skip"] = 1
+        inv = _rosbox(data)
+        assert inv.names(role="access") == [
+            "ether1", "ether2", "ether3", "ether4", "sfp-sfpplus2", "sfp-sfpplus3",
+        ]
+        assert inv.names(role="mgmt") == ["ether5"]
+
+    def test_the_rule_counts_by_type_and_no_other_does(self):
+        assert {
+            name for name, rule in dm._naming_rules().items() if rule.counts_by_type
+        } == {"routeros"}
+
+    def test_the_rule_can_name_a_management_port(self):
+        rule = dm._naming_rules()["routeros"]
+        assert rule.roles == frozenset({"access", "uplink", "mgmt"})
+        assert rule.prefixes == frozenset({
+            "ether", "combo", "sfp", "sfp-sfpplus", "sfp28-", "qsfpplus", "qsfp28-",
+        })
+
+
+class TestAManagementPortOnThePanel:
+    """A management port a naming rule names on a model's panel (RouterOS
+    ``ether1``) belongs to the deployment as a whole, as a typed
+    ``deployment_ports`` one does: it has no member rank, and it pairs
+    with the management port of the other side, never with an access
+    port."""
+
+    def test_it_has_no_member_rank(self):
+        inv = _rosbox()
+        assert [p.member_rank for p in inv.ports if p.role == "mgmt"] == [None]
+        assert {p.member_rank for p in inv.ports if p.role != "mgmt"} == {0}
+
+    def test_it_pairs_with_a_flat_profiles_management_port(self):
+        from netcanon.migration.port_mapping import plan_port_mapping
+
+        profile = TargetProfile(
+            vendor="x", model="y",
+            ports=[
+                {"id": "1", "kind": "physical"}, {"id": "2", "kind": "physical"},
+                {"id": "mgmt0", "kind": "mgmt"},
+            ],
+        )
+        plan = plan_port_mapping(_rosbox(), inventory_from_profile(profile), ["ether1", "ether5"])
+        assert plan.rename_map == {"ether1": "1", "ether5": "mgmt0"}
+
+    def test_it_pairs_with_a_typed_management_port(self):
+        """From a RouterOS panel to a Catalyst, whose management port is
+        typed whole under ``deployment_ports``."""
+        from netcanon.migration.port_mapping import plan_port_mapping
+
+        target = _catbox_compile(_catbox(), {"model": "CB-12"})
+        plan = plan_port_mapping(_rosbox(), target, ["ether1", "ether5"])
+        assert plan.rename_map == {
+            "ether1": "TwoGigabitEthernet1/0/1", "ether5": "GigabitEthernet0/0",
+        }
+
+    def test_a_module_cannot_have_one(self):
+        data = _data(ROSBOX_YAML)
+        data["models"]["RB-9"]["bays"] = {"A": {"accepts": ["M1"]}}
+        data["modules"] = {
+            "M1": {
+                "inventory": {"grade": "vendor-doc"},
+                "ports": [{"role": "mgmt", "count": 1, "prefix": "ether"}],
+            },
+        }
+        with pytest.raises(ValueError, match="a module cannot have one"):
+            _family(data)
+
+    def test_a_mode_that_numbers_members_cannot_have_one(self):
+        data = _data(ROSBOX_YAML)
+        data["modes"]["stacked"] = {
+            "label": "stacked", "naming": {"grade": "vendor-doc"}, "member_ids": [1, 2],
+        }
+        with pytest.raises(ValueError, match="mode 'stacked' numbers its members"):
+            _family(data)
+
+    def test_a_numbered_mode_the_model_does_not_take_is_no_objection(self):
+        data = _data(ROSBOX_YAML)
+        data["modes"]["stacked"] = {
+            "label": "stacked", "naming": {"grade": "vendor-doc"}, "member_ids": [1, 2],
+        }
+        data["models"]["RB-9"]["modes"] = ["standalone"]
+        assert _family(data).models["RB-9"].modes == ["standalone"]
+
+    def test_it_is_stated_in_one_place(self):
+        data = _data(ROSBOX_YAML)
+        data["deployment_ports"] = [
+            {"name": "mgmt0", "role": "mgmt", "naming": {"grade": "vendor-doc"}},
+        ]
+        with pytest.raises(ValueError, match="stated in one place"):
+            _family(data)
 
 
 # ---------------------------------------------------------------------------

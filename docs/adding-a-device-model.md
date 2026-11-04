@@ -61,9 +61,12 @@ every Juniper EX and QFX switch the `junos` rule
 every Dell PowerSwitch on SmartFabric OS10 the `os10` rule
 (`os10_port_name` in
 [`codecs/dell_os10/port_names.py`](../netcanon/migration/codecs/dell_os10/port_names.py)),
-and every fixed Cisco router on IOS XR the `iosxr` rule
+every fixed Cisco router on IOS XR the `iosxr` rule
 (`iosxr_port_name` in
-[`codecs/cisco_iosxr/port_names.py`](../netcanon/migration/codecs/cisco_iosxr/port_names.py)).
+[`codecs/cisco_iosxr/port_names.py`](../netcanon/migration/codecs/cisco_iosxr/port_names.py)),
+and every MikroTik CRS switch and CCR router on RouterOS the
+`routeros` rule (`routeros_port_name` in
+[`codecs/mikrotik_routeros/port_names.py`](../netcanon/migration/codecs/mikrotik_routeros/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -156,6 +159,32 @@ management port, `MgmtEth0/RP0/CPU0/0`, is a deployment port.  A
 port is an `uplink` when it is of the router's fastest class of
 cage: its QSFP-class ports where it has any, otherwise the ports of
 its top speed.
+
+A MikroTik switch or router on RouterOS names a port by its type
+and a number (`ether1`, `sfp-sfpplus16`, `sfp28-2`), with no member
+and no slot, as MikroTik's table of each model's interfaces ("MTU
+in RouterOS") prints them.  So the rule refuses a member id and any
+slot, and a RouterOS mode states no `member_ids`.  Each type counts
+from 1 on its own -- a CRS354-48G-4S+2Q+ has `ether1` to `ether49`,
+`sfp-sfpplus1` to `sfp-sfpplus4`, `qsfpplus1-1` and `qsfpplus2-1` --
+so the rule numbers the ports of each type apart (`counts_by_type`),
+and a `skip` passes over numbers of the group's own type.  A QSFP
+port is named by its first lane (`qsfp28-1-1`), so its group states
+`multi_lane`, and a family describes it as one link; its other
+lanes are not modelled.  The name is the port's factory name, which
+RouterOS keeps in `default-name` when the operator gives the port a
+name of its own.  Some models set one Ethernet port apart for
+management, and which one is the model's (`ether1` on a
+CRS309-1G-8S+, `ether49` on a CRS354): such a port is a group of the
+model's panel in the role `mgmt`, not a deployment port.  It is
+compiled as a port of the whole deployment all the same (no member
+rank), so that it pairs with the other side's management port, and
+that is right only for a deployment of one device: the loader
+refuses it in a mode that numbers its members, and in a family that
+also states a management port under `deployment_ports`.  A port is
+an `uplink` when it is of the model's QSFP-class cages, or, on a
+model with none, of its fastest ports; a management port is
+neither.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
@@ -413,10 +442,14 @@ A rule that names a port by its interface type also states the types
 it accepts (`prefixes`); every group of a family under that rule must
 state one of them, and a group under any other rule must state none.
 A rule whose names carry a lane says so (`lanes`); a group may state
-`multi_lane` only under such a rule.
+`multi_lane` only under such a rule.  A rule whose types each count
+from 1 says so (`counts_by_type`): a port's position is then counted
+among the ports of its own type in its slot.
 Ports that no rule names — a stack's one management interface — go
 under `deployment_ports:` by their literal names: each belongs to no
-member and comes after every member's ports.
+member and comes after every member's ports.  A management port that
+is one model's own, under a rule that can name it, is a `mgmt` group
+of that model's panel instead (RouterOS, above).
 
 Test the rule against the vendor's own printed examples, including one
 whose member number is not 1, and name the codec whose grammar it
@@ -450,9 +483,13 @@ these are load errors, not surprises later:
 * `multi_lane` on a group under a rule that puts no lane in a name;
 * a negative `skip`;
 * a mode that states `member_ids` under a rule whose names carry no
-  member number (`os10`, `iosxr`);
+  member number (`os10`, `iosxr`, `routeros`);
 * a group `slot` of `"0"` under `iosxr`: module 0 is the panel's own
   run of ports, and states none;
+* a group `slot` under `routeros`, which names no slot;
+* a `mgmt` group in a module; a `mgmt` group on a model's panel
+  where a mode that model takes states `member_ids`, or where the
+  family states a management port under `deployment_ports` too;
 * a model key or part number another model already uses;
 * more port groups, ports in a group, or bay-and-module combinations
   than the loader will build (the limits are constants at the top of

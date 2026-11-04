@@ -1758,7 +1758,9 @@ NX-OS running-config names no model, so a Nexus is declared by hand;
 nor does a Junos configuration, so an EX or QFX switch is declared by
 hand too, and nor does an OS10 one, so a Dell PowerSwitch is as well.
 Nor does an IOS XR running-config, so a Cisco NCS 540, NCS 5500 or
-8200 router is declared by hand.
+8200 router is declared by hand.  A MikroTik export prints its model
+on its `# model =` line, but no detector reads it yet, so a MikroTik
+is declared by hand as well.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -2097,7 +2099,13 @@ nothing, as before.
   (each port named whole, in the default port profile on an S4148),
   and for the Cisco NCS 540 (small and large density included), the
   NCS 5501-SE and NCS 55A1-36H, and the Cisco 8201 on IOS XR (each
-  port named whole, by the interface type of its top speed);
+  port named whole, by the interface type of its top speed), and for
+  the MikroTik CRS305-1G-4S+, CRS309-1G-8S+, CRS310-8G+2S+,
+  CRS317-1G-16S+, CRS326-24G-2S+, CRS326-24S+2Q+, CRS328-24P-4S+,
+  CRS354-48G-4S+2Q+, CRS354-48P-4S+2Q+, CRS504-4XQ, CRS510-8XS-2XQ,
+  CRS518-16XS-2XQ, CCR2004-1G-12S+2XS, CCR2004-16G-2S+ and
+  CCR2216-1G-12XS-2XQ on RouterOS (each port by its factory name, at
+  its full speed);
   `GET /model-families` is the current list.  A part graded `inferred`
   says why in its caveat.  Everything else goes through target
   profiles, and a device with neither a family nor a profile cannot be
@@ -2134,7 +2142,15 @@ nothing, as before.
   an SFP+, `GigabitEthernet0/0/0/0` with a 1G SFP), and a family names
   each port by the type of its top speed: a port that holds a slower
   optic comes back as off-inventory, and so does a lane of a port
-  broken out (`TenGigE0/0/0/20/0`).
+  broken out (`TenGigE0/0/0/20/0`).  A RouterOS port is listed by
+  its factory name, the name an export keeps in `default-name` for a
+  port you renamed, and a QSFP port as one link, by its first lane
+  (`qsfp28-1-1`): a lane of a port broken out (`qsfp28-1-2`) comes
+  back as off-inventory.  A MikroTik model that sets an Ethernet port
+  apart for management (`ether1` on a CRS309-1G-8S+ or a
+  CCR2004-1G-12S+2XS, `ether49` on a CRS354) has it on its own panel;
+  it belongs to no member, and pairs with the other side's
+  management port.
 * **Only port names are translated.**  An AOS-S config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a

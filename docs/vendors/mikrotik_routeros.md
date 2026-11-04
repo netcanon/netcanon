@@ -393,6 +393,33 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 - **Backup-side**: definition YAML lives at
   [`../../netcanon/definitions/library/mikrotik/`](../../netcanon/definitions/library/mikrotik/);
   uses `cisco_more_paging: false`.
+- **Declaring a MikroTik device as the source or target.**  The
+  CRS305-1G-4S+, CRS309-1G-8S+, CRS310-8G+2S+, CRS317-1G-16S+,
+  CRS326-24G-2S+, CRS326-24S+2Q+, CRS328-24P-4S+, CRS354-48G-4S+2Q+
+  and CRS354-48P-4S+2Q+ (family CRS3xx), the CRS504-4XQ,
+  CRS510-8XS-2XQ and CRS518-16XS-2XQ (CRS5xx), and the
+  CCR2004-1G-12S+2XS, CCR2004-16G-2S+ and CCR2216-1G-12XS-2XQ
+  (CCR2000) are model families with one mode, `standalone`: a
+  device on its own, each port at its full speed and none broken
+  out.  A port is named by its factory name, each type counted from
+  1 (`ether1`, `sfp-sfpplus1`, `sfp28-1`), and a QSFP port by its
+  first lane (`qsfpplus1-1`, `qsfp28-1-1`): a lane of a port broken
+  out comes back as off-inventory.  A model that sets an Ethernet
+  port apart for management has it as its management port
+  (`ether1`, or `ether49` on a CRS354), which pairs with the other
+  side's management port.  The CRS310-8G+2S+ is graded `capture`,
+  from a committed export; a panel whose names or management port
+  MikroTik's pages leave in doubt is graded `inferred`, and its
+  caveat says why.  An export prints its model on its `# model =`
+  line, but no detector reads it yet: choose the device by hand.
+  The flat target profiles of the CRS310-8G+2S+ and the
+  CCR2004-1G-12S+2XS are still offered beside the families, and
+  describe the same ports.  Not described, each for a reason its
+  family's file gives: the CRS312-4C+8XG, CRS328-4C-20S-4S+ and
+  CRS326-4C+20G+2Q+ (their combo ports), the CRS520-4XS-16XQ and
+  CRS504-4XQ-OUT, the CCR2116-12G-4S+ (no MikroTik text read says
+  which port is its management port), the CCR2004-16G-2S+PC and the
+  CCR2004-1G-2XS-PCIe.
 
 ## See also
 

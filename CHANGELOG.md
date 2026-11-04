@@ -868,6 +868,36 @@ timestamp if your timezone matters for an audit.
   declared, and a job's sentence offers both devices for an IOS XR
   job where a hardware port is among what it lists and the other
   side's vendor has a device too.
+- **MikroTik switches and routers on RouterOS can be declared as a
+  source or target device.**  Three model families: the CRS3xx
+  (CRS305-1G-4S+, CRS309-1G-8S+, CRS310-8G+2S+, CRS317-1G-16S+,
+  CRS326-24G-2S+, CRS326-24S+2Q+, CRS328-24P-4S+, CRS354-48G-4S+2Q+
+  and CRS354-48P-4S+2Q+), the CRS5xx (CRS504-4XQ, CRS510-8XS-2XQ and
+  CRS518-16XS-2XQ) and the CCR2000 (CCR2004-1G-12S+2XS,
+  CCR2004-16G-2S+ and CCR2216-1G-12XS-2XQ).  Each has one mode,
+  `standalone`: a device on its own, every port at its full speed and
+  none broken out.  Names come from a new `routeros` naming rule
+  (`routeros_port_name` beside the RouterOS codec): a port is its
+  type and a number, each type counted from 1 on its own (`ether1`,
+  `sfp-sfpplus1`, `sfp28-1`), and a QSFP port is named by its first
+  lane (`qsfpplus1-1`, `qsfp28-1-1`), as MikroTik's table of each
+  model's interfaces prints them; the rule refuses a member id and a
+  slot.  Per-type numbering is new to the loader (`counts_by_type`),
+  and a `skip` passes over numbers of the group's own type.  So is a
+  management port on a model's own panel -- `ether1` on the models
+  that set it apart, `ether49` on a CRS354 -- compiled as a port of
+  the whole deployment so that it pairs with the other side's
+  management port, and refused in a mode that numbers its members,
+  beside a management port under `deployment_ports`, and in a module.
+  A port is an uplink when it is of the model's QSFP-class cages, or,
+  on a model with none, of its fastest ports.  The CRS310-8G+2S+ is
+  graded `capture`, from the committed export; a panel whose names or
+  management port MikroTik's pages leave in doubt is `inferred`, and
+  says why.  No detector reads an export's `# model =` line yet.  Not
+  described, each for a reason its family's file gives: the
+  CRS312-4C+8XG, CRS328-4C-20S-4S+ and CRS326-4C+20G+2Q+, the
+  CRS520-4XS-16XQ and CRS504-4XQ-OUT, the CCR2116-12G-4S+, the
+  CCR2004-16G-2S+PC and the CCR2004-1G-2XS-PCIe.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

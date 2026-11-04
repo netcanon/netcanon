@@ -1,0 +1,150 @@
+# MikroTik Cloud Router Switch CRS3xx on RouterOS: the CRS305-1G-4S+,
+# CRS309-1G-8S+, CRS310-8G+2S+, CRS317-1G-16S+, CRS326-24G-2S+,
+# CRS328-24P-4S+, CRS326-24S+2Q+, CRS354-48G-4S+2Q+ and
+# CRS354-48P-4S+2Q+.
+#
+# A RouterOS device names a port by its type and a number, counted from
+# 1 within that type, with no member and no slot: ether1 to ether48,
+# then sfp-sfpplus1 to sfp-sfpplus4, then qsfpplus1-1 and qsfpplus2-1
+# on a CRS354.  A port of another type does not move the count, so the
+# CRS354's 10/100 port is ether49, after the 48 copper switch ports.
+# A QSFP port is named by its first lane; run as one link it is
+# configured through that sub-interface.  Every name below is in
+# MikroTik's own table of each model's interfaces ("MTU in RouterOS").
+#
+# A port the operator renamed keeps its factory name in `default-name`
+# (`set [ find default-name=sfp-sfpplus2 ] name=...`), and the factory
+# name is the one listed here.
+#
+# The management port.  Where a model has one Ethernet port apart from
+# its switch ports, it is listed as a `mgmt` port of the panel.  The
+# product pages of the CRS305, CRS309 and CRS317 say it is for
+# management.  On the CRS326-24S+2Q+ and the two CRS354s it is the one
+# 10/100 port, and MikroTik's MTU table gives it an L2MTU of 2028
+# where every switch port has 10218; no MikroTik text read calls it a
+# management port, so those panels are graded `inferred`.
+#
+# `ports:` lists are in PORT-NUMBER order within each type.  A port is
+# an `uplink` when it is of the model's QSFP-class cages, or, on a
+# model with none, of its fastest ports; every other data port is an
+# access port.  It says nothing about how a switch is cabled.
+#
+# PoE.  `poe: true` only where MikroTik's product page lists the port
+# as PoE-out: ether1 to ether24 on the CRS328-24P-4S+ and ether1 to
+# ether48 on the CRS354-48P-4S+2Q+.
+#
+# Part numbers.  The key of each model is the name RouterOS prints on
+# its `# model =` line, which has no -RM or -IN suffix; the product
+# code with its suffix is listed beside it.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The CRS312-4C+8XG, CRS328-4C-20S-4S+ and CRS326-4C+20G+2Q+, whose
+#     combo ports are named on their own (combo1 to combo4); possible
+#     later.
+#   * The netFiber and netPower models, the CRS418, CRS520, CRS804 and
+#     CRS812, and the RouterBOARD routers.
+#   * Any QSFP port broken out (its lanes 2 to 4).
+schema: 1
+vendor: mikrotik_routeros
+family: "CRS3xx"
+display_name: "MikroTik CRS3xx Cloud Router Switch"
+naming: routeros
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A switch on its own, every port at its full speed and none broken out; each type numbered from 1 (ether1, sfp-sfpplus1), a QSFP port by its first lane (qsfpplus1-1)"
+    naming:
+      grade: vendor-doc
+      ref: "MikroTik RouterOS documentation, MTU in RouterOS (the table of each model's interfaces names every port by its factory name, each type counted from 1: on the CRS354-48G-4S+2Q+, ether1-ether48 and ether49, sfp-sfpplus1-sfp-sfpplus4, qsfpplus1-1-qsfpplus2-4); MikroTik documentation, MikroTik wired interface compatibility (a QSFP port run as one link is configured through its first sub-interface)"
+      caveat: "Each port is named at its full speed, as one link. A QSFP port broken out uses its other sub-interfaces (lanes 2 to 4), which are not modelled. A port the operator renamed keeps its factory name in default-name, which is the name listed here. RouterOS names no member and no slot: declare each switch."
+
+models:
+  # --- one 1G management port and SFP+ ------------------------------------------
+  CRS305-1G-4S+:
+    skus: [CRS305-1G-4S+, CRS305-1G-4S+IN]
+    display_name: "MikroTik CRS305-1G-4S+, 1 Gigabit management port and 4 SFP+ (CRS305-1G-4S+IN)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS305-1G-4S+IN (four SFP+ ports, and one 1 Gbit copper Ethernet port for management access or regular traffic forwarding); MikroTik RouterOS documentation, MTU in RouterOS (CRS305-1G-4S+: ether1, sfp-sfpplus1-sfp-sfpplus4)", caveat: "The copper port also forwards traffic; it is listed as the management port."}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: gig, cage: rj45, notes: "ether1, the copper management port"}
+      - {role: uplink, count: 4, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  CRS309-1G-8S+:
+    skus: [CRS309-1G-8S+, CRS309-1G-8S+IN]
+    display_name: "MikroTik CRS309-1G-8S+, 1 Gigabit management port and 8 SFP+ (CRS309-1G-8S+IN)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS309-1G-8S+IN (eight SFP+ ports and a management Ethernet port); MikroTik RouterOS documentation, MTU in RouterOS (CRS309-1G-8S+: ether1, sfp-sfpplus1-sfp-sfpplus8)"}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: gig, cage: rj45, notes: "ether1, the management port"}
+      - {role: uplink, count: 8, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  CRS317-1G-16S+:
+    skus: [CRS317-1G-16S+, CRS317-1G-16S+RM]
+    display_name: "MikroTik CRS317-1G-16S+, 1 Gigabit management port and 16 SFP+ (CRS317-1G-16S+RM)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS317-1G-16S+RM (sixteen SFP+ ports and a 1GbE copper port for management); MikroTik RouterOS documentation, MTU in RouterOS (CRS317-1G-16S+: ether1, sfp-sfpplus1-sfp-sfpplus16)"}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: gig, cage: rj45, notes: "ether1, the management port"}
+      - {role: uplink, count: 16, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  # --- copper access and SFP+ uplinks ---------------------------------------------
+  CRS310-8G+2S+:
+    skus: [CRS310-8G+2S+, CRS310-8G+2S+IN]
+    display_name: "MikroTik CRS310-8G+2S+, 8 x 2.5 Gigabit and 2 SFP+ (CRS310-8G+2S+IN)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS310-8G+2S+IN (eight 2.5 Gigabit Ethernet ports and two SFP+ ports, with no PoE-out); MikroTik RouterOS documentation, MTU in RouterOS (CRS310-8G+2S+IN: ether1-ether8, sfp-sfpplus1-sfp-sfpplus2)"}
+    ports:
+      - {role: access, count: 8, prefix: ether, speed: 2.5gig, cage: rj45}
+      - {role: uplink, count: 2, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  CRS326-24G-2S+:
+    skus: [CRS326-24G-2S+, CRS326-24G-2S+RM]
+    display_name: "MikroTik CRS326-24G-2S+, 24 Gigabit and 2 SFP+ (CRS326-24G-2S+RM)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS326-24G-2S+RM (24 Gigabit Ethernet ports and two SFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS326-24G-2S+: ether1-ether24, sfp-sfpplus1, sfpplus2); public RouterOS exports printed under # model = CRS326-24G-2S+, which give the second SFP+ port default-name=sfp-sfpplus2", caveat: "MikroTik's MTU table writes the second SFP+ port sfpplus2, and the exports of this model, which are device output, write sfp-sfpplus2; this file follows the exports. No capture of this model is committed to this repository."}
+    ports:
+      - {role: access, count: 24, prefix: ether, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  CRS328-24P-4S+:
+    skus: [CRS328-24P-4S+, CRS328-24P-4S+RM]
+    display_name: "MikroTik CRS328-24P-4S+, 24 Gigabit PoE and 4 SFP+ (CRS328-24P-4S+RM)"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CRS328-24P-4S+RM (24 Gigabit Ethernet ports, PoE-out ports Ether1-Ether24, and four SFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS328-24P-4S+: ether1-ether24, sfp-sfpplus1-sfp-sfpplus4)"}
+    ports:
+      - {role: access, count: 24, prefix: ether, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  # --- QSFP+ uplinks and a 10/100 port ------------------------------------------
+  CRS326-24S+2Q+:
+    skus: [CRS326-24S+2Q+, CRS326-24S+2Q+RM]
+    display_name: "MikroTik CRS326-24S+2Q+, 24 SFP+ and 2 QSFP+ (CRS326-24S+2Q+RM)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS326-24S+2Q+RM (one 10/100 Ethernet port, 24 SFP+ ports and two QSFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS326-24S+2Q+: sfp-sfpplus1-sfp-sfpplus24 and qsfpplus1-1-qsfpplus2-4 at L2MTU 10218, ether1 at 2028)", caveat: "The names and counts are MikroTik's. That ether1 is a management port is not stated by MikroTik for this model: it is the one 10/100 port, and the MTU table gives it an L2MTU of 2028 where every switch port has 10218, as it does the CRS504-4XQ's Ethernet port, which that model's product page says is for management."}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether1, the 10/100 port"}
+      - {role: access, count: 24, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, prefix: qsfpplus, speed: 40gig, cage: qsfp+, multi_lane: true, notes: "qsfpplus1-1 and qsfpplus2-1, each as one link"}
+
+  CRS354-48G-4S+2Q+:
+    skus: [CRS354-48G-4S+2Q+, CRS354-48G-4S+2Q+RM]
+    display_name: "MikroTik CRS354-48G-4S+2Q+, 48 Gigabit, 4 SFP+ and 2 QSFP+ (CRS354-48G-4S+2Q+RM)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS354-48G-4S+2Q+RM (48 10/100/1000 Ethernet ports, one 10/100 Ethernet port, four SFP+ ports and two 40G QSFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS354-48G-4S+2Q+: ether1-ether48, sfp-sfpplus1-sfp-sfpplus4 and qsfpplus1-1-qsfpplus2-4 at L2MTU 10218, ether49 at 2028)", caveat: "The names and counts are MikroTik's. That ether49 is a management port is not stated by MikroTik for this model: it is the one 10/100 port, and the MTU table gives it an L2MTU of 2028 where every switch port has 10218, as it does the CRS504-4XQ's Ethernet port, which that model's product page says is for management."}
+    ports:
+      - {role: access, count: 48, prefix: ether, speed: gig, cage: rj45}
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether49, the 10/100 port"}
+      - {role: access, count: 4, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, prefix: qsfpplus, speed: 40gig, cage: qsfp+, multi_lane: true, notes: "qsfpplus1-1 and qsfpplus2-1, each as one link"}
+
+  CRS354-48P-4S+2Q+:
+    skus: [CRS354-48P-4S+2Q+, CRS354-48P-4S+2Q+RM]
+    display_name: "MikroTik CRS354-48P-4S+2Q+, 48 Gigabit PoE, 4 SFP+ and 2 QSFP+ (CRS354-48P-4S+2Q+RM)"
+    panel: {grade: inferred, ref: "MikroTik product page CRS354-48P-4S+2Q+RM (48 Gigabit Ethernet ports, PoE-out ports Ether1-Ether48, four SFP+ ports and two QSFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CRS354-48P-4S+2Q+: ether1-ether48, sfp-sfpplus1-sfp-sfpplus4 and qsfpplus1-1-qsfpplus2-4 at L2MTU 10218, ether49 at 2028)", caveat: "The names and counts are MikroTik's. That ether49 is a management port is not stated by MikroTik for this model: it is the one 10/100 port, and the MTU table gives it an L2MTU of 2028 where every switch port has 10218, as it does the CRS504-4XQ's Ethernet port, which that model's product page says is for management."}
+    ports:
+      - {role: access, count: 48, prefix: ether, speed: gig, cage: rj45, poe: true}
+      - {role: mgmt, count: 1, prefix: ether, speed: fast, cage: rj45, notes: "ether49, the 10/100 port"}
+      - {role: access, count: 4, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, prefix: qsfpplus, speed: 40gig, cage: qsfp+, multi_lane: true, notes: "qsfpplus1-1 and qsfpplus2-1, each as one link"}
+
+captures:
+  # A user-contributed RouterOS 7 export of a CRS310-8G+2S+: ether1 to
+  # ether8 and both SFP+ ports, each by its factory name.
+  - fixture: tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc
+    marker: "# model = crs310-8g+2s+"
+    mode: standalone
+    members: [{model: CRS310-8G+2S+}]

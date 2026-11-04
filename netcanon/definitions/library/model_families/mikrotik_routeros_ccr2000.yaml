@@ -1,0 +1,74 @@
+# MikroTik Cloud Core Router CCR2000 on RouterOS: the
+# CCR2004-1G-12S+2XS, CCR2004-16G-2S+ and CCR2216-1G-12XS-2XQ.
+#
+# A RouterOS device names a port by its type and a number, counted from
+# 1 within that type, with no member and no slot: ether1, sfp-sfpplus1
+# to sfp-sfpplus12, sfp28-1 and sfp28-2.  A QSFP28 port is named by its
+# first lane; run as one link it is configured through that
+# sub-interface.  Every name below is in MikroTik's own table of each
+# model's interfaces ("MTU in RouterOS").
+#
+# A port the operator renamed keeps its factory name in `default-name`,
+# and the factory name is the one listed here.
+#
+# The management port.  The CCR2004-1G-12S+2XS and CCR2216-1G-12XS-2XQ
+# have one Ethernet port, ether1, which their manuals call the
+# MGMT/BOOT port; it is listed as a `mgmt` port of the panel.  The
+# CCR2004-16G-2S+ has sixteen, and none is set apart.
+#
+# `ports:` lists are in PORT-NUMBER order within each type.  A port is
+# an `uplink` when it is of the model's QSFP-class cages, or, on a
+# model with none, of its fastest ports; every other data port is an
+# access port.  It says nothing about how a router is cabled.
+#
+# Part numbers.  The key of each model is its product code, which is
+# also the name RouterOS prints on its `# model =` line.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The CCR2116-12G-4S+: MikroTik's MTU table gives it ether1-ether12
+#     and ether13 apart, and its manual a MGMT/BOOT port, but no
+#     MikroTik text read says which ether that port is.
+#   * The passively cooled CCR2004-16G-2S+PC, and the CCR2004-1G-2XS-PCIe.
+#   * Any QSFP28 port broken out (its lanes 2 to 4).
+schema: 1
+vendor: mikrotik_routeros
+family: "CCR2000"
+display_name: "MikroTik CCR2000 Cloud Core Router"
+naming: routeros
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its full speed and none broken out; each type numbered from 1 (ether1, sfp-sfpplus1, sfp28-1), a QSFP28 port by its first lane (qsfp28-1-1)"
+    naming:
+      grade: vendor-doc
+      ref: "MikroTik RouterOS documentation, MTU in RouterOS (the table of each model's interfaces names every port by its factory name, each type counted from 1: on the CCR2216-1G-12XS-2XQ, ether1, sfp28-1 - sfp28-12, qsfp28-1-1 - qsfp28-2-4); MikroTik documentation, MikroTik wired interface compatibility (a QSFP port run as one link is configured through its first sub-interface)"
+      caveat: "Each port is named at its full speed, as one link. A QSFP28 port broken out uses its other sub-interfaces (lanes 2 to 4), which are not modelled. A port the operator renamed keeps its factory name in default-name, which is the name listed here. RouterOS names no member and no slot: declare each router."
+
+models:
+  CCR2004-1G-12S+2XS:
+    skus: [CCR2004-1G-12S+2XS]
+    display_name: "MikroTik CCR2004-1G-12S+2XS, 1 Gigabit management port, 12 SFP+ and 2 SFP28"
+    panel: {grade: vendor-doc, ref: "MikroTik user manual CCR2004-1G-12S+2XS (twelve 10G SFP+ ports and two 25G SFP28 ports; the MGMT/BOOT Ethernet port is used for the Netinstall process); MikroTik RouterOS documentation, MTU in RouterOS (CCR2004-1G-12S+2XS: ether1, sfp-sfpplus1-sfp-sfpplus12, sfp28-1 - sfp28-2)"}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: gig, cage: rj45, notes: "ether1, the MGMT/BOOT port"}
+      - {role: access, count: 12, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 2, prefix: sfp28-, speed: 25gig, cage: sfp28}
+
+  CCR2004-16G-2S+:
+    skus: [CCR2004-16G-2S+]
+    display_name: "MikroTik CCR2004-16G-2S+, 16 Gigabit and 2 SFP+"
+    panel: {grade: vendor-doc, ref: "MikroTik product page CCR2004-16G-2S+ (sixteen 10/100/1000 Ethernet ports and two SFP+ ports); MikroTik RouterOS documentation, MTU in RouterOS (CCR2004-16G-2S+: ether1-ether16, sfp-sfpplus1-sfp-sfpplus2)"}
+    ports:
+      - {role: access, count: 16, prefix: ether, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, prefix: sfp-sfpplus, speed: 10gig, cage: sfp+}
+
+  CCR2216-1G-12XS-2XQ:
+    skus: [CCR2216-1G-12XS-2XQ]
+    display_name: "MikroTik CCR2216-1G-12XS-2XQ, 1 Gigabit management port, 12 SFP28 and 2 QSFP28"
+    panel: {grade: vendor-doc, ref: "MikroTik user manual CCR2216-1G-12XS-2XQ (one 1G Ethernet port, labelled MGMT/ETH/BOOT; twelve 25G SFP28 ports and two 100G QSFP28 ports); MikroTik RouterOS documentation, MTU in RouterOS (CCR2216-1G-12XS-2XQ: ether1, sfp28-1 - sfp28-12, qsfp28-1-1 - qsfp28-2-4)"}
+    ports:
+      - {role: mgmt, count: 1, prefix: ether, speed: gig, cage: rj45, notes: "ether1, the MGMT/ETH/BOOT port"}
+      - {role: access, count: 12, prefix: sfp28-, speed: 25gig, cage: sfp28}
+      - {role: uplink, count: 2, prefix: qsfp28-, speed: 100gig, cage: qsfp28, multi_lane: true, notes: "qsfp28-1-1 and qsfp28-2-1, each as one link"}
