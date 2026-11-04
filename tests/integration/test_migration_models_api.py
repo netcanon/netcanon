@@ -1374,17 +1374,24 @@ class TestPortNamesWithNoDevices:
     def test_no_device_is_offered_where_none_is_described(
         self, client: TestClient, path: str,
     ) -> None:
-        """No model family and no target profile is of IOS XR's
-        vendor: two of its ports on one AOS-S name are settled by an
+        """No model family and no target profile is of VyOS's
+        vendor: two AOS-S ports on one VyOS name are settled by an
         entry and by nothing else.  The sentence offered both
         devices all the same -- advice nobody could take, which the
         migrate page did not give."""
-        text = (REPO_ROOT / "tests/fixtures/real/cisco_iosxr/xrdtools_isis_r1.cfg").read_text(
-            encoding="utf-8",
+        text = (
+            "; J9999A Configuration Editor; Created on release #WC.16.11.0001\n"
+            'hostname "sw"\n'
+            "interface 1/1\n"
+            '   name "a"\n'
+            "   exit\n"
+            "interface 1/A1\n"
+            '   name "b"\n'
+            "   exit\n"
         )
         resp = client.post(
             f"/api/v1/migration{path}",
-            json={"source": "cisco_iosxr", "target": "aruba_aoss", "raw_text": text},
+            json={"source": "aruba_aoss", "target": "vyos", "raw_text": text},
         )
         job = resp.json()
         assert job["status"] == "partial" and job["fused_ports"], path
@@ -1407,7 +1414,7 @@ class TestPortNamesWithNoDevices:
             name for name in list_public_codecs()
             if not a_device_is_described(request, get_codec(name))
         }
-        assert none == {"cisco_iosxr", "vyos"}
+        assert none == {"vyos"}
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_entries_settle_it_on_every_endpoint(

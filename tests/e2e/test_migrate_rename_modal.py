@@ -825,18 +825,13 @@ interface mgmt0
   ip address 192.0.2.9/24
 """
 
-#: An IOS XR router with its management port, which IOS-XE has no
-#: name for, as NX-OS's above.
-_IOSXR_WITH_MGMT = """!! IOS XR Configuration 7.3.2
-hostname r1
-interface MgmtEth0/RP0/CPU0/0
- ipv4 address 192.0.2.9 255.255.255.0
-!
-interface GigabitEthernet0/0/0/0
- ipv4 address 10.1.0.1 255.255.255.0
-!
-end
-"""
+#: A VyOS router of two ports, each with a description and nothing
+#: else: onto AOS-S both ``eth0`` and ``eth1`` are written ``1``.
+_VYOS_TWO_PORTS = (
+    "set system host-name r1\n"
+    "set interfaces ethernet eth0 description one\n"
+    "set interfaces ethernet eth1 description two\n"
+)
 
 #: Two IOS ports, to be sent to two spellings of one AOS-S name.
 _IOS_TWO_PORTS = """!
@@ -1766,19 +1761,19 @@ class TestRenameModalWhereDevicesSettleNothing:
     def test_no_pair_for_a_source_with_no_device(
         self, page: Page, live_server_url: str,
     ):
-        """A management port IOS XR has and IOS-XE does not: a
-        hardware port, and what a pair of devices would decide -- but
-        no device of an IOS XR router is described, so there is no
+        """Two ports of a VyOS router written as one on AOS-S:
+        hardware ports, and what a pair of devices would decide --
+        but no device of a VyOS router is described, so there is no
         pair to choose and the strip does not say to choose one."""
-        _open_modal_on(
-            page, live_server_url, "cisco_iosxr", "cisco_iosxe_cli", _IOSXR_WITH_MGMT,
-        )
+        _open_modal_on(page, live_server_url, "vyos", "aruba_aoss", _VYOS_TWO_PORTS)
+        assert "status: partial" in _status_line(page)
         expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_disabled()
-        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
-            "1 port dropped: the target has no name for it"
+        assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
+            "1 name of the output given more than one source name"
         )
         assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
-            "Give each dropped name a target, or drop it. Then Apply."
+            "Give all but one of the rows that share a name a target of their "
+            "own, or drop them. Then Apply."
         )
         assert "devices" not in _strip(page).inner_text()
 

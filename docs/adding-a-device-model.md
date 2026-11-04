@@ -58,9 +58,12 @@ every Cisco Nexus 9300 the `nxos` rule (`nexus_port_name` in
 every Juniper EX and QFX switch the `junos` rule
 (`ex_qfx_port_name` in
 [`codecs/juniper_junos/port_names.py`](../netcanon/migration/codecs/juniper_junos/port_names.py)),
-and every Dell PowerSwitch on SmartFabric OS10 the `os10` rule
+every Dell PowerSwitch on SmartFabric OS10 the `os10` rule
 (`os10_port_name` in
-[`codecs/dell_os10/port_names.py`](../netcanon/migration/codecs/dell_os10/port_names.py)).
+[`codecs/dell_os10/port_names.py`](../netcanon/migration/codecs/dell_os10/port_names.py)),
+and every fixed Cisco router on IOS XR the `iosxr` rule
+(`iosxr_port_name` in
+[`codecs/cisco_iosxr/port_names.py`](../netcanon/migration/codecs/cisco_iosxr/port_names.py)).
 
 A Catalyst names a port by its type, then switch, module and port
 (`TwoGigabitEthernet1/0/36`), and the type is the port's top speed, so
@@ -133,6 +136,26 @@ after such a gap states how many numbers it passes over (`skip: 2`
 before ports 29 and 30).  `skip` is for a number the device does not
 have in that state, stated from the vendor's own port list; a port
 the device has and nobody uses is a port, and is counted.
+
+A fixed Cisco router on IOS XR names a port
+`<Type>0/0/<module>/<port>`: rack 0, slot 0, the module and the
+port's number, counting from 0 (Cisco's guides give the
+interface-path-id as rack/slot/module/port).  A fixed router stands
+alone, so the rule refuses a member id, and an IOS XR mode states no
+`member_ids`.  Module 0 is the panel's own run of ports, which
+states no `slot`; a group on another module states its number
+(`slot: "1"` for an N540-24Z8Q2C-SYS's `HundredGigE0/0/1/0` and
+`HundredGigE0/0/1/1`), and `slot: "0"` is refused.  The type names
+the speed a port runs at, and that follows the optic fitted: an
+SFP+ port is `TenGigE` with a 10G optic and `GigabitEthernet` with a
+1G one.  So, as on a Catalyst, a family names each port by the type
+of its top speed, and its mode's label says so; a port that holds a
+slower optic, and a lane of a port broken out
+(`<Type>0/0/0/<port>/<lane>`), come back as off-inventory.  The
+management port, `MgmtEth0/RP0/CPU0/0`, is a deployment port.  A
+port is an `uplink` when it is of the router's fastest class of
+cage: its QSFP-class ports where it has any, otherwise the ports of
+its top speed.
 
 A **deployment** — a mode plus an ordered list of members, each a model
 with its modules — compiles to an **inventory**: every port that
@@ -427,7 +450,9 @@ these are load errors, not surprises later:
 * `multi_lane` on a group under a rule that puts no lane in a name;
 * a negative `skip`;
 * a mode that states `member_ids` under a rule whose names carry no
-  member number (`os10`);
+  member number (`os10`, `iosxr`);
+* a group `slot` of `"0"` under `iosxr`: module 0 is the panel's own
+  run of ports, and states none;
 * a model key or part number another model already uses;
 * more port groups, ports in a group, or bay-and-module combinations
   than the loader will build (the limits are constants at the top of

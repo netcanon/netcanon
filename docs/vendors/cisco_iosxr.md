@@ -359,6 +359,29 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   names no interface: it is not translated, and is listed on the
   migrate banner as a section (up to 0.7.7 it was an interface
   called `range` or `breakout`).
+- **Declaring an IOS XR router as the source or target device.**  The
+  Cisco NCS 540 (N540-24Z8Q2C-SYS, N540-28Z4C-SYS, N540-12Z20G-SYS,
+  N540X-12Z16G-SYS, N540X-16Z4G8Q2C and N540X-16Z8Q2C-D), the NCS 540
+  small density routers (N540X-6Z18G-SYS, N540X-4Z14G2Q and
+  N540X-6Z6G-SYS), the NCS 540 large density N540-24Q2C2DD-SYS, the
+  NCS 5501-SE and NCS 55A1-36H, and the Cisco 8201 (8201-SYS) are
+  model families with one mode, `standalone`: a router on its own,
+  rack 0, slot 0.  A port is `<Type>0/0/<module>/<port>`, counting
+  from 0, and is named at its top speed.  The type follows the optic,
+  so a port that holds a slower optic (`GigabitEthernet0/0/0/0` in an
+  SFP+ port) and a lane of a port broken out come back as
+  off-inventory.  The management port is `MgmtEth0/RP0/CPU0/0`.  A
+  running-config names no model, so the router is not read from the
+  config: choose it by hand.  A panel that Cisco numbers without
+  giving each port's interface type, or whose numbering comes from
+  Cisco's published design configurations, which state no model, is
+  graded `inferred`, and its caveat says why.  Not described, each
+  for a reason its family's file gives: the N540X-8Z16G-SYS, the
+  N540-24Q8L2DD-SYS, the NCS-5501, NCS-5502, NCS-5502-SE,
+  NCS-55A1-24H, NCS-55A1-48Q6H and NCS-55A1-24Q6H-S, the NCS-55A2-MOD
+  routers, the 8201-32FH, 8201-24H8FH, 8202, 8202-32FH-M and
+  8212-48FH-M, and the 8100, 8010 and 8700 series.  No family
+  describes a modular chassis or its line cards.
 
 ## See also
 

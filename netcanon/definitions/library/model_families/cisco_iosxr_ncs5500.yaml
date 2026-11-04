@@ -1,0 +1,81 @@
+# Cisco Network Convergence System 5500 fixed-port routers on IOS XR:
+# the NCS-5501-SE (40 SFP+ and 4 QSFP28) and the NCS-55A1-36H-S and
+# NCS-55A1-36H-SE-S (36 QSFP28).
+#
+# A fixed router stands alone, as rack 0, slot 0.  A port is
+# <Type>0/0/<module>/<port> (Cisco's command reference for the NCS 5500,
+# NCS 540 and NCS 560: "To specify a physical interface, use the
+# interface-path-id format: rack/slot/module/port/sub-port"), counting
+# from 0 within its module.  The management port is MgmtEth0/RP0/CPU0/0,
+# declared once under `deployment_ports`.
+#
+# Cisco's hardware installation guide gives each model's ports by count
+# and kind, and numbers none.  The numbering here is that of Cisco's
+# published Converged SDN Transport configurations
+# (github.com/ios-xr/design, directory Converged-SDN-Transport/v5), of
+# routers that Cisco's "Converged SDN Transport Implementation Guide -
+# 5.0" lists as these models.  The configurations state no model, and
+# that guide's list gives another model for two routers whose
+# configurations do not fit it, so each panel is graded `inferred`.
+# Among them, the NCS-5501-SE's QSFP28 ports are module 1
+# (HundredGigE0/0/1/0 to HundredGigE0/0/1/3; `slot: "1"` on their
+# group).
+#
+# This file names each port at its top speed, none broken out: that is
+# the mode's label.
+#
+# `ports:` lists are in PORT-NUMBER order.  A port is an `uplink` when
+# it is of the model's fastest class of cage, the QSFP-class ports; the
+# SFP+ ports are access ports.  It says nothing about how a router is
+# cabled.
+#
+# Part numbers.  The key of each model is its first part number.  The
+# NCS-55A1-36H-SE-S, which the installation guide describes in the same
+# words as the NCS-55A1-36H-S, is listed with it.  An IOS XR
+# running-config names no model, so a router is declared by hand.
+#
+# Not modelled yet, and said here so that nobody adds it by guessing:
+#
+#   * The NCS-5501, NCS-5502, NCS-5502-SE, NCS-55A1-24H, NCS-55A1-48Q6H
+#     and NCS-55A1-24Q6H-S: no Cisco text or published configuration
+#     read numbers their ports.
+#   * The NCS-55A2-MOD routers, whose bays take modular port adapters.
+#   * Any port broken out, and any port named at a speed below its top.
+schema: 1
+vendor: cisco_iosxr
+family: "NCS5500"
+display_name: "Cisco NCS 5500 fixed-port"
+naming: iosxr
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "A router on its own, every port at its top speed and none broken out, each named whole (<Type>0/0/<module>/<port>)"
+    naming:
+      grade: vendor-doc
+      ref: "Interface and Hardware Component Command Reference for Cisco NCS 5500 Series, Cisco NCS 540 Series, Cisco NCS 560 Series Routers, Ethernet Interface Commands (to specify a physical interface, use the interface-path-id format rack/slot/module/port/sub-port; rack is the chassis number, slot the physical slot number of the line card, module the module number, port the physical port number of the interface)"
+      caveat: "Each port is listed once, under the interface type of its top speed. The type follows the optic fitted: an SFP+ port holding a 1G optic is GigabitEthernet0/0/0/<port>, not TenGigE0/0/0/<port>, and such a source port is not on this inventory by its own name. A port broken out is named by lane (<Type>0/0/0/<port>/<lane>), and those names are not modelled. A fixed router is rack 0, slot 0: declare each router."
+
+deployment_ports:
+  - name: MgmtEth0/RP0/CPU0/0
+    role: mgmt
+    notes: "Out-of-band management port"
+    naming: {grade: vendor-doc, ref: "Interface and Hardware Component Configuration Guide for Cisco NCS 5500 Series Routers, IOS XR Release 7.8.x, Advanced Configuration and Modification of the Management Ethernet Interface (interface MgmtEth 0/RP0/CPU0/0, port 0 on the RP card installed in slot 0)", caveat: "The guide's example is for the NCS 5500 series and pairs no port on a model's panel with the name."}
+
+models:
+  # --- 40 SFP+ and 4 QSFP28 (module 1) ------------------------------------------
+  NCS-5501-SE:
+    skus: [NCS-5501-SE]
+    display_name: "Cisco NCS 5501-SE, 40 SFP+ and 4 QSFP28 (NCS-5501-SE)"
+    panel: {grade: inferred, ref: "Hardware Installation Guide for Cisco NCS 5500 Series Fixed-Port Routers, NCS 5500 Series Fixed-Port Router Overview (NCS-5501-SE: 40 x SFP/SFP+ ports, each capable of supporting 1 or 10 Gigabit Ethernet, and 4 x QSFP+/QSFP28 ports); Converged SDN Transport Implementation Guide - 5.0 (xrdocs.io, July 1, 2022), which lists its pre-aggregation and aggregation routers as NCS5501-SE; Cisco's published Converged SDN Transport configurations of those routers (github.com/ios-xr/design, directory Converged-SDN-Transport/v5), which name TenGigE0/0/0/0 to TenGigE0/0/0/39 and HundredGigE0/0/1/0 to HundredGigE0/0/1/3", caveat: "The installation guide gives the counts and numbers no port. That the SFP+ ports are TenGigE0/0/0/0 to 39 and the QSFP28 ports module 1, HundredGigE0/0/1/0 to 3, is inferred from Cisco's configurations of routers its design guide lists as this model; the configurations themselves state no model."}
+    ports:
+      - {role: access, count: 40, prefix: TenGigE, speed: 10gig, cage: sfp+}
+      - {role: uplink, count: 4, slot: "1", prefix: HundredGigE, speed: 100gig, cage: qsfp28, notes: "Module 1: HundredGigE0/0/1/0 to HundredGigE0/0/1/3"}
+
+  # --- 36 QSFP28 ---------------------------------------------------------------
+  NCS-55A1-36H-S:
+    skus: [NCS-55A1-36H-S, NCS-55A1-36H-SE-S]
+    display_name: "Cisco NCS 55A1-36H, 36 QSFP28 (NCS-55A1-36H-S, NCS-55A1-36H-SE-S)"
+    panel: {grade: inferred, ref: "Hardware Installation Guide for Cisco NCS 5500 Series Fixed-Port Routers, NCS 5500 Series Fixed-Port Router Overview (NCS-55A1-36H-S and NCS-55A1-36H-SE-S: 36 x QSFP ports, each capable of 40 GE (QSFP+) or 100 GE (QSFP28)); Converged SDN Transport Implementation Guide - 5.0 (xrdocs.io, July 1, 2022), which lists its core routers as Cisco 55A1-36H (36x100G); Cisco's published Converged SDN Transport configurations of those routers (github.com/ios-xr/design, directory Converged-SDN-Transport/v5), which name HundredGigE0/0/0/0 to HundredGigE0/0/0/35", caveat: "The installation guide gives the count and numbers no port. That the ports are HundredGigE0/0/0/0 to 35 is inferred from Cisco's configurations of routers its design guide lists as a 55A1-36H; the configurations themselves state no model."}
+    ports:
+      - {role: uplink, count: 36, prefix: HundredGigE, speed: 100gig, cage: qsfp28}

@@ -58,6 +58,7 @@ from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import device_models as dm
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.device_models import (
+    SPEED_RANK,
     Deployment,
     DeviceModelRegistry,
     FamilyDef,
@@ -1308,6 +1309,61 @@ def _os10_port_number(name: str) -> int:
     assert match, name
     return int(match.group(1))
 
+
+# Cisco IOS XR -- typed by hand from the family files' sources, each
+# model's port groups in PORT-NUMBER order, as (interface type, module,
+# first port, count, role).  A port is `<Type>0/0/<module>/<port>`: a
+# fixed router is rack 0, slot 0, and a port counts from 0 within its
+# module.  The N540X-16Z8Q2C-D has no ports 0 to 3.
+_XR = "cisco_iosxr"
+_GI, _TE, _TWE, _HU, _FH = (
+    "GigabitEthernet", "TenGigE", "TwentyFiveGigE", "HundredGigE", "FourHundredGigE",
+)
+
+
+def _xr(*groups: tuple[str, int, int, int, str]) -> tuple[list[str], list[str]]:
+    access: list[str] = []
+    uplinks: list[str] = []
+    for kind, module, first, count, role in groups:
+        names = [f"{kind}0/0/{module}/{port}" for port in range(first, first + count)]
+        (access if role == _ACC else uplinks).extend(names)
+    return access, uplinks
+
+
+_XR_PANELS: dict[str, tuple[list[str], list[str]]] = {
+    # NCS 540: the N540-24Z8Q2C-SYS's QSFP28 ports are module 1.
+    "N540-24Z8Q2C-SYS": _xr((_TE, 0, 0, 24, _ACC), (_TWE, 0, 24, 8, _ACC), (_HU, 1, 0, 2, _UP)),
+    "N540-28Z4C-SYS-A": _xr((_TE, 0, 0, 28, _ACC), (_HU, 0, 28, 4, _UP)),
+    "N540-12Z20G-SYS-A": _xr((_GI, 0, 0, 20, _ACC), (_TE, 0, 20, 12, _UP)),
+    "N540X-12Z16G-SYS-A": _xr((_GI, 0, 0, 16, _ACC), (_TE, 0, 16, 12, _UP)),
+    "N540X-16Z4G8Q2C-A": _xr(
+        (_GI, 0, 0, 4, _ACC), (_TE, 0, 4, 16, _ACC), (_TWE, 0, 20, 8, _ACC), (_HU, 0, 28, 2, _UP),
+    ),
+    "N540X-16Z8Q2C-D": _xr((_TE, 0, 4, 16, _ACC), (_TWE, 0, 20, 8, _ACC), (_HU, 0, 28, 2, _UP)),
+    # NCS 540 small density: no QSFP-class port, so the uplinks are the
+    # ports of the top speed.
+    "N540X-6Z18G-SYS-A": _xr((_GI, 0, 0, 18, _ACC), (_TE, 0, 18, 6, _UP)),
+    "N540X-4Z14G2Q-A": _xr((_GI, 0, 0, 14, _ACC), (_TE, 0, 14, 4, _ACC), (_TWE, 0, 18, 2, _UP)),
+    "N540X-6Z6G-SYS": _xr((_GI, 0, 0, 6, _ACC), (_TE, 0, 6, 6, _UP)),
+    # NCS 540 large density: the QSFP-class ports come first.
+    "N540-24Q2C2DD-SYS": _xr((_FH, 0, 0, 2, _UP), (_HU, 0, 2, 2, _UP), (_TWE, 0, 4, 24, _ACC)),
+    # NCS 5500 fixed-port: the NCS-5501-SE's QSFP28 ports are module 1.
+    "NCS-5501-SE": _xr((_TE, 0, 0, 40, _ACC), (_HU, 1, 0, 4, _UP)),
+    "NCS-55A1-36H-S": _xr((_HU, 0, 0, 36, _UP)),
+    # 8200
+    "8201-SYS": _xr((_FH, 0, 0, 24, _UP), (_HU, 0, 24, 12, _UP)),
+}
+for _model, _ports in _XR_PANELS.items():
+    EXPECTED_INVENTORIES[(_XR, _model, "standalone", ())] = _ports
+
+_XR_PORT = re.compile(r"^[A-Za-z]+0/0/(\d)/(\d+)$")
+
+
+def _xr_port_key(name: str) -> tuple[int, int]:
+    match = _XR_PORT.match(name)
+    assert match, name
+    return int(match.group(1)), int(match.group(2))
+
 #: Family key -> the ports of the whole deployment, after every
 #: member's: a stack has ONE management interface, whichever switch is
 #: active.
@@ -1351,6 +1407,12 @@ EXPECTED_DEPLOYMENT_PORTS: dict[str, list[str]] = {
     **{
         f"{_D}/{family}": ["mgmt1/1/1"]
         for family in ("S5200", "Z9", "S4100", "S4048", "S3048-S3248T", "N3200")
+    },
+    **{
+        f"{_XR}/{family}": ["MgmtEth0/RP0/CPU0/0"]
+        for family in (
+            "NCS540", "NCS540-small-density", "NCS540-large-density", "NCS5500", "8200",
+        )
     },
 }
 
@@ -1410,6 +1472,12 @@ class TestExactInventories:
             # between two runs of access ports, with ports 27 and 28 off.
             assert inventory.names() == (
                 sorted(access + uplinks, key=_os10_port_number) + mgmt
+            )
+        elif vendor == _XR:
+            # And an IOS XR router, module by module: on an
+            # N540-24Q2C2DD-SYS the QSFP-class uplinks come first.
+            assert inventory.names() == (
+                sorted(access + uplinks, key=_xr_port_key) + mgmt
             )
         else:
             assert inventory.names() == access + uplinks + mgmt
@@ -1568,6 +1636,7 @@ _CODEC_OF_RULE: dict[str, str] = {
     "nxos": "cisco_nxos",
     "junos": "juniper_junos",
     "os10": "dell_os10",
+    "iosxr": "cisco_iosxr",
 }
 
 
@@ -1626,6 +1695,19 @@ class TestCompiledNamesRoundTripThroughTheCodec:
                     assert (identity.stack, port.member_id) == (1, None), where
                     assert (identity.module, port.slot) == (1, ""), where
                     assert identity.port == port.index + 1, where
+                    checked += 1
+                    continue
+                if family.naming == "iosxr":
+                    # A fixed router is rack 0, slot 0, and has no
+                    # member number: the classifier reads the slot as
+                    # the stack.  The module is the group's slot (the
+                    # panel's own is 0), a port counts from 0 within
+                    # it, and its interface type is its speed.
+                    assert identity.kind == "physical", (*where, identity.kind)
+                    assert (identity.stack, port.member_id) == (0, None), where
+                    assert identity.module == int(port.slot or "0"), where
+                    assert identity.port == port.index, where
+                    assert identity.name_speed_hint == port.speed, where
                     checked += 1
                     continue
                 assert identity.kind == "physical", (*where, identity.kind)
@@ -2102,6 +2184,8 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     **{(_J, _JUNOS_FIRST_PART.get(model, model)): model for model in _JUNOS_PANELS},
     # Dell: the name a switch prints as its System Type is the model key.
     **{(_D, model): model for model in _OS10_PANELS},
+    # Cisco IOS XR: the first part number is the model key.
+    **{(_XR, model): model for model in _XR_PANELS},
 }
 
 #: Parts graded ``inferred``, as ``family key / kind / name``.  Every
@@ -2274,6 +2358,19 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "dell_os10/S3048-S3248T / panel / S3048-ON",
     "dell_os10/S3048-S3248T / panel / S3248T-ON",
     "dell_os10/N3200 / panel / N3248TE-ON",
+    # IOS XR: a panel whose ports Cisco numbers and gives no interface
+    # type, or types only in configurations that state no model; and
+    # a management port that no text read names for the family.
+    "cisco_iosxr/NCS540 / panel / N540X-12Z16G-SYS-A",
+    "cisco_iosxr/NCS540 / panel / N540X-16Z8Q2C-D",
+    "cisco_iosxr/NCS540 / deployment port / MgmtEth0/RP0/CPU0/0",
+    "cisco_iosxr/NCS540-small-density / panel / N540X-4Z14G2Q-A",
+    "cisco_iosxr/NCS540-small-density / deployment port / MgmtEth0/RP0/CPU0/0",
+    "cisco_iosxr/NCS540-large-density / panel / N540-24Q2C2DD-SYS",
+    "cisco_iosxr/NCS540-large-density / deployment port / MgmtEth0/RP0/CPU0/0",
+    "cisco_iosxr/NCS5500 / panel / NCS-5501-SE",
+    "cisco_iosxr/NCS5500 / panel / NCS-55A1-36H-S",
+    "cisco_iosxr/8200 / panel / 8201-SYS",
 }
 
 
@@ -3749,3 +3846,84 @@ class TestCiscoNexus:
         for family in self.FAMILIES:
             caveat = family.modes["standalone"].caveat
             assert "broken out" in caveat and "vPC" in caveat, family.key
+
+
+class TestCiscoIosXr:
+    #: Every part number of the IOS XR families -> its model, typed by
+    #: hand from Cisco's lists of each router's variants.  The -A and -D
+    #: variants (AC and DC power) list the same ports.
+    PARTS = {
+        "N540-24Z8Q2C-SYS": "N540-24Z8Q2C-SYS",
+        "N540X-ACC-SYS": "N540-24Z8Q2C-SYS",
+        "N540-ACC-SYS": "N540-24Z8Q2C-SYS",
+        "N540-28Z4C-SYS-A": "N540-28Z4C-SYS-A",
+        "N540-28Z4C-SYS-D": "N540-28Z4C-SYS-A",
+        "N540-12Z20G-SYS-A": "N540-12Z20G-SYS-A",
+        "N540-12Z20G-SYS-D": "N540-12Z20G-SYS-A",
+        "N540X-12Z16G-SYS-A": "N540X-12Z16G-SYS-A",
+        "N540X-12Z16G-SYS-D": "N540X-12Z16G-SYS-A",
+        "N540X-16Z4G8Q2C-A": "N540X-16Z4G8Q2C-A",
+        "N540X-16Z4G8Q2C-D": "N540X-16Z4G8Q2C-A",
+        "N540X-16Z8Q2C-D": "N540X-16Z8Q2C-D",
+        "N540X-6Z18G-SYS-A": "N540X-6Z18G-SYS-A",
+        "N540X-6Z18G-SYS-D": "N540X-6Z18G-SYS-A",
+        "N540X-4Z14G2Q-A": "N540X-4Z14G2Q-A",
+        "N540X-4Z14G2Q-D": "N540X-4Z14G2Q-A",
+        "N540X-6Z6G-SYS": "N540X-6Z6G-SYS",
+        "N540-24Q2C2DD-SYS": "N540-24Q2C2DD-SYS",
+        "NCS-5501-SE": "NCS-5501-SE",
+        "NCS-55A1-36H-S": "NCS-55A1-36H-S",
+        "NCS-55A1-36H-SE-S": "NCS-55A1-36H-S",
+        "8201-SYS": "8201-SYS",
+    }
+
+    #: Routers the family files say are not modelled.  Each is named
+    #: there, so that nobody adds it by guessing, and none resolves.
+    NOT_MODELLED = (
+        "N540X-8Z16G-SYS-A", "N540-24Q8L2DD-SYS", "NCS-5501", "NCS-5502", "NCS-5502-SE",
+        "NCS-55A1-24H", "NCS-55A1-48Q6H", "NCS-55A1-24Q6H-S", "8201-32FH", "8201-24H8FH",
+        "8202", "8202-32FH-M", "8212-48FH-M",
+    )
+
+    def _models(self) -> list[ModelDef]:
+        return [model for family, model in _every_model() if family.vendor == _XR]
+
+    def test_every_part_number_is_its_model(self) -> None:
+        for sku, key in self.PARTS.items():
+            hit = REGISTRY.resolve(_XR, sku)
+            assert hit is not None and hit[1].model == key, (sku, key)
+        assert {sku for model in self._models() for sku in model.skus} == set(self.PARTS)
+
+    def test_what_is_not_modelled_is_said_and_does_not_resolve(self) -> None:
+        said = "\n".join(
+            path.read_text(encoding="utf-8") for path in FAMILY_FILES
+            if path.name.startswith(f"{_XR}_")
+        )
+        for pid in self.NOT_MODELLED:
+            assert REGISTRY.resolve(_XR, pid) is None, pid
+            assert re.search(rf"(?<![\w-]){re.escape(pid)}(?![\w-])", said), pid
+
+    def test_an_uplink_is_of_the_models_fastest_class_of_cage(self) -> None:
+        """The QSFP-class ports where a router has any, otherwise the
+        ports of its top speed: the role says which ports are the
+        fastest, nothing about how a router is cabled."""
+        for model in self._models():
+            qsfp = any(group.cage.startswith("qsfp") for group in model.ports)
+            top = max(SPEED_RANK[group.speed] for group in model.ports)
+            for group in model.ports:
+                fastest = (
+                    group.cage.startswith("qsfp") if qsfp
+                    else SPEED_RANK[group.speed] == top
+                )
+                assert (group.role == "uplink") == fastest, (model.model, group.prefix)
+
+    def test_the_management_port_is_the_codecs(self) -> None:
+        identity = get_codec(_XR).classify_port_name("MgmtEth0/RP0/CPU0/0")
+        assert identity.kind == "mgmt"
+
+    def test_the_mode_says_what_is_not_modelled(self) -> None:
+        for family in REGISTRY.families.values():
+            if family.vendor != _XR:
+                continue
+            caveat = family.modes["standalone"].naming.caveat
+            assert "follows the optic" in caveat and "declare each router" in caveat, family.key
