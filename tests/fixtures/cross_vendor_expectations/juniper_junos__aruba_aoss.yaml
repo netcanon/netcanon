@@ -17,7 +17,7 @@
 #     Junos's — domain, syslog, mtu, timezone parse-and-ignore on
 #     the Aruba codec today, so even Tier-1 surface partially drops
 #     on cross-vendor round-trip.
-#   * Hash formats ($1$/$5$/$6$ vs sha1/bcrypt) do not overlap;
+#   * Hash formats ($1$/$5$/$6$ vs sha1/sha256) do not overlap;
 #     re-keying always required.
 #
 # The keyword-stable surface (hostname, snmp community, radius-server
@@ -600,13 +600,24 @@ per_field_expectation:
       Junos classes collapse to ``operator`` with a comment.
       Hash formats are NOT cross-compatible: Junos accepts ``$1$``
       (MD5 legacy), ``$5$`` (SHA-256), ``$6$`` (SHA-512 default
-      since 17.2 per KB31903); Aruba accepts ``sha1 <hex>``,
-      ``bcrypt $2y$...``, and ``plaintext "<pass>"``.  None
-      overlap.  SSH-RSA / SSH-DSA / SSH-ED25519 keys on Junos have
-      no canonical fit in the hash-shaped ``hashed_password``
-      field — parse-and-ignore today (lossy by deferral).
-      Cross-vendor migration requires re-setting passwords on the
-      target.
+      since 17.2 per KB31903); AOS-S takes ``sha1``, ``sha256`` and
+      a password as typed.  None overlap, so each such account is a
+      review comment in place of the account.  SSH-RSA /
+      SSH-DSA / SSH-ED25519 keys on Junos have no canonical fit in
+      the hash-shaped ``hashed_password`` field — parse-and-ignore
+      today (lossy by deferral).
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Measured over the committed inputs: 13 accounts on 8 cells, none
+      arrives -- 12 hold a secret AOS-S cannot take, and 1 has no
+      password read from the source.  Cross-vendor migration requires
+      re-setting passwords on the target.
     references: [junos-password-cli, junos-kb-password-format, aruba-user-security]
 
   # ── Tier 2 — RADIUS ──

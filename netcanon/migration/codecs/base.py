@@ -10,6 +10,9 @@ Every vendor adapter subclasses :class:`CodecBase` and ships:
       adapter-internal (Phase 0) or canonical-YANG-tree (Phase 0.5+)
       representation.
     * ``render(tree)`` — emit a raw config string from the tree.
+    * ``render_warnings(tree)`` — optional: a warning for each thing
+      ``render`` leaves out for a reason of the target's own, which
+      the pipeline adds to the job (default: none).
 
 The contract's key invariant is the round-trip::
 
@@ -526,6 +529,23 @@ class CodecBase(ABC):
             LimitExceeded: When the output is longer than the limit in
                 force (:mod:`netcanon.migration.limits`).
         """
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The job's warnings for what :meth:`render` will leave out of
+        *tree*, or write otherwise than it stands, for a reason of the
+        target's own.
+
+        Read from the same tree the renderer is given, by the same
+        code that decides, so that the two agree: the renderer has no
+        channel of its own for a warning, and what it writes in place
+        of a record (a ``review:`` comment) is in the output only.
+        The pipeline calls it just before :meth:`render`.
+
+        Returns:
+            One sentence a record, naming it and never a secret of it.
+            The default: none.
+        """
+        return []
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield canonical xpaths for every leaf in *tree*.

@@ -772,7 +772,7 @@ in rendered output find every such site.
   back to plaintext (that would leak the hash literal as the password —
   a severe security bug).
 
-  Two caveats, both measured rather than asserted:
+  Caveats, each measured rather than asserted:
 
   1. The policy only binds secrets it can *recognise*.  Until the
      `_STRUCTURED_PREFIXES` table existed, a bare crypt string carrying
@@ -819,6 +819,19 @@ in rendered output find every such site.
          the device and set its password there
 
      They used to write the typed string as the hash.
+  6. AOS-S holds ONE manager and ONE operator account, and a second
+     `password manager` line re-points the one account; an operator
+     password with no manager password gives manager access.  So an
+     AOS-S output writes the first user of each role it can take, an
+     operator only beside a manager, and no account with an empty
+     password; each other user is a review line, whose advice never
+     says to set a password that would replace the account written
+     above it.  The job has a warning for each user left out for a
+     reason of AOS-S's own, and `/local-users/user/privilege-level` is
+     lossy on `aruba_aoss`.  It used to write a line for every user, so
+     the switch kept the last of each role, and an operator account
+     alone where every manager's secret was foreign.  See
+     [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth

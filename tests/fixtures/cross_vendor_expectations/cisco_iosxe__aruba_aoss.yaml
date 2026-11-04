@@ -440,7 +440,7 @@ per_field_expectation:
       cisco_iosxe parser doesn't walk `<system><aaa>`.
       intent.local_users is empty after parse.  AOS-S target
       accepts the canonical surface, but hash format incompatibility
-      (Cisco type-5/8/9 vs AOS-S sha1/bcrypt) would force re-keying
+      (Cisco type-5/8/9 vs AOS-S sha1/sha256) would force re-keying
       on the target.  Once parser wired, flips to lossy (canonical
       shape round-trips; passwords don't).
     references: [aoss-asg, oc-system]

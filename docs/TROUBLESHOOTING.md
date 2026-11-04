@@ -615,6 +615,36 @@ why; it never quotes the password.
 (Junos `set system login user <name> authentication
 plain-text-password`, which asks for it; the OPNsense user manager).
 
+### "An AOS-S output has one manager and one operator, and my other users are review comments"
+
+By design.  An AOS-S switch holds one manager and one operator account:
+a second `password manager` line re-points the one account, and an
+operator password with no manager password gives manager access (HPE
+Access Security Guide, AOS-S 16.x).  So the output writes the first
+user of privilege 15 whose secret AOS-S takes as the manager, the first
+such user of any other privilege as the operator -- only beside a
+manager -- and each other user as a `; password <role> user-name ...
+-- review:` line.  The job has a warning for each, in one of three
+wordings:
+
+- `... AOS-S keeps one <role> account, and "<name>" has it` -- the role
+  is taken.  To give it to this user instead, drop the other in the
+  local-user rename map (the **Local users** pane of the rename
+  window).
+- `... no manager account is, and on AOS-S an operator password alone
+  gives manager access` -- no manager could be written (each one's
+  secret is a form AOS-S cannot take, or there is none).
+- `... no password for it was read from the source` -- RouterOS, for
+  one, exports no password.
+
+A user whose secret AOS-S cannot take is a review line as on every
+other target (above), with no warning of its own.
+
+**Action:** on the switch, set the manager first and then the operator,
+each with `password <role> user-name "<name>"`, which asks for the
+password.  Further named accounts are `aaa authentication local-user`,
+which Netcanon does not write.
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG

@@ -212,36 +212,52 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      trip. Measured over 3 cells: drifted on 3, preserved on 0, both
+      sides empty on 0.  6 accounts, 2 arrive.  Each real OS10 capture
+      has two privilege-15 accounts, and AOS-S holds one manager
+      account: the first is written, the second is a review comment
+      with a job warning.  The kitchen sink's two accounts hold secrets
+      AOS-S cannot take.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
     references: [os10-aoss-surface]
 
   local_users[].hashed_password:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      trip. Measured over 3 cells: drifted on 3, preserved on 0, both
+      sides empty on 0.  The secret of each account that arrives, a
+      password as typed, is read back tagged `plaintext:` -- the same
+      password under another canonical string.
     references: [os10-aoss-surface]
 
   local_users[].name:
     disposition: good
     note: >
-      Preserved on 2 of 3 cells that carry data for this
-      field -- the declared loss is never observed.  Authored `lossy`
-      against the synthetic kitchen-sink alone, which did not exercise
-      it; the real OS10 corpus committed alongside this change does,
-      and the field survives.  An unevidenced `lossy` over-claims loss
-      exactly as a missing declaration under-claims it, so the honest
-      disposition is `good`.
+      Each account that arrives keeps its name.  The field drifts on
+      all 3 cells that carry data only by the records that do not
+      arrive, which are counted under `local_users`: the second
+      privilege-15 account of each real capture, and the two
+      kitchen-sink accounts whose secrets AOS-S cannot take.  An
+      unevidenced `lossy` over-claims loss exactly as a missing
+      declaration under-claims it, so the honest disposition is
+      `good`.
     references: [os10-aoss-surface]
 
   local_users[].role:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      trip. Measured over 3 cells: drifted on 3, preserved on 0, both
+      sides empty on 0.  OS10's `sysadmin` comes back as AOS-S's
+      `manager`.
     references: [os10-aoss-surface]
 
   ntp_servers:

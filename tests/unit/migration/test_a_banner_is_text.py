@@ -1006,7 +1006,9 @@ def _digest(codec: str, path: str) -> str:
 #: interface and leaves its IP MTU at 1500, when the tree gained an IP
 #: MTU of its own (``CanonicalInterface.ip_mtu``); and every AOS-CX
 #: input with a VLAN interface, which is up unless it says ``shutdown``
-#: (``test_an_aoscx_vlan_interface_is_up.py``).
+#: (``test_an_aoscx_vlan_interface_is_up.py``); and the AOS-S kitchen
+#: sink, which holds one manager and one operator account as a switch
+#: does (``codecs/aruba_aoss/test_one_account_per_role.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1028,7 +1030,7 @@ BEFORE: dict[str, str] = {
     # (TestArubaAOSSStack): were "a4e275c2c670" and "fa27e0f87457".
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "f9c207ff3706",
     "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "9287eeaca4b7",
-    "synthetic/aruba_aoss/kitchen_sink.cfg": "0b36d8988e79",
+    "synthetic/aruba_aoss/kitchen_sink.cfg": "ea25a4c23fb5",
     "aruba_aoss/show_run_simple.txt": "8a4bc3fe9e9d",
     "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
     "real/cisco_iosxe/batfish_cisco_interface.txt": "ac89fc3d7159",

@@ -269,15 +269,19 @@ per_field_expectation:
       Aruba's two-role model (manager/operator) expands to Cisco's
       numeric privilege on render: manager -> privilege 15,
       operator -> privilege 1.  The Cisco target loses no data
-      from this expansion (Aruba had only the two roles), but the
-      reverse direction collapses Cisco's intermediate privilege
-      levels (already documented in cisco_iosxe_cli__aruba_aoss).
-      Hash formats are NOT cross-compatible: Aruba SHA-1
-      (``<hex>``), bcrypt (``$2y$...``), and plaintext are all
-      Aruba-only; Cisco accepts MD5 (``$1$...``), PBKDF2
-      (``$8$...``), and scrypt (``$9$...``) but none match Aruba's
-      forms.  Cross-vendor migration requires re-setting passwords
-      on the target.
+      from this expansion (Aruba had only the two roles, and a
+      switch holds at most one account of each), but the reverse
+      direction collapses Cisco's intermediate privilege levels
+      (already documented in cisco_iosxe_cli__aruba_aoss).  Hash
+      formats are NOT cross-compatible: AOS-S ``sha1`` and
+      ``sha256`` digests are AOS-S-only; Cisco accepts MD5
+      (``$1$...``), PBKDF2 (``$8$...``), and scrypt (``$9$...``) but
+      none match AOS-S's forms, so such an account is a review
+      comment in place of the account.  Measured over the committed
+      inputs: 1 of 4 accounts arrive across the 3 cells that
+      populate local users, an operator with a password as typed;
+      the 3 others carry an AOS-S `sha1:` digest.  Cross-vendor
+      migration requires re-setting passwords on the target.
     references: [local_users]
 
   radius_servers:

@@ -44,9 +44,19 @@ Two-role model (`manager` / `operator`):
 
 ```
 password manager user-name "admin" sha1 "fa1cefa1cefa1cefa1cefa1cefa1cefa1cefa1ce"
-password manager user-name "auditor" sha1 "0bce0bce0bce0bce0bce0bce0bce0bce0bce0bce"
 password operator user-name "netops" sha1 "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 ```
+
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 See [`../aruba_aoss_to_fortigate_cli/local_users.md`](../aruba_aoss_to_fortigate_cli/local_users.md)
 for full Aruba specifics.
@@ -72,9 +82,10 @@ class CanonicalLocalUser(BaseModel):
     - `prof_admin` -> `operator`.
     - Custom accprofiles -> `operator` (granularity lost).
 - **hashed_password** — `lossy`.  FortiOS `ENC <opaque-base64>`
-  is FortiGate-only; Aruba accepts plaintext / sha1-hex / bcrypt
-  but not the FortiOS form.  Cross-vendor migration of admin
-  accounts requires re-setting passwords on the target device.
+  is FortiGate-only; AOS-S takes plaintext / sha1 / sha256 but not
+  the FortiOS form, so such an account is a review comment in place
+  of the account.  Cross-vendor migration of admin accounts
+  requires re-setting passwords on the target device.
 - **trusthost rules (`set trusthost1` ...)** — `unsupported`.
   Not modelled in canonical; drop entirely on parse.  Aruba target
   has no equivalent IP-based access-restriction primitive in the

@@ -70,11 +70,11 @@ from ..._radius_secrets import (
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
-from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
 from ...canonical.transforms import _natural_port_sort_key, trunk_untagged_vlan
 from ..base import RenderError
+from .accounts import account_lines
 from .parse import _lists_read_from, _members_read_from
 from .port_names import one_spelling, trunk_number
 
@@ -225,66 +225,6 @@ def _has_renderable_body(iface: Any) -> bool:
     if iface.voice_vlan is not None:
         return True
     return bool(iface.lag_member_of)
-
-
-#: Hash algorithms AOS-S accepts in the ``password manager user-name
-#: <name> <alg> <hash>`` form.  Verified against Aruba's published
-#: docs (Aruba 3810M/5400R Access Security Guide for AOS-S 16.11,
-#: "Setting passwords and usernames" + the password command-options
-#: reference).  AOS-S accepts ``plaintext``, ``sha1`` (40-char hex),
-#: ``sha256`` (64-char hex).  ``sha512`` is NOT accepted (this is
-#: the cross-vendor migration hazard from Cisco / Arista — operator
-#: must reset the password rather than re-use the hash).  Cisco
-#: type-5 (md5crypt) and type-9 (scrypt) are also unmigratable.
-#:
-#: This set expresses Aruba-NATIVE emit forms.  The cross-vendor
-#: migratability gate (which algorithms AOS-S literally cannot
-#: consume) lives in :mod:`netcanon.migration._user_secrets` and
-#: is shared with fortigate_cli, juniper_junos, and opnsense codecs.
-_AOS_KNOWN_ALGORITHMS = {"sha1", "sha256", "plaintext"}
-
-
-def _split_aos_hash(hashed: str) -> tuple[str, str]:
-    """Split a canonical ``hashed_password`` into (aos-algorithm, hash).
-
-    Thin wrapper over the shared :func:`classify_hash` /
-    :func:`is_migratable` policy in
-    :mod:`netcanon.migration._user_secrets`.  Maps the shared
-    helper's output to the historical Aruba return shape so the
-    upstream caller and the existing unit tests stay unchanged:
-
-        ``sha1:<hex>``        -> ("sha1", "<hex>")        [native]
-        ``sha256:<hex>``      -> ("sha256", "<hex>")      [native]
-        ``arista:sha512:...`` -> ("__unmigratable__", "sha512")
-        ``5 <md5crypt>``      -> ("__unmigratable__", "5")
-        ``9 <scrypt>``        -> ("__unmigratable__", "9")
-        ``bcrypt:...``        -> ("__unmigratable__", "bcrypt")
-        ``fortios:ENC ...``   -> ("__unmigratable__", "fortios")
-
-    The sentinel ``"__unmigratable__"`` triggers comment-form
-    emission upstream rather than producing a syntactically-correct
-    but operationally-broken ``plaintext "..."`` line.  Operators
-    see an explicit "reset this password" reminder.
-    """
-    alg, payload = classify_hash(hashed)
-    # Aruba-native algorithm — emit verbatim using the AOS-S
-    # ``password manager <alg> <hash>`` form.  ``_AOS_KNOWN_ALGORITHMS``
-    # is the Aruba-local emit-form vocabulary; the shared helper's
-    # accepted-set covers exactly the same three for ``aruba_aoss``,
-    # but keeping this check local documents the AOS-S CLI grammar
-    # that consumes the ``alg`` token verbatim.
-    if alg in _AOS_KNOWN_ALGORITHMS:
-        return alg, payload
-    # Cross-vendor unmigratable hash — surface via comment-form
-    # review line.  The shared policy decides; Aruba just adapts.
-    if not is_migratable(hashed, "aruba_aoss"):
-        return "__unmigratable__", alg
-    # Unreachable in practice: every algorithm outside
-    # ``_AOS_KNOWN_ALGORITHMS`` should fail the shared helper's
-    # migratability gate.  Defensive plaintext wrap of the original
-    # preserves Aruba's historical "verbatim under plaintext"
-    # fallback for any unforeseen algorithm token.
-    return "plaintext", hashed
 
 
 def _lag_name_to_aos_trunk(name: str) -> str:
@@ -839,45 +779,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             )
             lines.append(summary)
 
-    # Local users (Tier 2).  AOS-S form:
-    #   password manager user-name "X" sha1 "<hash>"
-    #   password operator user-name "Y" sha1 "<hash>"
-    # Role derives from privilege: 15 -> manager, anything else ->
-    # operator (AOS-S has no "superuser+limited" gradient like
-    # Cisco's 1-15 scale; both roles are binary).  Hashes from
-    # other codecs that AOS-S cannot consume (Cisco type-5/7/8/9,
-    # Arista/Junos sha512, FortiGate ENC, OPNsense bcrypt) surface
-    # as comment-form ``review:`` lines per the shared
-    # :mod:`netcanon.migration._user_secrets` policy — operator
-    # gets an explicit "reset this password" prompt rather than a
-    # garbled line AOS-S would reject (or, worse, accept-as-plaintext).
-    for user in tree.local_users:
-        aos_role = "manager" if user.privilege_level == 15 else "operator"
-        hash_alg, hash_val = _split_aos_hash(user.hashed_password)
-        if hash_alg == "__unmigratable__":
-            # AOS-S can't consume this hash format (sha512 from
-            # Arista/Junos $6$, Cisco type-5/9, OPNsense/FortiGate
-            # bcrypt).  Emit a comment-form line so operators see an
-            # explicit "reset this password" reminder rather than a
-            # garbled `plaintext "arista:sha512:$6$..."` line that
-            # would either be rejected at deploy or, worse, accepted
-            # as a literal plaintext password (severe security bug).
-            lines.append(
-                f'; password {aos_role} user-name "{user.name}" '
-                f'-- review: {hash_val} hash from source vendor cannot '
-                f'be re-used on AOS-S; reset this user password manually'
-            )
-            continue
-        if breaks_its_quotes(user.name) or breaks_its_quotes(hash_val):
-            lines.append(
-                "; " + left_out(f"password {aos_role} user-name {user.name}",
-                                "AOS-S")
-            )
-            continue
-        lines.append(
-            f'password {aos_role} user-name "{user.name}" '
-            f'{hash_alg} "{hash_val}"'
-        )
+    # Local users (Tier 2).  AOS-S holds one manager and one operator
+    # account (`accounts`): the first user of each role it can take is
+    # written, and every other user is a ``review:`` comment that says
+    # why -- a second account of a role, an operator with no manager
+    # beside it (alone, it is a manager account), no password, or a
+    # secret AOS-S cannot take (the shared
+    # :mod:`netcanon.migration._user_secrets` policy).
+    lines.extend(account_lines(tree.local_users))
 
     # LAGs — AOS-S uses a single top-level ``trunk <ports> <name>
     # <type>`` line per trunk.  Vendor-native LAG names (e.g.

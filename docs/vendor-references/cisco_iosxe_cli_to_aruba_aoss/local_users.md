@@ -32,8 +32,18 @@ and `operator` (read-mostly).  Verbatim manual shape:
 ```
 password manager user-name "admin" sha1 a1b2c3...
 password operator user-name "noc" plaintext "S0meP4ss"
-password operator user-name "tech" sha1 deadbeef...
 ```
+
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 Hash forms accepted:
 
@@ -42,9 +52,8 @@ Hash forms accepted:
   opaque blob the source emitted; operator must re-hash on import).
 - `sha1 <hex>` — SHA-1-based hash.  AOS-S-specific salting; not
   cross-compatible with the Linux crypt() family.
-- `bcrypt $2y$...` — newer firmware introduces bcrypt support
-  (manual: "Aruba ArubaOS-Switch 16.11 release notes").  Stored
-  verbatim; not cross-compatible with Cisco type-9 scrypt.
+- `sha256 <hex>` — SHA-256 digest.  AOS-S has no bcrypt form and no
+  crypt(3) form (HPE Access Security Guide, AOS-S 16.x).
 
 There is **no** numeric privilege level — the role is named.
 
@@ -77,17 +86,16 @@ Hash compatibility is the hard limit:
 - Cisco type-8 PBKDF2 (`$8$...`) — Cisco-only.
 - Cisco / shared MD5 type-5 (`$1$...`) — Linux-crypt format; AOS-S
   does NOT advertise the type-5 form (manual lists only
-  `plaintext` / `sha1` / `bcrypt`).  Carrying a Cisco `$1$` hash to
-  Aruba via the codec produces a string AOS-S won't authenticate
-  against without re-hashing.
+  `plaintext` / `sha1` / `sha256`), so such an account is a review
+  comment in place of the account.
 - AOS-S SHA-1 (`<hex>`) — Aruba-only; Cisco accepts no SHA-1 form
   for `secret`.
-- AOS-S bcrypt (`$2y$...`) — Aruba-only.
+- AOS-S SHA-256 (`<hex>`) — a bare digest; Aruba-only.
 
 Cross-vendor migration of user accounts therefore requires
-re-setting passwords on the target device.  Both codecs pass
-hashes through verbatim; the loss surfaces in the validation
-report.
+re-setting passwords on the target device.  An account whose
+secret the target cannot take is a `review:` comment naming it, in
+place of the account, in either direction; no secret is quoted.
 
 Disposition: **lossy** (hash-format incompatibility + RBAC
 collapse from numeric privilege to two-role model).

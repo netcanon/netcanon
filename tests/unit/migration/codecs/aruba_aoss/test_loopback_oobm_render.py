@@ -31,8 +31,8 @@ from netcanon.migration.canonical.intent import (
     CanonicalIPv6Address,
     CanonicalLocalUser,
 )
+from netcanon.migration.codecs.aruba_aoss.accounts import _split_aos_hash
 from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
-from netcanon.migration.codecs.aruba_aoss.render import _split_aos_hash
 
 pytestmark = pytest.mark.unit
 

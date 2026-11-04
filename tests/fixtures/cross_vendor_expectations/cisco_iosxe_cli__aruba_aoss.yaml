@@ -12,7 +12,7 @@
 #   * VLAN membership model (Cisco port-centric vs Aruba VLAN-centric).
 #     Bridged via project_switchport_to_vlan / project_vlan_to_switchport.
 #   * Mask format (Cisco dotted-decimal vs Aruba CIDR).
-#   * Hash formats (Cisco type-9 scrypt vs Aruba SHA-1 / bcrypt;
+#   * Hash formats (Cisco type-9 scrypt vs Aruba sha1 / sha256;
 #     not cross-compatible).
 #   * Feature surface (Cisco supports VRF / BGP / EIGRP / DHCP-server
 #     pools; Aruba AOS-S has no VRF concept and is relay-only).
@@ -280,12 +280,22 @@ per_field_expectation:
       operator).  All intermediate Cisco privilege levels lose their
       granularity.  Hash formats are NOT cross-compatible: Cisco
       type-9 scrypt (``$9$...``) and type-8 PBKDF2 (``$8$...``) are
-      Cisco-only; Aruba accepts SHA-1 hex / bcrypt / plaintext but
-      none of these match Cisco's accepted forms.  Cross-vendor
-      migration of user accounts therefore requires re-setting
-      passwords on the target device.  Both codecs pass hashes
-      through verbatim per the canonical schema doctrine; the loss
-      surfaces in the validation report.
+      Cisco-only, and AOS-S takes ``sha1``, ``sha256`` and a password
+      as typed; an account whose secret AOS-S cannot take is a review
+      comment naming it, in place of the account.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Measured over the committed inputs: 11 accounts on 7 cells; 1
+      arrives, a privilege-15 account with a password as typed, and the
+      other 10 hold a secret AOS-S cannot take.  Cross-vendor migration
+      of user accounts therefore requires re-setting passwords on the
+      target device.
     references: [local_users]
 
   radius_servers:

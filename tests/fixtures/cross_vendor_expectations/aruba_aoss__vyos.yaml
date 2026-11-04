@@ -561,8 +561,8 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      1 of 5 accounts arrive across the 3 cells that populate local users; the
-      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      1 of 4 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 3 accounts that vanish carry 3 AOS-S
       `sha1:` digest. VyOS can consume a Linux crypt(3) string (`$1$` / `$5$` /
       `$6$`) in `encrypted-password`, or a genuine plaintext password in
       `plaintext-password`; anything else is refused on purpose (#461) with a
@@ -580,11 +580,14 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the 1 account that survives, the role changes: `manager` -> `admin` on
-      1. Mechanism: the vyos parser assigns every `system login user`
+      On the 1 account that survives, an AOS-S operator, the role changes:
+      `operator` -> `admin` on 1, and its privilege level `1` -> `15`.
+      Mechanism: the vyos parser assigns every `system login user`
       `role="admin"` and `privilege_level=15`, because VyOS login accounts carry
       no role or numeric privilege in the common case (vyos declares
-      `/local-users/user/privilege-level` lossy for exactly this). Accounts
+      `/local-users/user/privilege-level` lossy for exactly this), so an AOS-S
+      operator comes back an administrator: review every account an AOS-S
+      config brings to VyOS. Accounts
       refused for their secret vanish with their role and are counted once,
       under `local_users[].name`; this key is about the value on accounts that
       survive.
@@ -593,8 +596,8 @@ per_field_expectation:
   "local_users[].hashed_password":
     disposition: good
     note: >
-      No secret is written in a form VyOS cannot consume. 4 accounts are refused
-      for their secret (4 AOS-S `sha1:` digest) and vanish with it; that loss is
+      No secret is written in a form VyOS cannot consume. 3 accounts are refused
+      for their secret (3 AOS-S `sha1:` digest) and vanish with it; that loss is
       recorded once, under `local_users[].name`. The 1 secret that arrives is
       carried with the credential unchanged: 1 plaintext password as
       `plaintext-password`. Before #461 this key read preserved because the

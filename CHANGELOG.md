@@ -28,6 +28,42 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **An AOS-S output could give an operator manager access, and kept
+  only the last account of each role.**  An ArubaOS-Switch holds one
+  manager and one operator account: a second `password manager
+  user-name ...` line re-points the one account, and an operator
+  password with no manager password gives manager access (HPE Access
+  Security Guide, AOS-S 16.x).  The renderer wrote a line for every
+  local user.  Of several accounts of a role the switch kept the last,
+  and nothing said so; a config whose privilege-15 accounts all held
+  secrets AOS-S cannot take (a Cisco type-9 administrator) came out
+  with a live operator line and no manager line; an account with no
+  password came out as `plaintext ""`; and the review line for an
+  account that was not written advised resetting its password, which
+  on AOS-S replaces the account written above it.  The output now has
+  at most one live line of each role (the first user AOS-S can take,
+  in the source's order), an operator line only beside a manager
+  line, and no empty value.  Every other user is a review line whose
+  advice fits the switch, and the job has a warning for each user left
+  out for a reason of AOS-S's own, through a new hook a target says
+  such things by (`CodecBase.render_warnings`).
+  `/local-users/user/privilege-level` is lossy on `aruba_aoss`, so
+  such a job has a `warn` validation.  The local-user narratives of
+  the expectation files onto and from AOS-S are measured again: several
+  still described a foreign digest written behind `plaintext`, which
+  the classifier's fail-open fix (#460) had ended, and `cisco_nxos`
+  onto `aruba_aoss` is `lossy` rather than `unsupported`, as its
+  siblings are -- AOS-S models local users, and the NX-OS accounts
+  are refused for their secrets.  The six reference notes on
+  local users onto AOS-S showed several accounts of a role as the
+  device's form, named a `bcrypt` form AOS-S does not have (it takes
+  `plaintext`, `sha1` and `sha256`) and said a foreign secret was
+  passed through verbatim, and four target profiles misspelt `aaa
+  authentication local-user`; all are corrected.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_one_account_per_role.py`,
+  which reads the output as text over every committed capture and is
+  handed each defect.
+
 - **The PII guard no longer publishes what it guards.**  The CI
   guard (`.github/workflows/pii-guard.yml`) and the pre-push hook
   (`scripts/git-hooks/pre-push`) spelled the maintainer's personal
@@ -5329,6 +5365,15 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **AOS-S credentials: `include-credentials`, `sha256` mode and two
+  forms the parser does not read.**  An AOS-S output writes a hashed
+  account without `include-credentials` (a switch has been seen to
+  refuse a `sha256` line without it) and a `sha256` value without
+  `password non-plaintext-sha256`; both change how the switch stores
+  every credential, so they are left to the operator.  As a source,
+  the parser does not read the bare `password manager` marker a switch
+  prints without `include-credentials`, nor an `aaa authentication
+  local-user` account: such accounts are not in the translation.
 - **A sub-interface's number is bounded onto Junos alone.**  On the
   other targets that write a unit's number in its name (IOS-XE, IOS
   XR, NX-OS, EOS and the like) a sub-interface keeps its number from

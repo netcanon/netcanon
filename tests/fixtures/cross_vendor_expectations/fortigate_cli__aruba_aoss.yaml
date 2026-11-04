@@ -348,14 +348,22 @@ per_field_expectation:
       (manager/operator) on render: super_admin -> manager, all
       others -> operator.  Granular per-profile detail is lost.
       Hash formats are NOT cross-compatible: FortiOS ``ENC
-      <opaque-base64>`` is not Aruba-accepted; cross-vendor
-      migration of admin accounts requires re-setting passwords on
-      the target device (Aruba accepts plaintext, sha1 hex, or
-      bcrypt).  Both codecs preserve hashes verbatim with vendor
-      tags so the loss surfaces in the validation report.  Trust-
-      host / IP-based access controls (FortiOS ``set trusthost1``)
-      are FortiGate-specific and not modelled in canonical, so
-      they drop entirely on Aruba render.
+      <opaque-base64>`` is not a form AOS-S takes (``sha1``,
+      ``sha256`` and a password as typed), so such an account is a
+      review comment naming it, in place of the account.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Measured over the committed inputs: 8 accounts on 4 cells, none
+      arrives -- 6 hold a secret AOS-S cannot take, and 2 have no
+      password read from the source.  Trust-host / IP-based access
+      controls (FortiOS ``set trusthost1``) are FortiGate-specific and
+      not modelled in canonical, so they drop entirely on Aruba render.
     references: [local_users]
 
   radius_servers:

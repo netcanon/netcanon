@@ -297,12 +297,22 @@ per_field_expectation:
       to ``operator`` with banner.  Password material is the
       structural blocker: RouterOS does not surface hashed
       passwords in /export, so the canonical ``hashed_password``
-      arrives empty.  Aruba render emits ``password manager
-      user-name "<name>" sha1 ""`` (empty SHA-1) which Aruba
-      accepts syntactically but treats as a no-password account
-      (login disabled until the operator manually sets a
-      password).  Operator MUST re-set passwords on the Aruba
-      target after migration.
+      arrives empty.  AOS-S has no account without a password, so
+      the render writes no live line for such a user: each is a
+      ``; password <role> user-name "<name>" -- review:`` comment,
+      and the job carries a warning for it.  It used to write
+      ``sha1 ""``, an account with no usable password.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Measured over the committed inputs: 3 accounts on 1 cell, none
+      arrives.  Operator MUST create the accounts on the Aruba target
+      after migration: the manager first, then at most one operator.
     references: [local_users]
 
   radius_servers:
@@ -409,7 +419,7 @@ per_field_expectation:
 #
 #   * The local-users surface is confidently lossy in this direction
 #     specifically because RouterOS's /export does not surface
-#     password material AND Aruba's hash formats (SHA-1 hex, bcrypt,
+#     password material AND Aruba's hash formats (sha1, sha256,
 #     plaintext) are not the same as RouterOS's vendor-private
 #     format — this is a documented limitation, not a codec gap.
 #     The empty SHA-1 render is the dominant lossy path.

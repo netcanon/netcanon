@@ -41,15 +41,25 @@ Retrieved: 2026-04-30
 
 ```
 password manager user-name "admin" sha1 "fa1cefa1cefa1cefa1cefa1cefa1cefa1cefa1ce"
-password manager user-name "siteops" plaintext "fakeRedactedPlaintext"
 password operator user-name "monitor" sha1 "0bce0bce0bce0bce0bce0bce0bce0bce0bce0bce"
 ```
+
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 Aruba user model:
 
 - Two roles: `manager` (full admin) and `operator` (read-only).
-- Hash formats: `sha1 "<40-hex>"`, `bcrypt "$2y$..."`,
-  `plaintext "<plaintext>"`.
+- Hash formats: `sha1 "<40-hex>"`, `sha256 "<64-hex>"`,
+  `plaintext "<plaintext>"`; no bcrypt form.
 
 ## Cross-vendor mapping
 
@@ -69,10 +79,9 @@ OPNsense -> Aruba:
   intermediate Cisco-style privilege levels never surfaced from
   OPNsense in the first place.
 - `local_users[].hashed_password`: **lossy** — OPNsense bcrypt
-  (`$2y$` / `$2b$`) MAY be accepted by recent Aruba firmware (16.11+
-  with bcrypt support); older AOS-S firmware accepts only SHA-1
-  hex.  Cross-pair render passes the bcrypt blob verbatim and
-  operators verify on apply.  If the target Aruba doesn't accept
-  bcrypt, password reset is required.
+  (`$2y$` / `$2b$`) is not a form AOS-S takes (`plaintext`, `sha1`,
+  `sha256`; HPE Access Security Guide, AOS-S 16.x), so each such
+  account is a `review:` comment naming it, in place of the account,
+  and its password is set again on the switch.
 - `local_users[].role`: **lossy** — Aruba two-role keyword
   collapse, identical to the privilege mapping above.

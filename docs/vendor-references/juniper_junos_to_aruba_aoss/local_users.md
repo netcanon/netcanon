@@ -43,12 +43,21 @@ Two-role local-user model with quoted user-name:
 
 ```
 password manager user-name "admin" sha1 a1b2c3...
-password manager user-name "siteops" plaintext "fakeRedactedPlaintext"
 password operator user-name "monitor" sha1 0bce0bce...
-password manager user-name "ops-team" bcrypt $2y$10$...
 ```
 
-Hash forms: `plaintext "<pass>"`, `sha1 <hex>`, `bcrypt $2y$...`.
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
+
+Hash forms: `plaintext "<pass>"`, `sha1 <hex>`, `sha256 <hex>`.
 Roles: `manager` (admin) and `operator` (read-mostly) only.
 
 ## Cross-vendor mapping
@@ -81,8 +90,9 @@ Hash compatibility (the hard limit):
   keys parse-and-ignore on Junos source today (lossy by deferral).
 
 Cross-vendor migration of user accounts therefore requires
-re-setting passwords on the target device.  Both codecs pass hashes
-through verbatim; the loss surfaces in the validation report.
+re-setting passwords on the target device.  An account whose secret
+the target cannot take is a `review:` comment naming it, in place of
+the account, in either direction; no secret is quoted.
 
 Disposition: **lossy** (hash incompatibility + Junos-only class
 diversity collapses to Aruba's two-role model).

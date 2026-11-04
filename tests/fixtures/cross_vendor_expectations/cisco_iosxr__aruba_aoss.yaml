@@ -421,15 +421,22 @@ per_field_expectation:
     disposition: lossy
     reason: >
       This key carries the record-level loss for the whole `local_users` list.
-      Drifts on 8 of the 9 populated cells, and the mechanism depends on the
-      IOS-XR secret TYPE MARKER: a user whose secret is type-5 or type-7 is not
-      rendered at all — AOS-S emits a `;`-prefixed review comment naming the
-      account and instructing a manual password reset, which by design does not
-      re-parse into a user — while a user with a type-10 secret survives.  On 7
-      cells every account vanishes; on `iosxr_design_cst_pa3_xr752.cfg` 3
-      accounts become 1; on the kitchen-sink cell both survive.  Recorded lossy
-      rather than unsupported because the drop is conditional, not total: the
-      concept round-trips for some accounts.
+      No account arrives: 14 accounts on 9 cells, each holding a type-5, type-7
+      or type-10 (SHA-512 crypt) secret, which AOS-S cannot take (it takes
+      `sha1`, `sha256` and a password as typed).  Each is a `;`-prefixed review
+      comment naming the account and instructing a manual password reset, which
+      by design does not re-parse into a user.  Until #460 a type-10 account was
+      written with its digest behind AOS-S's `plaintext` keyword.  Recorded lossy
+      rather than unsupported because the drop is decided by the secret's form:
+      an account whose secret AOS-S takes arrives.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
       Do not migrate identity blind here — enumerate the source `username`
       blocks and re-create every account on the target, then confirm the review
       comments in the rendered config have all been actioned.
@@ -438,33 +445,26 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      A real per-record value change on accounts that DO survive, independent
-      of the record drop above: `root-lr` -> `manager` on every cell that
-      carries it, while `operator` -> `operator` round-trips unchanged.  The
-      AOS-S render emits `password manager` / `password operator` only, so
-      every non-operator source role lands on `manager` and any finer IOS-XR
-      task-group distinction collapses.  Note the direction: this is the TOP
-      AOS-S privilege level, so a migrated account is not silently downgraded —
-      but neither is a narrower custom task-group preserved, and an account
-      that was deliberately scoped on IOS-XR arrives with full management
-      rights.  Review the privilege of every surviving account after cutover.
+      No account arrives on the corpus (see `local_users[].name`), so there is
+      no role on the target to compare; the drift on this key is the parent
+      record-count collapse.  On an account that arrives, the role is the AOS-S
+      account of its privilege level: 15 is `manager` and any other `operator`,
+      so `root-lr` lands on the manager account and a finer IOS-XR task-group
+      distinction collapses.  An account that was deliberately scoped on IOS-XR
+      can therefore arrive with full management rights.  Review the privilege
+      of every account after cutover.
     references: [iosxr-aoss-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 9 populated cells, with the same type-marker split as
-      `local_users[].name` but a different consequence.  A type-5 / type-7
-      secret takes its whole account with it (review comment, no user).  A
-      type-10 secret is worse in a quieter way: the account IS rendered, but
-      the digest is emitted under the AOS-S `plaintext` keyword, so the
-      round-trip returns the canonical value with a `plaintext:` marker in
-      front of the original string.  The target's stored credential is the
-      digest treated as a literal password — neither the operator's password
-      nor a hash the box will verify against.
-      Either way NO migrated account arrives with a working credential.  Set
-      passwords on the target before cutover, or the accounts are unusable and
-      the ones that look configured are the dangerous ones.
+      No secret arrives on the corpus: each of the 14 accounts holds a type-5,
+      type-7 or type-10 secret, which AOS-S cannot take, and is a review comment
+      in place of the account (see `local_users[].name`).  Until #460 a type-10
+      digest was emitted under the AOS-S `plaintext` keyword, so the target held
+      the digest as a literal password -- neither the operator's password nor a
+      hash the box will verify against; it no longer is.  Set passwords on the
+      target before cutover.
       Secret values are deliberately NOT quoted here or in the reference note —
       per AGENTS.md, hashes are operator-traceable key material, and a document
       that quotes the value it describes defeats its own redaction.

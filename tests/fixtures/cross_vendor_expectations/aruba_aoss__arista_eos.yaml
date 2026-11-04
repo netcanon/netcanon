@@ -293,13 +293,17 @@ per_field_expectation:
       Arista's privilege+role on render: manager -> privilege 15
       / role network-admin; operator -> privilege 1 / role
       network-operator.  The Arista target loses no data from
-      this expansion (Aruba had only the two roles).  Hash
-      formats are NOT cross-compatible: Aruba SHA-1 (``<hex>``),
-      bcrypt (``$2y$...``), and plaintext are all Aruba-only;
-      Arista accepts MD5 (``$1$...``), SHA-512-crypt (``$6$...``),
-      and Cisco-7 (``$7$...``) but none match Aruba's forms.
-      Cross-vendor migration requires re-setting passwords on
-      the target.
+      this expansion (Aruba had only the two roles, and a switch
+      holds at most one account of each).  Hash formats are NOT
+      cross-compatible: AOS-S ``sha1`` and ``sha256`` digests are
+      AOS-S-only; Arista accepts MD5 (``$1$...``), SHA-512-crypt
+      (``$6$...``), and Cisco-7 (``$7$...``) but none match AOS-S's
+      forms, so such an account is a review comment in place of the
+      account.  Measured over the committed inputs: 1 of 4 accounts
+      arrive across the 3 cells that populate local users, an
+      operator with a password as typed; the 3 others carry an AOS-S
+      `sha1:` digest.  Cross-vendor migration requires re-setting
+      passwords on the target.
     references: [local_users]
 
   radius_servers:

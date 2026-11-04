@@ -42,6 +42,7 @@ from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
 from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
+from .accounts import account_warnings
 from .parse import _parse_port_list, parse_intent, without_banner_bodies
 from .render import _format_port_list, render_intent
 
@@ -163,6 +164,21 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/privilege-level",
+                reason=(
+                    "AOS-S has two accounts, one manager and one operator, "
+                    "and no numeric privilege: privilege 15 is the manager "
+                    "account and any other level the operator account.  Of "
+                    "several users of one role the first AOS-S can take is "
+                    "written and each other is a `review:` comment (a second "
+                    "`password <role>` line would replace the first); an "
+                    "operator account is written only beside a manager "
+                    "account, since an operator password alone gives manager "
+                    "access (HPE Access Security Guide, AOS-S 16.x)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/lags/lag/mode",
                 reason=(
@@ -573,6 +589,12 @@ class ArubaAOSSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """A warning for each local user AOS-S is not given for a reason
+        of its own: it holds one manager and one operator account
+        (:mod:`.accounts`)."""
+        return account_warnings(getattr(tree, "local_users", None) or [])
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

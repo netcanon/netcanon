@@ -35,17 +35,28 @@ AOS-S has a **fixed two-role local-user model**: `manager`
 ```
 password manager user-name "admin" sha1 a1b2c3...
 password operator user-name "noc" plaintext "S0meP4ss"
-password manager user-name "ops-team" bcrypt $2y$10$...
 ```
+
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 Hash forms accepted:
 
 - `plaintext "<pass>"`
 - `sha1 <hex>` (AOS-S-specific salt mechanics)
-- `bcrypt $2y$...` (newer firmware)
+- `sha256 <hex>`
 
 There is **no numeric privilege level** — the role is named
-(manager / operator).  No SHA-512 / SHA-256 / MD5 forms.
+(manager / operator).  No bcrypt form, and no crypt(3) form (`$1$`,
+`$5$`, `$6$`).
 
 ## Cross-vendor mapping
 
@@ -69,12 +80,12 @@ Hash compatibility (the hard limit):
   default in modern EOS, so it bites every migration.
 - Arista `secret 7 $...` (Cisco-7 reversible) — Cisco/Arista-
   only; Aruba does not accept type-7.
-- Aruba's SHA-1 / bcrypt hash types are Aruba-only on the wire.
+- AOS-S's `sha1` / `sha256` digests are AOS-S-only on the wire.
 
 Cross-vendor migration of user accounts therefore **requires
-re-setting passwords on the target device**.  Both codecs pass
-hashes through verbatim; the loss surfaces in the validation
-report.
+re-setting passwords on the target device**.  An account whose
+secret the target cannot take is a `review:` comment naming it, in
+place of the account, in either direction; no secret is quoted.
 
 The Arista kitchen-sink exercises:
 
@@ -84,10 +95,11 @@ username operator privilege 15 role network-admin secret sha512 $6$fakeSalt$fake
 username readonly privilege 1 role network-operator secret 5 $1$fakeSalt$fakeMd5Hash...
 ```
 
-— `admin` (nopassword) and `readonly` (privilege=1, MD5) emit
-without secret on Aruba (or with `plaintext ""` placeholder which
-is rejected); `operator` (privilege=15, SHA-512) requires
-re-keying.
+— none of the three is written on AOS-S: `admin` has no password (a
+review comment, with a job warning), and `operator` (SHA-512) and
+`readonly` (MD5) hold secrets AOS-S cannot take (a review comment
+each).  On the switch, set the manager first, then at most one
+operator.
 
 Disposition: **lossy** (hash-format incompatibility on every
 modern Arista hash; Cisco-style `privilege` semantic collapses to
