@@ -23,7 +23,13 @@ Two halves, kept apart on purpose:
   every port name the config uses should be a port of the proposed
   device.  A name that is not is reported, because the hardware
   lines cannot show everything: a module the config does not state,
-  or text from more than one device.
+  or text from more than one device.  The names are read as a
+  translation with that device declared reads them: where a port
+  keeps a factory name beside the one the config gives it
+  (RouterOS), the device's port is the config's name for it, and
+  where the names do not say which port is which, nothing is checked
+  and a note says why -- the reason the plan gives for pairing no
+  port by position.
 
 What a proposal carries is capped, whatever the text holds: a config
 that states more devices than a declaration may list is answered with
@@ -61,6 +67,7 @@ from ..models.port_inventory import (
     DeploymentSpec,
     DetectedDeployment,
     DetectedMember,
+    Inventory,
     MemberSpec,
 )
 from .device_models import (
@@ -143,6 +150,12 @@ def _arista_eos(raw_text: str) -> DetectedDeployment | None:
     return detect_deployment(raw_text)
 
 
+def _mikrotik_routeros(raw_text: str) -> DetectedDeployment | None:
+    from .codecs.mikrotik_routeros.deployment_detect import detect_deployment
+
+    return detect_deployment(raw_text)
+
+
 def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     """Vendor id to detector.
 
@@ -154,7 +167,7 @@ def _detectors() -> dict[str, Callable[[str], DetectedDeployment | None]]:
     """
     return {
         "aruba_aoss": _aoss, "aruba_aoscx": _aoscx, "cisco_iosxe": _cisco_iosxe,
-        "arista_eos": _arista_eos,
+        "arista_eos": _arista_eos, "mikrotik_routeros": _mikrotik_routeros,
     }
 
 
@@ -415,12 +428,24 @@ def propose_deployment(
         return proposal
     proposal.deployment = spec
     proposal.inventory = inventory.summary()
+    _check_the_ports(proposal, codec, raw_text, inventory)
+    return proposal
 
+
+def _check_the_ports(
+    proposal: DeploymentProposal, codec: CodecBase, raw_text: str,
+    inventory: Inventory,
+) -> None:
+    """Check *proposal* against the port names *raw_text* uses, as a
+    translation with *inventory* declared for the source reads them:
+    sets ``used_port_count``, ``missing_ports``, ``missing_port_count``
+    and ``consistent``, or says in a note why it could not."""
     # The check that makes a proposal worth more than a regex: the
     # ports the config actually uses should all be ports of the device
     # the config says it is.
     from .canonical.intent import CanonicalIntent
-    from .canonical.port_names import collect_hardware_port_names
+    from .canonical.port_names import collect_hardware_port_names, factory_names
+    from .port_mapping import why_the_names_do_not_say_which_port
 
     try:
         tree = codec.parse(raw_text)
@@ -430,7 +455,7 @@ def propose_deployment(
             f"The proposal was not checked against the port names the "
             f"config uses: {exc}"
         )
-        return proposal
+        return
     except Exception:
         tree = None
     if not isinstance(tree, CanonicalIntent):
@@ -438,17 +463,19 @@ def propose_deployment(
             "The config could not be parsed, so the proposal was not "
             "checked against the port names it uses."
         )
-        return proposal
-    names = set(inventory.names())
-    # The same collection a translation makes, with the same folding.
-    # It does NOT do what a translation does for a vendor whose ports
-    # keep a factory name (`ports_keep_a_factory_name`): no such vendor
-    # has a detector, and a test fails for the first that gets one
-    # until this check is taught about them.
+        return
+    # The names a translation with this device declared reads, read
+    # the same way: a port the config gives a name of its own
+    # (RouterOS: ``set [ find default-name=ether1 ] name=WAN``) is
+    # found on the device by its factory name and known by the
+    # config's.  Then the same collection, with the same folding.
+    factory = factory_names(tree)
+    own_names = [factory.known_as.get(name, name) for name in inventory.names()]
+    names = set(own_names)
     named = collect_hardware_port_names(
         tree,
         classify=getattr(codec, "classify_port_name", None),
-        always=names,
+        always=own_names,
         fold=not getattr(codec, "port_names_case_sensitive", False),
     )
     # A sub-interface (``Ethernet1.2``) is a unit of a port, not a
@@ -458,18 +485,35 @@ def propose_deployment(
     # config uses, as the plan's ``off_inventory`` lists it.
     used = {_port_of(name) for name in named}
     proposal.used_port_count = len(used)
-    missing = [name for name in named if _port_of(name) not in names]
-    proposal.missing_port_count = len(missing)
-    # A port name is the config's own text and has no length of its
-    # own: each is cut to a length a list can be read at.
-    proposal.missing_ports = [_clipped(name) for name in missing[:MAX_MISSING_PORTS]]
     if not used:
         # Nothing to check against is not a check that passed.
         proposal.notes.append(
             "The config names no port, so the proposal could not be "
             "checked against the port names it uses."
         )
-        return proposal
+        return
+    why = why_the_names_do_not_say_which_port(
+        inventory, factory.known_as, factory.looked_up_twice,
+    )
+    if why is not None:
+        # A translation with this device declared pairs no port for
+        # this reason, and no name can be said to be missing either.
+        # The reason names what the config calls its ports, which has
+        # no length of its own: the note is cut as a detector's are.
+        note = (
+            f"The proposal was not checked against the port names the "
+            f"config uses: {why}.  A translation with this device "
+            f"declared pairs no port by position either."
+        )
+        proposal.notes.append(
+            note if len(note) <= MAX_NOTE_LENGTH else note[: MAX_NOTE_LENGTH - 2] + " …"
+        )
+        return
+    missing = [name for name in named if _port_of(name) not in names]
+    proposal.missing_port_count = len(missing)
+    # A port name is the config's own text and has no length of its
+    # own: each is cut to a length a list can be read at.
+    proposal.missing_ports = [_clipped(name) for name in missing[:MAX_MISSING_PORTS]]
     proposal.consistent = not missing
     if missing:
         # This note is written here, after the detector's own were
@@ -485,4 +529,3 @@ def propose_deployment(
             f"is from more than one device; a name that is not a port of "
             f"the hardware.  Check before relying on this."
         )
-    return proposal

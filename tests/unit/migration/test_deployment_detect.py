@@ -3,7 +3,7 @@
 Two layers, tested apart:
 
 * a vendor's **detector** reads the lines that state the hardware --
-  AOS-S's, AOS-CX's, the Catalyst's (IOS-XE) and EOS's.  Each is pinned
+  AOS-S's, AOS-CX's, the Catalyst's (IOS-XE), EOS's and RouterOS's.  Each is pinned
   on short configs written for the purpose (every stanza form the
   vendor's guides and real captures show) and on the committed captures;
 * :func:`propose_deployment` resolves a detection against the model
@@ -28,12 +28,14 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import deployment_detect
+from netcanon.migration.canonical import port_names as port_names_module
 from netcanon.migration.codecs.arista_eos import deployment_detect as eos_detect
 from netcanon.migration.codecs.aruba_aoscx import deployment_detect as aoscx_detect
 from netcanon.migration.codecs.aruba_aoss import deployment_detect as aoss_deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.cisco_iosxe_cli import deployment_detect as catalyst_detect
+from netcanon.migration.codecs.mikrotik_routeros import deployment_detect as routeros_detect
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.deployment_detect import (
     MAX_EVIDENCE_LINES,
@@ -132,6 +134,7 @@ vlan 1
 _CODEC_OF = {
     "aruba_aoss": "aruba_aoss", "aruba_aoscx": "aruba_aoscx",
     "cisco_iosxe": "cisco_iosxe_cli", "arista_eos": "arista_eos",
+    "mikrotik_routeros": "mikrotik_routeros",
 }
 
 #: The words a vendor's detector reports as ``fabric``: its configs'
@@ -141,6 +144,8 @@ _STANZA_WORDS = {
     "cisco_iosxe": ("switch",),
     # An Arista fixed switch stands alone: no stanza, no member number.
     "arista_eos": (),
+    # RouterOS names no member and no slot.
+    "mikrotik_routeros": (),
 }
 
 _T = TypeVar("_T")
@@ -1035,6 +1040,47 @@ class TestTheModeAConfigIsIn:
         assert set(_STANZA_WORDS) == set(detection_vendors())
 
 
+ROUTEROS = get_codec("mikrotik_routeros")
+
+#: The head of a RouterOS export of a CRS310-8G+2S+, as the public
+#: exports print it, with the software id and serial number left out.
+_ROS_TOP = "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n# model = CRS310-8G+2S+\n"
+_ROS_ETH = "/interface ethernet\n"
+_CRS310_CAPTURE = REPO_ROOT / "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc"
+
+#: RouterOS configs whose names say which port each is: a translation
+#: with the device declared pairs their ports.  The capture names most
+#: of its ports by names of the operator's own.
+_ROS_PAIRED = {
+    "the capture": _CRS310_CAPTURE.read_text(encoding="utf-8"),
+    "a port renamed": _ROS_TOP + _ROS_ETH + "set [ find default-name=ether1 ] name=WAN\n"
+    "/ip address\nadd address=192.0.2.1/24 interface=WAN\nadd address=192.0.2.9/24 interface=ether2\n",
+    "a port the device lacks": _ROS_TOP + "/ip address\nadd address=192.0.2.1/24 interface=ether11\n",
+    "a renamed port the device lacks": _ROS_TOP + _ROS_ETH
+    + "set [ find default-name=ether11 ] name=WAN\n/ip address\nadd address=192.0.2.1/24 interface=WAN\n",
+    "two ports swapped": _ROS_TOP + _ROS_ETH
+    + "set [ find default-name=ether1 ] name=ether2\nset [ find default-name=ether2 ] name=ether1\n",
+    "a renamed port on a VLAN": _ROS_TOP + "/interface bridge\nadd name=br0 vlan-filtering=yes\n"
+    + _ROS_ETH + "set [ find default-name=sfp-sfpplus1 ] name=uplink\n"
+    "/interface bridge port\nadd bridge=br0 interface=uplink\nadd bridge=br0 interface=ether3 pvid=10\n"
+    "/interface bridge vlan\nadd bridge=br0 tagged=uplink untagged=ether3 vlan-ids=10\n",
+    "a renamed LAG member": _ROS_TOP + _ROS_ETH + "set [ find default-name=ether1 ] name=WAN\n"
+    "/interface bonding\nadd name=bond1 slaves=WAN,ether2\n",
+}
+
+#: RouterOS configs whose names do not say which port each is: a
+#: translation with the device declared pairs no port by position.
+_ROS_NOT_PAIRED = {
+    "a renamed port beside its old name": _ROS_TOP + _ROS_ETH
+    + "set [ find default-name=ether1 ] name=WAN\n/ip address\nadd address=192.0.2.1/24 interface=ether1\n",
+    "one factory name set twice": _ROS_TOP + _ROS_ETH
+    + "set [ find default-name=ether1 ] name=WAN\nset [ find default-name=ether1 ] name=LAN\n",
+    "a port given the name of another": _ROS_TOP + _ROS_ETH + "set [ find default-name=ether1 ] name=ether2\n",
+    "a port given the name of one of another type": _ROS_TOP + _ROS_ETH
+    + "set [ find default-name=ether1 ] name=sfp-sfpplus1\n",
+}
+
+
 class TestTheCheckIsTheOneATranslationMakes:
     """``missing_ports`` and a translation's ``off_inventory`` are two
     callers of one collection.  If they could differ, a proposal would
@@ -1085,12 +1131,120 @@ class TestTheCheckIsTheOneATranslationMakes:
         assert missing("flexible-module A type JL083A\nvlan 1\n   untagged 1-46,A1-A4,Trk1\n   exit\n") == []
         assert len(missing("vlan 1\n   untagged 1-48,1/1-1/12\n   exit\n")) == 12
 
-    def test_no_detector_yet_for_a_vendor_whose_ports_keep_a_factory_name(self) -> None:
-        """A translation does more for such a vendor than the check in
-        a proposal does.  The first one to get a detector fails here
-        until that check is taught the same."""
-        for vendor in detection_vendors():
-            assert not getattr(get_codec(_CODEC_OF[vendor]), "ports_keep_a_factory_name", False), vendor
+    def test_each_vendor_whose_ports_keep_a_factory_name_is_checked_here(self) -> None:
+        """A translation reads such a vendor's port names through the
+        factory names its ports keep (``ports_keep_a_factory_name``),
+        and the RouterOS tables below hold a proposal to that reading.
+        A detector for another such vendor fails here until it has
+        tables of its own."""
+        keeps = {
+            vendor for vendor in detection_vendors()
+            if getattr(get_codec(_CODEC_OF[vendor]), "ports_keep_a_factory_name", False)
+        }
+        assert keeps == {"mikrotik_routeros"}
+
+    @pytest.mark.parametrize("title", sorted(_ROS_PAIRED))
+    def test_a_port_that_keeps_a_factory_name(self, title: str) -> None:
+        """RouterOS finds a port by its factory name and the rest of
+        the config calls it by the name it was given
+        (``set [ find default-name=ether1 ] name=WAN``): the device's
+        port is the config's name for it, in a proposal as in a
+        translation with the device declared."""
+        body = _ROS_PAIRED[title]
+        proposal = propose_deployment(ROUTEROS, body, REGISTRY)
+        declared = compile_deployment(
+            Deployment(vendor="mikrotik_routeros", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        plan = run_plan_with_models(ROUTEROS, ROUTEROS, body, declared, declared).port_mapping_plan
+        assert plan.applied
+        assert proposal.missing_port_count == len(plan.off_inventory)
+        assert sorted(proposal.missing_ports) == sorted(plan.off_inventory)
+        assert proposal.consistent is (not plan.off_inventory)
+
+    def test_what_those_routeros_configs_are_missing(self) -> None:
+        """So that the comparison above is not between two empty lists.
+        A port the device lacks is listed by the name the config gives
+        it, as the plan lists it."""
+        missing = {
+            title: propose_deployment(ROUTEROS, body, REGISTRY).missing_ports
+            for title, body in _ROS_PAIRED.items()
+        }
+        assert missing == {
+            "the capture": [],
+            "a port renamed": [],
+            "a port the device lacks": ["ether11"],
+            "a renamed port the device lacks": ["WAN"],
+            "two ports swapped": [],
+            "a renamed port on a VLAN": [],
+            "a renamed LAG member": [],
+        }
+
+    def test_a_check_that_reads_no_factory_name_fails_those(self, monkeypatch) -> None:
+        """The tables are not ones that a check reading each name as
+        the device's own passes: with the factory names taken out, a
+        renamed port is "missing" and names that do not say which port
+        is which are checked all the same."""
+        def answers() -> dict[str, tuple[bool | None, list[str]]]:
+            bodies = {**_ROS_PAIRED, **_ROS_NOT_PAIRED}
+            return {
+                title: (proposal.consistent, proposal.missing_ports)
+                for title, proposal in (
+                    (title, propose_deployment(ROUTEROS, body, REGISTRY))
+                    for title, body in bodies.items()
+                )
+            }
+
+        right = answers()
+        monkeypatch.setattr(
+            port_names_module, "factory_names",
+            lambda _tree: port_names_module.FactoryNames({}, {}, []),
+        )
+        wrong = answers()
+        assert {title for title in right if right[title] != wrong[title]} == {
+            "the capture", "a port renamed", "a renamed port on a VLAN", "a renamed LAG member",
+            *_ROS_NOT_PAIRED,
+        }
+
+    @pytest.mark.parametrize("title", sorted(_ROS_NOT_PAIRED))
+    def test_names_that_do_not_say_which_port(self, title: str) -> None:
+        """Where a translation with the device declared pairs no port
+        by position, a proposal checks no port name, and says why in
+        the plan's own words."""
+        body = _ROS_NOT_PAIRED[title]
+        proposal = propose_deployment(ROUTEROS, body, REGISTRY)
+        declared = compile_deployment(
+            Deployment(vendor="mikrotik_routeros", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        plan = run_plan_with_models(ROUTEROS, ROUTEROS, body, declared, declared).port_mapping_plan
+        assert not plan.applied
+        (warning,) = [w for w in plan.warnings if w.startswith("port mapping: ")]
+        reason = warning.removeprefix("port mapping: ").removesuffix(
+            ", so nothing was paired by position; port names were translated by name shape instead"
+        )
+        assert reason != warning.removeprefix("port mapping: ")
+        assert proposal.deployment is not None and proposal.used_port_count
+        assert proposal.consistent is None
+        assert proposal.missing_ports == [] and proposal.missing_port_count == 0
+        (note,) = [n for n in proposal.notes if n.startswith("The proposal was not checked")]
+        assert note == (
+            f"The proposal was not checked against the port names the config uses: "
+            f"{reason}.  A translation with this device declared pairs no port by "
+            f"position either."
+        )
+
+    def test_that_note_is_cut_to_size(self) -> None:
+        """The reason names the factory names the config looks a port
+        up by, which are the config's own text."""
+        long = "x" * 5_000
+        body = (
+            _ROS_TOP + _ROS_ETH
+            + f"set [ find default-name={long} ] name=a\nset [ find default-name={long} ] name=b\n"
+            + "/ip address\nadd address=192.0.2.1/24 interface=ether2\n"
+        )
+        proposal = propose_deployment(ROUTEROS, body, REGISTRY)
+        assert proposal.consistent is None
+        (note,) = [n for n in proposal.notes if n.startswith("The proposal was not checked")]
+        assert len(note) == MAX_NOTE_LENGTH and note.endswith(" \u2026")
 
 
 class TestEveryDetector:
@@ -2983,6 +3137,271 @@ class TestTheAristaDetectorOnTextMadeToBeSlow:
     def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
         text = self.PREFIXES[prefix] + self.TAILS[tail]
         detected = _within(5.0, lambda: eos_detect.detect_deployment(text))
+        if detected is not None:
+            assert sum(map(len, detected.notes)) < 4_000
+            assert max(map(len, detected.evidence), default=0) < 100
+
+
+# ---------------------------------------------------------------------------
+# The RouterOS detector
+# ---------------------------------------------------------------------------
+
+
+def _ros(model: str, *lines: str) -> str:
+    """The head of a RouterOS export as the public exports print it,
+    the model on its line, then *lines*.  The software id and serial
+    number are made up."""
+    return (
+        "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n"
+        "# software id = FAKE-0000\n#\n"
+        f"# model = {model}\n"
+        "# serial number = FAKESERIAL00\n"
+        + "".join(f"{line}\n" for line in lines)
+    )
+
+
+_ROS_READ = "# model = CRS310-8G+2S+\n"
+
+
+class TestRouterOSDetector:
+    def test_the_line_as_an_export_prints_it(self) -> None:
+        detected = routeros_detect.detect_deployment(_ros("CRS310-8G+2S+", "/ip address"))
+        assert detected.fabric == ""
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        assert detected.evidence == ["# model = CRS310-8G+2S+"]
+        assert len(detected.notes) == 1
+
+    def test_the_notes_say_what_the_line_does_not_prove(self) -> None:
+        (note,) = routeros_detect.detect_deployment(_ros("CRS310-8G+2S+")).notes
+        assert note.startswith("The `# model =` line is a comment")
+        assert "a file can be edited" in note
+        assert "no MikroTik text read describes the line" in note
+
+    def test_the_lines_beside_it_are_not_handed_back(self) -> None:
+        """The serial number and the software id identify one device
+        and say nothing about what it is."""
+        text = _ros("CRS310-8G+2S+", "/ip address", "add address=192.0.2.1/24 interface=ether1")
+        dumped = routeros_detect.detect_deployment(text).model_dump_json()
+        assert "FAKE" not in dumped and "serial" not in dumped and "software" not in dumped
+        proposal = propose_deployment(ROUTEROS, text, REGISTRY)
+        assert "FAKE" not in proposal.model_dump_json()
+
+    def test_a_model_comes_back_in_capitals(self) -> None:
+        """As a public RB952Ui-5ac2nD export prints its model."""
+        detected = routeros_detect.detect_deployment(_ros("RB952Ui-5ac2nD"))
+        assert _members(detected) == [(None, "RB952UI-5AC2ND", {})]
+        assert detected.evidence == ["# model = RB952Ui-5ac2nD"]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "/ip address\nadd address=192.0.2.1/24 interface=ether1\n",
+            "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n# software id = FAKE-0000\n",
+            "# Based on Model: CRS310-8G+2S+\n",
+            "# models = CRS310-8G+2S+\n",
+            "# modelled on a CRS310-8G+2S+\n",
+            "/system identity\nset name=\"# model = CRS310-8G+2S+\"\n",
+        ],
+        ids=["empty", "no head", "a head with no model", "a script's comment", "another word",
+             "a longer word", "in a value"],
+    )
+    def test_text_that_states_no_model(self, text: str) -> None:
+        assert routeros_detect.detect_deployment(text) is None
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "   # model = CRS310-8G+2S+", "#model=CRS310-8G+2S+", "# model = CRS310-8G+2S+   ",
+            "\t#\tmodel\t=\tCRS310-8G+2S+",
+        ],
+        ids=["indented", "no spaces", "white space after", "tabs"],
+    )
+    def test_a_comment_as_the_parser_reads_one(self, line: str) -> None:
+        """The parser takes any line whose first mark is ``#`` for a
+        comment."""
+        detected = routeros_detect.detect_deployment(line + "\n")
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        assert detected.evidence == ["# model = CRS310-8G+2S+"]
+
+    def test_windows_line_endings(self) -> None:
+        detected = routeros_detect.detect_deployment(_ros("CRS310-8G+2S+").replace("\n", "\r\n"))
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        assert detected.evidence == ["# model = CRS310-8G+2S+"]
+
+    def test_a_continued_line_is_read_as_the_parser_joins_it(self) -> None:
+        """An export breaks a long line at any column with a backslash
+        and goes on in the next, indented; the parser joins the two."""
+        detected = routeros_detect.detect_deployment("# model = CRS310-\\\n    8G+2S+\n")
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        joined = routeros_detect.detect_deployment(_ROS_READ.replace("\n", "\\\n") + "/ip address\n")
+        assert joined.members == []
+        assert joined.notes[1].startswith("1 comment line(s) begin `# model` and could not be read")
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "# model",
+            "# model =",
+            "# model =   ",
+            "# model: CRS310-8G+2S+",
+            "# model = -CRS310-8G+2S+",
+            "# model = CRS310=8G+2S+",
+            "# model = CRS310-8G+2S+ (rev 2)",
+            "# model = " + "C" * 65,
+        ],
+        ids=["the word alone", "nothing after", "white space after", "a colon", "a leading hyphen",
+             "an equals sign", "brackets", "a model too long"],
+    )
+    def test_a_line_no_export_prints_is_counted_and_left_out(self, line: str) -> None:
+        detected = routeros_detect.detect_deployment(f"{line}\n{_ROS_READ}")
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        assert detected.notes[1].startswith(
+            "1 comment line(s) begin `# model` and could not be read as `# model =` and a model"
+        )
+
+    def test_the_bound_is_read_up_to(self) -> None:
+        detected = routeros_detect.detect_deployment("# model = " + "C" * 64 + "\n")
+        assert _members(detected) == [(None, "C" * 64, {})] and len(detected.notes) == 1
+
+    def test_lines_none_of_which_can_be_read(self) -> None:
+        detected = routeros_detect.detect_deployment("# model\n# model: x\n")
+        assert detected.members == [] and detected.evidence == []
+        assert detected.notes[0].startswith("The config has comment lines that begin `# model`, but none")
+        assert detected.notes[1].startswith("2 comment line(s) begin `# model`")
+
+    def test_two_models_are_two_devices(self) -> None:
+        detected = routeros_detect.detect_deployment(_ros("CRS310-8G+2S+") + _ros("RB952Ui-5ac2nD"))
+        assert detected.members == [] and detected.evidence == []
+        assert detected.notes == [
+            "The config's `# model =` lines name 2 models (CRS310-8G+2S+, RB952UI-5AC2ND): the "
+            "text is from more than one device, and no device is proposed.",
+        ]
+
+    def test_one_model_twice_may_be_two_devices(self) -> None:
+        detected = routeros_detect.detect_deployment(_ros("CRS310-8G+2S+") + _ros("crs310-8g+2s+"))
+        assert _members(detected) == [(None, "CRS310-8G+2S+", {})]
+        assert detected.evidence == ["# model = CRS310-8G+2S+"]
+        assert detected.notes[1] == (
+            "The config has 2 `# model =` lines.  Every export read prints it once, so the text "
+            "may be from more than one device of that model."
+        )
+
+    def test_a_few_models_are_named_and_the_rest_counted(self) -> None:
+        text = "".join(f"# model = M{n:04d}\n" for n in range(12))
+        (note,) = routeros_detect.detect_deployment(text).notes
+        assert "name 12 models (M0000, M0001" in note and "M0007 and 4 more)" in note
+
+    @pytest.mark.parametrize(
+        ("name", "part"),
+        [
+            ("ntc_ip_address_export.rsc", "RB750UPR2"),
+            ("routeros_diff_verbose_export.rsc", "RB952UI-5AC2ND"),
+            ("taqavi_initial_provisioning.rsc", None),
+            ("user_contrib_crs310_ros7.rsc", "CRS310-8G+2S+"),
+        ],
+    )
+    def test_each_committed_export(self, name: str, part: str | None) -> None:
+        """Two RouterBOARD routers no family describes, a provisioning
+        script that is not an export (its comment names a model, but
+        not on a line an export prints), and the CRS310 that a capture
+        claim cites (which the test of every claim reads)."""
+        raw = (REPO_ROOT / "tests/fixtures/real/mikrotik" / name).read_text(encoding="utf-8")
+        detected = routeros_detect.detect_deployment(raw)
+        if part is None:
+            assert detected is None
+            return
+        assert _members(detected) == [(None, part, {})] and len(detected.notes) == 1
+        if part != "CRS310-8G+2S+":
+            proposal = propose_deployment(ROUTEROS, raw, REGISTRY)
+            assert proposal.deployment is None and proposal.unknown_parts == [part]
+            assert f"No model family describes {part}" in proposal.notes[0]
+
+    def test_those_are_the_committed_exports(self) -> None:
+        """A capture committed later is read above, or fails here."""
+        assert sorted(p.name for p in (REPO_ROOT / "tests/fixtures/real/mikrotik").glob("*.rsc")) == [
+            "ntc_ip_address_export.rsc", "routeros_diff_verbose_export.rsc",
+            "taqavi_initial_provisioning.rsc", "user_contrib_crs310_ros7.rsc",
+        ]
+
+
+class TestRouterOSProposal:
+    def test_the_capture(self) -> None:
+        """A CRS310 whose ports the operator named: every one is found
+        by its factory name, as a translation finds it."""
+        proposal = propose_deployment(ROUTEROS, _ROS_PAIRED["the capture"], REGISTRY)
+        assert proposal.family == "mikrotik_routeros/CRS3xx" and proposal.mode == "standalone"
+        assert proposal.fabric == ""
+        assert proposal.deployment.model_dump() == {
+            "mode": "standalone",
+            "members": [{"model": "CRS310-8G+2S+", "id": None, "modules": {}}],
+        }
+        assert proposal.consistent is True and proposal.missing_ports == []
+        assert proposal.used_port_count == 10 == proposal.inventory.port_count
+        assert proposal.evidence == ["# model = CRS310-8G+2S+"]
+
+    def test_a_router_of_another_family(self) -> None:
+        proposal = propose_deployment(
+            ROUTEROS, _ros("CCR2004-1G-12S+2XS", "/ip address", "add address=192.0.2.1/24 interface=sfp28-1"),
+            REGISTRY,
+        )
+        assert proposal.family == "mikrotik_routeros/CCR2000"
+        assert proposal.consistent is True
+
+    def test_the_proposal_is_accepted_as_a_source_deployment(self) -> None:
+        proposal = propose_deployment(ROUTEROS, _ROS_PAIRED["a port renamed"], REGISTRY)
+        inventory = compile_deployment(
+            Deployment(vendor="mikrotik_routeros", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        assert inventory.family == "mikrotik_routeros/CRS3xx"
+        assert inventory.names() == [*(f"ether{n}" for n in range(1, 9)), "sfp-sfpplus1", "sfp-sfpplus2"]
+
+    @pytest.mark.parametrize("model", ["RB750UPr2", "L009UiGS-2HaxD", "CRS312-4C+8XG", "CHR"])
+    def test_a_model_no_family_describes(self, model: str) -> None:
+        """Two routers, a CRS3xx whose combo ports are not modelled,
+        and a word no export read prints."""
+        proposal = propose_deployment(ROUTEROS, _ros(model, "/ip address"), REGISTRY)
+        assert proposal.deployment is None
+        assert proposal.unknown_parts == [model.upper()]
+        assert f"No model family describes {model.upper()}" in proposal.notes[0]
+
+    def test_text_from_two_devices_proposes_nothing(self) -> None:
+        proposal = propose_deployment(ROUTEROS, _ros("CRS310-8G+2S+") + _ros("CRS305-1G-4S+"), REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        assert proposal.notes[0].startswith("The config's `# model =` lines name 2 models")
+
+
+class TestTheRouterOSDetectorOnTextMadeToBeSlow:
+    """Each tail is built to make the pattern go back over a run it has
+    already crossed, or to make a note grow with the text.  The detector
+    is called by itself: the parser's cost is not what this pins."""
+
+    PREFIXES = {
+        "nothing stated": "",
+        "a device": _ROS_READ,
+    }
+    TAILS = {
+        "the opener and spaces": "# model" + " " * 300_000 + "x",
+        "a comment mark and spaces": "#" + " " * 300_000 + "x",
+        "spaces and a comment mark": " " * 300_000 + "#",
+        "a long model": "# model = " + "C" * 300_000,
+        "a model and spaces": "# model = CRS310" + " " * 300_000 + "=",
+        "a model of spaces": "# model = C" + " " * 300_000 + "x",
+        "lines that trail off": ("# model = C" + " " * 3000 + "=\n") * 100,
+        "lines no pattern reads": "# model: x\n" * 50_000,
+        "many models": "".join(f"# model = M{n}\n" for n in range(50_000)),
+        "one model many times": _ROS_READ * 50_000,
+        "continued lines": "# model = C\\\n" * 100_000,
+        "blank lines": "\n" * 300_000,
+        "lines of spaces": "   \n" * 100_000,
+        "the opener again and again": "# model " * 60_000,
+    }
+
+    @pytest.mark.parametrize("prefix", sorted(PREFIXES))
+    @pytest.mark.parametrize("tail", sorted(TAILS))
+    def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
+        text = self.PREFIXES[prefix] + self.TAILS[tail]
+        detected = _within(5.0, lambda: routeros_detect.detect_deployment(text))
         if detected is not None:
             assert sum(map(len, detected.notes)) < 4_000
             assert max(map(len, detected.evidence), default=0) < 100

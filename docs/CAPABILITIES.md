@@ -1752,15 +1752,13 @@ not take, a member number outside the mode's range, more members than
 the mode allows; and when the vendor has no detector yet.  The first
 of `notes` says which.  None of these is an error: the answer is a 200
 either way.
-Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE)
-and Arista EOS configs today; no other vendor has a detector yet.  An
-NX-OS running-config names no model, so a Nexus is declared by hand;
-nor does a Junos configuration, so an EX or QFX switch is declared by
-hand too, and nor does an OS10 one, so a Dell PowerSwitch is as well.
-Nor does an IOS XR running-config, so a Cisco NCS 540, NCS 5500 or
-8200 router is declared by hand.  A MikroTik export prints its model
-on its `# model =` line, but no detector reads it yet, so a MikroTik
-is declared by hand as well.
+Detection reads Aruba AOS-S, Aruba AOS-CX, Cisco Catalyst (IOS-XE),
+Arista EOS and MikroTik RouterOS configs today; no other vendor has a
+detector yet.  An NX-OS running-config names no model, so a Nexus is
+declared by hand; nor does a Junos configuration, so an EX or QFX
+switch is declared by hand too, and nor does an OS10 one, so a Dell
+PowerSwitch is as well.  Nor does an IOS XR running-config, so a Cisco
+NCS 540, NCS 5500 or 8200 router is declared by hand.
 
 **An AOS-CX config states each member of its VSF stack.**  A CX 6200
 or 6300 prints a `vsf member N` block for each member, with the
@@ -1793,6 +1791,27 @@ A virtual EOS (`vEOS`, `cEOS`) and a model no family describes are
 answered with a note.  On a 7050X whose QSFP+ ports still run as four
 10G interfaces, the default, a proposal is `consistent: false` and
 lists the names of lanes 2 to 4.
+
+**A RouterOS export names the device that printed it.**  A MikroTik
+`/export` opens with comment lines, one of which names the device's
+model, `# model = CRS310-8G+2S+` -- the product code without its `-RM`
+or `-IN` -- and detection reads that line: one device, with no member
+number, in the family's mode `standalone`.  What it cannot show, which
+its notes say: the line is a comment, which nothing in the
+configuration depends on and a file can be edited, and no MikroTik
+text read describes it.  The software id and the serial number on the
+lines beside it are never read.  Lines that name two models are text
+from more than one device, and nothing is proposed; a model printed
+twice is proposed, with a note that the text may be from two devices.
+A model no family describes -- the RB750 and RB952 routers of the
+committed exports among them -- is answered with a note.  A port the
+config gives a name of its own
+(`set [ find default-name=ether1 ] name=WAN`) is checked by its
+factory name, as a translation pairs it.  Where the names do not say
+which port is which -- a port renamed beside a line that still uses
+its old name, or given the name of another port -- the proposal is
+`consistent: null`, and its note gives the reason a translation with
+that device declared gives for pairing no port by position.
 
 **A Catalyst config states each switch of its stack.**  A `show
 running-config` from a Catalyst has a `switch N provision <type>` line

@@ -417,14 +417,18 @@ its configs' word for a stack (the detection's `fabric`) in
 by themselves.  The
 detector must propose, for every capture a capture claim of that vendor
 cites, the deployment the claim states; it is handed text made to be
-slow; and a vendor whose ports keep a factory name is refused until the
-check in `propose_deployment` does for it what a translation does.
+slow; and a vendor whose ports keep a factory name
+(`ports_keep_a_factory_name`) fails until it has tables of its own in
+`TestTheCheckIsTheOneATranslationMakes`, as RouterOS has: configs
+whose renamed ports a translation pairs, and configs whose names it
+pairs no port for, each held to the plan a translation makes.
 Those slow texts state no device, so they stop at the detector's first
 patterns: write the vendor's own (as `TestTheAossDetectorOnTextMadeToBeSlow`,
 `TestTheCatalystDetectorOnTextMadeToBeSlow`,
-`TestTheAoscxDetectorOnTextMadeToBeSlow` and
-`TestTheAristaDetectorOnTextMadeToBeSlow` do) with a device stated and
-a tail made for each pattern.
+`TestTheAoscxDetectorOnTextMadeToBeSlow`,
+`TestTheAristaDetectorOnTextMadeToBeSlow` and
+`TestTheRouterOSDetectorOnTextMadeToBeSlow` do) with a device stated
+and a tail made for each pattern.
 
 ### A new naming grammar
 
