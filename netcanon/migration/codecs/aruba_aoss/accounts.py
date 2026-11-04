@@ -32,6 +32,22 @@ want of a manager, an account with no password (:func:`account_warnings`).
 A secret AOS-S cannot take is a comment on every target, and is said
 in the output only, as on the others.
 
+A live line in a hashed form (``sha1``, ``sha256``) needs settings this
+output does not write.  A 5412R refused ``password manager user-name
+... sha256 ...`` with "Invalid input: sha256" until
+``include-credentials`` had been run, and Aruba Central's template help
+says a template that sets a password must carry ``include-credentials``;
+for ``sha1`` the need is inferred.  ``sha256`` needs ``password
+non-plaintext-sha256`` as well, which the 16.11 guides document and a
+2530 on 16.10 refuses, and in that mode the switch does not take a
+password in SHA-1 form (HPE Access Security Guide, AOS-S 16.11).
+``include-credentials`` keeps the switch's credentials in its config
+file, and a startup config that holds it replaces the credentials the
+switch kept apart, so neither setting is written: one ``review:`` line
+above the accounts names what the switch needs
+(:func:`setting_review`), and the job says it once
+(:func:`setting_warning`).
+
 No line here holds a secret outside a live ``password`` line: a comment
 names the account and never its value.
 """
@@ -63,6 +79,9 @@ _AOS_KNOWN_ALGORITHMS = {"sha1", "sha256", "plaintext"}
 
 #: The two roles, in the order the switch prints them.
 ROLES = ("manager", "operator")
+
+#: The hashed forms AOS-S takes, in the order a review line names them.
+HASHED_FORMS = ("sha1", "sha256")
 
 
 def _split_aos_hash(hashed: str) -> tuple[str, str]:
@@ -118,6 +137,8 @@ class Account:
         live: Whether :attr:`line` is a live line.
         warning: The job's warning for a user left out for a reason of
             AOS-S's own (see the module docstring); empty otherwise.
+        form: The form of a live line (``plaintext``, ``sha1``,
+            ``sha256``); empty for a comment.
     """
 
     name: str
@@ -125,6 +146,7 @@ class Account:
     line: str
     live: bool
     warning: str = ""
+    form: str = ""
 
 
 def role_of(user: CanonicalLocalUser) -> str:
@@ -214,6 +236,7 @@ def aoss_accounts(users: Sequence[CanonicalLocalUser]) -> list[Account]:
                     name, role,
                     f'password {role} user-name "{name}" {alg} "{value}"',
                     live=True,
+                    form=alg,
                 ))
                 continue
             warning = ""
@@ -259,14 +282,93 @@ def aoss_accounts(users: Sequence[CanonicalLocalUser]) -> list[Account]:
     return accounts
 
 
+def _hashed(accounts: Sequence[Account]) -> tuple[list[Account], list[str]]:
+    """The live accounts of *accounts* whose line is hashed, and the
+    hashed forms among them in :data:`HASHED_FORMS` order."""
+    hashed = [a for a in accounts if a.live and a.form in HASHED_FORMS]
+    forms = [f for f in HASHED_FORMS if any(a.form == f for a in hashed)]
+    return hashed, forms
+
+
+def _needs(forms: Sequence[str]) -> str:
+    """What a switch needs for lines of *forms*, after "needs"."""
+    said = (
+        "include-credentials on the switch, which keeps its credentials "
+        "in its config file"
+    )
+    if "sha256" in forms:
+        said += (
+            ", and a sha256 one password non-plaintext-sha256 as well, "
+            "which not every switch has"
+        )
+        if "sha1" in forms:
+            said += " and in which the switch does not take sha1"
+    return said
+
+
+def _setting_advice(hashed: Sequence[Account], forms: Sequence[str]) -> str:
+    """What to do on the switch for lines of *forms*."""
+    if "sha1" in forms and "sha256" in forms:
+        sha1 = next(a.name for a in hashed if a.form == "sha1")
+        return (
+            "set both on the switch before the account lines, and the "
+            f'password of "{sha1}" there by hand'
+        )
+    if "sha256" in forms:
+        return (
+            "set both on the switch before the account lines, or set "
+            "the passwords there"
+        )
+    return (
+        "set it on the switch before the account lines, or set the "
+        "passwords there"
+    )
+
+
+def setting_review(accounts: Sequence[Account]) -> str:
+    """The ``review:`` line written above *accounts* when a live line
+    of them is hashed; ``""`` when none is (see the module docstring).
+    It names the forms and the settings, and holds no secret."""
+    hashed, forms = _hashed(accounts)
+    if not hashed:
+        return ""
+    written = "neither is written" if "sha256" in forms else "not written"
+    return (
+        f"; review: a hashed password line ({', '.join(forms)}) needs "
+        f"{_needs(forms)}; {written} -- {_setting_advice(hashed, forms)}"
+    )
+
+
+def setting_warning(accounts: Sequence[Account]) -> str:
+    """The job's warning beside :func:`setting_review`; ``""`` when no
+    live line of *accounts* is hashed."""
+    hashed, forms = _hashed(accounts)
+    if not hashed:
+        return ""
+    names = " and ".join(f'"{a.name}"' for a in hashed)
+    what = "a hashed password" if len(hashed) == 1 else "hashed passwords"
+    written = "neither is written" if "sha256" in forms else "it is not written"
+    advice = _setting_advice(hashed, forms)
+    return (
+        f"The AOS-S output writes {names} with {what} "
+        f"({', '.join(forms)}), and a hashed password line needs "
+        f"{_needs(forms)}; {written}.  {advice[0].upper()}{advice[1:]}."
+    )
+
+
 def account_lines(users: Sequence[CanonicalLocalUser]) -> list[str]:
-    """The lines the AOS-S output has for *users*."""
-    return [account.line for account in aoss_accounts(users)]
+    """The lines the AOS-S output has for *users*: the review line of
+    :func:`setting_review` (if any), then the accounts."""
+    accounts = aoss_accounts(users)
+    review = setting_review(accounts)
+    return [review] * bool(review) + [account.line for account in accounts]
 
 
 def account_warnings(users: Sequence[CanonicalLocalUser]) -> list[str]:
-    """The job's warnings for *users* on an AOS-S target."""
-    return [
-        account.warning for account in aoss_accounts(users)
-        if account.warning
+    """The job's warnings for *users* on an AOS-S target: the one of
+    :func:`setting_warning` (if any), then one a user left out."""
+    accounts = aoss_accounts(users)
+    said = setting_warning(accounts)
+    return [said] * bool(said) + [
+        account.warning for account in accounts if account.warning
     ]
