@@ -488,7 +488,10 @@ per_field_expectation:
       plaintext` is read as typed and arrives, as `password manager
       user-name "<name>" plaintext "<password>"`, read back tagged
       `plaintext:` -- the same password under another canonical string;
-      no committed capture has one.  Before cutover, list the source
+      no committed capture has one.  At most one account of each role
+      arrives: AOS-S holds one manager and one operator account, and an
+      operator is written only beside a manager
+      (`docs/vendors/aruba_aoss.md`).  Before cutover, list the source
       accounts, search the render for `review:` comments, and re-create
       each refused account on the target with a fresh password.
     references: [aoscx-aoss-surface]

@@ -421,17 +421,28 @@ per_field_expectation:
   # -- Records the target cannot represent at all --
 
   local_users:
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      The whole record vanishes on all 9 cells that populate it — "all N
-      local_users dropped".  The aruba_aoss matrix declares no `/local-users`
-      path at all, so the render emits nothing and the account name, its role
-      and its NX-OS type-5 hash (shape `5 $5$<salt>$<digest>`, which AOS-S
-      could not consume anyway) go together.  This is the pair's most
-      operator-significant loss: deploy the rendered config as-is and the
-      target comes up with no local credentials from this source.  Create the
-      manager / operator accounts and set their passwords on the target BEFORE
-      cutover, and confirm the console / out-of-band path still works.
+      No account arrives on any of the 9 cells that populate local users --
+      10 accounts.  Each holds an NX-OS type-5 hash (shape
+      `5 $5$<salt>$<digest>`), which AOS-S cannot take (it takes `sha1`,
+      `sha256` and a password as typed), so each is a `;` review comment
+      naming the account, in place of the account.  Recorded `lossy`
+      rather than `unsupported`: AOS-S models local users, and an account
+      whose secret it takes arrives.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      This is the pair's most operator-significant loss: deploy the rendered
+      config as-is and the target comes up with no local credentials from
+      this source.  Create the manager / operator accounts and set their
+      passwords on the target BEFORE cutover, and confirm the console /
+      out-of-band path still works.
     references: [nxos-aoss-surface]
 
   routing_instances:

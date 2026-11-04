@@ -266,8 +266,8 @@ class TestPopulatesEveryExpectedCanonicalField:
             assert r.acct_port == 1813
 
     def test_local_users_count_and_roles(self, tree) -> None:
-        # ≥3 distinct accounts spanning manager + operator roles.
-        assert len(tree.local_users) >= 3
+        # One account of each role: a switch holds no more.
+        assert len(tree.local_users) == 2
         roles = {u.role for u in tree.local_users}
         assert "manager" in roles
         assert "operator" in roles
@@ -285,15 +285,15 @@ class TestPopulatesEveryExpectedCanonicalField:
         siteops = next(
             u for u in tree.local_users if u.name == "siteops"
         )
-        assert siteops.role == "manager"
+        assert siteops.role == "operator"
         assert siteops.hashed_password.startswith("plaintext:")
 
     def test_local_users_operator_role_priv1(self, tree) -> None:
-        monitor = next(
-            u for u in tree.local_users if u.name == "monitor"
+        siteops = next(
+            u for u in tree.local_users if u.name == "siteops"
         )
-        assert monitor.role == "operator"
-        assert monitor.privilege_level == 1
+        assert siteops.role == "operator"
+        assert siteops.privilege_level == 1
 
     def test_lags(self, tree) -> None:
         # ≥2 LAGs declared via ``trunk`` lines.

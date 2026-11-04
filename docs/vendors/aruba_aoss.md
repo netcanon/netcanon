@@ -53,8 +53,9 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - RADIUS — `radius-server host <ip> key <secret>`
 - DHCP server pools (`dhcp-server pool` grammar with default-router
   + dns-server + network + range)
-- Local users — `password manager sha1` hash (and other AOS-S hash
-  forms) form-preserving migration
+- Local users — one manager and one operator account, in the AOS-S
+  forms (`sha1`, `sha256`, `plaintext`); see
+  [Local users](#local-users-one-manager-and-one-operator)
 
 Parse-tolerant (parsed but not currently rendered cross-vendor —
 intra-AOS-S round-trip preserves them; cross-vendor render path is
@@ -128,6 +129,58 @@ multiple `CanonicalVRRPGroup` records on the SVI.
 - [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
   — anycast-gateway design (no AOS-S participation; declared
   unsupported across all three anycast canonical paths).
+
+## Local users: one manager and one operator
+
+An AOS-S switch holds one manager account and one operator account.
+`password manager user-name "<name>" <form> "<value>"` sets the
+manager account and names it; a second `password manager` line is
+taken without an error and re-points the same account, so the switch
+keeps the last one.  And an operator password with no manager password
+gives manager access.  Both are in HPE's Access Security Guide for
+AOS-S 16.x ("Setting passwords and usernames").
+
+As a target, Netcanon therefore writes at most two live lines:
+
+- the **manager** account: the first user of privilege 15, in the
+  source's order, whose secret AOS-S can take (`plaintext`, `sha1`,
+  `sha256`) and is not empty;
+- the **operator** account: the first such user of any other privilege,
+  and only when a manager account is written;
+- every other user as a `; password <role> user-name "<name>" --
+  review: ...` comment that says why and what to do on the switch.
+  Beside an account of the same role, the comment says the role is
+  taken and never advises setting the password, which would replace
+  the account written above it.  No comment holds a secret.
+
+The job carries a warning for each user left out for a reason of
+AOS-S's own: a second account of a role, an operator with no manager
+beside it, an account with no password.  A secret AOS-S cannot take is
+said in the output, as on every other target.  The capability matrix
+declares `/local-users/user/privilege-level` lossy, so a job with
+local users onto AOS-S has a `warn` validation.  To give a role to
+another user, drop the first in the local-user rename map
+(`local_user_rename_map`; the **Local users** pane of the rename
+window).
+
+Not written: the further named accounts an AOS-S switch can hold,
+`aaa authentication local-user`.  They are set from the CLI only,
+need a group that exists and `aaa authorization commands local`, and
+are not used while RADIUS or TACACS+ is the login method, so Netcanon
+does not make them up.
+
+Known limitations, still open:
+
+- A hashed form is written without `include-credentials` on the
+  switch.  A switch has been seen to refuse a `sha256` line without
+  it (for `sha1` this is inferred), and `sha256` also needs `password
+  non-plaintext-sha256`.  Both change how the switch stores every
+  credential, so they are left to the operator.
+- As a source, the parser reads the `password <role> user-name ...
+  <form> "<value>"` line only.  It does not read the bare `password
+  manager` / `password operator` marker a switch prints without
+  `include-credentials`, nor an `aaa authentication local-user`
+  account.
 
 ## Lossy paths
 
@@ -586,8 +639,10 @@ have.
   that have a stanza.  An AOS-S OUTPUT is held to the same count of
   the ports its ranges name, where it is written.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
-- **`include-credentials` mode** affects how hashes appear in
-  running-config — Netcanon parses + preserves both forms.
+- **`include-credentials` mode** affects how credentials appear in
+  running-config.  Without it a switch prints a bare `password
+  manager` marker, which the parser does not read; see
+  [Local users](#local-users-one-manager-and-one-operator).
 - **Banner format + positional port lists** — the codec correctly
   parses the AOS-S banner / "Configuration Editor" prelude and the
   position-sensitive port-list forms (`untagged 1,3,5-10` etc.).

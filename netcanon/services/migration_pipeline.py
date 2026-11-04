@@ -390,6 +390,10 @@ def run_plan(
         # Stage 5 — render
         job.status = MigrationJobStatus.rendering
         logger.debug("run_plan %s: stage=render", job.id[:8])
+        # What the target leaves out for a reason of its own, said as
+        # the job's warnings (an AOS-S switch holds one manager and one
+        # operator account): the renderer itself returns text only.
+        job.warnings.extend(target.render_warnings(tree))
         job.rendered = target.render(tree)
 
     except LimitExceeded as exc:

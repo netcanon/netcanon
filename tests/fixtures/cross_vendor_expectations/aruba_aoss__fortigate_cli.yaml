@@ -343,8 +343,8 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      1 of 5 accounts arrive across the 3 cells that populate local users; the
-      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      1 of 4 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 3 accounts that vanish carry 3 AOS-S
       `sha1:` digest. FortiOS can consume its own `ENC` ciphertext or a genuine
       plaintext password; anything else is refused with a review comment naming
       the account, in place of the account. Up to 0.7.7 such an account was

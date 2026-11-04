@@ -16,7 +16,8 @@
 #   * VXLAN/EVPN — Arista's VXLAN data and EVPN MAC-VRF / Type-5
 #     surfaces have no Aruba target.
 #   * Local users — Arista's secret sha512 (the modern default)
-#     requires re-keying on Aruba's narrower SHA-1 / bcrypt set.
+#     requires re-keying on Aruba's narrower sha1 / sha256 /
+#     plaintext set.
 #   * Timezone — zoneinfo names cannot be auto-mapped to Aruba's
 #     minute-offset format without a curated lookup.
 #   * MTU — not parsed by the aruba_aoss codec, so jumbo-frame
@@ -293,18 +294,29 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Arista's ``privilege <N>`` + ``role <name>`` collapses to
-      Aruba's two-role model on render: privilege >= 15 OR role
-      = network-admin -> manager; everything else -> operator.
-      Cisco-style granular privilege levels (1..14) are flattened.
-      Hash formats are NOT cross-compatible: Arista MD5
-      (``$1$...``), SHA-512-crypt (``$6$...``, the modern
-      default), and Cisco-7 reversible (``$7$...``) are all
-      Arista-only on the canonical layer; Aruba accepts SHA-1
-      (``<hex>``), bcrypt (``$2y$...``), and plaintext but none
-      match Arista's forms.  Cross-vendor migration of user
-      accounts therefore requires re-setting passwords on the
-      target device — and modern EOS uses SHA-512 by default,
-      so this bites every migration.
+      Aruba's two-role model on render: privilege 15 -> manager,
+      everything else -> operator.  Cisco-style granular privilege
+      levels (1..14) are flattened.  Hash formats are NOT
+      cross-compatible: Arista MD5 (``$1$...``), SHA-512-crypt
+      (``$6$...``, the modern default), and Cisco-7 reversible
+      (``$7$...``) are all Arista-only on the canonical layer; AOS-S
+      takes ``sha1``, ``sha256`` and a password as typed, and none
+      match Arista's forms, so each such account is a review comment
+      in place of the account.
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Measured over the committed inputs: 15 accounts on 8 cells, none
+      arrives -- 12 hold a secret AOS-S cannot take, and 3 have no
+      password read from the source.  Cross-vendor migration of user
+      accounts therefore requires re-setting passwords on the target
+      device -- and modern EOS uses SHA-512 by default, so this bites
+      every migration.
     references: [local_users]
 
   radius_servers:

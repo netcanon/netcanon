@@ -39,7 +39,7 @@ lags: {max: 60, prefix: Trk}
 # raised and the switch rebooted.
 #
 # max_local_users is deliberately unset.  HPE documents one manager and
-# one operator credential plus up to 100 `aaa authorization local-user`
+# one operator credential plus up to 100 `aaa authentication local-user`
 # accounts; which of those the local-users fit-check should count for
 # an AOS-S target is undecided, and an unsourced cap is worse than none.
 max_vlans: 2048

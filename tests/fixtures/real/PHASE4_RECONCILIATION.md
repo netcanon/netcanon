@@ -10,17 +10,17 @@ Intra-vendor self-pairs skipped (no Phase 3 YAML — by design, Phase 3 is cross
 
 | Variance class | Count | Severity |
 |---|---:|---|
-| ALIGNED | 9009 | ok |
+| ALIGNED | 9007 | ok |
 | CODEC_BUG | 4 | **high** |
-| EXPECTED_LOSSY | 4176 | ok |
-| EXPECTED_UNSUPPORTED | 2576 | ok |
+| EXPECTED_LOSSY | 4183 | ok |
+| EXPECTED_UNSUPPORTED | 2567 | ok |
 | METHODOLOGY_ISSUE_under | 1905 | low/medium |
 | METHODOLOGY_ISSUE_over | 16 | low |
-| STRUCTURAL_ONLY | 5732 | low |
+| STRUCTURAL_ONLY | 5736 | low |
 | TRIVIAL_EMPTY | 35179 | ok |
 | **Total field-cells classified** | **58597** | |
 
-Severity roll-up: 4 high, 287 medium, 7366 low, 50940 ok.
+Severity roll-up: 4 high, 287 medium, 7370 low, 50936 ok.
 
 ## Per-cell matrix — CODEC_BUG counts
 

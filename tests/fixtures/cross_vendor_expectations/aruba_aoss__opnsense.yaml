@@ -539,19 +539,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      1 of 5 accounts arrive across the 3 cells that populate local users; the
-      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
-      `sha1:` digest. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
-      crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
-      else is refused with a review comment naming the account, in place of the
+      None of the 4 accounts arrive across the 3 cells that populate local
+      users; the list is emptied on each. 3 carry an AOS-S `sha1:` digest and
+      1 a password as typed. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or
+      SHA-512 crypt (`$6$`) in `<password>`; anything else -- a password as
+      typed included, since OPNsense's config holds a password only as a hash
+      -- is refused with a review comment naming the account, in place of the
       account. Up to 0.7.7 such an account was written as a `<user>` element
       with no `<password>`; a refused secret now drops the whole account, as on
-      every other target. The survivors are 1 carrying 1 plaintext password.
-      Recorded `lossy` rather than `unsupported`: which account survives is
-      decided by its secret form, and accounts with a consumable secret do
-      arrive. Before cutover, list the source accounts, search the render for
-      `review:` comments, and re-create each refused account on the target with
-      a fresh password.
+      every other target. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and an account with a
+      consumable secret would arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, aruba-users]
 
   radius_servers:

@@ -32,14 +32,24 @@ Retrieved: 2026-04-30
 
 ```
 password manager user-name "admin" sha1 "<40-hex>"
-password manager user-name "siteops" plaintext "<plaintext>"
 password operator user-name "monitor" sha1 "<40-hex>"
 ```
 
+AOS-S holds **one** manager and **one** operator account: the
+user-name names the account, and a second `password manager` line
+re-points the same one (HPE Access Security Guide, AOS-S 16.x).  An
+operator password with no manager password gives manager access.
+Netcanon writes the first user of each role that AOS-S can take, an
+operator only beside a manager, and every other user as a `; ...
+-- review:` comment, with a job warning where the reason is AOS-S's
+own; further named accounts on a switch are `aaa authentication
+local-user` (CLI only; not written).
+See [`../../vendors/aruba_aoss.md`](../../vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
+
 Aruba uses a **two-role** model: `manager` (privileged) and
-`operator` (read-only).  Both roles accept SHA-1 hex / bcrypt /
-plaintext-redacted hash forms.  Aruba does NOT accept the
-RouterOS vendor-private password format.
+`operator` (read-only).  Both roles take the `plaintext`, `sha1`
+and `sha256` forms.  Aruba does NOT accept the RouterOS
+vendor-private password format.
 
 ## Cross-vendor mapping
 
@@ -66,21 +76,18 @@ RouterOS named groups -> Aruba two-role:
 
 RouterOS does not surface hashed passwords in `/export`, so the
 canonical `hashed_password` arrives **empty** after parsing a
-RouterOS source.  Aruba target render emits:
+RouterOS source.  AOS-S has no account without a password, so the
+render writes no live line for such a user.  Each is a comment:
 
 ```
-password manager user-name "admin" sha1 ""
+; password manager user-name "admin" -- review: no password for this account was read from the source; set it on the switch with password manager user-name "admin", which asks for the password
 ```
 
-which Aruba accepts syntactically but treats as a no-password
-account (login disabled until the operator manually sets a password).
-This is the dominant lossy path for cross-vendor user migration in
-this direction — the operator MUST run `password manager user-name
-"<name>" plaintext "<new-password>"` on each migrated user post-
-migration.
-
-The codec emits a banner explaining the empty-hash render so the
-operator sees the gap during the migration validation review.
+and the job carries a warning for it.  This is the dominant lossy
+path for user migration in this direction.  On the switch, set the
+manager password first and then at most one operator: AOS-S holds one
+account of each role, and a second `password manager` line replaces
+the first.
 
 ### Disposition
 
@@ -89,4 +96,4 @@ operator sees the gap during the migration validation review.
 | `local_users[].name` | good |
 | `local_users[].privilege_level` | lossy (custom RouterOS groups have no Aruba numeric equivalent) |
 | `local_users[].role` | lossy (RouterOS `write` collapses to Aruba `manager`) |
-| `local_users[].hashed_password` | lossy (RouterOS does not surface hashes; render emits empty SHA-1) |
+| `local_users[].hashed_password` | lossy (RouterOS does not surface hashes; each account is a review comment) |

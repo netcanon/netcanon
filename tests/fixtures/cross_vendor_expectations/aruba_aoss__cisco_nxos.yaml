@@ -417,8 +417,8 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      1 of 5 accounts arrive across the 3 cells that populate local users; the
-      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      1 of 4 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 3 accounts that vanish carry 3 AOS-S
       `sha1:` digest. NX-OS can consume a `$5$` or `$1$` crypt string under
       `password 5`, or a genuine plaintext password; anything else is refused on
       purpose (#461) with a review comment naming the account and no user entry.
@@ -435,10 +435,12 @@ per_field_expectation:
   "local_users[].privilege_level":
     disposition: lossy
     reason: >
-      On the 1 account that survives, the privilege level changes: `15` -> `1`
-      on 1. Mechanism: cisco_nxos renders the canonical role verbatim and maps
+      On the 1 account that survives, an operator, the privilege level is
+      unchanged (`1`); a manager would not keep its level. Mechanism:
+      cisco_nxos renders the canonical role verbatim and maps
       only `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Accounts refused for their secret
+      `/local-users/user/privilege-level`), so an AOS-S `manager` would come back
+      at privilege 1. Accounts refused for their secret
       vanish with their privilege level and are counted once, under
       `local_users[].name`; this key is about the value on accounts that
       survive.
@@ -447,8 +449,8 @@ per_field_expectation:
   "local_users[].hashed_password":
     disposition: good
     note: >
-      No secret is written in a form NX-OS cannot consume. 4 accounts are
-      refused for their secret (4 AOS-S `sha1:` digest) and vanish with it; that
+      No secret is written in a form NX-OS cannot consume. 3 accounts are
+      refused for their secret (3 AOS-S `sha1:` digest) and vanish with it; that
       loss is recorded once, under `local_users[].name`. The 1 secret that
       arrives is carried with the credential unchanged: 1 plaintext password as
       `password 0`. Before #461 this key read preserved because the value was

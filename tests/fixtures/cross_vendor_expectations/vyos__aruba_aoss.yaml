@@ -517,74 +517,56 @@ per_field_expectation:
   "local_users[].name":
     disposition: lossy
     reason: >
-      One account vanishes across the corpus, and the rule is clean enough to
-      act on: `netadmin` on `houdev_vyos_dhcpv6_pd_client.conf`, the only user
-      on that cell, whose canonical `hashed_password` is the EMPTY STRING.
-      17 source accounts, 16 after the round-trip.
-      The mechanism was verified by inspecting the render, not inferred: the
-      renderer still emits a line — `password manager user-name "netadmin"
-      plaintext ""` — but the AOS-S parser's `_PASSWORD_LINE_RE` requires at
-      least one character inside the quotes (`"([^"]+)"`) and its
-      continuation-line fallback `_PASSWORD_HEAD_RE` requires the line to end
-      after the algorithm token.  `plaintext ""` matches neither, so the line
-      is skipped and that cell yields a config with ZERO readable users.
-      Every account carrying a `$6$` digest survives with its name intact.
-      Recorded `lossy` rather than `unsupported`: aruba_aoss plainly models
-      local users and emits them on 12 of 13 cells, so this is a partial
-      record loss inside a concept the target holds — not the concept-level
-      gap that `vxlan_vnis[].vni` is.
-      Before cutover, list the source accounts and diff them against the
-      render: a silently missing admin account is how a migration locks you
-      out.
+      No account arrives across the corpus: 17 accounts on 13 cells.  16 carry
+      a `$6$` crypt digest (SHA-512), which AOS-S cannot take (it takes `sha1`,
+      `sha256` and a password as typed), and each is a `;` review comment
+      naming the account, in place of the account.  The seventeenth,
+      the only account of its cell, has an EMPTY canonical `hashed_password`;
+      AOS-S has no account without a password, so it is a review comment with
+      a job warning.  (It used to be written `plaintext ""`, which the AOS-S
+      parser does not read back.)
+      AOS-S holds one manager and one operator account (HPE Access
+      Security Guide, AOS-S 16.x), so the render writes the first account
+      of each role whose secret it can take, an operator only beside a
+      manager, and every other account as a `; ... -- review:` comment;
+      a second account of a role, an operator with no manager and an
+      account with no password each also carry a job warning, and
+      `/local-users/user/privilege-level` is lossy on aruba_aoss
+      (`docs/vendors/aruba_aoss.md`).
+      Recorded `lossy` rather than `unsupported`: aruba_aoss models local
+      users, and an account whose secret it takes arrives; the loss here is
+      decided by the secret's form, not the concept-level gap that
+      `vxlan_vnis[].vni` is.  Before cutover, list the source accounts and
+      diff them against the render: a silently missing admin account is how a
+      migration locks you out.
     references: [vyos-aoss-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on 12 of the 13 cells that populate local users — every cell
-      whose user records survive — as a consistent re-mapping rather than a
-      drop.  (On the thirteenth the record itself is gone; see
-      `local_users[].name`.)  All 17 source accounts carry the VyOS
-      role `admin`, and all 16 survivors come back `manager`, the AOS-S
-      two-level vocabulary the render targets (`password manager user-name
-      …`).  `privilege_level` 15 is preserved on all 16, so the authority
-      level is not what changes — the canonical string is.
-      Recorded `lossy` (warns, stays compatible) and not `unsupported`,
-      because the account and its privilege survive.  Verify the mapping if
-      any source account carries a role outside `admin` — this corpus
-      exercises only that one, and the aruba_aoss matrix declares NOTHING at
-      all under `/local-users/*`, so there is no declared behaviour to fall
-      back on.  vyos separately declares `/local-users/user/privilege-level`
-      lossy on the source side.
-      The one account that vanishes entirely is accounted for ONCE, under
-      `local_users[].name`; recording that disappearance again here would
-      double-count a single loss.
+      No account arrives on the corpus (see `local_users[].name`), so there is
+      no role on the target to compare; the drift on this key is the parent
+      record-count collapse.  Every VyOS login user is read with the role
+      `admin` and privilege 15; on an account that arrives that is the AOS-S
+      `manager`, and only the first such account is written: AOS-S holds one
+      manager account, so the others are review comments with a job warning.
+      Recorded `lossy` for the change of canonical string.  vyos separately
+      declares `/local-users/user/privilege-level` lossy on the source side.
+      The accounts that vanish are counted ONCE, under `local_users[].name`.
     references: [vyos-aoss-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on 12 of the 13 cells that populate local users — every cell
-      whose user records survive — and the failure mode is worse than a drop.
-      Every source account that survives carries a `$6$` crypt digest
-      (SHA-512); the single exception, an account with no secret at all, is
-      recorded under `local_users[].name`.
-      The AOS-S render emits the digest as `password manager user-name
-      "<user>" plaintext "<secret>"`, and the re-parse returns it tagged
-      `plaintext:`.  Measured on 16 of 16 surviving records: `$6$…` becomes
-      `plaintext:$6$…`, ten characters longer, digest body byte-identical.
-      Nothing is lost; the secret is RE-TYPED as a literal cleartext password.
-      Two consequences for a cutover.  First, no migrated account
-      authenticates with its original password, because the target now treats
-      the crypt digest as the password string itself.  Second, the rendered
-      config contains the source's digest on a line marked `plaintext`, so it
-      inherits none of the handling the `$6$` form implied — treat any
-      rendered AOS-S config from a VyOS source as secret-bearing.
-      Set passwords on the target by hand before cutover.
+      No secret arrives on the corpus: 16 of the 17 accounts carry a `$6$`
+      crypt digest (SHA-512), which AOS-S cannot take, and each is a review
+      comment in place of the account; the seventeenth has no secret (see
+      `local_users[].name`).  Until #460 the AOS-S render wrote such a digest
+      as `password manager user-name "<user>" plaintext "<secret>"`, so the
+      target held the digest as a literal cleartext password; it no longer
+      does.  Set passwords on the target by hand before cutover.
       No digest body is reproduced in this file or its reference doc — only
-      the crypt-scheme marker and the length class are described.  The one
-      literal quoted, the `plaintext:` tag, is a degradation artifact
-      containing no key material.
+      the crypt-scheme marker is described.
     references: [vyos-aoss-surface]
 
   radius_servers:

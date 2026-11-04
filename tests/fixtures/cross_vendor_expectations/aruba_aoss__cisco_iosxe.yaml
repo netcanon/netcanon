@@ -438,10 +438,10 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       AOS-S parser populates intent.local_users (manager / operator
-      roles, sha1 / bcrypt / plaintext hashes).  cisco_iosxe render
+      roles, sha1 / sha256 / plaintext secrets).  cisco_iosxe render
       does NOT walk `<system><aaa><authentication><users>`.
       Render-side gap.  Even if wired, hash-format incompatibility
-      (Aruba sha1/bcrypt vs Cisco type-5/8/9) would force re-keying
+      (AOS-S sha1/sha256 vs Cisco type-5/8/9) would force re-keying
       on the target — same lossy classification as the
       cisco_iosxe_cli direction.
     references: [aoss-asg, oc-system]
