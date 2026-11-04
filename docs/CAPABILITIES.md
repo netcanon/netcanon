@@ -830,7 +830,12 @@ in rendered output find every such site.
      reason of AOS-S's own, and `/local-users/user/privilege-level` is
      lossy on `aruba_aoss`.  It used to write a line for every user, so
      the switch kept the last of each role, and an operator account
-     alone where every manager's secret was foreign.  See
+     alone where every manager's secret was foreign.  A hashed account
+     line (`sha1`, `sha256`) needs `include-credentials` on the switch,
+     and `sha256` also `password non-plaintext-sha256`; both change how
+     the switch keeps every credential, so neither is written, and one
+     review line above the accounts (and one job warning) says what
+     the switch needs.  See
      [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
 
 * **SNMPv3 USM key portability**

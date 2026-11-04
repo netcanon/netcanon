@@ -163,6 +163,34 @@ another user, drop the first in the local-user rename map
 (`local_user_rename_map`; the **Local users** pane of the rename
 window).
 
+A hashed account line needs settings the output does not write.  A
+5412R refused `password manager user-name ... sha256 ...` ("Invalid
+input: sha256") until `include-credentials` had been run, and Aruba
+Central's template help says a template that sets a password must
+carry `include-credentials`; for `sha1` the need is inferred.
+`sha256` needs `password non-plaintext-sha256` as well, which the
+16.11 guides document and a 2530 on 16.10 refuses; in that mode the
+switch does not take a password in SHA-1 form.  `include-credentials`
+keeps the switch's credentials in its config file, and a startup
+config that holds it replaces the credentials the switch kept apart,
+so Netcanon writes neither setting.  Where a live account line is
+`sha1` or `sha256`, the output has one line above the accounts:
+
+    ; review: a hashed password line (sha1) needs include-credentials
+    on the switch, which keeps its credentials in its config file; not
+    written -- set it on the switch before the account lines, or set
+    the passwords there
+
+(one line in the output), naming `password non-plaintext-sha256` too
+where a line is `sha256`, and, where the lines are `sha1` and
+`sha256` both, the account whose password is to be set by hand.  The
+job has one warning that says the same.  A `plaintext` line has no
+such line: the CLI takes it as typed.  Aruba Central's sentence is
+about any password in a template, so a config loaded as a file may
+need `include-credentials` for a `plaintext` line as well; what a
+switch does with a password line in a file without it is not
+described in the guides.
+
 Not written: the further named accounts an AOS-S switch can hold,
 `aaa authentication local-user`.  They are set from the CLI only,
 need a group that exists and `aaa authorization commands local`, and
@@ -171,11 +199,6 @@ does not make them up.
 
 Known limitations, still open:
 
-- A hashed form is written without `include-credentials` on the
-  switch.  A switch has been seen to refuse a `sha256` line without
-  it (for `sha1` this is inferred), and `sha256` also needs `password
-  non-plaintext-sha256`.  Both change how the switch stores every
-  credential, so they are left to the operator.
 - As a source, the parser reads the `password <role> user-name ...
   <form> "<value>"` line only.  It does not read the bare `password
   manager` / `password operator` marker a switch prints without

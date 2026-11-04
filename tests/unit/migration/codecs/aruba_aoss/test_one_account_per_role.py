@@ -17,6 +17,13 @@ guide).  The renderer wrote a live line for every local user, so:
   "reset this user password manually", which on a switch whose role
   was written replaces that account.
 
+A hashed account line (``sha1``, ``sha256``) needs ``include-credentials``
+on the switch, and ``sha256`` needs ``password non-plaintext-sha256`` as
+well, in which mode the switch does not take ``sha1``.  The output
+writes neither setting; it has one ``review:`` line above the accounts
+that names what the switch needs, and the job one warning
+(:func:`wrong_setting`).
+
 The output is read as TEXT here, by a reader this module owns
 (:func:`live_accounts`), over hand-made trees, through the pipeline,
 and over every committed capture; each check is handed the defect it is
@@ -111,6 +118,65 @@ def wrong_accounts(
     return wrong
 
 
+#: The forms a switch takes only with a setting the output leaves out.
+_HASHED = {"sha1", "sha256"}
+
+#: A setting the output must not write: it changes how the switch keeps
+#: every credential, and is the operator's to decide.
+_SETTING = re.compile(
+    r"^[ \t]*(include-credentials|password[ \t]+non-plaintext-sha256)\b"
+)
+
+
+def _users_said(warnings: list[str]) -> list[str]:
+    """The warnings for a user left out, one a user."""
+    return [w for w in warnings if w.startswith("Local user ")]
+
+
+def wrong_setting(text: str, warnings: list[str]) -> list[str]:
+    """What is wrong with what an AOS-S output *text* and its job's
+    *warnings* say of the settings a hashed account line needs."""
+    lines = text.splitlines()
+    live = [
+        (index, hit) for index, line in enumerate(lines)
+        if (hit := _LIVE.match(line)) is not None
+    ]
+    hashed = [(index, hit) for index, hit in live if hit.group(3) in _HASHED]
+    forms = {hit.group(3) for _i, hit in hashed}
+    reviews = [
+        index for index, line in enumerate(lines)
+        if line.startswith("; review:") and "include-credentials" in line
+    ]
+    said = [w for w in warnings if "include-credentials" in w]
+    wrong = [
+        f"a setting is written: {line.strip()}"
+        for line in lines if _SETTING.match(line)
+    ]
+    if not hashed:
+        if reviews:
+            wrong.append("a review line for the settings and no hashed line")
+        if said:
+            wrong.append("a warning for the settings and no hashed line")
+        return wrong
+    if len(reviews) != 1:
+        wrong.append(f"{len(reviews)} review lines for the settings")
+    if len(said) != 1:
+        wrong.append(f"{len(said)} warnings for the settings")
+    if reviews and live and reviews[0] > live[0][0]:
+        wrong.append("the review line is below an account line")
+    for words in [lines[index] for index in reviews] + said:
+        named = re.search(r"\(((?:sha1|sha256)(?:, (?:sha1|sha256))*)\)", words)
+        if named is None or set(named.group(1).split(", ")) != forms:
+            wrong.append(f"the forms named are not {sorted(forms)}")
+        if "sha256" in forms and "password non-plaintext-sha256" not in words:
+            wrong.append("sha256 and no password non-plaintext-sha256")
+        if forms == _HASHED:
+            sha1 = next(h.group(2) for _i, h in hashed if h.group(3) == "sha1")
+            if "does not take sha1" not in words or f'"{sha1}"' not in words:
+                wrong.append(f'sha1 and sha256, and "{sha1}" is not named')
+    return wrong
+
+
 def _user(name: str, level: int, secret: str) -> CanonicalLocalUser:
     return CanonicalLocalUser(
         name=name, privilege_level=level, hashed_password=secret,
@@ -147,6 +213,42 @@ class TestTheCheckFails:
         assert wrong_accounts(text, ["a"], []) == []
 
 
+_SHA1 = 'password manager user-name "a" sha1 "x"\n'
+_SHA256 = 'password manager user-name "a" sha256 "x"\n'
+_SAYS_SHA1 = "; review: a hashed password line (sha1) needs include-credentials\n"
+_WARNS_SHA1 = ["... (sha1) ... include-credentials"]
+
+
+class TestTheSettingCheckFails:
+    @pytest.mark.parametrize(("text", "warnings", "said"), [
+        (_SHA1, [], "0 review lines for the settings"),
+        (_SAYS_SHA1 + _SHA1, [], "0 warnings for the settings"),
+        (_SHA1 + _SAYS_SHA1, _WARNS_SHA1, "the review line is below"),
+        (_SAYS_SHA1 + _SAYS_SHA1 + _SHA1, _WARNS_SHA1, "2 review lines"),
+        (_SAYS_SHA1 + 'password manager user-name "a" plaintext "x"\n',
+         [], "a review line for the settings and no hashed line"),
+        (_SAYS_SHA1 + _SHA256, ["... (sha256) ... include-credentials"],
+         "the forms named are not"),
+        ("; review: a hashed password line (sha256) needs include-credentials\n"
+         + _SHA256, ["... (sha256) ... include-credentials"],
+         "sha256 and no password non-plaintext-sha256"),
+        ("include-credentials\n" + _SAYS_SHA1 + _SHA1, _WARNS_SHA1,
+         "a setting is written"),
+        ("password non-plaintext-sha256\n", [], "a setting is written"),
+        ("; review: a hashed password line (sha1, sha256) needs "
+         "include-credentials, password non-plaintext-sha256\n"
+         + _SHA256 + 'password operator user-name "b" sha1 "y"\n',
+         ["(sha1, sha256) include-credentials password non-plaintext-sha256"],
+         '"b" is not named'),
+    ])
+    def test_handed_the_defect(
+        self, text: str, warnings: list[str], said: str,
+    ) -> None:
+        assert any(said in w for w in wrong_setting(text, warnings)), (
+            wrong_setting(text, warnings)
+        )
+
+
 # ---------------------------------------------------------------------------
 # Hand-made trees
 # ---------------------------------------------------------------------------
@@ -166,8 +268,9 @@ class TestOneAccountPerRole:
         # No advice that, followed, replaces the account written above.
         assert "asks for the password" not in line
         assert "reset" not in line
-        assert len(warnings) == 1
-        assert '"bob"' in warnings[0] and '"admin"' in warnings[0]
+        said = _users_said(warnings)
+        assert len(said) == 1
+        assert '"bob"' in said[0] and '"admin"' in said[0]
         # The secret of the account not written is in no line.
         assert "bobpw" not in out
 
@@ -182,7 +285,8 @@ class TestOneAccountPerRole:
             ("manager", "admin", "aa11"), ("operator", "viewer", "bb22"),
         ]
         assert wrong_accounts(out, ["viewer", "admin", "guest"], warnings) == []
-        assert len(warnings) == 1 and '"guest"' in warnings[0]
+        said = _users_said(warnings)
+        assert len(said) == 1 and '"guest"' in said[0]
 
 
 class TestNoOperatorWithoutAManager:
@@ -251,6 +355,50 @@ class TestASecretAosSCannotTake:
         line = next(x for x in out.splitlines() if 'user-name "root"' in x)
         assert '"admin" above' in line
         assert "asks for the password" not in line
+
+
+class TestAHashedLineSaysWhatItNeeds:
+    @pytest.mark.parametrize(("users", "forms"), [
+        ((("admin", 15, "sha1:aa11"), ("viewer", 1, "sha1:bb22")), ["sha1"]),
+        ((("admin", 15, "sha256:aa11"),), ["sha256"]),
+        ((("admin", 15, "sha256:aa11"), ("viewer", 1, "sha1:bb22")),
+         ["sha1", "sha256"]),
+        ((("admin", 15, "plaintext:pw"), ("viewer", 1, "sha1:bb22")), ["sha1"]),
+    ])
+    def test_one_review_line_above_the_accounts(
+        self, users: tuple[tuple[str, int, str], ...], forms: list[str],
+    ) -> None:
+        out, warnings = _render(*(_user(*u) for u in users))
+        assert wrong_setting(out, warnings) == []
+        review = next(x for x in out.splitlines() if "include-credentials" in x)
+        assert f"({', '.join(forms)})" in review
+        # Neither holds a secret.
+        assert "aa11" not in review and "bb22" not in review
+        assert not any("aa11" in w or "bb22" in w for w in warnings)
+
+    @pytest.mark.parametrize("users", [
+        (("admin", 15, "plaintext:pw"),),
+        # A hashed account that is a comment needs no setting.
+        (("viewer", 1, "sha1:bb22"),),
+        (("root", 15, "9 $9$fake$hash"), ("viewer", 1, "sha1:bb22")),
+        (),
+    ])
+    def test_none_without_a_live_hashed_line(
+        self, users: tuple[tuple[str, int, str], ...],
+    ) -> None:
+        out, warnings = _render(*(_user(*u) for u in users))
+        assert "include-credentials" not in out
+        assert not any("include-credentials" in w for w in warnings)
+
+    def test_the_parser_reads_the_accounts_back_past_it(self) -> None:
+        out, _ = _render(
+            _user("admin", 15, "sha256:aa11"),
+            _user("viewer", 1, "sha1:bb22"),
+        )
+        users = ArubaAOSSCodec().parse(out).local_users
+        assert [(u.name, u.role) for u in users] == [
+            ("admin", "manager"), ("viewer", "operator"),
+        ]
 
 
 class TestTheParserReadsItBack:
@@ -322,6 +470,20 @@ class TestThroughThePipeline:
         job = run_plan(get_codec("cisco_iosxe_cli"), get_codec("arista_eos"), _IOSXE)
         assert not [w for w in job.warnings if w.startswith("Local user ")]
 
+    def test_a_hashed_manager_from_a_switch(self) -> None:
+        raw = (
+            FIXTURES / "real" / "aruba_aoss" / "user_contrib_2930m_wc1611.cfg"
+        ).read_text(encoding="utf-8")
+        # The source sets include-credentials; the output names it in
+        # a review line and does not set it.
+        assert any(_SETTING.match(line) for line in raw.splitlines())
+        job = run_plan(ArubaAOSSCodec(), ArubaAOSSCodec(), raw)
+        assert [r for r, _n, _v in live_accounts(job.rendered)] == ["manager"]
+        assert wrong_setting(job.rendered, list(job.warnings)) == []
+        assert "include-credentials" in job.rendered
+        onto_eos = run_plan(ArubaAOSSCodec(), get_codec("arista_eos"), raw)
+        assert not any("include-credentials" in w for w in onto_eos.warnings)
+
 
 # ---------------------------------------------------------------------------
 # Every committed capture
@@ -348,7 +510,7 @@ def _captures() -> list[tuple[str, str, Path]]:
 
 def test_every_capture_onto_aos_s() -> None:
     wrong: list[str] = []
-    asked = {"jobs": 0, "with users": 0, "two of a role": 0}
+    asked = {"jobs": 0, "with users": 0, "two of a role": 0, "hashed": 0}
     for codec, label, path in _captures():
         raw = path.read_text(encoding="utf-8")
         try:
@@ -370,7 +532,13 @@ def test_every_capture_onto_aos_s() -> None:
             job.rendered, [u.name for u in users], list(job.warnings),
         ):
             wrong.append(f"{label}: {said}")
+        for said in wrong_setting(job.rendered, list(job.warnings)):
+            wrong.append(f"{label}: {said}")
+        if any((hit := _LIVE.match(line)) and hit.group(3) in _HASHED
+               for line in job.rendered.splitlines()):
+            asked["hashed"] += 1
     assert wrong == [], "\n".join(wrong[:20])
     # It read something: jobs with users, and with two of a role.
     assert asked["with users"] > 10, asked
     assert asked["two of a role"] > 3, asked
+    assert asked["hashed"] > 0, asked

@@ -645,6 +645,25 @@ each with `password <role> user-name "<name>"`, which asks for the
 password.  Further named accounts are `aaa authentication local-user`,
 which Netcanon does not write.
 
+### "An AOS-S output says a hashed password line needs include-credentials"
+
+The accounts are written as `sha1` or `sha256` hashes, and a switch
+takes a hashed account line with settings Netcanon does not write:
+`include-credentials` (a 5412R refused a `sha256` line until it had
+been run; Aruba Central's template help asks for it beside any
+password) and, for `sha256`, `password non-plaintext-sha256` as well,
+which not every switch has and in which the switch does not take
+`sha1`.  `include-credentials` keeps the switch's credentials in its
+config file, and a startup config that holds it replaces the
+credentials the switch kept apart, so the choice is left to you.
+
+**Action:** either run `include-credentials` (and, for `sha256`,
+`password non-plaintext-sha256`) on the switch before the account
+lines, or leave the lines out and set each password on the switch
+with `password <role> user-name "<name>"`, which asks for it.  Where
+the review line names an account to set by hand, its line is `sha1`
+on a switch that will be in `sha256` mode.
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG

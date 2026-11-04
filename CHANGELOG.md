@@ -28,6 +28,21 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **An AOS-S output with a hashed account says what the switch
+  needs to take it.**  A hashed account line (`sha1`, `sha256`) needs
+  `include-credentials` on the switch -- a 5412R refused a `sha256`
+  line until it had been run, and Aruba Central's template help says
+  a template that sets a password must carry it -- and `sha256`
+  needs `password non-plaintext-sha256` as well, in which mode the
+  switch does not take `sha1`.  The output wrote the lines and said
+  nothing.  Both settings change how the switch keeps every
+  credential, so neither is written: where a live account line is
+  hashed, one `; review:` line above the accounts names what the
+  switch needs (and, for `sha1` and `sha256` together, the account
+  to set by hand), and the job has one warning that says the same.
+  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_one_account_per_role.py`.
+
 - **An AOS-S output could give an operator manager access, and kept
   only the last account of each role.**  An ArubaOS-Switch holds one
   manager and one operator account: a second `password manager
@@ -5365,15 +5380,13 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **AOS-S credentials: `include-credentials`, `sha256` mode and two
-  forms the parser does not read.**  An AOS-S output writes a hashed
-  account without `include-credentials` (a switch has been seen to
-  refuse a `sha256` line without it) and a `sha256` value without
-  `password non-plaintext-sha256`; both change how the switch stores
-  every credential, so they are left to the operator.  As a source,
-  the parser does not read the bare `password manager` marker a switch
-  prints without `include-credentials`, nor an `aaa authentication
-  local-user` account: such accounts are not in the translation.
+- **AOS-S credentials: two forms the parser does not read.**  As a
+  source, the parser does not read the bare `password manager` marker
+  a switch prints without `include-credentials`, nor an `aaa
+  authentication local-user` account: such accounts are not in the
+  translation.  As a target, an output does not write
+  `include-credentials` or `password non-plaintext-sha256`, which a
+  hashed account line needs; a review line says so.
 - **A sub-interface's number is bounded onto Junos alone.**  On the
   other targets that write a unit's number in its name (IOS-XE, IOS
   XR, NX-OS, EOS and the like) a sub-interface keeps its number from
