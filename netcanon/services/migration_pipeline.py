@@ -2670,6 +2670,7 @@ def run_plan_with_models(
     from ..migration.canonical.port_names import (
         collect_hardware_port_names,
         collect_port_names,
+        factory_names,
         stated_sub_interfaces,
         unit_tags,
     )
@@ -2713,20 +2714,15 @@ def run_plan_with_models(
         tree = None
     if isinstance(tree, CanonicalIntent):
         every = collect_port_names(tree)
-        factory_of = {
-            iface.name: iface.default_name for iface in tree.interfaces
-            if iface.name and iface.default_name
-        }
         # A port the operator named is found in the model by its
-        # factory name, and known everywhere else by theirs.
-        known_as = {
-            factory: name for name, factory in factory_of.items()
-            if factory != name
-        }
+        # factory name, and known everywhere else by theirs; and one
+        # factory name on two interfaces is a port that was renamed,
+        # beside a line that still uses its old name.  Read the one
+        # way a deployment proposal reads them too.
+        factory = factory_names(tree)
+        factory_of = factory.factory_of
+        known_as = factory.known_as
         own_names = [known_as.get(name, name) for name in own_names]
-        # One factory name on two interfaces: a port that was renamed,
-        # beside a line that still uses its old name.
-        looked_up = Counter(factory_of.values())
         # A port of the declared source counts as used when the config
         # names it, whatever the codec's classifier makes of the name;
         # only a name OUTSIDE the inventory can be set aside as
@@ -2739,7 +2735,7 @@ def run_plan_with_models(
         )
         plan = plan_port_mapping(
             source_inventory, target_inventory, used, known_as=known_as,
-            one_hardware=[name for name, count in looked_up.items() if count > 1],
+            one_hardware=factory.looked_up_twice,
         )
         # An operator may key an entry by another letter case of a
         # name, or by the factory name of a port the config calls

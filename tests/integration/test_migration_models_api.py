@@ -2147,6 +2147,45 @@ class TestDetectDeployment:
         assert proposal["evidence"] == ["! device: … (DCS-7050SX3-48YC8, EOS-4.32.1F)"]
         assert "rack9" not in resp.text
 
+    def test_a_routeros_export_is_read_from_its_model_line(self, client: TestClient) -> None:
+        """The serial number beside the line is not handed back, and a
+        port the export renamed is found by its factory name."""
+        resp = client.post(self.URL, json={
+            "source": "mikrotik_routeros",
+            "raw_text": (
+                "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n# software id = FAKE-0000\n#\n"
+                "# model = CRS310-8G+2S+\n# serial number = FAKESERIAL00\n"
+                "/interface ethernet\nset [ find default-name=ether2 ] name=core-a\n"
+                "/ip address\nadd address=192.0.2.1/24 interface=core-a\n"
+            ),
+        })
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["family"] == "mikrotik_routeros/CRS3xx" and proposal["mode"] == "standalone"
+        assert proposal["deployment"]["members"] == [
+            {"model": "CRS310-8G+2S+", "id": None, "modules": {}},
+        ]
+        assert proposal["evidence"] == ["# model = CRS310-8G+2S+"]
+        assert proposal["consistent"] is True and proposal["missing_ports"] == []
+        assert "FAKE" not in resp.text
+
+    def test_routeros_names_that_do_not_say_which_port_are_not_checked(self, client: TestClient) -> None:
+        resp = client.post(self.URL, json={
+            "source": "mikrotik_routeros",
+            "raw_text": (
+                "# model = CRS310-8G+2S+\n/interface ethernet\n"
+                "set [ find default-name=ether1 ] name=ether2\n"
+            ),
+        })
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["deployment"] is not None and proposal["consistent"] is None
+        assert any(
+            note.startswith("The proposal was not checked against the port names the config uses: "
+                            "the config gives a port the name another port of the source device has")
+            for note in proposal["notes"]
+        )
+
     def test_a_stored_config_can_be_read_too(self, client: TestClient, test_settings) -> None:
         """``source_filename`` names a config in the backup store, as on
         a plan request.  The stored file is a stacked capture, so the

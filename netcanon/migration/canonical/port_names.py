@@ -53,6 +53,9 @@ This module defines the **vendor-agnostic bridge**:
    track entry, a VXLAN source, a LAG's members.  Recorded where they
    are removed, so that what the job says is what was done
    (``PortRenameResult.taken``).
+10. :func:`factory_names` — the factory names a config's ports keep
+    beside the names it gives them (RouterOS), read the one way that
+    ``run_plan_with_models`` and a deployment proposal both read them.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -771,6 +774,53 @@ def collect_hardware_port_names(
 #: port's own: what its parser read of it from context
 #: (``CanonicalInterface.kind``) before what its name reads as.
 UNIT_PARENT_KINDS: frozenset[str] = frozenset({"physical", "breakout", "lag"})
+
+
+class FactoryNames(NamedTuple):
+    """What a config says of the factory names its ports keep beside
+    the names it gives them (``interfaces[].default_name``; RouterOS:
+    ``set [ find default-name=ether1 ] name=WAN``).  See
+    :func:`factory_names`."""
+
+    factory_of: dict[str, str]
+    """The name the config uses for an interface to its factory name,
+    for every interface that has one."""
+
+    known_as: dict[str, str]
+    """A factory name to the other name the config gives that port:
+    the port is found on a device by the first and is known everywhere
+    else by the second."""
+
+    looked_up_twice: list[str]
+    """Factory names the config looks more than one interface up by: a
+    port that was renamed, beside a line that still uses its old name,
+    or two set lines for one port."""
+
+
+def factory_names(intent: CanonicalIntent) -> FactoryNames:
+    """The factory names *intent*'s ports keep, read once.
+
+    A translation with devices declared reads a source config's ports
+    through this (``run_plan_with_models``), and so does a deployment
+    proposal's check of the ports a config uses
+    (:func:`~netcanon.migration.deployment_detect.propose_deployment`),
+    so that the two cannot read one config two ways.  On a platform
+    whose ports have one name each, every field is empty.
+    """
+    factory_of = {
+        iface.name: iface.default_name for iface in intent.interfaces
+        if iface.name and iface.default_name
+    }
+    known_as = {
+        factory: name for name, factory in factory_of.items()
+        if factory != name
+    }
+    looked_up = Counter(factory_of.values())
+    return FactoryNames(
+        factory_of=factory_of,
+        known_as=known_as,
+        looked_up_twice=[name for name, count in looked_up.items() if count > 1],
+    )
 
 
 #: The most digits of a unit that is sent after its port ACROSS

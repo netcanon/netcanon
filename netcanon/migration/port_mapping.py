@@ -20,7 +20,11 @@ caller merges it over :attr:`MappingPlan.rename_map`).
 Two stages:
 
 * :func:`plan_port_mapping` pairs the inventories.  Pure: it sees no
-  config beyond the list of names the source uses.
+  config beyond the list of names the source uses.  The part of it
+  that asks whether those names say which port each is,
+  :func:`why_the_names_do_not_say_which_port`, is asked by a
+  deployment proposal too
+  (:func:`~netcanon.migration.deployment_detect.propose_deployment`).
 * :func:`settle_plan` reconciles that plan with what a translation
   run then actually did — which ports the operator overrode, which
   were dropped, whether two names ended on one target — and rewrites
@@ -101,6 +105,7 @@ __all__ = [
     "name_key",
     "plan_port_mapping",
     "settle_plan",
+    "why_the_names_do_not_say_which_port",
 ]
 
 
@@ -248,6 +253,52 @@ def _not_applied(plan: MappingPlan, reason: str) -> MappingPlan:
     return plan
 
 
+def why_the_names_do_not_say_which_port(
+    source: Inventory,
+    known_as: Mapping[str, str] | None = None,
+    one_hardware: Iterable[str] = (),
+) -> str | None:
+    """Why the names a config uses do not say which port of *source*
+    each is, or ``None`` when they do.
+
+    Two ways, both on a platform whose ports keep a factory name beside
+    the name an operator gives them (RouterOS): the config looks more
+    than one interface up by one factory name, or gives a port the name
+    another port of the device has.  :func:`plan_port_mapping` pairs no
+    port by position for either reason, and a deployment proposal checks
+    no port name for it.
+
+    Args:
+        source: Inventory of the device the config came from.
+        known_as: See :func:`plan_port_mapping`.
+        one_hardware: See :func:`plan_port_mapping`.
+
+    Returns:
+        The reason, as a clause that begins in lower case and names at
+        most eight of the names (each as the config has it), or
+        ``None``.
+    """
+    twice = sorted(set(one_hardware))
+    if twice:
+        return (
+            f"the config looks more than one interface up by one factory "
+            f"name ({_summary(twice)}) — a renamed port beside a line that "
+            f"still uses its old name, or two set lines for one port, which "
+            f"are read as two interfaces — and which of them is the port "
+            f"cannot be told"
+        )
+    shown = dict(known_as or {})
+    counts = Counter(shown.get(port.name, port.name) for port in source.ports)
+    ambiguous = sorted(name for name, count in counts.items() if count > 1)
+    if ambiguous:
+        return (
+            f"the config gives a port the name another port of the source "
+            f"device has ({_summary(ambiguous)}), so its ports cannot be "
+            f"told apart by name"
+        )
+    return None
+
+
 def plan_port_mapping(
     source: Inventory,
     target: Inventory,
@@ -307,30 +358,13 @@ def plan_port_mapping(
                 f"({_summary(repeated)})",
             )
 
-    twice = sorted(set(one_hardware))
-    if twice:
-        return _not_applied(
-            plan,
-            f"the config looks more than one interface up by one factory "
-            f"name ({_summary(twice)}) — a renamed port beside a line that "
-            f"still uses its old name, or two set lines for one port, which "
-            f"are read as two interfaces — and which of them is the port "
-            f"cannot be told",
-        )
+    why = why_the_names_do_not_say_which_port(source, known_as, one_hardware)
+    if why is not None:
+        return _not_applied(plan, why)
     shown = dict(known_as or {})
 
     def config_name(port: PhysicalPort) -> str:
         return shown.get(port.name, port.name)
-
-    counts = Counter(config_name(port) for port in source.ports)
-    ambiguous = sorted(name for name, count in counts.items() if count > 1)
-    if ambiguous:
-        return _not_applied(
-            plan,
-            f"the config gives a port the name another port of the source "
-            f"device has ({_summary(ambiguous)}), so its ports cannot be "
-            f"told apart by name",
-        )
 
     used: set[str] | None = None if used_names is None else set(used_names)
     target_groups = _by_position(target.ports)

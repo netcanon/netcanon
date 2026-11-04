@@ -411,7 +411,11 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   from a committed export; a panel whose names or management port
   MikroTik's pages leave in doubt is graded `inferred`, and its
   caveat says why.  An export prints its model on its `# model =`
-  line, but no detector reads it yet: choose the device by hand.
+  line, and detection reads it: the source picker of the Interface
+  rename modal offers the device it names (`POST
+  /api/v1/migration/detect-deployment` on the API).  The software id
+  and the serial number beside it are never read.  A port the config
+  renamed is checked by its factory name, as a translation pairs it.
   The flat target profiles of the CRS310-8G+2S+ and the
   CCR2004-1G-12S+2XS are still offered beside the families, and
   describe the same ports.  Not described, each for a reason its

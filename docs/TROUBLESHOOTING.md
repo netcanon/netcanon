@@ -1016,8 +1016,13 @@ is that device, and uses port names that device does not have
   its `module` or `stacking` lines and its VLAN port lists.
 
 `consistent: null` is not a pass: nothing was checked, because nothing
-was proposed, the text could not be parsed, or it names no port.  The
-modal shows that line in amber too.
+was proposed, the text could not be parsed, or it names no port --
+or, on RouterOS, because its names do not say which port is which: a
+port renamed beside a line that still uses its old name, or given the
+name of another port.  The note then gives the reason, and a
+translation with that device declared pairs no port by position
+either (see "The strip says 'No port was paired by position'" above).
+The modal shows that line in amber too.
 
 A `deployment` of `null` is not an error.  The first of `notes` says
 why: the config

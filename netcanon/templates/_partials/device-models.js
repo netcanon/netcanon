@@ -1344,9 +1344,10 @@
             + (howMany > 8 ? ' …' : ''));
           warn = true;
         } else if (proposal.consistent !== true) {
-          // null: nothing was checked (the text names no port, or
-          // could not be parsed).  The note below says which; it is
-          // not a pass, so it is not shown as one.
+          // null: nothing was checked (the text names no port,
+          // could not be parsed, or names its ports in a way that
+          // does not say which port is which).  The note below says
+          // which; it is not a pass, so it is not shown as one.
           warn = true;
         }
         (proposal.notes || []).forEach(function(note, i) {

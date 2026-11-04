@@ -499,6 +499,28 @@ class TestSourceDeviceIsReadFromTheConfig:
         expect(lines).to_contain_text("! device: \u2026 (DCS-7060CX-32S, EOS-4.23.1F)")
         expect(lines).not_to_contain_text("test-sw")
 
+    def test_a_mikrotik_is_read_from_its_model_line(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """``# model = CRS310-8G+2S+``: the model and its one mode are
+        filled in, the line is quoted without the serial number beside
+        it, and the port the export renamed is not called missing."""
+        _translate(page, live_server_url, "mikrotik_routeros", "aruba_aoss", _ROUTEROS_EXPORT)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(_source_note(page)).to_be_visible()
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            "fam:CRS3xx:CRS310-8G+2S+"
+        )
+        expect(page.locator(_tid("migrate-device-source-mode-select"))).to_have_value("standalone")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_contain_text(
+            "The `# model =` line is a comment"
+        )
+        lines = page.locator(_tid("migrate-device-source-note-read-from"))
+        lines.locator("summary").click()
+        expect(lines).to_contain_text("# model = CRS310-8G+2S+")
+        expect(_source_note(page)).not_to_contain_text("FAKE")
+        expect(page.locator(_tid("migrate-device-source-note-inconsistent"))).to_have_count(0)
+
     def test_an_arista_config_that_states_no_switch_says_so(
         self, page: Page, live_server_url: str,
     ) -> None:
@@ -1355,6 +1377,13 @@ set [ find default-name=ether2 ] name=core-a comment="core A"
 add address=192.0.2.2/30 interface=ether1
 add address=10.0.0.1/24 interface=core-a
 """
+
+#: :data:`_ROUTEROS_NAMED` under the head of an export, as the public
+#: exports print it; the software id and serial number are made up.
+_ROUTEROS_EXPORT = (
+    "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n# software id = FAKE-0000\n#\n"
+    "# model = CRS310-8G+2S+\n# serial number = FAKESERIAL00\n" + _ROUTEROS_NAMED
+)
 
 _ROUTEROS_GATEWAY_LIST = """/interface ethernet
 set [ find default-name=ether1 ] comment="a"

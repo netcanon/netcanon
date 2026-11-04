@@ -893,11 +893,36 @@ timestamp if your timezone matters for an audit.
   on a model with none, of its fastest ports.  The CRS310-8G+2S+ is
   graded `capture`, from the committed export; a panel whose names or
   management port MikroTik's pages leave in doubt is `inferred`, and
-  says why.  No detector reads an export's `# model =` line yet.  Not
-  described, each for a reason its family's file gives: the
+  says why.  Not described, each for a reason its family's file gives: the
   CRS312-4C+8XG, CRS328-4C-20S-4S+ and CRS326-4C+20G+2Q+, the
   CRS520-4XS-16XQ and CRS504-4XQ-OUT, the CCR2116-12G-4S+, the
   CCR2004-16G-2S+PC and the CCR2004-1G-2XS-PCIe.
+- **`detect-deployment` reads a MikroTik export's `# model =` line.**
+  A RouterOS `/export` opens with comment lines, one of which is
+  `# model = <model>`, and detection -- and with it the source picker
+  of the Interface rename modal -- now reads it: one device, with no
+  member number, in the mode `standalone`.  The evidence is that line;
+  the software id and the serial number beside it are never read.  The
+  notes say that the line is a comment, which nothing in the
+  configuration depends on, and that no MikroTik text read describes
+  it; lines that name two models are text from more than one device
+  and propose nothing, a model printed twice is proposed with a note
+  that the text may be from two devices, and a comment that begins
+  `# model` and cannot be read is counted.  A line is read as the
+  parser reads it, continued lines joined.  The detector is
+  `codecs/mikrotik_routeros/deployment_detect.py`.  The proposal's
+  check against the ports a config uses now reads a port that keeps a
+  factory name as a translation with the device declared does: by
+  that name, so that a port the operator renamed (`set [ find
+  default-name=ether1 ] name=WAN`) is not reported missing.  Both read
+  the factory names one way (`factory_names` in
+  `migration/canonical/port_names.py`); where the names do not say
+  which port is which -- one factory name looked up twice, or a port
+  given the name of another -- the proposal checks no name, is
+  `consistent: null`, and its note gives the reason the plan gives
+  for pairing no port by position
+  (`why_the_names_do_not_say_which_port` in
+  `migration/port_mapping.py`).
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

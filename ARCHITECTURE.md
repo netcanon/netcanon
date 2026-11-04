@@ -1931,9 +1931,11 @@ detection, an Apply — is dropped.
 (`netcanon/migration/deployment_detect.py`).  An AOS-S `show
 running-config` usually states its own hardware, a Catalyst's
 states the type of each switch of its stack (`switch N provision`),
-and a CX 6200's or 6300's the part number of each VSF member (`vsf
-member N` and the `type` line under it); no other vendor has a
-detector yet.  Detection is split the way
+a CX 6200's or 6300's the part number of each VSF member (`vsf
+member N` and the `type` line under it), an Arista EOS config the
+model of the switch that printed it (`! device:`), and a MikroTik
+RouterOS export the model of its device (`# model =`); no other
+vendor has a detector yet.  Detection is split the way
 naming is: a small *detector* beside the vendor's codec reads the lines that state the device and
 returns the part numbers, member numbers and bays they state — it has
 no table of models — and `propose_deployment` resolves what was read
@@ -1943,8 +1945,13 @@ against the config**: every port name the config uses should be a port
 of the device the config says it is.  That check is the collection a
 translation makes of the same config, with the same folding, so a
 proposal's missing ports are, up to the cap on that list, the ports a
-translation would report as off the inventory (a vendor whose ports
-keep a factory name gets no detector until that holds for it too).
+translation would report as off the inventory.  Where a port keeps a
+factory name beside the name the config gives it (RouterOS), both read
+the factory names one way (`factory_names`), so the device's port is
+the config's name for it; and where those names do not say which port
+is which, the translation pairs no port by position and the proposal
+checks no name, for the one reason
+(`why_the_names_do_not_say_which_port`).
 The result is a *proposal* with the hardware lines
 it was read from, each as far as its part number; it is never applied
 by itself, because a member or module line states what a device is
