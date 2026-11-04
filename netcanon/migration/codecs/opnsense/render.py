@@ -49,7 +49,7 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -187,7 +187,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             # An account the source gives no password is a review
             # comment, never a <user> with no <password>.
             if holds_no_secret(user.hashed_password):
-                review = format_no_secret_comment(
+                review = format_empty_hash_comment(
                     user.name, comment_syntax="xml",
                     target_label="OPNsense",
                 )

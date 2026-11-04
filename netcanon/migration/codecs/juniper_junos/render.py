@@ -77,7 +77,7 @@ from ..._derived_values import (
 from ..._one_value import ADDRESSES, one_value_tree
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -181,7 +181,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # not a ``class`` line with no ``authentication``: what Junos
         # lets such an account do is not established here.
         if holds_no_secret(user.hashed_password):
-            out.append(format_no_secret_comment(
+            out.append(format_empty_hash_comment(
                 user.name, comment_syntax="hash", target_label="Junos",
             ))
             continue

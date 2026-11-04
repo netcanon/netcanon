@@ -52,7 +52,7 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -977,7 +977,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # left blank").  A RouterOS export holds no password, so
             # every user of one is here.
             if holds_no_secret(user.hashed_password):
-                lines.append(format_no_secret_comment(
+                lines.append(format_empty_hash_comment(
                     user.name, comment_syntax="hash",
                     target_label="RouterOS",
                 ))

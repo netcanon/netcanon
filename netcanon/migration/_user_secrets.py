@@ -45,8 +45,8 @@ IOS-XE (Cisco: "No password is required for this user to log in"),
 a blank password on RouterOS and FortiOS -- and the tree
 cannot say whether the source meant that or only held no password
 it could print (a RouterOS export holds none, a FortiOS admin for
-remote login has none).  :func:`format_no_secret_comment` is the
-line written in its place, :func:`no_secret_warnings` the job's
+remote login has none).  :func:`format_empty_hash_comment` is the
+line written in its place, :func:`empty_hash_warnings` the job's
 warning for it (the default of ``CodecBase.render_warnings``).
 
 See also:
@@ -65,8 +65,8 @@ Public surface:
   formatter for the review line emitted when a hash can't be migrated.
 * :func:`holds_no_secret` — predicate: does this value hold no
   password at all?  Such an account is not written on any target.
-* :func:`format_no_secret_comment` — the review line written in its
-  place; :func:`no_secret_warnings` — the job's warning for each.
+* :func:`format_empty_hash_comment` — the review line written in its
+  place; :func:`empty_hash_warnings` — the job's warning for each.
 
 Configuration surface:
 
@@ -457,7 +457,7 @@ def holds_no_secret(hashed: str) -> bool:
     Empty, or a tag with nothing after it (``sha1:``, ``5 ``): the
     payload :func:`classify_hash` finds is empty.  Every renderer of
     local users asks this first, and writes
-    :func:`format_no_secret_comment` in place of such an account,
+    :func:`format_empty_hash_comment` in place of such an account,
     whatever the target and the source -- the same platform included,
     since the tree does not say whether the source MEANT an account
     with no password or only printed none.
@@ -465,7 +465,7 @@ def holds_no_secret(hashed: str) -> bool:
     return not classify_hash(hashed)[1]
 
 
-def format_no_secret_comment(
+def format_empty_hash_comment(
     user_name: str,
     comment_syntax: str = "hash",
     target_label: str = "this target",
@@ -494,11 +494,11 @@ def format_no_secret_comment(
     return comment(body, comment_syntax)
 
 
-def no_secret_warnings(users, target_label: str) -> list[str]:
+def empty_hash_warnings(users, target_label: str) -> list[str]:
     """The job's warning for each of ``users`` that holds no password.
 
     One sentence a user, naming it (never a secret: it has none), for
-    the account :func:`format_no_secret_comment` stands in for.
+    the account :func:`format_empty_hash_comment` stands in for.
     """
     return [
         f'Local user "{user.name}" is not written for {target_label}: '

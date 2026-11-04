@@ -62,7 +62,7 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -229,7 +229,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # required for this user to log in".
     for u in tree.local_users:
         if holds_no_secret(u.hashed_password):
-            out.append(format_no_secret_comment(
+            out.append(format_empty_hash_comment(
                 u.name, comment_syntax="exclamation",
                 target_label="Cisco IOS-XE",
             ))

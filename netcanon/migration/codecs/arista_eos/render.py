@@ -44,7 +44,7 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -424,7 +424,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # in with none, from the console and wherever remote login
             # without a password is allowed.
             if holds_no_secret(user.hashed_password):
-                out.append(format_no_secret_comment(
+                out.append(format_empty_hash_comment(
                     user.name, comment_syntax="exclamation",
                     target_label="Arista EOS",
                 ))

@@ -99,7 +99,7 @@ from __future__ import annotations
 from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -277,7 +277,7 @@ def _render_local_user(user) -> str:
     # An account the source gives no password is a review line,
     # never the account without one.
     if holds_no_secret(user.hashed_password):
-        return format_no_secret_comment(
+        return format_empty_hash_comment(
             user.name, comment_syntax="exclamation", target_label="Dell OS10",
         )
     payload = classify_hash(user.hashed_password)[1]

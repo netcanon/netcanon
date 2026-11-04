@@ -836,7 +836,7 @@ accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`; a typed
 password (`plaintext`) is in a set only where the target has a line
 that takes one (not Junos, not OPNsense).  Before either, a render
 path asks `holds_no_secret(hashed)`: an account with no password at
-all is a `format_no_secret_comment(...)` line in place of the
+all is a `format_empty_hash_comment(...)` line in place of the
 account on every target, and `CodecBase.render_warnings` gives the
 job a warning for each, worded with the codec's
 `local_user_target_label`.

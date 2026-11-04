@@ -542,9 +542,9 @@ the policy locally:
   hash-portability policy.  Public API: `classify_hash(hashed)`,
   `is_migratable(hashed, target_vendor)`, `format_review_comment(
   user_name, algorithm, comment_syntax, target_label)`,
-  `holds_no_secret(hashed)`, `format_no_secret_comment(user_name,
+  `holds_no_secret(hashed)`, `format_empty_hash_comment(user_name,
   comment_syntax, target_label)`.  Each target codec asks
-  `holds_no_secret()` first and writes `format_no_secret_comment(...)`
+  `holds_no_secret()` first and writes `format_empty_hash_comment(...)`
   in place of an account that has no password; then calls
   `is_migratable()` before emitting a password line, and on a miss
   emits a `format_review_comment(...)` line in the appropriate

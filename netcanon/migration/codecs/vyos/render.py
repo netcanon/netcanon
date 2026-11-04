@@ -46,7 +46,7 @@ from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._user_secrets import (
     classify_hash,
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -373,7 +373,7 @@ def _render_login(users: list) -> list[str]:
     out = ["    login {"]
     for u in sorted(users, key=lambda x: x.name):
         if holds_no_secret(u.hashed_password):
-            out.append("        " + format_no_secret_comment(
+            out.append("        " + format_empty_hash_comment(
                 u.name, comment_syntax="slash", target_label="VyOS",
             ))
             continue

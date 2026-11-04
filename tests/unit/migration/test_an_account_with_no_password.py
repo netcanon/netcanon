@@ -37,7 +37,7 @@ import pytest
 
 import netcanon.migration.codecs  # noqa: F401  (registers the codecs)
 from netcanon.migration._user_secrets import (
-    format_no_secret_comment,
+    format_empty_hash_comment,
     format_review_comment,
     holds_no_secret,
     is_migratable,
@@ -368,7 +368,7 @@ def test_a_review_line_is_in_no_targets_syntax(target) -> None:
 @pytest.mark.parametrize("syntax", ["hash", "exclamation", "semicolon", "slash", "xml"])
 def test_the_two_review_lines_share_their_subject(syntax) -> None:
     for line in (
-        format_no_secret_comment("zq", syntax, "T"),
+        format_empty_hash_comment("zq", syntax, "T"),
         format_review_comment("zq", "bcrypt", syntax, "T"),
     ):
         assert 'user "zq"' in line, line
@@ -418,7 +418,7 @@ class TestTheCheckFails:
 
     def test_two_review_lines(self) -> None:
         text, warnings = self._good()
-        text += format_no_secret_comment("zqadmin", "exclamation", "Arista EOS") + "\n"
+        text += format_empty_hash_comment("zqadmin", "exclamation", "Arista EOS") + "\n"
         assert any(
             "2 review lines" in s for s in wrong("arista_eos", text, warnings, _NAMES)
         )
