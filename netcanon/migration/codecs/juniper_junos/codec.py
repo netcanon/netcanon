@@ -77,6 +77,8 @@ class JunosCodec(CodecBase):
     """Bidirectional codec for Juniper Junos ``set``-form configuration."""
 
     name: ClassVar[str] = "juniper_junos"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Junos"
     version_hint: ClassVar[str | None] = "Junos 18.x+"
     input_format: ClassVar[str] = "cli-junos-set"
     direction: ClassVar[str] = "bidirectional"

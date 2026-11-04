@@ -513,29 +513,24 @@ per_field_expectation:
   # -- Identity -- one account lost, every surviving credential intact -------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      17 local-user records across 13 cells; 16 survive.  The single loss is
-      `netadmin` on `houdev_vyos_dhcpv6_pd_client.conf` — the one account in
-      the corpus with NO password.  The render emits
-      `username netadmin privilege 15 nopassword`, and the IOS-XE CLI
-      re-parser does not recognise the `nopassword` form, so the account is
-      not recovered.  That is the only cell where the user list changes
-      length (1 -> 0).
-      Recorded `lossy`, not `unsupported`, and the vanish classifier
-      disagrees — it reports this field `TOTAL -> unsupported` because on
-      that one cell the count goes 1 -> 0, which looks total in isolation.
-      Resolved by round-tripping all 13 cells rather than trusting the
-      per-cell verdict: cisco_iosxe_cli emits `username` lines on ALL 13
-      cells and 16 of 17 accounts survive with role and credential intact.
-      This is a partial record loss inside a concept the target models, not
-      the concept-level gap `unsupported` blocks for (#436).
-      Before cutover, list the source accounts and diff them against the
-      render — a silently missing admin account is how a migration locks you
-      out, and the account this pair drops is precisely the one with no
-      password to fall back on.
-      This key carries the record-level signal for the whole `local_users`
-      list; the two sub-fields below are scored on surviving records only.
+      No account arrives: 0 of 17 across the 13 cells that populate local
+      users. The 16 accounts that hold a secret carry 16 SHA-512 crypt
+      (`$6$`), and each is refused for its secret's form (#461) with a review
+      comment naming the account, in place of the account. The one account
+      with no password, on `houdev_vyos_dhcpv6_pd_client.conf`, vanishes too:
+      the IOS-XE render writes a review comment naming it, since an account
+      written with no password could log in with none. Up to 0.7.7 it was
+      written `username <name> privilege 15 nopassword`, which the IOS-XE CLI
+      re-parser did not read back. Recorded `unsupported` rather than `lossy`:
+      no account arrives on this corpus, so the record vanishes entirely
+      (#436). Which account would arrive is decided by its secret's form, so a
+      source holding a secret this target can take would carry it. Before
+      cutover, search the render for `review:` comments and re-create each
+      such account on the target with a password, or as an account for remote
+      (RADIUS or TACACS+) login. This key carries the record-level signal for
+      the whole `local_users` list.
     references: [vyos-iosxe-cli-surface]
 
   "local_users[].role":

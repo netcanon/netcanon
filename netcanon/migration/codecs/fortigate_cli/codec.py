@@ -64,6 +64,8 @@ class FortiGateCLICodec(CodecBase):
     """Codec for FortiGate CLI (``config/edit/set/next/end``)."""
 
     name: ClassVar[str] = "fortigate_cli"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "FortiOS"
     version_hint: ClassVar[str | None] = "7.x"
     input_format: ClassVar[str] = "cli-fortigate"
     direction: ClassVar[str] = "bidirectional"

@@ -388,6 +388,21 @@ tests use these exclusively — never CSS classes or element structure.  See
   so a sanitised config held typed passwords where the device held
   hashes, and on Junos lost the account.  A fake is the same kind of
   secret as what it replaces (`tests/unit/tools/test_sanitize_keeps_a_secrets_kind.py`).
+  And no secret at all is not a secret that every target takes: a
+  user the source gives no password (nothing, or a tag with nothing
+  after it) was written by every target but AOS-S -- `nopassword` on
+  IOS-XE and EOS, an account that logs in with none -- since every
+  gate asked whether a hash could be re-used and an empty one raised
+  no question.  Every renderer of local users asks `holds_no_secret`
+  first and writes a review line in place of the account, the
+  source's own platform included (the tree does not say whether the
+  source MEANT no password).  Guarded by
+  `tests/unit/migration/test_an_account_with_no_password.py`, which
+  reads each target's output for an account with a reader of the
+  target's grammar the test owns, not only with the target's parser
+  -- the IOS-XE, NX-OS and AOS-CX parsers did not read back the
+  account their renderer wrote, so a parse of the output found nothing
+  to object to.
 - **Never** re-emit a credential that is SALTED TO ITS SOURCE DEVICE.  An
   SNMPv3 USM key is localised against the agent's engine ID, so writing another
   vendor's key into the target's key leaf yields a config that commits cleanly

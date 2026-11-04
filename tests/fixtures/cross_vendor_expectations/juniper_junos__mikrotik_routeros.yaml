@@ -646,21 +646,26 @@ per_field_expectation:
   # ── Tier 2 — local users ──
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      1 of 13 accounts arrive across the 8 cells that populate local users; the
-      list shrinks on 8 of them. The 12 accounts that vanish carry 4 SHA-512
-      crypt (`$6$`), 4 MD5 crypt (`$1$`), 4 `junos:`-tagged crypt string.
-      RouterOS can consume a genuine plaintext password only (it hashes the
-      password itself); anything else is refused with a review comment naming
-      the account, in place of the account. Up to 0.7.7 such an account was
+      No account arrives: 0 of 13 across the 8 cells that populate local
+      users. The 12 accounts refused for their secret carry 4 SHA-512 crypt
+      (`$6$`), 4 MD5 crypt (`$1$`), 4 `junos:`-tagged crypt string. RouterOS
+      can consume a genuine plaintext password only (it hashes the password
+      itself); anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was
       written as `/user add` with no `password=`, which RouterOS gives a blank
-      password; a refused secret now drops the whole account, as on every other
-      target. The survivors are 1 with no stored secret. Recorded `lossy` rather
-      than `unsupported`: which account survives is decided by its secret form,
-      and accounts with a consumable secret do arrive. Before cutover, list the
-      source accounts, search the render for `review:` comments, and re-create
-      each refused account on the target with a fresh password.
+      password; a refused secret now drops the whole account, as on every
+      other target. The 1 account with no stored secret, which up to 0.7.7
+      arrived, now vanishes too: the RouterOS render writes a review comment
+      naming it, in place of the account, since an account written with no
+      password could log in with none. Recorded `unsupported` rather than
+      `lossy`: no account arrives on this corpus, so the record vanishes
+      entirely (#436). Which account would arrive is decided by its secret's
+      form, so a source holding a secret this target can take would carry it.
+      Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target
+      with a fresh password.
     references: [junos-password-cli, junos-kb-password-format, mikrotik-user]
 
   # ── Tier 2 — RADIUS ──

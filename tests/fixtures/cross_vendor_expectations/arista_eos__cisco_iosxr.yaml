@@ -48,8 +48,9 @@ meta:
     router carrying the same routed interfaces, addressing, VRFs and static
     routing.  Hostname, domain, DNS/NTP/syslog targets, the whole interface
     inventory with its descriptions, admin state, MTU and IPv6 addressing,
-    static routes, VRF names, usernames and stored password hashes all
-    survive.  What does not survive is everything below the routed layer:
+    static routes, VRF names, and every account that holds a password,
+    with its stored hash, all survive (an account with no password is a
+    review comment in its place).  What does not survive is everything below the routed layer:
     the VLAN database, VXLAN VNIs, the anycast gateway MAC, switchport
     membership, SNMP, DHCP pools and RADIUS are dropped outright, and
     interface type, LAG naming, VARP anycast SVI addressing and implicit user
@@ -473,8 +474,19 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: "Usernames preserved on 6 of 6 cells; `/local-users/user/name` supported on both sides."
+    disposition: lossy
+    reason: >
+      12 of 15 accounts arrive across the 8 cells that populate local users;
+      the list shrinks on 2 of them. The 3 that vanish are the accounts with
+      no stored secret: the IOS-XR render writes a review comment naming each,
+      in place of the account, since an account written for IOS-XR with no
+      password could log in with none. Up to 0.7.7 each was written as a
+      `username` with its `group` and no secret. Every account that holds a
+      password arrives. Recorded `lossy` rather than `unsupported`: an account
+      is left out only where the source holds no secret for it, and the rest
+      arrive. Before cutover, search the render for `review:` comments and
+      re-create each such account on the target with a password, or as an
+      account for remote (RADIUS or TACACS+) login.
     references: [arista-iosxr-surface]
 
   "local_users[].role":

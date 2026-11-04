@@ -44,7 +44,9 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
+    format_empty_hash_comment,
     format_review_comment,
+    holds_no_secret,
     is_migratable,
 )
 from ..._usm_keys import (
@@ -396,8 +398,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # ``_ARISTA_SECRET_TYPE`` — keeping the dispatch table local
     # documents the EOS CLI grammar that consumes the tag verbatim
     # (similar to Aruba's ``_AOS_KNOWN_ALGORITHMS``).  Unmigratable
-    # hashes fall through to a comment-form ``! password manager
-    # user-name "X" -- review:`` line so the operator gets an
+    # hashes fall through to a comment-form ``! user "X" --
+    # review:`` line so the operator gets an
     # explicit "reset this password" signal and the rendered config
     # commits clean.
     #
@@ -417,20 +419,26 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # passwordless account on commit, defeating the gate.
             # Finding #16 in user_smoke_findings.md (post-fix
             # re-paste).
-            if user.hashed_password:
-                algorithm, payload = classify_hash(user.hashed_password)
-                if not is_migratable(user.hashed_password, "arista_eos"):
-                    review = format_review_comment(
-                        user.name, algorithm,
-                        comment_syntax="exclamation",
-                        target_label="Arista EOS",
-                    )
-                    out.append(review)
-                    continue
-                secret_tag = _ARISTA_SECRET_TYPE[algorithm]
-            else:
-                secret_tag = None
-                payload = ""
+            # An account the source gives no password is a review line
+            # too.  It was written ``nopassword``: an account that logs
+            # in with none, from the console and wherever remote login
+            # without a password is allowed.
+            if holds_no_secret(user.hashed_password):
+                out.append(format_empty_hash_comment(
+                    user.name, comment_syntax="exclamation",
+                    target_label="Arista EOS",
+                ))
+                continue
+            algorithm, payload = classify_hash(user.hashed_password)
+            if not is_migratable(user.hashed_password, "arista_eos"):
+                review = format_review_comment(
+                    user.name, algorithm,
+                    comment_syntax="exclamation",
+                    target_label="Arista EOS",
+                )
+                out.append(review)
+                continue
+            secret_tag = _ARISTA_SECRET_TYPE[algorithm]
             # Name, role and secret are one word each on this line (a
             # user name and a password take no white space); the account
             # is left out whole rather than altered.
@@ -444,10 +452,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 parts.append(f"privilege {user.privilege_level}")
             if user.role:
                 parts.append(f"role {user.role}")
-            if user.hashed_password:
-                parts.append(f"secret {secret_tag} {payload}")
-            else:
-                parts.append("nopassword")
+            parts.append(f"secret {secret_tag} {payload}")
             out.append(" ".join(parts))
         out.append("!")
 

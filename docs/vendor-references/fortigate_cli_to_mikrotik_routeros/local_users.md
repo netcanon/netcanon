@@ -1,5 +1,8 @@
 # Local users and admin profiles: FortiGate FortiOS versus MikroTik RouterOS
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — no account from this source is written for RouterOS.**  A FortiOS `ENC` secret (tagged `fortios:`) is one RouterOS cannot take, and since 2026-10-20 a refused secret drops the whole account: the render writes `# user "<name>" -- review: fortios hash from source vendor cannot be re-used on RouterOS; reset this user password manually` under `/user` IN PLACE of it, not a `/user add` line without a password attribute.  An account the source holds no password for (on this source, admins for remote (RADIUS) login that hold no local secret) was written as `/user add group=<group> name=<name>` with no `password=` up to this change, and is now `# user "<name>" -- review: no password for this account was read from the source, and an account written for RouterOS without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, with one job warning naming each.  Measured on this pair: `local_users` in/out over the 4 cells that populate users is **8 / 0** (6 refused `fortios` secrets, and 2 accounts with no password, on 1 cell); before this change it was **8 / 2**, the 2 being the accounts with no password.  Any statement below that the rendered `/user add` line carries no password attribute describes an earlier render.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__mikrotik_routeros.yaml`.
+
 ## FortiGate FortiOS CLI
 
 Sources:

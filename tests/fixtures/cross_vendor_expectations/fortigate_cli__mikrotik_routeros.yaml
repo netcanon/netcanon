@@ -37,10 +37,10 @@
 #     MD5/SHA1 + AES-128) and engineID-salted passphrases are
 #     well-documented but the exact narrowing depends on RouterOS
 #     version (some recent ROS 7.x accept SHA256/AES-256-CFB).
-#   * Local users are medium-confidence lossy on this direction:
-#     FortiOS source HAS hashed passwords (in ENC form) but RouterOS
-#     does not surface password material in /export, so the rendered
-#     RouterOS config carries no password attribute at all.
+#   * Local users are unsupported on this direction:
+#     FortiOS source HAS hashed passwords (in ENC form), which RouterOS
+#     cannot take, and an account with no password is a review comment
+#     in its place, so no account arrives on this corpus.
 #   * Firewall / NAT / VDOM / UTM are confidently unsupported in
 #     this direction — FortiGate source carries meaningful policy
 #     data with no canonical landing place.
@@ -300,21 +300,25 @@ per_field_expectation:
     references: [lags]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      2 of 8 accounts arrive across the 4 cells that populate local users; the
-      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
-      `ENC` ciphertext. RouterOS can consume a genuine plaintext password only
-      (it hashes the password itself); anything else is refused with a review
+      No account arrives: 0 of 8 across the 4 cells that populate local users.
+      The 6 accounts refused for their secret carry 6 FortiOS `ENC`
+      ciphertext. RouterOS can consume a genuine plaintext password only (it
+      hashes the password itself); anything else is refused with a review
       comment naming the account, in place of the account. Up to 0.7.7 such an
       account was written as `/user add` with no `password=`, which RouterOS
       gives a blank password; a refused secret now drops the whole account, as
-      on every other target. The survivors are 2 with no stored secret. Recorded
-      `lossy` rather than `unsupported`: which account survives is decided by
-      its secret form, and accounts with a consumable secret do arrive. Before
-      cutover, list the source accounts, search the render for `review:`
-      comments, and re-create each refused account on the target with a fresh
-      password.
+      on every other target. The 2 accounts with no stored secret, which up to
+      0.7.7 arrived, now vanish too: the RouterOS render writes a review
+      comment naming each, in place of the account, since an account written
+      with no password could log in with none. Recorded `unsupported` rather
+      than `lossy`: no account arrives on this corpus, so the record vanishes
+      entirely (#436). Which account would arrive is decided by its secret's
+      form, so a source holding a secret this target can take would carry it.
+      Before cutover, list the source accounts, search the render for
+      `review:` comments, and re-create each refused account on the target
+      with a fresh password.
     references: [local_users]
 
   radius_servers:

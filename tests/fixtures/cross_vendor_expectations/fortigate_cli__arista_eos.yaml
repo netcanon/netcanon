@@ -327,28 +327,31 @@ per_field_expectation:
     references: [lags]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       FortiGate's named accprofile strings (``super_admin`` /
-      ``super_admin_readonly`` / ``prof_admin`` / custom)
-      flatten onto Arista's numeric privilege + role string via
-      codec policy: ``super_admin`` -> privilege 15 + role
-      ``network-admin``; others -> privilege 1 + role preserved
-      as-is in the canonical ``role`` field.  Granular per-
-      profile detail (FortiGate accprofile permission matrices)
-      is lost — Arista has no equivalent of FortiGate's per-
-      profile feature-permission grid.  Hash formats are NOT
-      cross-compatible: FortiOS ``ENC <opaque-base64>`` requires
-      the FortiGate device's master key; Arista accepts ``$1$``
-      (md5_crypt), ``$5$`` (sha256_crypt), ``$6$`` (sha512_crypt
-      — modern default), ``$8$`` (PBKDF2), ``$9$`` (scrypt), and
-      type-7 reversible — none match FortiOS ``ENC``.  Cross-
-      vendor migration of admin accounts requires re-setting
-      passwords on the target.  Both codecs preserve hashes
-      verbatim with vendor tags so the loss surfaces in the
-      validation report.  Trusthost / IP-source-restriction
-      (FortiOS ``set trusthost1``) is FortiGate-specific and
-      not in canonical, so it drops entirely on Arista render.
+      ``super_admin_readonly`` / ``prof_admin`` / custom) flatten onto
+      Arista's numeric privilege + role string via codec policy:
+      ``super_admin`` -> privilege 15 + role ``network-admin``; others ->
+      privilege 1 + role preserved as-is in the canonical ``role`` field.
+      Granular per- profile detail (FortiGate accprofile permission matrices)
+      is lost — Arista has no equivalent of FortiGate's per- profile
+      feature-permission grid. Hash formats are NOT cross-compatible: FortiOS
+      ``ENC <opaque-base64>`` requires the FortiGate device's master key;
+      Arista accepts ``$1$`` (md5_crypt), ``$5$`` (sha256_crypt), ``$6$``
+      (sha512_crypt — modern default), ``$8$`` (PBKDF2), ``$9$`` (scrypt), and
+      type-7 reversible — none match FortiOS ``ENC``. Cross- vendor migration
+      of admin accounts requires re-setting passwords on the target. Both
+      codecs preserve hashes verbatim with vendor tags so the loss surfaces in
+      the validation report. Trusthost / IP-source-restriction (FortiOS ``set
+      trusthost1``) is FortiGate-specific and not in canonical, so it drops
+      entirely on Arista render. No account arrives: 0 of 8 across the 4 cells
+      that populate local users; 6 are refused for their FortiOS `ENC` secret
+      and 2 hold no stored secret, and each is a review comment in place of
+      the account. Recorded `unsupported` rather than `lossy`: no account
+      arrives on this corpus, so the record vanishes entirely (#436). Which
+      account would arrive is decided by its secret's form, so a source
+      holding a secret this target can take would carry it.
     references: [local_users, local_users_arista]
 
   radius_servers:

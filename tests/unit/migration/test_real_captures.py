@@ -44,6 +44,7 @@ from typing import Any
 
 import pytest
 
+from netcanon.migration._user_secrets import holds_no_secret
 from netcanon.migration.canonical.intent import CanonicalIntent
 
 # Side-effect imports to auto-register every codec with the registry
@@ -360,6 +361,13 @@ def test_real_capture_round_trips_stable(
         # field the codec CAN render.
         if codec.capabilities.classify("/routing/static-route") != "supported":
             d.pop("static_routes", None)
+        # An account with no password is not written, on its own
+        # codec too (test_an_account_with_no_password.py): the first
+        # parse has it, the re-parse does not.
+        d["local_users"] = [
+            u for u in d["local_users"]
+            if not holds_no_secret(u["hashed_password"])
+        ]
         # Sort collections by natural identity key.
         for key, id_key in [
             ("interfaces", "name"),

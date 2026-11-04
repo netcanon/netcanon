@@ -144,7 +144,8 @@ lossy where vendors disagree on representation.
 * `local_users` — name, privilege, role, hashed_password.  Hashes
   that the target's CLI cannot consume surface as comment-form
   review lines (see "Hash-portability policy" below) — **never** as
-  a plaintext fallback
+  a plaintext fallback; an account with no password is such a line
+  too, never an account
 * `radius_servers`
 * `dhcp_servers` (per-pool — network, gateway, range, options)
 * `vxlan_vnis`, `evpn_type5_routes` (shipped schema-first; `vxlan_vnis`
@@ -755,13 +756,14 @@ in rendered output find every such site.
 
 * **Hash-portability policy**
   ([`netcanon/migration/_user_secrets.py`](../netcanon/migration/_user_secrets.py)).
-  Every render path that emits a local user (all eleven) calls
+  Every render path that emits a local user calls
   `is_migratable(hash, target_vendor)` first; on a miss, they emit a
   vendor-correct comment of the form:
 
-      password manager user-name "X" -- review: <alg> hash from
-      source vendor cannot be re-used on <target>; reset this user
-      password manually
+      user "X" -- review: <alg> hash from source vendor cannot be
+      re-used on <target>; reset this user password manually
+
+  (AOS-S writes its own lines, which name its own command.)
 
   Comment delimiter varies by vendor: Aruba AOS-S uses `;`, Cisco
   IOS-XE CLI / NX-OS / IOS-XR, Arista EOS and ArubaOS-CX use `!`,
@@ -813,10 +815,10 @@ in rendered output find every such site.
      `<password>` hold a hash; Junos's `plain-text-password` asks at a
      prompt), so there such an account is left out with a review line:
 
-         # password manager user-name "<name>" -- review: the source
-         holds this password as typed, and Junos takes a password into
-         its config only as a hash; the account is left out: add it on
-         the device and set its password there
+         # user "<name>" -- review: the source holds this password
+         as typed, and Junos takes a password into its config only as
+         a hash; the account is left out: add it on the device and set
+         its password there
 
      They used to write the typed string as the hash.
   6. AOS-S holds ONE manager and ONE operator account, and a second
@@ -837,6 +839,30 @@ in rendered output find every such site.
      review line above the accounts (and one job warning) says what
      the switch needs.  See
      [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md#local-users-one-manager-and-one-operator).
+  7. No target writes an account that has no password.  A user the
+     source gives none -- nothing, or a tag with nothing after it
+     (`sha1:`, `5 `; `holds_no_secret`) -- is a review line in place
+     of the account on every target, and the job has a warning for
+     it:
+
+         ! user "<name>" -- review: no password for this account was
+         read from the source, and an account written for Arista EOS
+         without one could log in with none; it is left out: add it
+         on the device with a password, or as an account for remote
+         (RADIUS or TACACS+) login
+
+     What such an account may do is the target's: an IOS-XE
+     `nopassword` account logs in with no password, an EOS one from
+     the console, and a RouterOS user added with no password has a
+     blank one.  IOS-XE and EOS wrote `nopassword` and the others an
+     account with no password clause.  It holds between two configs
+     of one platform too, since the tree does not say whether the
+     source meant such an account or only printed none: an account
+     that authenticates only through RADIUS or TACACS+ (a Junos
+     `remote` template, a FortiOS remote administrator), an OPNsense
+     `<user>` with no `<password>`, a VyOS user with no
+     `authentication` and every user of a RouterOS export, which
+     prints no passwords, are added on the device by hand.
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth

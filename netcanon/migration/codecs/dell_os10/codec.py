@@ -72,6 +72,8 @@ class DellOS10Codec(CodecBase):
     """
 
     name: ClassVar[str] = "dell_os10"
+    #: See ``CodecBase.local_user_target_label``.
+    local_user_target_label: ClassVar[str | None] = "Dell OS10"
     version_hint: ClassVar[str | None] = "10.5.x"
     input_format: ClassVar[str] = "cli-dellos10"
     direction: ClassVar[str] = "bidirectional"

@@ -36,7 +36,10 @@ corpus yet — operator captures from EOS 4.27+ are welcome (see
   with auth + priv per user
 - RADIUS — `radius-server host`
 - Local users with hashed passwords — `secret sha512 $6$` and
-  `secret 5 $1$` form-preserving cross-vendor migration
+  `secret 5 $1$` form-preserving cross-vendor migration.  A
+  `nopassword` account is a `review:` line on every target, EOS
+  included: no target writes an account with no password (on EOS it
+  logs in from the console with none)
 - MLAG — peer link + per-Port-Channel `mlag <id>` mapping
 - VRF definitions (`vrf instance ...`)
 - VXLAN — `interface Vxlan1` + `vxlan vlan <id> vni <vni>` mappings

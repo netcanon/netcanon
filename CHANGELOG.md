@@ -28,6 +28,37 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **No target writes an account that has no password.**  A local user
+  the source gives no password -- nothing, or a tag with nothing after
+  it (`sha1:`, `5 `) -- was written by every target but AOS-S: IOS-XE
+  and EOS as `username <name> ... nopassword`, which on IOS-XE logs in
+  with no password at all and on EOS from the console, and the others
+  as an account with no password clause, which on RouterOS is an
+  account whose password is empty.  Each job said `completed` and
+  nothing else.  Every renderer now asks one question first
+  (`holds_no_secret` in `netcanon/migration/_user_secrets.py`) and
+  writes one `review:` comment in place of such an account, in its
+  own comment syntax, naming the account and saying to add it on the
+  device with a password or as an account for remote (RADIUS or
+  TACACS+) login; the job has one warning for each.  The status is
+  not changed.  AOS-S, which already left such an account out, now
+  knows a tag alone for one too.  It is so between two configs of one
+  platform as well, since the tree does not say whether the source
+  MEANT an account with no password or only printed none: an EOS
+  `nopassword` account, a Junos template account for remote login, a
+  FortiOS administrator that authenticates remotely, an OPNsense
+  `<user>` with no `<password>`, a VyOS user with no `authentication`,
+  and every user of a RouterOS export (which prints no passwords) are
+  review lines on their own platform too.  And the review line for a
+  hash a target cannot take names the account as `user "<name>"` on
+  every target but AOS-S; it had begun with the AOS-S command
+  `password manager user-name` everywhere.  Guarded by
+  `tests/unit/migration/test_an_account_with_no_password.py`, which
+  renders such accounts onto every target that writes accounts and
+  reads each output for an account twice -- by a reader of the
+  target's grammar the test owns, and with the target's parser --
+  over every committed input as well.
+
 - **An AOS-S output with a hashed account says what the switch
   needs to take it.**  A hashed account line (`sha1`, `sha256`) needs
   `include-credentials` on the switch -- a 5412R refused a `sha256`
@@ -5535,10 +5566,18 @@ timestamp if your timezone matters for an audit.
   line that contains only the delimiter character"; the parser reads
   the rest as text, the safe side, and a banner that never ends so is
   refused).
-- **An EOS account with `nopassword` is written to Junos as a login
-  user with no authentication statement**, in a job that says
-  `completed`; what Junos then allows such a user is not established
-  here.
+- **An account that authenticates only remotely is not written.**
+  An account a config keeps with no password of its own because a
+  RADIUS or TACACS+ server checks it (a Junos `remote` template
+  account, a FortiOS administrator of a remote group) is a review
+  line on every target, its own platform included, and is added on
+  the device by hand.  The same holds for every account of a RouterOS
+  export: the RouterOS parser reads no `password=`, which an export
+  never prints.  So is any other account a config states with no
+  password (an OPNsense `<user>` with no `<password>`, a VyOS user
+  with no `authentication`).  And a sanitised config is rendered by
+  its own codec, so its output has the same review line in place of
+  such an account.
 - **A whole IOS XR `show running-config formal` config is refused,
   not read.**  No capture of it is committed, and Cisco states its
   printed shape for class and policy maps only.  Paste `show

@@ -8,8 +8,8 @@ section):
 
 * Finding #2 — bcrypt hash leak under ``secret 5 bcrypt:$2y$11$...``
   (security disclosure + wrong type tag).  Cross-vendor hashes that
-  IOS-XE cannot consume must emit a ``! password manager user-name
-  ...`` review-comment line, not the literal payload.
+  IOS-XE cannot consume must emit a ``! user "<name>" -- review:
+  ...`` comment line, not the literal payload.
 * Finding #8 — ``interface igc0`` empty stub leaking through from the
   OPNsense canonical tree.  The render path now mirrors the Junos
   tiered-elision pattern (commit ``0fdf7e9``) and skips empty stubs
@@ -69,7 +69,7 @@ class TestHashGate:
         assert "username root secret 5" not in out
         # Review comment present, IOS-XE syntax (``! ``).
         assert (
-            '! password manager user-name "root" -- review: bcrypt'
+            '! user "root" -- review: bcrypt'
             in out
         )
 
@@ -137,7 +137,7 @@ class TestHashGate:
         assert "AK1abc" not in out
         assert "fortios" in out
         assert (
-            '! password manager user-name "bob"' in out
+            '! user "bob" -- review:' in out
         )
 
 

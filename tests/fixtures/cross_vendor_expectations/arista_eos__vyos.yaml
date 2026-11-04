@@ -51,8 +51,9 @@ meta:
     the same routed interfaces, addressing, static routing and VRFs.
     Hostname, domain, DNS and NTP, the full interface inventory with its
     descriptions, MTU, admin state and IPv4/IPv6 addressing, VRF names,
-    VXLAN VNI numbers, local account names and their password hashes all
-    survive. What does not is the entire L2 fabric — the VLAN database, the
+    VXLAN VNI numbers, and every local account that holds a password,
+    with its hash, all survive (an account with no password is a review
+    comment in its place). What does not is the entire L2 fabric — the VLAN database, the
     LAG/bonding surface, and the VARP anycast gateway — plus syslog
     destinations, DHCP pools, SNMP trap hosts, the static-route VRF scope,
     SNMPv3 algorithm strength, the VXLAN VLAN binding, and every local-user
@@ -540,13 +541,19 @@ per_field_expectation:
   # -- Identity -- names and credentials cross; authority does not ----------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      All 12 accounts across all 6 cells survive with their names intact —
-      zero accounts dropped, zero added, on any cell.  Both matrices declare
-      `/local-users/user/name` supported.  Notable because account loss is
-      the common failure on this mesh; it does not happen on this pair.  The
-      losses that DO occur are on the role, below.
+    disposition: lossy
+    reason: >
+      12 of 15 accounts arrive across the 8 cells that populate local users;
+      the list shrinks on 2 of them. The 3 that vanish are the accounts with
+      no stored secret: the VyOS render writes a review comment naming each,
+      in place of the account, since an account written for VyOS with no
+      password could log in with none. Up to 0.7.7 each was written as a
+      `login user` with no `authentication` node. Every account that holds a
+      password arrives. Recorded `lossy` rather than `unsupported`: an account
+      is left out only where the source holds no secret for it, and the rest
+      arrive. Before cutover, search the render for `review:` comments and
+      re-create each such account on the target with a password, or as an
+      account for remote (RADIUS or TACACS+) login.
     references: [arista-vyos-surface]
 
   "local_users[].role":

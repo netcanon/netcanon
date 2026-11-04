@@ -30,6 +30,9 @@ import pathlib
 import pytest
 
 from netcanon.migration.codecs.juniper_junos import JunosCodec
+from tests.unit.migration.test_an_account_with_no_password import (
+    without_the_reviews_of,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -304,7 +307,9 @@ def test_round_trip_stable():
     # byte.
     second_intent = codec.parse(rendered_a)
     rendered_b = codec.render(second_intent)
-    assert rendered_a == rendered_b, (
+    # The first render writes a review line in place of an account with
+    # no password; the re-parse has no such account.
+    assert without_the_reviews_of(rendered_a, first_intent) == rendered_b, (
         "Junos kitchen-sink round-trip is not stable: render → parse "
         "→ render must produce byte-identical output."
     )

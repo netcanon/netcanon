@@ -590,22 +590,25 @@ per_field_expectation:
     references: [mikrotik_bonding, opnsense-laggs]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       RouterOS named groups (``full`` / ``write`` / ``read`` / custom)
-      collapse to OPNsense's binary admin / non-admin via group
-      membership: ``full`` -> ``<groupname>admins</groupname>``
-      (privilege 15 equivalent); ``write`` -> ``<groupname>admins
-      </groupname>`` with banner (closest analogue); ``read`` ->
-      ``<groupname>users</groupname>``; custom RouterOS groups
-      collapse to ``users`` with banner.  The dominant lossy point
-      is password material: RouterOS ``/export`` does NOT surface
-      hashed passwords (they are stored encrypted in the vendor-
-      private ``user.dat`` binary).  ``CanonicalLocalUser.hashed_password``
-      arrives EMPTY after a RouterOS parse; OPNsense render emits
-      the user record without a ``<password>`` element and OPNsense
-      will refuse login until the operator sets a password manually
-      post-migration.
+      collapse to OPNsense's binary admin / non-admin via group membership:
+      ``full`` -> ``<groupname>admins</groupname>`` (privilege 15 equivalent);
+      ``write`` -> ``<groupname>admins </groupname>`` with banner (closest
+      analogue); ``read`` -> ``<groupname>users</groupname>``; custom RouterOS
+      groups collapse to ``users`` with banner. The dominant lossy point is
+      password material: RouterOS ``/export`` does NOT surface hashed
+      passwords (they are stored encrypted in the vendor- private ``user.dat``
+      binary). ``CanonicalLocalUser.hashed_password`` arrives EMPTY after a
+      RouterOS parse; the OPNsense render writes a review comment naming each
+      account, in place of the account, since an account written with no
+      password could log in with none: no account arrives (0 of 3 on the 1
+      cell that populates local users), and the operator creates the accounts
+      with passwords, or as accounts for remote (RADIUS or TACACS+) login,
+      post-migration. Recorded `unsupported` rather than `lossy`: no account
+      can arrive from a RouterOS export, because it prints no passwords, so
+      the record vanishes entirely (#436).
     references: [mikrotik_user, opnsense-users]
 
   radius_servers:

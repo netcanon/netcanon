@@ -123,7 +123,7 @@ sub-field of the same parent is preserved on every cell that exercises it, so
   claimed by a key that genuinely declares a loss.
 * **`local_users[].hashed_password` never survives.** The render emits no
   password line at all, only a review comment
-  (`# password manager user-name "admin" -- review: 5 hash from source vendor
+  (`# user "admin" -- review: 5 hash from source vendor
   cannot be re-used on FortiOS; reset this user password manually`). Shape of
   the loss: `5 $5$<salt>$<digest>` -> `""`. Every migrated admin account lands
   on the FortiGate with no credential.

@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 import netcanon.migration.codecs  # noqa: F401  (registers the codecs)
-from netcanon.migration._user_secrets import classify_hash
+from netcanon.migration._user_secrets import classify_hash, holds_no_secret
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
 from netcanon.tools import sanitize
@@ -74,7 +74,15 @@ _READS_A_SECRET = {
 
 
 def _kinds(codec: str, text: str) -> list[str]:
-    return sorted(classify_hash(u.hashed_password)[0] for u in get_codec(codec).parse(text).local_users)
+    """The kind of each secret the parse of *text* holds.  An account
+    with no password holds none, and is not written
+    (``tests/unit/migration/test_an_account_with_no_password.py``); a
+    secret sanitised to nothing would be one fewer here."""
+    return sorted(
+        classify_hash(u.hashed_password)[0]
+        for u in get_codec(codec).parse(text).local_users
+        if not holds_no_secret(u.hashed_password)
+    )
 
 
 def _findings(codec: str, raw: str) -> list[str]:

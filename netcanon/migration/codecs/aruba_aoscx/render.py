@@ -49,7 +49,13 @@ import ipaddress
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_empty_hash_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ..._usm_keys import (
     PLAINTEXT,
     classify_usm_key,
@@ -230,7 +236,7 @@ def _render_local_user(user) -> str:
     ``role`` (the AOS-CX group) is emitted verbatim when set (same-vendor
     round-trip) and otherwise derived from the privilege level
     (administrators >= 15, else operators).  A user with no stored secret
-    renders the bare form (best-effort for a cross-vendor source).
+    is a review line: the bare form is an account with no password.
 
     The secret passes the shared :func:`is_migratable` gate first.  The
     ``ciphertext`` slot only takes AOS-CX's own device-keyed ``AQB`` blob;
@@ -244,9 +250,13 @@ def _render_local_user(user) -> str:
     # Name, group and password are one word each (a local user's name and
     # password take no spaces); the account is left out whole rather than
     # altered.  Policy: :mod:`netcanon.migration._one_value`.
-    payload = (
-        classify_hash(user.hashed_password)[1] if user.hashed_password else ""
-    )
+    # An account the source gives no password is a review line,
+    # never the account without one.
+    if holds_no_secret(user.hashed_password):
+        return format_empty_hash_comment(
+            user.name, comment_syntax="exclamation", target_label="ArubaOS-CX",
+        )
+    payload = classify_hash(user.hashed_password)[1]
     # A secret this target cannot take at all is the hash gate's to
     # say (below); this asks only of one it would write.
     if splits(user.name) or splits(role) or (
@@ -254,16 +264,14 @@ def _render_local_user(user) -> str:
         and is_migratable(user.hashed_password, "aruba_aoscx")
     ):
         return "! " + left_out(f"user {user.name}", "ArubaOS-CX")
-    if user.hashed_password:
-        algorithm, payload = classify_hash(user.hashed_password)
-        if not is_migratable(user.hashed_password, "aruba_aoscx"):
-            return format_review_comment(
-                user.name, algorithm,
-                comment_syntax="exclamation", target_label="ArubaOS-CX",
-            )
-        kind = "plaintext" if algorithm == "plaintext" else "ciphertext"
-        return f"user {user.name} group {role} password {kind} {payload}"
-    return f"user {user.name} group {role}"
+    algorithm, payload = classify_hash(user.hashed_password)
+    if not is_migratable(user.hashed_password, "aruba_aoscx"):
+        return format_review_comment(
+            user.name, algorithm,
+            comment_syntax="exclamation", target_label="ArubaOS-CX",
+        )
+    kind = "plaintext" if algorithm == "plaintext" else "ciphertext"
+    return f"user {user.name} group {role} password {kind} {payload}"
 
 
 def _render_snmp(snmp, source_vendor: str = "") -> list[str]:

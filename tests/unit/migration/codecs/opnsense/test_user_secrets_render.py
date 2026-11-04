@@ -55,8 +55,8 @@ def test_unmigratable_cisco_type_9_emits_xml_review_comment() -> None:
     )
     out = render_intent(intent)
     # Comment marker present, naming the user.
-    assert "password manager" in out
-    assert 'user-name "netadmin"' in out
+    assert '<!--user "netadmin" - review:' in out
+    assert "password manager" not in out
     # Carries the source algorithm name so the operator knows what
     # they are resetting from.
     assert "9 hash" in out

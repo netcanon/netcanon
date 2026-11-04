@@ -289,8 +289,12 @@ add group=read name=viewer
         intent = CanonicalIntent(
             source_vendor="test", source_format="test",
             local_users=[
-                CanonicalLocalUser(name="admin", privilege_level=15),
-                CanonicalLocalUser(name="viewer", privilege_level=1),
+                CanonicalLocalUser(
+                    name="admin", privilege_level=15, hashed_password="Typed-pw1",
+                ),
+                CanonicalLocalUser(
+                    name="viewer", privilege_level=1, hashed_password="Typed-pw1",
+                ),
             ],
         )
         out = MikroTikRouterOSCodec().render(intent)
@@ -308,7 +312,14 @@ add group=read name=viewer
         )
         c = MikroTikRouterOSCodec()
         first = c.parse(raw)
-        second = c.parse(c.render(first))
+        # An export holds no password, and an account with none is not
+        # written (test_an_account_with_no_password.py): each is given
+        # one RouterOS takes.
+        given = first.model_copy(update={"local_users": [
+            u.model_copy(update={"hashed_password": "Typed-pw1"})
+            for u in first.local_users
+        ]})
+        second = c.parse(c.render(given))
         assert [(u.name, u.privilege_level) for u in first.local_users] \
                == [(u.name, u.privilege_level) for u in second.local_users]
 

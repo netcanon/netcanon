@@ -267,28 +267,25 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Both vendors share the Linux crypt() hash family ($1$ MD5,
-      $5$ SHA-256, $6$ SHA-512); hash BYTES round-trip cleanly for
-      $6$ SHA-512 entries.  However, several documented losses
-      surface as drift on the comparator:
-      (1) ``hashed_password`` carries a vendor-prefix tag (the
-      arista_eos parser tags as ``arista:sha512:$6$...`` while the
-      Junos parser tags its own re-parse as ``junos:$6$...``).
-      Vendor-prefix asymmetry is by design — each codec marks
-      provenance — but the strings differ on round-trip.
-      (2) ``privilege_level`` (Arista's integer 1-15) collapses on
-      Junos: Junos has no integer privilege model, only role
-      names, so non-default values round-trip as 1.
-      (3) ``role`` — Junos injects a default role of
-      ``super-user`` when the source role is blank, so the
-      empty-string Arista value re-emerges as ``super-user`` on
-      Junos round-trip.
-      (4) MD5 ($1$) hash entries are dropped by the Junos render
-      path (only $6$ SHA-512 survives) — count drift per the
-      ``ksator_dcs_7150s64`` and ``synthetic/kitchen_sink`` cells
-      (real codec-level loss, NOT a stale expectation).
-      See ``tests/fixtures/real/phase4_findings_arista_eos.md``
-      for per-fixture cell evidence.
+      Both vendors share the Linux crypt() hash family ($1$ MD5, $5$ SHA-256,
+      $6$ SHA-512); hash BYTES round-trip cleanly for $6$ SHA-512 entries.
+      However, several documented losses surface as drift on the comparator:
+      (1) ``hashed_password`` carries a vendor-prefix tag (the arista_eos
+      parser tags as ``arista:sha512:$6$...`` while the Junos parser tags its
+      own re-parse as ``junos:$6$...``). Vendor-prefix asymmetry is by design
+      — each codec marks provenance — but the strings differ on round-trip.
+      (2) ``privilege_level`` (Arista's integer 1-15) collapses on Junos:
+      Junos has no integer privilege model, only role names, so non-default
+      values round-trip as 1. (3) ``role`` — Junos injects a default role of
+      ``super-user`` when the source role is blank, so the empty-string Arista
+      value re-emerges as ``super-user`` on Junos round-trip. (4) The 3
+      accounts with no stored secret (EOS `nopassword`) vanish: the Junos
+      render writes a review comment naming each, in place of the account,
+      since an account written with no password could log in with none — count
+      drift on 2 of the 8 cells that populate local users. Every account that
+      holds a password arrives, MD5 ($1$) included. See
+      ``tests/fixtures/real/phase4_findings_arista_eos.md`` for per-fixture
+      cell evidence.
     references: [arista-user-security, junos-password-cli, junos-kb-password-format]
 
   # ── Tier 2 — RADIUS ──

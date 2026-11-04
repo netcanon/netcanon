@@ -35,7 +35,9 @@ Netcanon translates the shared-network-function subset.
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 
 - Local users — `<user>` blocks with bcrypt `<password>` hash
-  form-preserving migration; `<groupname>` mappings
+  form-preserving migration; `<groupname>` mappings.  A `<user>` with
+  no `<password>` is a `review:` comment on every target, OPNsense
+  included: no target writes an account with no password
 - SNMP v1/v2c via `<snmpd>` (community, contact, location);
   **SNMPv3 is Tier-3** for OPNsense (raw `snmpd.conf` snippet
   carry-through; no canonical model)

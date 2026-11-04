@@ -187,6 +187,15 @@ Full rules and limitations in the sanitiser's module docstring at
   such a statement, say so in the report and write the statement out
   by hand, with its values changed.  The same goes for an IOS XR
   `interface preconfigure` stanza, which the parser leaves out too.
+- **An account with no password is a review line.**  The sanitised
+  config is rendered by its own codec, which writes no account that
+  has no password (an EOS `nopassword` account, a Junos `remote`
+  template, a FortiOS remote administrator, an OPNsense `<user>` with
+  no `<password>`, a VyOS user with no `authentication`, every user of
+  a RouterOS export): a `review:` comment naming the account stands in
+  its place.  If the bug is about such
+  an account, say so in the report and write its lines out by hand,
+  with the name changed.
 - **FQDN host targets redacted; unmodelled host references not.**  The
   modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets) now
   redact an FQDN to a stable `host-N.example.test` placeholder so the org

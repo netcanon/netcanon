@@ -1,5 +1,8 @@
 # Local users: OPNsense versus MikroTik RouterOS
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — no account from this source is written for RouterOS.**  An OPNsense `bcrypt:`-tagged secret is one RouterOS cannot take, and since 2026-10-20 a refused secret drops the whole account: the render writes `# user "<name>" -- review: bcrypt hash from source vendor cannot be re-used on RouterOS; reset this user password manually` (or the same with `sha512`, for a SHA-512 crypt body) under `/user` IN PLACE of it, not a `/user add` line without a password attribute.  An account the source holds no password for was written as `/user add group=<group> name=<name>` with no `password=` up to this change, and is now `# user "<name>" -- review: no password for this account was read from the source, and an account written for RouterOS without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, with one job warning naming each.  Measured on this pair: `local_users` in/out over the 7 cells that populate users is **14 / 0** (8 refused `bcrypt` and 2 refused `sha512` secrets, and 4 accounts with no password, on 1 cell); before this change it was **14 / 4**, the 4 being the accounts with no password.  Any statement below that the RouterOS render emits the account without a password attribute describes an earlier render.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__mikrotik_routeros.yaml`.
+
 ## OPNsense
 
 Source: [OPNsense Users manual](https://docs.opnsense.org/manual/users.html)

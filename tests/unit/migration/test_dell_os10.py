@@ -1631,10 +1631,10 @@ class TestLocalUsers:
         assert "review:" in out and "opnuser" in out
         assert "username opnuser password" not in out
 
-    def test_a_user_with_no_secret_survives_the_round_trip(self, codec):
-        """The render emits no password clause for a secret-less
-        cross-vendor account, so the parser must accept that form — else
-        the account vanishes on re-parse."""
+    def test_a_user_with_no_secret_is_not_written(self, codec):
+        """An account with no password is a review line, never an
+        account (``test_an_account_with_no_password.py``); the parser
+        still reads a ``username`` line with no password clause."""
         tree = CanonicalIntent(
             local_users=[
                 CanonicalLocalUser(
@@ -1642,7 +1642,10 @@ class TestLocalUsers:
                 ),
             ],
         )
-        back = codec.parse(codec.render(tree))
+        out = codec.render(tree)
+        assert 'user "nopass" -- review: no password' in out
+        assert codec.parse(out).local_users == []
+        back = codec.parse("username nopass role netoperator priv-lvl 1\n")
         assert [u.name for u in back.local_users] == ["nopass"]
         assert back.local_users[0].hashed_password == ""
 

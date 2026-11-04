@@ -541,12 +541,22 @@ the policy locally:
 * **`netcanon/migration/_user_secrets.py`** — cross-vendor
   hash-portability policy.  Public API: `classify_hash(hashed)`,
   `is_migratable(hashed, target_vendor)`, `format_review_comment(
-  user_name, algorithm, comment_syntax, target_label)`.  Each
-  target codec calls `is_migratable()` before emitting a password
-  line; on miss, emit a `format_review_comment(...)` line in the
-  appropriate per-codec syntax (`hash` / `semicolon` / `slash` /
-  `xml` / `exclamation`) and skip the password command.  NEVER fall
-  back to plaintext (would leak the hash literal as the password).
+  user_name, algorithm, comment_syntax, target_label)`,
+  `holds_no_secret(hashed)`, `format_empty_hash_comment(user_name,
+  comment_syntax, target_label)`.  Each target codec asks
+  `holds_no_secret()` first and writes `format_empty_hash_comment(...)`
+  in place of an account that has no password; then calls
+  `is_migratable()` before emitting a password line, and on a miss
+  emits a `format_review_comment(...)` line in the appropriate
+  per-codec syntax (`hash` / `semicolon` / `slash` / `xml` /
+  `exclamation`) in place of the account.  NEVER fall back to
+  plaintext (would leak the hash literal as the password).  A codec
+  that renders users states `local_user_target_label` in its class
+  body; the base class's `render_warnings` then warns of each account
+  with no password (`test_no_target_writes_an_account_with_no_password`
+  in `tests/unit/migration/test_an_account_with_no_password.py` fails
+  for a codec in `_USER_RENDERING_TARGETS` with no warning or no
+  review line).
   Per-target accepted-algorithm sets live in
   `_TARGET_ACCEPTS[<vendor>]`, and a typed password (`plaintext`) is
   in a target's set only where the target has a line that takes one:

@@ -530,8 +530,9 @@ By design.  Netcanon's hash-portability policy (see
 [`CAPABILITIES.md`](CAPABILITIES.md))
 **never** falls back to plaintext.  If the source vendor's hash
 form (e.g. Cisco type-7) doesn't have a target equivalent, the
-rendered output gets a `# REVIEW: <hash> from <source vendor>`
-comment instead of a plaintext password.
+rendered output gets a `user "<name>" -- review: <algorithm> hash
+from source vendor cannot be re-used on <target>` comment instead of
+a plaintext password.  It names the algorithm, never the hash.
 
 The account itself is left out with it, on every target: an account
 written without the password it had would be an account with none.
@@ -614,6 +615,24 @@ why; it never quotes the password.
 **Action:** add the user on the device and set its password there
 (Junos `set system login user <name> authentication
 plain-text-password`, which asks for it; the OPNsense user manager).
+
+### "A user with no password came out as a review comment"
+
+By design.  The source gave the account no password -- nothing, or a
+tag with nothing after it.  It may be an EOS or IOS-XE `nopassword`
+account, an account that authenticates only through RADIUS or
+TACACS+ (a Junos `remote` template, a FortiOS remote administrator),
+an OPNsense `<user>` with no `<password>`, a VyOS user with no
+`authentication`, or any user of a RouterOS export, which prints no
+passwords.  Written as it stands, it would be an account that may
+log in with no password (on IOS-XE at all, on EOS from the console,
+on RouterOS with an empty one), so no target writes it, the source's
+own platform included: the config does not say whether the account
+was meant to have none or only printed none.  The review line names
+the account, and the job has a warning for it.
+
+**Action:** add the user on the device with a password, or set it up
+for remote login the way the target does that.
 
 ### "An AOS-S output has one manager and one operator, and my other users are review comments"
 

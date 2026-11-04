@@ -36,7 +36,8 @@ FortiGate ``ENC ..``, etc.) cannot be re-used on Junos.  The
 ``..._user_secrets`` module's :func:`is_migratable` policy gate
 decides per-hash whether to emit ``set system login user X
 authentication encrypted-password "..."`` or fall back to a
-``# password manager user-name "X" -- review:`` comment line.
+``# user "X" -- review:`` comment line; a user that holds no
+password at all is such a line too (``holds_no_secret``).
 Junos comments use ``#`` (or ``/* .. */``) so :func:`format_review_comment`
 is called with ``comment_syntax="hash"``.  Empty interface stubs
 (no IP / no description / no L2 / no LAG / no VRF binding, and
@@ -76,7 +77,9 @@ from ..._derived_values import (
 from ..._one_value import ADDRESSES, one_value_tree
 from ..._user_secrets import (
     classify_hash,
+    format_empty_hash_comment,
     format_review_comment,
+    holds_no_secret,
     is_migratable,
 )
 from ..._usm_keys import (
@@ -174,6 +177,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- login users ---
     for user in tree.local_users:
+        # An account the source gives no password is a review line,
+        # not a ``class`` line with no ``authentication``: what Junos
+        # lets such an account do is not established here.
+        if holds_no_secret(user.hashed_password):
+            out.append(format_empty_hash_comment(
+                user.name, comment_syntax="hash", target_label="Junos",
+            ))
+            continue
         # Hash-gate FIRST: when the source hash is unmigratable to
         # Junos, drop the user entirely.  Emitting just the bare
         # ``set system login user X class Y`` line (without any
@@ -194,9 +205,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # widens the migratable set codec-locally so cross-vendor
         # render-into-Junos doesn't drop the user when the source
         # canonical happens to use a tagged form rather than a bare
-        # crypt string.  Empty ``hashed_password`` falls through to
-        # the bare ``class`` line below — Junos accepts that form
-        # as a console-only / no-password account.  A TYPED password
+        # crypt string.  A TYPED password
         # is refused here too: Junos takes one only at the prompt of
         # ``plain-text-password``, and ``encrypted-password "<typed>"``
         # made the typed string the hash (``_TARGET_ACCEPTS`` notes).

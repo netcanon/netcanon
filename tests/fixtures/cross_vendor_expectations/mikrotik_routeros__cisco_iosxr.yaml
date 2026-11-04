@@ -56,11 +56,12 @@ meta:
     demarcation point replaced by an IOS-XR router carrying the same routed
     edge.  Interface inventory, names, descriptions, admin state, MTU, IPv4 and
     IPv6 addressing, static-route destinations and next-hops, LAG membership
-    and mode, and local account names and roles all survive.  What does not is
-    everything RouterOS carries that IOS-XR does not model in v1: the VLAN
-    table, DHCP server pools, SNMP in its entirety, RADIUS servers, per-record
-    interface typing, the operator-chosen bundle names, and static-route
-    descriptions.
+    and mode all survive.  What does not is everything RouterOS carries that
+    IOS-XR does not model in v1: the VLAN table, DHCP server pools, SNMP in
+    its entirety, RADIUS servers, per-record interface typing, the
+    operator-chosen bundle names, and static-route descriptions; and no
+    local account arrives, since the export holds no password for any of
+    them and each is a review comment in its place.
   certainty: medium
   references:
     - id: mikrotik-iosxr-surface
@@ -481,39 +482,45 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved exactly on the 1 cell that populates local users
-      (admin, operator, auditor), with the record count unchanged at 3 -> 3.
-      The account list does not shrink on this pair, so unlike the campus pairs
-      there is no structural signal to claim here.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 3 on the 1 cell that populates local users. A
+      RouterOS `/user` export holds no password and the parser reads none, so
+      every account reaches the IOS-XR render with no stored secret; the
+      render writes a review comment naming each, in place of the account,
+      since an account written for IOS-XR with no password could log in with
+      none. Up to 0.7.7 each was written as a `username` with its `group` and
+      no secret. Recorded `unsupported` rather than `lossy` because the record
+      vanishes entirely (#436) and a `lossy` warning would understate a target
+      with no local accounts. It is a property of the source export, not a gap
+      in the IOS-XR user model. Create a console admin on the target out of
+      band before cutover; then search the render for `review:` comments and
+      re-create each account with a password, or as an account for remote
+      (RADIUS or TACACS+) login.
     references: [mikrotik-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role preserved on the 1 populated cell — admin/admin, operator/operator,
-      auditor/operator — with cisco_iosxr declaring 3 supported `/local-users`
-      paths.  Read this narrowly: the sibling canonical field
-      `privilege_level` is NOT preserved (15, 10 and 1 all collapse to 1), so
-      an operator who reads only `role` will not see that accounts lose
-      privilege.  The audit has no expectation key for `privilege_level`, so it
-      is recorded in the reference doc rather than declared here, and it is not
-      offered as evidence for any disposition in this file.  The direction is
-      fail-closed — accounts lose privilege rather than gain it.
+      No account arrives on this pair (see `local_users[].name`), so there is
+      no role on the target to compare. Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which
+      the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Up to 0.7.7, when the accounts arrived, their
+      roles were kept and their privilege levels collapsed to 1; the audit has
+      no expectation key for `privilege_level`.
     references: [mikrotik-iosxr-surface]
 
   "local_users[].hashed_password":
     disposition: not_applicable
     note: >
       Source-side gap, and an unusually clean one: a RouterOS `/user` export
-      does not carry the password hash at all, so the field is empty on both
-      sides of all 5 cells and there is no hash-format incompatibility to
-      describe.  Do not read `not_applicable` as "credentials migrated" — it
-      means there was never a credential to migrate.  Every account arrives on
-      IOS-XR without a working password and must have one set before cutover,
-      exactly as if the hash had been dropped.  No secret material is quoted in
-      this file or in the reference doc.
+      does not carry the password hash at all, so the field is empty on every
+      source record and there is no hash-format incompatibility to describe.
+      Do not read `not_applicable` as "credentials migrated" — it means there
+      was never a credential to migrate, and because of that no account
+      arrives on IOS-XR (see `local_users[].name`). No secret material is
+      quoted in this file or in the reference doc.
     references: [mikrotik-iosxr-surface]
 
   radius_servers:

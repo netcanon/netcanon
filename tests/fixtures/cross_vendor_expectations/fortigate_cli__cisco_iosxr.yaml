@@ -451,65 +451,73 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      2 of 8 accounts arrive across the 4 cells that populate local users; the
-      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
-      `ENC` ciphertext. IOS-XR can consume `secret 5` / `8` / `9` / `10`,
-      `password 7`, or a genuine plaintext password; anything else is refused on
-      purpose (#461) with a review comment naming the account and no user entry.
+      No account arrives: 0 of 8 across the 4 cells that populate local users.
+      The 6 accounts refused for their secret carry 6 FortiOS `ENC`
+      ciphertext. IOS-XR can consume `secret 5` / `8` / `9` / `10`, `password
+      7`, or a genuine plaintext password; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry.
       Before that change the value was written behind `secret 0`, the IOS-XR
-      cleartext marker, so the account either carried the source's stored secret
-      as its literal password or could not authenticate at all. The survivors
-      are 2 with no stored secret. Recorded `lossy` rather than `unsupported`:
-      which account survives is decided by its secret form, and accounts with a
-      consumable secret do arrive. Before cutover, list the source accounts,
-      search the render for `review:` comments, and re-create each refused
-      account on the target with a fresh password.
+      cleartext marker, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. The 2
+      accounts with no stored secret, which up to 0.7.7 arrived, now vanish
+      too: the IOS-XR render writes a review comment naming each, in place of
+      the account, since an account written with no password could log in with
+      none. Recorded `unsupported` rather than `lossy`: no account arrives on
+      this corpus, so the record vanishes entirely (#436). Which account would
+      arrive is decided by its secret's form, so a source holding a secret
+      this target can take would carry it. Before cutover, list the source
+      accounts, search the render for `review:` comments, and re-create each
+      refused account on the target with a fresh password.
     references: [fortigate-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      On the 2 accounts that survive, the role is unchanged. Mechanism:
-      cisco_iosxr renders the role as ` group <role>` and maps only `root-lr` /
+      No account arrives on this pair (see `local_users[].name`), so there is
+      no role on the target to compare; up to 0.7.7 the 2 accounts with no
+      stored secret arrived with their role unchanged. Mechanism: cisco_iosxr
+      renders the role as ` group <role>` and maps only `root-lr` /
       `root-system` back to privilege 15. Recorded `good` rather than `lossy`:
-      the only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+      the only drift on this key is the parent record-count collapse, which
+      the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with
+      their role and are counted once, under `local_users[].name`.
     references: [fortigate-iosxr-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
       No secret is written in a form IOS-XR cannot consume. 6 accounts are
-      refused for their secret (6 FortiOS `ENC` ciphertext) and vanish with it;
-      that loss is recorded once, under `local_users[].name`. The accounts that
-      arrive carry no stored secret, so there is no value to compare. Before
-      #461 this key read preserved because the value was written behind `secret
-      0`, the IOS-XR cleartext marker; that preservation was a leak or a dead
+      refused for their secret (6 FortiOS `ENC` ciphertext) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. The 2
+      accounts with no stored secret do not arrive either (see
+      `local_users[].name`), so there is no value to compare. Before #461 this
+      key read preserved because the value was written behind `secret 0`, the
+      IOS-XR cleartext marker; that preservation was a leak or a dead
       credential, not a working one. Recorded `good` rather than `lossy`: the
       only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here, so a declared loss on this key could never be evidenced. No secret
-      value is quoted here or in the reference doc; only shapes and counts.
+      audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here, so a declared loss on this key could never be
+      evidenced. No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [fortigate-iosxr-surface]
 
   radius_servers:
     disposition: unsupported
     reason: >
-      Total drop on both cells that carry RADIUS servers — 1 -> 0 and 2 -> 0
-      — with no AAA or radius-server line anywhere in the render.
-      cisco_iosxr declares `/radius-servers/server/host` and
-      `/radius-servers/server/key` unsupported ("Render emits no AAA
-      radius-server config").  The operationally sharp part is the
-      interaction with local users: on the fg100e cell the two RADIUS-backed
-      admin accounts (`radius_super_admin`, `radius_ro_admin`) DO survive as
-      `username` blocks, with no local secret and now no RADIUS server to
-      authenticate them against.  Re-author AAA on the target before cutover
-      or those accounts are inert.  The shared secret is dropped with the
-      server and must be re-entered by hand.
+      Total drop on both cells that carry RADIUS servers — 1 -> 0 and 2 -> 0 —
+      with no AAA or radius-server line anywhere in the render. cisco_iosxr
+      declares `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported ("Render emits no AAA radius-server config"). The
+      operationally sharp part is the interaction with local users: on the
+      fg100e cell the two RADIUS-backed admin accounts hold no local secret,
+      so neither arrives: each is a review comment in its place, and there is
+      no RADIUS server to authenticate them against either. Re-author AAA on
+      the target and re-create those accounts for remote login before cutover.
+      The shared secret is dropped with the server and must be re-entered by
+      hand.
     references: [fortigate-iosxr-surface]
 
   # -- Fabric ---------------------------------------------------------------

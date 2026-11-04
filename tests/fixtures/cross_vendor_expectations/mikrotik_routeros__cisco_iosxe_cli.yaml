@@ -269,18 +269,22 @@ per_field_expectation:
     references: [mikrotik_bonding]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Predefined-group mapping is operator-curated: ``full`` ->
-      privilege 15, ``read`` -> privilege 1, ``write`` ->
-      privilege 7 (no canonical mapping table; banner on render).
-      Custom RouterOS groups have no Cisco numeric equivalent.
-      Password material is the structural blocker: RouterOS does
+      Predefined-group mapping is operator-curated: ``full`` -> privilege 15,
+      ``read`` -> privilege 1, ``write`` -> privilege 7 (no canonical mapping
+      table; banner on render). Custom RouterOS groups have no Cisco numeric
+      equivalent. Password material is the structural blocker: RouterOS does
       not surface hashed passwords in /export, so the canonical
-      ``hashed_password`` arrives empty.  Cisco render emits
-      ``username X privilege Y`` with NO ``secret`` clause —
-      operator MUST set passwords manually on the target Cisco
-      device after migration.
+      ``hashed_password`` arrives empty. The IOS-XE render therefore writes a
+      review comment naming each account, in place of the account, since an
+      account written with no password could log in with none: no account
+      arrives (0 of 3 on the 1 cell that populates local users), and the
+      operator MUST create the accounts with passwords, or as accounts for
+      remote (RADIUS or TACACS+) login, on the target Cisco device after
+      migration. Recorded `unsupported` rather than `lossy`: no account can
+      arrive from a RouterOS export, because it prints no passwords, so the
+      record vanishes entirely (#436).
     references: [mikrotik_user]
 
   radius_servers:
@@ -389,7 +393,7 @@ per_field_expectation:
 #     / static routes) is high-confidence: vendor docs are clear and
 #     both codecs have established parse+render coverage.
 #
-#   * The local-users surface is confidently lossy in this direction
+#   * The local-users surface is confidently unsupported in this direction
 #     specifically because RouterOS's /export does not surface
 #     password material — this is a documented limitation, not a
 #     codec gap.

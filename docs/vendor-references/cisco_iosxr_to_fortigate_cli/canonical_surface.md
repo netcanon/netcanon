@@ -229,7 +229,7 @@ across 14 user records:
   `$1$`) and **type-7** (the reversible vendor-obfuscated form) secret is
   dropped. The renderer is explicit about it rather than silent — it emits a
   review comment in place of the password line, of the form
-  `# password manager user-name "<name>" -- review: <type> hash from source
+  `# user "<name>" -- review: <type> hash from source
   vendor cannot be re-used on FortiOS; reset this user password manually` — and
   the re-parse yields an empty `hashed_password`.
 - **3 of 14 keep their bytes but not their meaning.** IOS-XR **type-10** (crypt

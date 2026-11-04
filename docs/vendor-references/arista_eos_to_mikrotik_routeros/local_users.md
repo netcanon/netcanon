@@ -1,5 +1,8 @@
 # Local users: Arista EOS versus MikroTik RouterOS
 
+<!-- an-account-with-no-password -->
+> **Update 2026-11-04 — an account with no password is no longer written.**  Up to this change the RouterOS render wrote an account whose source holds no password (an empty secret, or a tag with nothing after it) as `/user add group=<group> name=<name>` with no `password=`, which RouterOS gives an empty password.  It now writes one review comment IN PLACE of the account, under `/user`, `# user "<name>" -- review: no password for this account was read from the source, and an account written for RouterOS without one could log in with none; it is left out: add it on the device with a password, or as an account for remote (RADIUS or TACACS+) login`, and the job carries one warning naming each such account.  Measured on this pair: **3** such accounts across 2 cells (2 on one real capture, 1 on the synthetic kitchen sink).  All 3 used to arrive, and none does now: `local_users` in/out over the 8 cells that populate users goes from **15 / 3** to **15 / 0**.  The other 12 accounts are review lines for a secret RouterOS cannot take, as before.  Any statement below that such an account is written, arrives without a password, or renders `nopassword` describes the render before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__mikrotik_routeros.yaml`.
+
 ## Arista EOS
 
 Source: [Arista EOS — User Security](https://www.arista.com/en/um-eos/eos-user-security)

@@ -50,7 +50,13 @@ from ..._radius_secrets import (
     radius_secret_is_migratable,
     unwrap_native_secret,
 )
-from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._user_secrets import (
+    classify_hash,
+    format_empty_hash_comment,
+    format_review_comment,
+    holds_no_secret,
+    is_migratable,
+)
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ..._vlan_labels import vlan_labels
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
@@ -966,6 +972,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         lines.append("/user")
         for user in tree.local_users:
+            # A user the source gives no password is a review line: one
+            # added with none has a blank one ("If not specified, it is
+            # left blank").  A RouterOS export holds no password, so
+            # every user of one is here.
+            if holds_no_secret(user.hashed_password):
+                lines.append(format_empty_hash_comment(
+                    user.name, comment_syntax="hash",
+                    target_label="RouterOS",
+                ))
+                continue
             # Map canonical privilege onto a RouterOS built-in
             # group via threshold rules; safe default is ``read``.
             group = _routeros_group_for_privilege(user.privilege_level)
@@ -980,7 +996,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # auth bypass for anyone who has read access to the
             # original config.  When the canonical carries a
             # plaintext password, emit it; when foreign-hashed,
-            # emit a ``# password manager … -- review:`` comment IN
+            # emit a ``# user … -- review:`` comment IN
             # PLACE of the ``add`` line, so the operator has a
             # deterministic signal that a hash existed and the user
             # must be re-created.  Surfaced by OPNsense supergate

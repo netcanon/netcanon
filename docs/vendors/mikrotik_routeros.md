@@ -88,7 +88,11 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   section for both v1/v2c and v3 — community + auth-protocol +
   auth-password + encryption-protocol + encryption-password)
 - RADIUS — `/radius`
-- Local users — `/user`
+- Local users — `/user`.  An export prints no passwords, so as a
+  source every user is a `review:` line on every target, RouterOS
+  included (no target writes an account with no password; RouterOS
+  gives one an empty password): add each on the device with a
+  password
 - DHCP server pools — `/ip pool` + `/ip dhcp-server network`
   (per-pool subnet, gateway, range, options)
 - **Renamed-port preservation** — RouterOS lets operators rename

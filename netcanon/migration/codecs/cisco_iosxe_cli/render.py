@@ -62,7 +62,9 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
+    format_empty_hash_comment,
     format_review_comment,
+    holds_no_secret,
     is_migratable,
 )
 from ..._usm_keys import (
@@ -222,10 +224,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # bcrypt as md5crypt (wrong type marker).  We now consult the
     # shared :mod:`netcanon.migration._user_secrets` policy and emit
     # a comment-form ``review:`` line in IOS comment syntax (``! ``)
-    # when the hash is unmigratable.  Empty password renders
-    # ``nopassword`` (legitimate Cisco form).
+    # when the hash is unmigratable.  An account with no password is
+    # a review line too: ``nopassword`` is Cisco's "No password is
+    # required for this user to log in".
     for u in tree.local_users:
-        if u.hashed_password and not is_migratable(
+        if holds_no_secret(u.hashed_password):
+            out.append(format_empty_hash_comment(
+                u.name, comment_syntax="exclamation",
+                target_label="Cisco IOS-XE",
+            ))
+            continue
+        if not is_migratable(
             u.hashed_password, "cisco_iosxe_cli",
         ):
             algorithm, _payload = classify_hash(u.hashed_password)
@@ -258,11 +267,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # from privilege; emitting them as roles would be
             # noisy and frequently wrong).
             pass
-        if not u.hashed_password:
-            parts.append("nopassword")
-        else:
-            hash_type, hash_val = _split_cisco_hash(u.hashed_password)
-            parts.append(f"secret {hash_type} {hash_val}")
+        hash_type, hash_val = _split_cisco_hash(u.hashed_password)
+        parts.append(f"secret {hash_type} {hash_val}")
         out.append(" ".join(parts))
     if tree.local_users:
         out.append("!")

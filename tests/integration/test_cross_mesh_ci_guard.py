@@ -513,6 +513,12 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # its size and is compared record by record: a VLAN interface there comes
 # back with its VLAN's name as its description, and the FortiGate kitchen
 # sink shows its aggregate members' loss.  The YAML reasons say so.
+#
+# And one down after no target writes an account with no password:
+# mikrotik_routeros__arista_eos (2 to 1), for ``local_users``.  A RouterOS
+# export prints no passwords, so its users had been written onto EOS as
+# accounts with no secret, and arrived against the declared loss; each is a
+# review comment now, no account arrives, and the YAML says unsupported.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -556,7 +562,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "juniper_junos__fortigate_cli": 4,
     "juniper_junos__mikrotik_routeros": 3,
     "juniper_junos__opnsense": 4,
-    "mikrotik_routeros__arista_eos": 2,
+    "mikrotik_routeros__arista_eos": 1,
     "mikrotik_routeros__aruba_aoss": 1,
     "mikrotik_routeros__cisco_iosxe": 1,
     "mikrotik_routeros__cisco_iosxe_cli": 1,

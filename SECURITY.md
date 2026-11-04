@@ -1025,7 +1025,8 @@ to the code's.
 `netcanon/migration/codecs/base.py` (`parse`, `render`),
 `netcanon/services/migration_pipeline.py` (`run_plan`),
 `netcanon/tools/sanitize.py`, `netcanon/migration/codecs/_scanner.py`,
-`netcanon/migration/codecs/fortigate_cli/parse.py`
+`netcanon/migration/codecs/fortigate_cli/parse.py`,
+`netcanon/migration/_user_secrets.py` (`holds_no_secret`)
 
 A translation writes the source config's text values -- descriptions,
 names, comments -- into the target's config, which an operator then
@@ -1087,6 +1088,20 @@ one, naming the field -- an operator's port map puts names into the
 tree too.  The limit is not raised: it is read when the check is made,
 and a server that sets another is held to its own.  Guarded by
 `tests/unit/migration/test_a_number_too_long_to_read.py`.
+
+Nor is any target given an account with no password.  A local user
+the source gives none -- nothing, or a tag with nothing after it
+(`sha1:`) -- was written on every target but AOS-S: as `nopassword`
+on IOS-XE and EOS, an account that logs in with no password (on EOS
+from the console), and elsewhere as an account with no password
+clause, which on RouterOS has an empty one.  Every renderer of local
+users asks `holds_no_secret` first and writes a review line in place
+of such an account, its source's own platform included, since the
+tree does not say whether the source meant an account with no
+password or only printed none; the job has a warning for each.
+Guarded by `tests/unit/migration/test_an_account_with_no_password.py`,
+which reads every target's output for the account with a reader of
+the target's grammar of its own as well as with the target's parser.
 
 ---
 

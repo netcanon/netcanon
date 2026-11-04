@@ -28,8 +28,8 @@
 #     edit-id-vs-zone-label addressing and DNS three-cap on FortiOS
 #   * snmp — v1/v2c good; v3 USM unsupported on OPNsense (lives in
 #     snmpd.conf, not config.xml)
-#   * local_users — lossy (FortiOS `ENC` versus OPNsense bcrypt;
-#     both vendor-private, not cross-compatible)
+#   * local_users — unsupported (FortiOS `ENC` versus OPNsense bcrypt;
+#     both vendor-private, not cross-compatible: no account arrives)
 #   * radius_servers — lossy (FortiOS ENC versus OPNsense cleartext
 #     secret; cross-vendor re-keying required)
 #   * lags — lossy (FortiOS operator-named versus OPNsense `lagg<N>`
@@ -577,21 +577,25 @@ per_field_expectation:
     references: [fgt-lags, opn-laggs]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      2 of 8 accounts arrive across the 4 cells that populate local users; the
-      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
-      `ENC` ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
+      No account arrives: 0 of 8 across the 4 cells that populate local users.
+      The 6 accounts refused for their secret carry 6 FortiOS `ENC`
+      ciphertext. OPNsense can consume bcrypt (`$2y$` / `$2b$`) or SHA-512
       crypt (`$6$`) in `<password>`, or a genuine plaintext password; anything
-      else is refused with a review comment naming the account, in place of the
-      account. Up to 0.7.7 such an account was written as a `<user>` element
-      with no `<password>`; a refused secret now drops the whole account, as on
-      every other target. The survivors are 2 with no stored secret. Recorded
-      `lossy` rather than `unsupported`: which account survives is decided by
-      its secret form, and accounts with a consumable secret do arrive. Before
-      cutover, list the source accounts, search the render for `review:`
-      comments, and re-create each refused account on the target with a fresh
-      password.
+      else is refused with a review comment naming the account, in place of
+      the account. Up to 0.7.7 such an account was written as a `<user>`
+      element with no `<password>`; a refused secret now drops the whole
+      account, as on every other target. The 2 accounts with no stored secret,
+      which up to 0.7.7 arrived, now vanish too: the OPNsense render writes a
+      review comment naming each, in place of the account, since an account
+      written with no password could log in with none. Recorded `unsupported`
+      rather than `lossy`: no account arrives on this corpus, so the record
+      vanishes entirely (#436). Which account would arrive is decided by its
+      secret's form, so a source holding a secret this target can take would
+      carry it. Before cutover, list the source accounts, search the render
+      for `review:` comments, and re-create each refused account on the target
+      with a fresh password.
     references: [fgt-local-users, opn-users]
 
   radius_servers:
@@ -722,7 +726,9 @@ per_field_expectation:
 #
 #   * The hash-format incompatibility (FortiOS ``ENC`` versus OPNsense
 #     bcrypt) and shared-secret incompatibility (FortiOS ``ENC``
-#     versus OPNsense cleartext) are documented and confidently lossy.
+#     versus OPNsense cleartext) are documented: confidently
+#     unsupported for local users (no account arrives) and lossy for
+#     RADIUS.
 #
 #   * The shared 802.1Q-child-interface idiom for VLAN modelling is
 #     unusual in the wider mesh and clean on this pair — confidently

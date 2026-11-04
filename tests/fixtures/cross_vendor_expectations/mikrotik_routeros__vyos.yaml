@@ -20,13 +20,14 @@
 # two diverge is everything else. On the IOS-XR pair the LAG surface is a
 # total concept drop; here bonds round-trip perfectly, members and mode
 # included. On the IOS-XR pair credentials are the story; here no MikroTik
-# export carries password material at all, and what collapses instead is the
-# user ROLE. Do not carry either finding across.
+# export carries password material at all, so no local account arrives
+# (each is a review comment in its place). Do not carry either finding
+# across.
 #
 # The real losses on this pair are the VLAN table (a total record drop), the
 # DHCP-server pools, the RADIUS servers, the SNMP trap host, the IANA
 # interface type hint, the static-route description, the SNMPv3 algorithm
-# strength, the local-user role, and a hostname that arrives as the literal
+# strength, every local account (a record drop), and a hostname that arrives as the literal
 # `vyos` when the source never set one.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
@@ -52,11 +53,12 @@ meta:
     its descriptions, admin state, MTU, IPv4/IPv6 addressing and bond
     membership; so do DNS and NTP servers, static-route destinations and
     next-hops, the bonds themselves with their mode, SNMP community /
-    location / contact, and every local account by name. What does not is
+    location / contact. What does not is
     the VLAN table (every record vanishes), the on-box DHCP pools, the
     RADIUS servers, the SNMP trap host, the IANA interface type hint on
     every port, the static-route descriptions, SNMPv3 algorithm strength,
-    and the local-user role — every account arrives as `admin`.
+    and every local account — the export holds no password for any of
+    them, so each is a review comment in its place.
   certainty: medium
   references:
     - id: mikrotik-vyos-surface
@@ -556,68 +558,60 @@ per_field_expectation:
   # -- Identity -- names survive, authority does not -------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Preserved on the single cell that populates local users: 3 records in
-      (`admin`, `operator`, `auditor`), 3 out, all matched by name — no
-      account vanishes and none is invented.  vyos declares
-      `/local-users/user/name` supported and renders a real
-      `system { login { user <name> { ... } } }` stanza for each.
-      One operational note that is NOT a loss on this pair and must not be
-      read as one: no MikroTik fixture carries any password material at all,
-      because a RouterOS `.rsc` export does not include the user password
-      database.  `hashed_password` is empty on all 3 source records, the
-      rendered VyOS `login` stanza is correspondingly bare — `user admin { }`
-      with no `authentication` node — and so every migrated account arrives
-      with NO credential.  That is something the export never had, not
-      something the migration lost.  Set passwords on the VyOS box before it
-      is reachable.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 3 on the 1 cell that populates local users. A
+      RouterOS `.rsc` export holds no password and the parser reads none, so
+      every account reaches the VyOS render with no stored secret; the render
+      writes a review comment naming each, in place of the account, since an
+      account written for VyOS with no password could log in with none. Up to
+      0.7.7 each was written as a `login user` with no `authentication` node.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source export, not a gap in the
+      VyOS user model. Create a console admin on the target out of band before
+      cutover; then search the render for `review:` comments and re-create
+      each account with a password, or as an account for remote (RADIUS or
+      TACACS+) login.
     references: [mikrotik-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Authority collapses upward.  Measured on the 3 records of the single
-      cell that populates users: `admin` stays `admin`, but `operator` and
-      `auditor` — both `role: operator` on the source — come back as
-      `admin`.  The `privilege_level` field moves with them, 10 -> 15 and
-      1 -> 15, while the `admin` account's 15 stays 15.
-      Those are ONE mechanism, not two findings: vyos declares
-      `/local-users/user/privilege-level` LOSSY and says exactly why — VyOS
-      `system login user` accounts have no numeric privilege level in the
-      common case, so "the codec maps every login user to privilege 15 /
-      role `admin`".  The role change and the privilege-level change are the
-      same mapping seen twice; the loss is booked once, here, on the key the
-      audit measures.  Neither is cited as corroboration of the other.
-      Recorded `lossy` and not `unsupported`: no account vanishes, and vyos
-      does model roles.  But read the direction — this is a privilege
-      ESCALATION on migration.  Two read-only accounts arrive with full
-      administrative rights on the new box.  Re-apply the intended
-      authorisation on the target and diff it against the source account
-      list before cutover.
-      Standing observation, not a pair fact: vyos declares
-      `/local-users/user/role` SUPPORTED while the role demonstrably changes
-      here — a declaration-versus-behaviour mismatch to raise against the
-      codec, and `mikrotik_routeros` declares no path under `/local-users/`
-      at all while populating name, role and privilege level.  Both are left
-      for codec changes rather than fixed here.
+      No account arrives on this pair now (see `local_users[].name`), so no
+      role reaches the target to compare, and the only drift on this key is
+      the record-count change the audit attributes to `local_users[].name`. Up
+      to 0.7.7 the accounts arrived and authority collapsed upward: `admin`
+      stayed `admin`, but the two `role: operator` accounts came back as
+      `admin`, with `privilege_level` 10 -> 15 and 1 -> 15. That is the target
+      codec's mapping, not a fact of this corpus: vyos declares
+      `/local-users/user/privilege-level` LOSSY because VyOS `system login
+      user` accounts have no numeric privilege level in the common case, so
+      "the codec maps every login user to privilege 15 / role `admin`". Kept
+      `lossy` for that mapping, which this corpus no longer measures. Re-apply
+      the intended authorisation on the target and diff it against the source
+      account list before cutover. Standing observation, not a pair fact: vyos
+      declares `/local-users/user/role` SUPPORTED while that mapping changes
+      the role — a declaration-versus-behaviour mismatch to raise against the
+      codec, and `mikrotik_routeros` declares no path under `/local-users/` at
+      all while populating name, role and privilege level. Both are left for
+      codec changes rather than fixed here.
     references: [mikrotik-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: not_applicable
     note: >
       Source-side gap, and measured rather than assumed: a RouterOS `.rsc`
-      export does not carry the user password database, so
-      `hashed_password` is empty on every source user record in the corpus —
-      3 of 3 on the one cell that has users — and is empty on both sides
-      after the round-trip.  There is no credential for VyOS to lose.
-      `mikrotik_routeros` declares no path under `/local-users/` at all;
-      vyos declares `/local-users/user/hashed-password` SUPPORTED and does
+      export does not carry the user password database, so `hashed_password`
+      is empty on every source user record in the corpus — 3 of 3 on the one
+      cell that has users. There is no credential for VyOS to lose.
+      `mikrotik_routeros` declares no path under `/local-users/` at all; vyos
+      declares `/local-users/user/hashed-password` SUPPORTED and does
       round-trip an `encrypted-password` blob verbatim same-vendor, so the
-      target is capable — it is simply handed nothing.
-      The operational consequence is recorded under `local_users[].name`:
-      every migrated account arrives without a credential.  No hash body is
-      quoted in this file or its reference doc; only the shape is described.
+      target is capable — it is simply handed nothing. The operational
+      consequence is recorded under `local_users[].name`: with no password
+      handed over, no account arrives. No hash body is quoted in this file or
+      its reference doc; only the shape is described.
     references: [mikrotik-vyos-surface]
 
   radius_servers:
@@ -634,8 +628,8 @@ per_field_expectation:
       not carry the key.  Recorded `unsupported` rather than `lossy` because
       a vanished record is not lossy (#436), and because a device that
       silently stops authenticating against RADIUS falls back to whatever
-      local accounts it has — which, per `local_users[].hashed_password`,
-      have no passwords on this pair.  Those two facts compound; they are
+      local accounts it has — and, per `local_users[].name`, no local
+      account arrives on this pair.  Those two facts compound; they are
       separate measurements on separate keys and neither is evidence for the
       other, but the operator should read them together.
       Re-author RADIUS on the VyOS side and re-enter the shared secret by

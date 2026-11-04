@@ -1126,7 +1126,8 @@ class TestRoundTrip:
             "ip name-server vrf default 10.0.0.1\n"
             "ntp server 10.0.0.1\n"
             "snmp-server community public ro\n"
-            "username admin privilege 15 role network-admin nopassword\n"
+            "username admin privilege 15 role network-admin secret sha512 "
+            "$6$fakeSalt$fakeHashForRoundTrip\n"
             "!\n"
             "vlan 10\n"
             "   name USERS\n"
@@ -1328,7 +1329,7 @@ class TestProbe:
 class TestCrossVendorHashGate:
     """Wave 2 hash-policy gate.  Foreign-source hashes that Arista's
     ``secret`` command cannot consume must NEVER reach the wire as
-    payload — render falls back to a ``! password manager ...
+    payload — render falls back to a ``! user "..." --
     review:`` comment so the operator gets an explicit reset signal
     and the rendered config commits clean.
 
@@ -1362,8 +1363,7 @@ class TestCrossVendorHashGate:
         # The bare prefix line is fine (no secret tag).
         assert "secret 5 bcrypt" not in out
         # Review comment must be present, in Arista (``!``) syntax.
-        assert "! password manager" in out
-        assert 'user-name "root"' in out
+        assert '! user "root" -- review:' in out
         assert "bcrypt" in out
         # Wave-4 follow-up (finding #16): the orphan ``username X
         # role Y`` declaration line is now dropped entirely.
@@ -1605,8 +1605,7 @@ class TestHashGateFullDrop:
         out = AristaEOSCodec().render(intent)
         # The review comment is present (and uses the new
         # target_label="Arista EOS" wording from commit 0074bda).
-        assert "! password manager" in out
-        assert 'user-name "root"' in out
+        assert '! user "root" -- review:' in out
         assert "cannot be re-used on Arista EOS" in out
         # The orphan declaration line MUST NOT appear anywhere.
         assert "username root role" not in out

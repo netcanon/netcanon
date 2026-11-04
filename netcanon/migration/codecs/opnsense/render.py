@@ -49,7 +49,9 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import (
     classify_hash,
+    format_empty_hash_comment,
     format_review_comment,
+    holds_no_secret,
     is_migratable,
 )
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
@@ -182,6 +184,17 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         # what password_verify() checks a password against, and the
         # typed string written there opened nothing.
         for user in intent.local_users:
+            # An account the source gives no password is a review
+            # comment, never a <user> with no <password>.
+            if holds_no_secret(user.hashed_password):
+                review = format_empty_hash_comment(
+                    user.name, comment_syntax="xml",
+                    target_label="OPNsense",
+                )
+                sys_el.append(ET.Comment(
+                    review.removeprefix("<!-- ").removesuffix(" -->")
+                ))
+                continue
             if user.hashed_password and not is_migratable(
                 user.hashed_password, "opnsense",
             ):

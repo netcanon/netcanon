@@ -268,18 +268,23 @@ per_field_expectation:
     references: [lags]
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      FortiGate's named accprofile strings (``super_admin`` /
-      ``prof_admin`` / custom) collapse to Cisco's numeric privilege
-      levels (super_admin -> 15, others -> 1) — granular per-profile
-      detail is lost.  Hash formats are NOT cross-compatible:
-      FortiOS ``ENC <opaque-base64>`` is not Cisco-accepted; cross-
-      vendor migration of admin accounts requires re-setting
-      passwords on the target device.  Both codecs preserve hashes
-      verbatim with vendor tags.  ``role`` field carries the
-      accprofile name for intra-FortiGate round-trip but Cisco
-      render does not emit it (Cisco uses numeric privilege).
+      FortiGate's named accprofile strings (``super_admin`` / ``prof_admin`` /
+      custom) collapse to Cisco's numeric privilege levels (super_admin -> 15,
+      others -> 1) — granular per-profile detail is lost. Hash formats are NOT
+      cross-compatible: FortiOS ``ENC <opaque-base64>`` is not Cisco-accepted;
+      cross- vendor migration of admin accounts requires re-setting passwords
+      on the target device. Both codecs preserve hashes verbatim with vendor
+      tags. ``role`` field carries the accprofile name for intra-FortiGate
+      round-trip but Cisco render does not emit it (Cisco uses numeric
+      privilege). No account arrives: 0 of 8 across the 4 cells that populate
+      local users; 6 are refused for their FortiOS `ENC` secret and 2 hold no
+      stored secret, and each is a review comment in place of the account.
+      Recorded `unsupported` rather than `lossy`: no account arrives on this
+      corpus, so the record vanishes entirely (#436). Which account would
+      arrive is decided by its secret's form, so a source holding a secret
+      this target can take would carry it.
     references: [local_users]
 
   radius_servers:

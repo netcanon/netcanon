@@ -63,8 +63,9 @@ meta:
     device carrying the same routed interfaces, addressing, static routes, VRF
     and management plane.  Hostname, domain, DNS, NTP, the surviving interface
     inventory with all of its addressing, description, MTU and admin state,
-    SNMP scalars, VRF identity and every local-user account with its role and
-    its credential all survive.  What does not: attribute-free interface
+    SNMP scalars, VRF identity and every local-user account that holds a
+    password, with its role and its credential, all survive (one that holds
+    none is a review comment).  What does not: attribute-free interface
     records are pruned; the entire VXLAN overlay is dropped because the VNI
     binding has no VLAN to ride on; the LAG is renamed to its Junos-native
     `ae0` form; the static-route metric is dropped; the SNMPv3 engine ID is
@@ -552,33 +553,37 @@ per_field_expectation:
       fixed here.
     references: [vyos-junos-surface]
 
-  # -- Identity -- every account survives, every credential re-encoded -------
+  # -- Identity -- every account with a password survives, re-encoded -------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      17 local-user records across 13 cells and ALL 17 survive — zero accounts
-      vanish, zero names drift, and the user list is identical on both sides
-      of every cell.  That is unusual for this mesh, where identity is
-      normally the first thing to shed records, and it is worth checking
-      against the other vyos pairs before assuming the corpus is simply easy.
-      Both matrices declare `/local-users/user/name` supported; the render
-      emits `set system login user <name> …` on all 13 cells.
-      Because no record vanishes, this key carries no structural signal and
-      the two sub-fields below stand on their own measurements.
+    disposition: lossy
+    reason: >
+      16 of 17 accounts arrive across the 13 cells that populate local users;
+      the list shrinks on 1 of them. The one that vanishes is the account with
+      no stored secret: the Junos render writes a review comment naming it, in
+      place of the account, since an account written for Junos with no
+      password could log in with none. Up to 0.7.7 it was written as a bare
+      `set system login user <name> class <role>`. Every account that holds a
+      password arrives. Recorded `lossy` rather than `unsupported`: an account
+      is left out only where the source holds no secret for it, and the rest
+      arrive. Before cutover, search the render for `review:` comments and
+      re-create each such account on the target with a password, or as an
+      account for remote (RADIUS or TACACS+) login.
     references: [vyos-junos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on all 17 records — zero drift on any cell.  Every
+      Role is preserved on all 16 records that arrive — zero drift on any
+      cell.  Every
       account in the corpus is `admin`, rendered as
       `set system login user <name> class admin`, so coverage is one role
       value wide and this file says so rather than claiming the whole role
       surface is proven.  Both matrices declare `/local-users/user/role`
       supported.
       Adjacent and NOT scored by this key: the separate
-      `local_users[].privilege_level` scalar goes 15 -> 1 on all 17 records.
+      `local_users[].privilege_level` scalar goes 15 -> 1 on all 16 records
+      that arrive.
       vyos already declares `/local-users/user/privilege-level` lossy on its
       own side.  It is recorded in the reference doc so the next reader does
       not re-hunt it; no expectation key on this pair covers it.
@@ -588,8 +593,8 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on 16 of 17 records, across 12 of 13 cells.  The seventeenth is
-      the one account in the corpus with no password at all, and it is
-      unaffected.
+      the one account in the corpus with no password at all, and it does not
+      arrive (see `local_users[].name`).
       The shape is uniform and was verified exhaustively rather than sampled:
       on 16 of 16 drifting records the target value is EXACTLY `junos:`
       prepended to the source value, with length growing by exactly the 6
@@ -605,7 +610,8 @@ per_field_expectation:
       recoverable kind, not the destroyed kind.  Contrast the IOS-XR -> EOS
       pair, where a type-10 secret degrades into a cleartext marker and the
       hash body is gone outright; nothing like that happens here.
-      NOT `unsupported`: no account vanishes and both matrices declare
+      NOT `unsupported`: every account that holds a password arrives with
+      it, and both matrices declare
       `/local-users/user/hashed-password` supported.  Still verify login on
       the target before cutover — a prefix convention is a codec detail, and
       the thing that must actually work is the password.
