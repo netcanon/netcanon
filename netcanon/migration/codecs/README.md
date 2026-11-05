@@ -285,7 +285,10 @@ class MyVendorCodec(CodecBase):
             # yields is a dead declaration (the registry honesty test
             # `test_declared_supported_is_walkable` fails on it).
         ],
-        # Plus lossy / unsupported as needed.
+        # Plus lossy / unsupported as needed.  A record's path covers
+        # none of its leaves: declare each leaf the walker yields under
+        # a surface your render drops, or each one classifies
+        # `supported` (see `_NOT_RENDERED` in the IOS-XE NETCONF codec).
     )
 
     @property

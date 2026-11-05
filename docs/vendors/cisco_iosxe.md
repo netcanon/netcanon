@@ -16,6 +16,19 @@ Two codecs ship for the IOS-XE family:
   subset Netcanon's NETCONF stub knows how to emit).  Use only when
   you specifically need NETCONF output.
 
+  > **Fixed: a job onto this codec no longer reports what it drops
+  > as translated.**  The codec writes interfaces only, and of an
+  > interface its name, description, state, type and addresses.  Its
+  > capability matrix declared the other surfaces by a marker, which
+  > does not cover the leaves under it, so a job's report listed a
+  > local user, a LAG, a VRF, a DHCP pool, a VLAN's members and an
+  > interface's VRF or LAG membership as `supported` — and a config
+  > of a local user and a LAG with no hostname was `completed` with
+  > an output that held neither.  Each is `unsupported` now and holds
+  > the job `partial`.  If you took a `completed` job onto
+  > `cisco_iosxe` to mean nothing was lost, re-run it and read the
+  > report.
+
   > **Fixed in #482 — re-check any NETCONF output produced before it.**
   > Used as a migration **target**, this codec previously dropped
   > foreign port names instead of translating them, and because

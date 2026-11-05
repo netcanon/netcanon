@@ -274,14 +274,20 @@ text").
 #### `cisco_iosxe` (NETCONF / OpenConfig, bidirectional Phase 0.5 stub)
 
 This codec is an experimental stub — its `_render_canonical()`
-emits **only the `openconfig-interfaces` subtree**.  Every other
-canonical surface is declared `unsupported` so the cross-mesh audit
-matrix flags the gap honestly rather than masquerading as drift.
+emits **only the `openconfig-interfaces` subtree**, and of an
+interface only its name, description, enabled state, type and
+addresses.  Every other canonical surface is declared `unsupported`
+so the cross-mesh audit matrix flags the gap honestly rather than
+masquerading as drift.
 
 | Path (granular) | Class |
 |---|---|
-| `/interfaces/interface/config/mtu` | Lossy (YANG MTU drops platform-specific IP-vs-link distinction) |
+| `/interfaces/interface/config/mtu` | Lossy (the interface is written; its MTU is not) |
 | `/interfaces/interface/config/ip-mtu` | Unsupported (no IP MTU is carried between OpenConfig and the tree) |
+| `/interfaces/interface/{config/vrf,dhcp-client,dhcp-client-v6,lag-member-of}` | Unsupported (the interface is written without them, as without its switchport fields) |
+| `/local-users/user/{name,role,privilege-level,hashed-password}` | Unsupported (no `<system><aaa>` is written) |
+| `/lags/lag/{name,mode,members}` | Unsupported |
+| `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported |
 | `/system/{hostname,dns-server,ntp-server}` | Unsupported |
 | `/vlans/vlan/{id,name}` | Unsupported |
 | `/routing/static-route` | Unsupported |
@@ -295,6 +301,19 @@ matrix flags the gap honestly rather than masquerading as drift.
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
 | `/anycast-gateway-mac` | Unsupported (ship-before-wire v0.2.0 Wave C) |
 | `/access-list`, `/firewall` | Unsupported (Tier 3) |
+
+A row stands for every leaf the walker yields under it, each declared
+on its own (`_NOT_RENDERED` in the codec): `classify` matches a path
+exactly, and calls one it does not find `supported`.  Until this was
+fixed, a local user, a LAG, a VRF, a DHCP pool and the leaves of a
+VLAN, a static route, a VNI, an SNMPv3 user and a VRRP group were
+declared by their marker or their record's path alone, so each leaf
+was in a job's `supported_paths`, and a config of a local user and a
+LAG with no hostname was `completed` with an output that held
+neither.  `TestEveryWalkablePath`
+(`tests/unit/migration/codecs/cisco_iosxe/test_capability_matrix_honesty.py`)
+renders the registry's maximal tree, parses it back, and fails for a
+lost path the matrix calls `supported`.
 
 Top-level field markers (`/hostname`, `/domain`, `/dns_servers`,
 `/ntp_servers`, `/timezone`, `/syslog_servers`, `/vlans`,

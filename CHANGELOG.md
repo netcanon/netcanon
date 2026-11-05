@@ -1324,6 +1324,32 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A job onto the IOS-XE NETCONF codec no longer lists what it
+  drops as translated.**  The codec writes interfaces only, and of
+  an interface its name, description, state, type and addresses.
+  Its capability matrix declared every other surface by its field
+  marker (`/local_users`) or by a record's own path (`/lags`,
+  `/interfaces/interface/vrrp-groups/group`).  `classify` matches a
+  path exactly and calls a path it does not find `supported`, so 38
+  leaves under those were in the `supported_paths` of a job whose
+  config held them, among them a local user's name, role, privilege
+  and password hash, a LAG's name, mode and members, a VRF's route
+  distinguisher and route targets, a DHCP pool's options, a static
+  route's interface and metric, a VLAN's description and members, a
+  VNI's VLAN and flood list, an SNMPv3 user's passphrase and engine
+  ID, a VRRP group's addresses, and an interface's VRF, DHCP client
+  and LAG membership.  A config of a local user and a LAG, with no
+  hostname to hold the job, was `completed` with an output that held
+  neither.  Each leaf is declared `unsupported` now, and such a job
+  is `partial`.  The MTU stays `lossy`, as the interface is written
+  and its MTU is not, with a reason that says so: the old one spoke
+  of an IP-versus-link distinction, and no MTU is written at all.
+  The cross-mesh audit reads the field markers and does not move.
+  Guarded by `TestEveryWalkablePath` in
+  `tests/unit/migration/codecs/cisco_iosxe/test_capability_matrix_honesty.py`,
+  which renders the registry's maximal tree, parses it back, and
+  fails for a walkable path the output lost that the matrix calls
+  `supported` -- found by experiment, not from a list.
 - **`detect-deployment` counts a sub-interface as the port it rides
   on.**  The check of a proposal against the config listed every
   sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port

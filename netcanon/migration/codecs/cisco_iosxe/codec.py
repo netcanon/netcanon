@@ -159,6 +159,123 @@ def _extract_version(raw: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+#: Every walkable leaf of a surface this render writes no record of, by
+#: the reason it is dropped.  ``CapabilityMatrix.classify`` is an
+#: exact-string match and an undeclared path is ``supported``, so a field
+#: marker (``/local_users``) or a record's own path (``/lags``,
+#: ``/vrrp-groups/group``) leaves each leaf under it reported as
+#: translated: a job onto this codec listed its local users, LAGs, VRFs,
+#: VXLAN and DHCP pools among the paths it would emit.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/codecs/cisco_iosxe/
+#: test_capability_matrix_honesty.py`` holds the matrix to the render,
+#: every walkable path.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "The OpenConfig render writes no `<system><aaa>` subtree: every "
+        "local user is dropped, with its name, role, privilege and "
+        "password hash.",
+        (
+            "/local-users/user/name",
+            "/local-users/user/role",
+            "/local-users/user/privilege-level",
+            "/local-users/user/hashed-password",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no openconfig-if-aggregate "
+        "augment: every LAG is dropped, with its mode and members.",
+        ("/lags/lag/name", "/lags/lag/mode", "/lags/lag/members"),
+    ),
+    (
+        "The OpenConfig render writes no DHCP pool: every pool is "
+        "dropped, with its gateway, DNS servers, domain and lease.",
+        (
+            "/dhcp-servers/pool/gateway",
+            "/dhcp-servers/pool/dns-servers",
+            "/dhcp-servers/pool/domain-name",
+            "/dhcp-servers/pool/lease-time",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no `<network-instances>`: every "
+        "VRF is dropped, with its route distinguisher, route targets "
+        "and L3 VNI.",
+        (
+            "/routing-instances/instance/name",
+            "/routing-instances/instance/description",
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+            "/routing-instances/instance/l3-vni",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no static route: each is dropped, "
+        "with its interface, metric and description.",
+        (
+            "/routing/static-route/interface",
+            "/routing/static-route/metric",
+            "/routing/static-route/description",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no `<vlans>` subtree: every VLAN "
+        "is dropped, with its description, members and address.",
+        (
+            "/vlans/vlan/description",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+            "/vlans/vlan/ipv4/address/ip",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no VXLAN: every VNI is dropped, "
+        "with its VLAN, multicast group and flood list.",
+        (
+            "/vxlan-vnis/vlan-id",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+        ),
+    ),
+    (
+        "The OpenConfig render writes no SNMP subtree: an SNMPv3 user is "
+        "dropped, with its passphrases and engine ID.",
+        ("/snmp/v3-user/auth-passphrase", "/snmp/v3-user/engine-id"),
+    ),
+    (
+        "VRRP / HSRP / CARP groups are not rendered (see "
+        "/interfaces/interface/vrrp-groups/group): a group's addresses, "
+        "tracked interfaces and MAC are dropped with it.",
+        (
+            "/interfaces/interface/vrrp-groups/group/virtual-ips",
+            "/interfaces/interface/vrrp-groups/group/track-interfaces",
+            "/interfaces/interface/vrrp-groups/group/virtual-mac",
+        ),
+    ),
+    (
+        "The anycast gateway is not rendered (see "
+        "/interfaces/interface/ipv4/address/virtual-gateway-address): "
+        "its MAC is dropped with it.",
+        (
+            "/interfaces/interface/ipv4/address/virtual-gateway-mac",
+            "/interfaces/interface/ipv6/address/virtual-gateway-mac",
+        ),
+    ),
+    (
+        "The OpenConfig render writes an interface's name, description, "
+        "enabled, type and addresses only: its VRF binding, DHCP client "
+        "and LAG membership are dropped, as its switchport and 802.1Q "
+        "fields are.",
+        (
+            "/interfaces/interface/config/vrf",
+            "/interfaces/interface/dhcp-client",
+            "/interfaces/interface/dhcp-client-v6",
+            "/interfaces/interface/lag-member-of",
+        ),
+    ),
+)
+
+
 @register
 class CiscoIOSXECodec(CodecBase):
     """Adapter for Cisco IOS-XE 17.x OpenConfig NETCONF.
@@ -251,9 +368,12 @@ class CiscoIOSXECodec(CodecBase):
     #: with both granular xpaths (matching :func:`_walk_canonical`'s
     #: shapes for :func:`validate_against` classification) AND
     #: top-level field xpaths (matching ``run_full_mesh.py``'s
-    #: field-disposition shape).  Wave 10β-A flagged the previous
-    #: ``supported``-but-unrendered declarations as artifactual
-    #: matrix-honesty violations; this declaration is the fix.
+    #: field-disposition shape).  The granular xpaths are every leaf
+    #: the walker yields under each surface (``_NOT_RENDERED``), since a
+    #: record's own path does not cover its leaves.  Wave 10β-A flagged
+    #: the previous ``supported``-but-unrendered declarations as
+    #: artifactual matrix-honesty violations; this declaration is the
+    #: fix.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe",
         vendor_id="cisco_iosxe",
@@ -299,9 +419,9 @@ class CiscoIOSXECodec(CodecBase):
             LossyPath(
                 path="/interfaces/interface/config/mtu",
                 reason=(
-                    "IOS-XE OC model tracks MTU but some platform-specific "
-                    "MTU tweaks (IP vs link) are only representable in CLI; "
-                    "YANG-only round-trip loses the distinction."
+                    "The OpenConfig render writes an interface's name, "
+                    "description, enabled, type and addresses only: its "
+                    "MTU is dropped while the interface survives."
                 ),
                 severity="warn",
             ),
@@ -814,6 +934,13 @@ class CiscoIOSXECodec(CodecBase):
                     "wire-up scheduled for v0.2.0 (closes existing "
                     "per-VRF static-route lossy declaration)."
                 ),
+            ),
+            # ── Every other walkable leaf the render drops (see
+            # _NOT_RENDERED). ──
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )
