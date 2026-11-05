@@ -15,7 +15,7 @@
 #     not_applicable rather than unsupported.
 #   * DHCP server pools — Aruba is relay-only, so no source data
 #     to lose.
-#   * Hash formats are still incompatible (Aruba SHA-1/bcrypt vs
+#   * Hash formats are still incompatible (Aruba SHA-1/SHA-256 vs
 #     Cisco type-9 scrypt) — same lossy direction either way.
 
 meta:
@@ -269,8 +269,9 @@ per_field_expectation:
       Aruba's two-role model (manager/operator) expands to Cisco's
       numeric privilege on render: manager -> privilege 15,
       operator -> privilege 1.  The Cisco target loses no data
-      from this expansion (Aruba had only the two roles, and a
-      switch holds at most one account of each), but the reverse
+      from this expansion (each AOS-S account carries a privilege
+      level: 15 for the manager, 1 for the operator, and for a local
+      user the N of its `Level-N` group, else 1), but the reverse
       direction collapses Cisco's intermediate privilege levels
       (already documented in cisco_iosxe_cli__aruba_aoss).  Hash
       formats are NOT cross-compatible: AOS-S ``sha1`` and
@@ -278,10 +279,13 @@ per_field_expectation:
       (``$1$...``), PBKDF2 (``$8$...``), and scrypt (``$9$...``) but
       none match AOS-S's forms, so such an account is a review
       comment in place of the account.  Measured over the committed
-      inputs: 1 of 4 accounts arrive across the 3 cells that
+      inputs: 1 of 7 accounts arrive across the 5 cells that
       populate local users, an operator with a password as typed;
-      the 3 others carry an AOS-S `sha1:` digest.  Cross-vendor
-      migration requires re-setting passwords on the target.
+      3 others carry an AOS-S `sha1:` digest, and 3 hold no secret (a bare `password manager` /
+      `password operator` marker, printed without `include-credentials`),
+      which no target writes as an account.
+      Cross-vendor migration requires re-setting passwords on the
+      target.
     references: [local_users]
 
   radius_servers:

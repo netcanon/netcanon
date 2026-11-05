@@ -1022,8 +1022,15 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
     # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
     # as a contact and a location (test_snmp_contact_and_location.py).
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "fffcddd76bc4",
-    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
+    # And again, by its local users and nothing else: its bare
+    # `password manager` and `password operator` are each an account
+    # that holds no secret (codecs/aruba_aoss/test_every_account_form.py):
+    # was "fffcddd76bc4".
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "b9824a4ed0be",
+    # Moved on purpose, by its local users and nothing else: its bare
+    # `password manager` is an account that holds no secret
+    # (test_every_account_form.py): was "06c7aeab8a24".
+    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "09066a0fddd7",
     "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
     # Moved on purpose, by a row each and nothing else: the `oobm` and
     # `stacking` stanzas are listed among the sections not translated

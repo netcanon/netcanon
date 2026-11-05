@@ -54,7 +54,8 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - DHCP server pools (`dhcp-server pool` grammar with default-router
   + dns-server + network + range)
 - Local users — one manager and one operator account, in the AOS-S
-  forms (`sha1`, `sha256`, `plaintext`); see
+  forms (`sha1`, `sha256`, `plaintext`), and as a source the
+  `aaa authentication local-user` accounts beside them; see
   [Local users](#local-users-one-manager-and-one-operator)
 
 Parse-tolerant (parsed but not currently rendered cross-vendor —
@@ -195,15 +196,44 @@ Not written: the further named accounts an AOS-S switch can hold,
 `aaa authentication local-user`.  They are set from the CLI only,
 need a group that exists and `aaa authorization commands local`, and
 are not used while RADIUS or TACACS+ is the login method, so Netcanon
-does not make them up.
+does not make them up.  An AOS-S source's local users are review
+comments on an AOS-S target too.
+
+As a source, the parser reads every account the switch prints:
+
+- the last `password manager` line and the last `password operator`
+  line, as the switch keeps them.  `user-name` may be left out (the
+  account is then `manager` or `operator`), and a terminal can wrap
+  the quoted hash onto the next line.  An earlier line of a role is
+  a row of `dropped_tier3_sections`, which names no user and no
+  value;
+- the bare `password manager` / `password operator` marker a switch
+  prints without `include-credentials`, as an account of the role's
+  default name that holds no secret.  Every target writes it as a
+  review comment in place of an account, and the job has a warning
+  for it, so the password is set by hand;
+- each `aaa authentication local-user "<name>" group "<group>"`
+  account, with its password or without (wrapped or not), at the
+  privilege level of the switch's own group `Level-0` to `Level-15`,
+  and at 1 in any other group, which a row says: what such a group
+  allows is in its `aaa authorization group` rules, which are not
+  translated.  The last line of a user is the one read (names are
+  case-sensitive), and a local-user line that sets no account (a
+  password policy such as `min-pwd-length`) is a row.
+
+In the tree the manager comes first, then the operator, then the
+local users, whatever the order of the lines, so that onto AOS-S the
+manager slot goes to the switch's manager and not to a local user of
+`Level-15` printed above it.
 
 Known limitations, still open:
 
-- As a source, the parser reads the `password <role> user-name ...
-  <form> "<value>"` line only.  It does not read the bare `password
-  manager` / `password operator` marker a switch prints without
-  `include-credentials`, nor an `aaa authentication local-user`
-  account.
+- A bare marker is read under the role's default name.  A switch
+  whose account was given another name prints the same bare marker
+  without `include-credentials`, so that name is not in the text.
+- A local user in a group other than `Level-0` to `Level-15` is read
+  at privilege level 1, the safe side, and the groups `manager` and
+  `operator` are such groups.  Re-check its rights on the target.
 
 ## Lossy paths
 
@@ -664,7 +694,8 @@ have.
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
 - **`include-credentials` mode** affects how credentials appear in
   running-config.  Without it a switch prints a bare `password
-  manager` marker, which the parser does not read; see
+  manager` marker, which the parser reads as an account that holds
+  no secret; see
   [Local users](#local-users-one-manager-and-one-operator).
 - **Banner format + positional port lists** — the codec correctly
   parses the AOS-S banner / "Configuration Editor" prelude and the

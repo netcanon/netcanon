@@ -34,6 +34,15 @@ meaning, read where it stands, and the later of two lines wins
 1,3``, ``interface 1-4``) gives its VLAN lines to each port, makes no
 record named after the list, and says what else it sets.
 
+A switch has one manager and one operator account, set by ``password
+manager`` / ``password operator``: of several lines of a role the last
+is the switch's, and the earlier are said.  A line printed without
+``include-credentials`` names no user and no value, and is an account
+of the role's default name that holds no secret.  The local users
+beside them (``aaa authentication local-user``) are read too, at the
+privilege level of a ``Level-N`` group and at 1 in any other.  The
+two accounts come first in the tree, the local users after them.
+
 Wire-format surfaces handled (mirrors the codec's CapabilityMatrix
 ``supported`` list): hostname, DNS, NTP, syslog, SNMP (community /
 location / contact / trap-host / v3 USM users with separate
@@ -232,34 +241,65 @@ _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _TRUNK_LINE_RE = re.compile(
     r"^trunk\s+(\S+)\s+(\S+)\s+(\S+)\s*$", re.IGNORECASE,
 )
-# ``password manager user-name "admin" sha1 "8db..."``
-# Real AOS-S output always quotes both the name and the hash; sha1 is
-# the modern algorithm (legacy "plaintext" form is also accepted by
-# the parser for backward compatibility but rarely seen).
+# The switch's two accounts, one line a role (HPE Access Security
+# Guide, AOS-S 16.x, "Setting passwords and usernames"):
+#
+#   password manager user-name "admin" sha1 "<hash>"
+#   password operator user-name "monitor" plaintext "<password>"
+#   password manager
+#
+# The last is how the switch prints a role whose password is set while
+# ``include-credentials`` is off: no name, no value.  A typed line may
+# leave out ``user-name`` (the names are then ``manager`` and
+# ``operator``) or the value (``plaintext`` then asks for it).  The
+# switch keeps ONE account a role, and a second line re-points it, so
+# of several lines of a role the last is the switch's.
 _PASSWORD_LINE_RE = re.compile(
-    r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
-    r'(\S+)\s+"([^"]+)"\s*$',
+    r'^password[ \t]+(manager|operator)'
+    r'(?:[ \t]+user-name[ \t]+("[^"]*"|[^\s"]\S*))?'
+    r'(?:[ \t]+(?!user-name(?!\S))([^\s"]\S*)(?:[ \t]+("[^"]*"|[^\s"]\S*))?)?'
+    r'[ \t]*$',
     re.IGNORECASE,
 )
-# Continuation-line variant: when the operator pastes a config
-# whose terminal wrapped the long sha1 hash onto the next line,
-# the first line ends with the algorithm token but no quoted hash:
+# A line whose terminal wrapped a long hash onto the next one ends with
+# its algorithm, and the quoted hash is the next line that is not blank:
 #
 #   password manager user-name "admin" sha1
 #    "deadbeef0000000000000000000000000000dead"
 #
-# This regex matches the algorithm-only head line; the loop in
-# parse() then peeks the next non-blank line for the trailing
-# quoted hash.  Without this fallback the user's copy-paste from
-# `show running-config` silently drops the local-user record.
-_PASSWORD_HEAD_RE = re.compile(
-    r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
-    r'(\S+)\s*$',
-    re.IGNORECASE,
-)
+# (:func:`_hash_read`).  Without it a copy-paste of `show
+# running-config` lost the account.
 _PASSWORD_HASH_CONTINUATION_RE = re.compile(
     r'^\s*"([^"]+)"\s*$',
 )
+# The local users beside the two accounts, each in an authorization
+# group (HPE Access Security Guide, AOS-S 16.x, "Configuring a local
+# user for a group").  A 2530 prints the first form with
+# ``include-credentials`` on, its hash wrapped onto the next line as
+# above, and the second with it off; the third is typed, and asks for
+# the password:
+#
+#   aaa authentication local-user "admin2" group "ADMINS" password sha1 "<hash>"
+#   aaa authentication local-user "admin2" group "ADMINS"
+#   aaa authentication local-user admin2 group Level-15 password plaintext
+_LOCAL_USER_LINE_RE = re.compile(
+    r'^aaa[ \t]+authentication[ \t]+local-user[ \t]+("[^"]+"|[^\s"]\S*)'
+    r'[ \t]+group[ \t]+("[^"]+"|[^\s"]\S*)'
+    r'(?:[ \t]+password[ \t]+([^\s"]\S*)(?:[ \t]+("[^"]*"|[^\s"]\S*))?)?'
+    r'[ \t]*$',
+    re.IGNORECASE,
+)
+# Any other line of that command: a password policy of one user
+# (``aging-period``, ``min-pwd-length``, ``clear-password-history``), or
+# a form the parser does not read.  It sets no account, and is said.
+_LOCAL_USER_OTHER_RE = re.compile(
+    r"^aaa[ \t]+authentication[ \t]+local-user(?!\S)", re.IGNORECASE,
+)
+# The switch's own groups ``Level-0`` to ``Level-15``, as it spells
+# them: a user in ``Level-15`` has "the same access rights as the
+# Manager role", one in ``Level-1`` those of the Operator role (HPE
+# Access Security Guide, AOS-S 16.11, role-based access control).
+_PREDEFINED_GROUP_RE = re.compile(r"Level-(1[0-5]|[0-9])")
 # AOS-S RADIUS forms (16.10 Access Security Guide):
 #   radius-server host <ip>
 #   radius-server host <ip> key "<secret>"
@@ -537,7 +577,8 @@ _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _RADIUS_HOST_RE,
     _RADIUS_KEY_GLOBAL_RE,
     _PASSWORD_LINE_RE,
-    _PASSWORD_HEAD_RE,
+    _LOCAL_USER_LINE_RE,
+    _LOCAL_USER_OTHER_RE,
     _TRUNK_LINE_RE,
     _GLOBAL_PORT_VLAN_RE,
     _OOBM_HEADER_RE,
@@ -619,6 +660,60 @@ def _unquote(s: str) -> str:
     if len(s) >= 2 and s.startswith('"') and s.endswith('"'):
         return _unescape(s[1:-1])
     return s
+
+
+def _word(token: str | None) -> str:
+    """*token* without the quotes around it, if it has them: a user's
+    name or a hash, which the renderer writes between quotes and never
+    escapes.  ``""`` for no token."""
+    if token and len(token) >= 2 and token[0] == '"' and token[-1] == '"':
+        return token[1:-1]
+    return token or ""
+
+
+def _hash_read(alg: str | None, token: str | None, lines: list[str], at: int) -> tuple[str, int]:
+    """An account's ``hashed_password`` as the line at *at* gives it,
+    and the index of the line to read next.
+
+    Args:
+        alg: The algorithm the line names, or ``None``: the switch
+            printed that a password is set and not what it is.
+        token: The value after the algorithm, or ``None``.  A line that
+            ends with its algorithm had its value wrapped onto the next
+            line that is not blank, if that line is a quoted value and
+            nothing else (``_PASSWORD_HASH_CONTINUATION_RE``).
+        lines: The config's lines.
+        at: The index of the line.
+
+    Returns:
+        ``""`` for no algorithm; ``"<alg>:<value>"``; or ``"<alg>:"``
+        for an algorithm with no value (a typed ``plaintext``, which
+        asks for it, or a hash a paste lost), which holds no secret
+        either.
+    """
+    if not alg:
+        return "", at + 1
+    if token is not None:
+        return f"{alg.lower()}:{_word(token)}", at + 1
+    after = at + 1
+    while after < len(lines) and not lines[after].strip():
+        tick()
+        after += 1
+    if after < len(lines):
+        wrapped = _PASSWORD_HASH_CONTINUATION_RE.match(lines[after])
+        if wrapped:
+            return f"{alg.lower()}:{wrapped.group(1)}", after + 1
+    return f"{alg.lower()}:", at + 1
+
+
+def _privilege_of_group(group: str) -> int:
+    """The privilege level a local user in *group* is read at: ``N`` in
+    the switch's own ``Level-N``, and 1 in any other.  What another
+    group allows is in its ``aaa authorization group`` rules, which are
+    not translated; and the default groups ``manager`` and ``operator``
+    are read at 1 as well, the level with the fewer rights."""
+    level = _PREDEFINED_GROUP_RE.fullmatch(group)
+    return int(level.group(1)) if level else 1
 
 
 #: AOS-Switch (ProVision) release from the ``Created on release #`` banner
@@ -1821,6 +1916,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # the record still lists it, and nothing in the loop reads an
     # earlier VLAN's list).
     memberships = _Memberships(intent)
+    # The account each role has (the last line's), and each local user
+    # by name (the last line's): the tree is given the two accounts
+    # first, after the last line.
+    by_role: dict[str, CanonicalLocalUser] = {}
+    by_name: dict[str, CanonicalLocalUser] = {}
     i = 0
     while i < len(lines):
         tick()
@@ -2077,59 +2177,50 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         pwd = _PASSWORD_LINE_RE.match(stripped_line)
         if pwd:
             role = pwd.group(1).lower()
-            name = pwd.group(2)
-            hash_alg = pwd.group(3).lower()
-            hash_val = pwd.group(4)
-            # Stash hash-alg prefix on the hash so render can
-            # reconstruct the `password <role> user-name "X" <alg> "<h>"`
-            # form.  Non-standard algorithms fall through verbatim.
-            intent.local_users.append(CanonicalLocalUser(
-                name=name,
+            # The algorithm is kept on the hash (``sha1:<hash>``), so
+            # that the renderer writes the line's form again.
+            hashed, i = _hash_read(pwd.group(3), pwd.group(4), lines, i)
+            if role in by_role:
+                memberships.say(
+                    f'password {role} (a later "password {role}" line sets the '
+                    f"same account, as on the switch; not translated)"
+                )
+            by_role[role] = CanonicalLocalUser(
+                name=_word(pwd.group(2)) or role,
                 privilege_level=15 if role == "manager" else 1,
-                hashed_password=f"{hash_alg}:{hash_val}",
+                hashed_password=hashed,
                 role=role,
-            ))
-            i += 1
+            )
             continue
 
-        # Continuation-line fallback for terminal-wrapped pastes
-        # where the long sha1 hash landed on the line AFTER the
-        # ``password ... <alg>`` head.  Look for an algorithm-
-        # only head line, then peek the next non-blank line for
-        # the trailing quoted hash; consume both lines on match.
-        head = _PASSWORD_HEAD_RE.match(stripped_line)
-        if head:
-            role = head.group(1).lower()
-            name = head.group(2)
-            hash_alg = head.group(3).lower()
-            # Look ahead for the continuation line carrying the
-            # quoted hash.  Tolerate a single blank line between
-            # head and continuation in case the operator's paste
-            # introduced one.
-            cont_idx = i + 1
-            while cont_idx < len(lines) and not lines[cont_idx].strip():
-                tick()
-                cont_idx += 1
-            if cont_idx < len(lines):
-                cont = _PASSWORD_HASH_CONTINUATION_RE.match(lines[cont_idx])
-                if cont:
-                    intent.local_users.append(CanonicalLocalUser(
-                        name=name,
-                        privilege_level=15 if role == "manager" else 1,
-                        hashed_password=f"{hash_alg}:{cont.group(1)}",
-                        role=role,
-                    ))
-                    i = cont_idx + 1
-                    continue
-            # Head matched but no continuation found — emit a
-            # user record without a hash so the operator at least
-            # sees the username appearing in the rename pane.
-            intent.local_users.append(CanonicalLocalUser(
+        local = _LOCAL_USER_LINE_RE.match(stripped_line)
+        if local:
+            name, group = _word(local.group(1)), _word(local.group(2))
+            hashed, i = _hash_read(local.group(3), local.group(4), lines, i)
+            if by_name.pop(name, None) is not None:
+                memberships.say(
+                    "aaa authentication local-user (a later line names the same "
+                    "user and sets the account; not translated)"
+                )
+            if not _PREDEFINED_GROUP_RE.fullmatch(group):
+                memberships.say(
+                    "aaa authentication local-user ... group (a group other than "
+                    "the switch's Level-0 to Level-15: what it allows is not "
+                    "translated, and the user is read at privilege level 1)"
+                )
+            # The group is not a role: no other platform has it.
+            by_name[name] = CanonicalLocalUser(
                 name=name,
-                privilege_level=15 if role == "manager" else 1,
-                hashed_password=f"{hash_alg}:",
-                role=role,
-            ))
+                privilege_level=_privilege_of_group(group),
+                hashed_password=hashed,
+            )
+            continue
+
+        if _LOCAL_USER_OTHER_RE.match(stripped_line):
+            memberships.say(
+                "aaa authentication local-user (a line that sets no account: a "
+                "password policy, or a form not read; not translated)"
+            )
             i += 1
             continue
 
@@ -2282,6 +2373,15 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
         # Unrecognised top-level line — skip.
         i += 1
+
+    # The two accounts first, as the switch prints them, then the local
+    # users: the AOS-S renderer gives the manager slot to the first user
+    # of privilege 15, which is the manager's line and not a Level-15
+    # user printed above it.
+    intent.local_users = [
+        *(by_role[role] for role in ("manager", "operator") if role in by_role),
+        *by_name.values(),
+    ]
 
     # What each VLAN lost to a later line leaves it now.
     memberships.finish()

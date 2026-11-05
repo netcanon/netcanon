@@ -623,8 +623,9 @@ tag with nothing after it.  It may be an EOS or IOS-XE `nopassword`
 account, an account that authenticates only through RADIUS or
 TACACS+ (a Junos `remote` template, a FortiOS remote administrator),
 an OPNsense `<user>` with no `<password>`, a VyOS user with no
-`authentication`, or any user of a RouterOS export, which prints no
-passwords.  Written as it stands, it would be an account that may
+`authentication`, an AOS-S `password manager` line printed without
+`include-credentials`, or any user of a RouterOS export, which prints
+no passwords.  Written as it stands, it would be an account that may
 log in with no password (on IOS-XE at all, on EOS from the console,
 on RouterOS with an empty one), so no target writes it, the source's
 own platform included: the config does not say whether the account
@@ -662,7 +663,37 @@ other target (above), with no warning of its own.
 **Action:** on the switch, set the manager first and then the operator,
 each with `password <role> user-name "<name>"`, which asks for the
 password.  Further named accounts are `aaa authentication local-user`,
-which Netcanon does not write.
+which Netcanon does not write, from an AOS-S source either: re-create
+each one listed in a review line with `aaa authentication local-user
+"<name>" group "<group>" password plaintext`, which asks for the
+password.
+
+### "An AOS-S source has rows about `password manager` or `aaa authentication local-user`"
+
+The parser reads the accounts as the switch keeps them, and says
+in a row of the job's dropped sections what it read otherwise:
+
+- `password <role> (a later "password <role>" line sets the same
+  account, ...)` -- a switch has one account of each role, and of
+  several lines the last is the one it keeps.  The earlier are not
+  translated.
+- `aaa authentication local-user (a later line names the same
+  user ...)` -- the same for a local user.
+- `aaa authentication local-user ... group (a group other than the
+  switch's Level-0 to Level-15 ...)` -- the user is read at
+  privilege level 1.  What its group allows is in the group's `aaa
+  authorization group` rules, which are not translated: give the
+  account its rights on the target by hand.
+- `aaa authentication local-user (a line that sets no account ...)`
+  -- a password policy such as `min-pwd-length`, which is not
+  translated.
+
+A bare `password manager` or `password operator` line -- what a
+switch prints without `include-credentials` -- is an account with no
+password, and every target writes it as a review line in place of
+the account ("A user with no password came out as a review
+comment", above): the text holds no password to translate.
+**Action:** set the password on the target.
 
 ### "An AOS-S output says a hashed password line needs include-credentials"
 

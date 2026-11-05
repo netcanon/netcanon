@@ -437,8 +437,9 @@ per_field_expectation:
   local_users:
     disposition: unsupported
     reason: >
-      AOS-S parser populates intent.local_users (manager / operator
-      roles, sha1 / sha256 / plaintext secrets).  cisco_iosxe render
+      AOS-S parser populates intent.local_users (the manager and the
+      operator, and each `aaa authentication local-user` account;
+      sha1 / sha256 / plaintext secrets, or none).  cisco_iosxe render
       does NOT walk `<system><aaa><authentication><users>`.
       Render-side gap.  Even if wired, hash-format incompatibility
       (AOS-S sha1/sha256 vs Cisco type-5/8/9) would force re-keying
