@@ -124,6 +124,10 @@ in v1 (parity with the NX-OS / IOS-XE IPv6-anycast deferral).
   ArubaOS-CX <release>` banner + management-plane service footer
   (`ssh server`, `https-server`, `clock`, `ntp`, `spanning-tree`) is
   discarded on parse; a synthesised banner is emitted on render.
+- **`/interfaces/interface/{dhcp-client,dhcp-client-v6}`** — the codec
+  reads and writes no DHCP client, IPv4 or IPv6: the interface is
+  written without one (severity `warn`: the job says so and stays
+  `completed`).
 
 ## What we don't do
 
@@ -137,10 +141,14 @@ is visible, not silent):
   and per-VRF static routes (these live under the deferred `evpn` /
   `router bgp` blocks; only the bare `vrf <name>` + default-VRF `ip
   route` are wired)
-- **VRRP** (FHRP) and **IPv6 active-gateway**
+- **VRRP** (FHRP) and **IPv6 active-gateway** — and so no field of
+  either: a group's virtual IPs, tracked interfaces and virtual MAC,
+  and the MAC of an IPv6 gateway
+- **DHCP server pool fields** — no pool is written, so neither is its
+  gateway, its DNS servers, its domain or its lease
 - **VXLAN control plane** — per-VLAN L2VNI RD/RT (almost always
-  `auto`-derived) and symmetric-IRB **L3VNI** (`vni N / vrf <name>`);
-  the L2 VLAN↔VNI binding itself IS supported
+  `auto`-derived), symmetric-IRB **L3VNI** (`vni N / vrf <name>`) and
+  EVPN Type-5 routes; the L2 VLAN↔VNI binding itself IS supported
 
 Deliberately deferred to [Tier
 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered):

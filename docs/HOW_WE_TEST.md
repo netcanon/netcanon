@@ -264,6 +264,27 @@ mend is in named sets, compared for equality with what is measured.
 It cannot see a membership the source parser never put in the tree:
 that is missing from both sides.
 
+**What a matrix calls supported is looked for in the output.**  A
+codec's capability matrix is what the validation report reads, and
+it matches a path as an exact string: a path no list names is
+`supported`.  So a field the render writes nothing for was reported
+as translated unless someone had thought to declare it — the gateway
+of a DHCP pool on a codec that writes no pool, every field of a VRF
+on a codec with no VRF, an HSRP group on a codec that writes VRRP
+only.  `test_a_supported_path_is_written.py` builds, for every path
+the walker can yield, the smallest tree that holds it, moves it into
+each target's port names with the port translator, renders it onto
+every public codec and reads it back with that codec's own parser; a
+path the matrix calls `supported` that is not in what comes back
+fails.  A field of a record a codec declares unsupported must be
+declared too, and the record a path belongs to is typed by hand in
+the test.  The check is one-sided — a path that comes back from one
+tree is not shown to come back from every tree — and it reads with
+the codec's own parser, so a line written where the device does not
+take it, and read back from the same place, passes.  Two such forms
+were found from the vendors' documentation instead (FortiOS and Junos
+IPv6 VRRP), and are declared lossy.
+
 **A convention of the tree is not checked by reading the tree that
 way.**  A trunk states which VLAN it carries untagged and which VLANs
 it carries, and the platforms differ on whether the second statement

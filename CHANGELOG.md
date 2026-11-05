@@ -1350,6 +1350,49 @@ timestamp if your timezone matters for an audit.
   which renders the registry's maximal tree, parses it back, and
   fails for a walkable path the output lost that the matrix calls
   `supported` -- found by experiment, not from a list.
+- **No codec lists what it does not write as translated.**  The same
+  defect, on the other codecs: 152 walkable paths a codec's render
+  writes nothing for, or writes only in some cases, were `supported`
+  in its matrix -- 26 on IOS XR, 22 on AOS-S, 21 on VyOS, 20 on
+  OPNsense, 17 on RouterOS, 15 on FortiOS, 11 on AOS-CX, 10 on NX-OS,
+  4 each on IOS-XE CLI and Junos, 2 on EOS; none on OS10.  Among them
+  every field of a DHCP pool on a codec that writes no pool, every
+  field of a VRF on FortiOS and RouterOS, the MAC of a virtual
+  gateway on the codecs that write none, the SNMP location, contact,
+  trap hosts and v3 users on IOS XR, every field of a VLAN on VyOS
+  and IOS XR, and a DHCP client on the codecs that read and write
+  none.  And the VRRP group itself was `supported` on IOS-XE CLI,
+  EOS, AOS-S, FortiOS, RouterOS and Junos, each of which writes IETF
+  VRRP only: an HSRP or CARP group is not written there, and only some
+  of them say so in the output.  Each path is declared now, leaf by
+  leaf, in two tables of the codec (`_NOT_RENDERED`, `unsupported`;
+  `_DROPPED`, `lossy` with severity `warn`): a job whose config holds
+  a path that is not written is `partial` where it was `completed`,
+  and one whose path is written only in some cases says so and stays
+  `completed`.  Two forms were found from the vendors' documentation,
+  not by a test, and are declared `lossy`: an IPv6 virtual IP is
+  written as `set vrip6` in FortiOS's IPv4 `config vrrp`, where
+  Fortinet documents IPv6 VRRP under `config ipv6` / `config vrrp6`;
+  and as `virtual-inet6-address` in a Junos group under an IPv4
+  address, where Juniper documents a `vrrp-inet6-group` under a
+  `family inet6` address with a `virtual-link-local-address`.  The
+  vendor pages and `docs/CAPABILITIES.md` said more than the matrices
+  did in places, and now say the same: the IOS-XE CLI, EOS, AOS-S,
+  FortiOS, RouterOS and Junos VRRP rows were `Supported`, the Junos
+  row claimed IPv6, and the RouterOS row claimed review lines for
+  tracking that the render does not write.  Guarded by
+  `tests/unit/migration/test_a_supported_path_is_written.py`, which
+  renders the smallest tree for every walkable path onto every public
+  codec, reads it back with the codec's own parser and fails for a
+  `supported` path that does not come back, and for a field of a
+  record declared unsupported that is not declared too.  It reads
+  with the codec's own parser, so a line written where the device
+  does not take it, and read back from there, passes -- which is how
+  the two VRRP forms above went unseen.  Four lines are written and
+  not read back, and pinned there until their parsers read them:
+  IOS-XE CLI `ip address dhcp`, FortiOS `set mode dhcp`, a RouterOS
+  `/user` line's `password=`, and a RouterOS route whose `gateway=` is
+  an interface name.
 - **`detect-deployment` counts a sub-interface as the port it rides
   on.**  The check of a proposal against the config listed every
   sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port
@@ -5536,10 +5579,13 @@ timestamp if your timezone matters for an audit.
   OS10 takes `netoperator` at `priv-lvl` 0 or 1 only, and an account
   from 2 to 14 is written `role netoperator priv-lvl <n>`.  IOS XR's
   `operator` group may not exist on the newest Cisco 8000 releases.
-  IOS-XE NETCONF writes no local users, and its capability matrix
-  declares them at a path (`/local_users`) the validation report does
-  not look up, so a job onto it with local users does not say they
-  are missing.
+  IOS-XE NETCONF writes no local users, and a job onto it with local
+  users is `partial` and lists them (see "Fixed").
+- **Two stanzas are read by no parser and said by no job.**  The
+  IOS-XE CLI parser reads no HSRP (`standby`) line, and the AOS-S
+  parser no `dhcp-server pool` stanza; neither adds a row to the
+  sections not translated, so a group or a pool of such a config is
+  in no output and the job does not say so.  The vendor pages say it.
 - **AOS-S credentials.**  As a target, an output does not write
   `include-credentials` or `password non-plaintext-sha256`, which a
   hashed account line needs; a review line says so.  As a source, a

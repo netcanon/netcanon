@@ -70,6 +70,100 @@ __all__ = [
 ]
 
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No IPv4 virtual gateway is written "
+        "(`ipv4/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRF is written (`/routing-instances/instance` is unsupported), "
+        "so no field of one is and no interface is placed in one: its name, "
+        "description, route distinguisher, route targets and L3 VNI go with "
+        "it, and so does each interface's VRF.",
+        (
+            "/routing-instances/instance/name",
+            "/routing-instances/instance/description",
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+            "/routing-instances/instance/l3-vni",
+            "/interfaces/interface/config/vrf",
+        ),
+    ),
+    (
+        "No VXLAN VNI is written (`/vxlan-vnis/vni` is unsupported), so "
+        "neither is its VLAN, its multicast group or its flood list.",
+        (
+            "/vxlan-vnis/vlan-id",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+        ),
+    ),
+    (
+        "No EVPN Type-5 route is written: the codec has no form for one.",
+        ("/evpn-type5-routes/route",),
+    ),
+    (
+        "No SNMPv3 user is written (`/snmp/v3-user` is unsupported), so "
+        "neither is its authentication passphrase or its engine ID.",
+        (
+            "/snmp/v3-user/auth-passphrase",
+            "/snmp/v3-user/engine-id",
+        ),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "A CARP group is written with one virtual IP (`<subnet>`): its "
+        "other virtual IPs are dropped.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-ips",),
+    ),
+    (
+        "A CARP group is written with an IPv4 virtual IP only: an IPv6 "
+        "virtual IP is dropped.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-ipv6s",),
+    ),
+    (
+        "A CARP group is written with no password (`<password>`): the "
+        "group's authentication is dropped, and has to be set on the "
+        "device.",
+        ("/interfaces/interface/vrrp-groups/group/authentication",),
+    ),
+    (
+        "A CARP group tracks no interface in the form the codec writes: the "
+        "interfaces a group tracks are dropped.",
+        ("/interfaces/interface/vrrp-groups/group/track-interfaces",),
+    ),
+    (
+        "CARP takes its MAC from the group's VHID: a virtual MAC the source "
+        "set is dropped.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-mac",),
+    ),
+)
+
+
 @register
 class OPNsenseCodec(CodecBase):
     """Adapter for OPNsense ``config.xml`` (25.x).
@@ -360,6 +454,12 @@ class OPNsenseCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -649,6 +749,12 @@ class OPNsenseCodec(CodecBase):
                     "has no VRF model at all, so this leaf stays unsupported "
                     "even once <staticroutes> rendering lands."
                 ),
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

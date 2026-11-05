@@ -1192,16 +1192,13 @@ class TestVRRPGroups:
 
     # ----------------------------- Capabilities -----------------------------
 
-    def test_capability_vrrp_supported(self):
-        """Wave B flips ``/interfaces/interface/vrrp-groups/group``
-        from unsupported to supported."""
+    def test_capability_vrrp_lossy(self):
+        """A VRRP group in a VLAN is written; a group of another
+        protocol, or on an interface that is not a VLAN's, is not, so
+        the path is lossy, not supported."""
         caps = ArubaAOSSCodec().capabilities
-        assert "/interfaces/interface/vrrp-groups/group" in caps.supported
-        unsupported_paths = [up.path for up in caps.unsupported]
-        assert (
-            "/interfaces/interface/vrrp-groups/group"
-            not in unsupported_paths
-        )
+        assert "/interfaces/interface/vrrp-groups/group" not in caps.supported
+        assert caps.classify("/interfaces/interface/vrrp-groups/group") == "lossy"
 
     def test_capability_anycast_remains_unsupported(self):
         """AOS-S has no anycast-gateway grammar — these paths stay

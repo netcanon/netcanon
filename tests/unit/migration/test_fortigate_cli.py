@@ -1165,15 +1165,12 @@ end
         # No ``edit <gid>`` line for the HSRP group.
         assert "            edit 10" not in out
 
-    def test_capability_matrix_vrrp_supported(self):
-        """Wave B flip: VRRP path lifts from ``unsupported`` to
-        ``supported``."""
+    def test_capability_matrix_vrrp_lossy(self):
+        """A VRRP group is written; an HSRP group is not (the test
+        above), so the path is lossy, not supported."""
         caps = FortiGateCLICodec().capabilities
-        assert "/interfaces/interface/vrrp-groups/group" in caps.supported
-        unsupported_paths = [u.path for u in caps.unsupported]
-        assert (
-            "/interfaces/interface/vrrp-groups/group" not in unsupported_paths
-        )
+        assert "/interfaces/interface/vrrp-groups/group" not in caps.supported
+        assert caps.classify("/interfaces/interface/vrrp-groups/group") == "lossy"
 
     def test_capability_matrix_anycast_still_unsupported(self):
         """FortiGate is a firewall / edge platform — anycast-gateway

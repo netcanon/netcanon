@@ -107,7 +107,18 @@ identical IPv6-anycast deferral).
 
 - **`/interfaces/interface/vrrp-groups/group`** — VRRP / CARP groups
   normalise to HSRP on render (see above); sub-second timers,
-  virtual-MAC, and track objects are not modelled in v1.
+  virtual-MAC, and track objects are not modelled in v1.  Each of the
+  two fields is declared lossy on its own
+  (`vrrp-groups/group/{track-interfaces,virtual-mac}`): the group is
+  written tracking no interface, and with HSRP's own MAC.
+- **`/interfaces/interface/ipv4/address/virtual-gateway-mac`** — the
+  MAC of a virtual gateway is written only with the gateway the codec
+  writes, a Distributed Anycast Gateway that is the interface's own
+  address (above).  The MAC of any other virtual gateway is dropped
+  with it.
+- **`/interfaces/interface/{dhcp-client,dhcp-client-v6}`** — the codec
+  reads and writes no DHCP client, IPv4 or IPv6: the interface is
+  written without one.
 - **`/routing/static-route/description`** — render emits destination
   + next-hop + metric only; the static-route name/description drops.
 - **`/routing-instances/instance/route-distinguisher`** — `rd auto`
@@ -147,9 +158,10 @@ identical IPv6-anycast deferral).
 
 - `timezone` (`domain`, DNS, NTP and syslog servers now round-trip —
   promotion #4)
-- DHCP server pools
+- DHCP server pools (and every field of one: gateway, DNS servers,
+  domain, lease)
 - RADIUS servers (host + shared secret)
-- IPv6 anycast-gateway
+- IPv6 anycast-gateway (and the MAC that goes with one)
 
 Deliberately deferred to [Tier
 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered):

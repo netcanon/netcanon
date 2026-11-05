@@ -70,6 +70,107 @@ from . import port_names as _port_names
 from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
+        "no field of one is: its gateway, DNS servers, domain and lease go "
+        "with it.",
+        (
+            "/dhcp-servers/pool/gateway",
+            "/dhcp-servers/pool/dns-servers",
+            "/dhcp-servers/pool/domain-name",
+            "/dhcp-servers/pool/lease-time",
+        ),
+    ),
+    (
+        "No IPv4 virtual gateway is written "
+        "(`ipv4/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRRP group is written (`vrrp-groups/group` is unsupported), so "
+        "neither are its tracked interfaces, its other virtual IPs or its "
+        "virtual MAC.",
+        (
+            "/interfaces/interface/vrrp-groups/group/track-interfaces",
+            "/interfaces/interface/vrrp-groups/group/virtual-ips",
+            "/interfaces/interface/vrrp-groups/group/virtual-mac",
+        ),
+    ),
+    (
+        "No VXLAN VNI is written (`/vxlan-vnis/vni` is unsupported), so "
+        "neither is its VLAN, its multicast group or its flood list.",
+        (
+            "/vxlan-vnis/vlan-id",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+        ),
+    ),
+    (
+        "SNMP is out of the v1 XR scope (see /snmp/community): the codec "
+        "neither reads nor writes it, so no location, contact, trap host or "
+        "SNMPv3 user reaches the output.",
+        (
+            "/snmp",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
+            "/snmp/v3-user",
+            "/snmp/v3-user/auth-passphrase",
+            "/snmp/v3-user/engine-id",
+        ),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "The codec reads and writes no DHCP client, IPv4 or IPv6: the "
+        "interface is written without one.",
+        (
+            "/interfaces/interface/dhcp-client",
+            "/interfaces/interface/dhcp-client-v6",
+        ),
+    ),
+    (
+        "IOS-XR EVPN is a Tier-3 `l2vpn` / `evpn` surface the codec does "
+        "not model: a VRF's L3 VNI is not written.",
+        ("/routing-instances/instance/l3-vni",),
+    ),
+    (
+        "IOS-XR has no VLAN database: a VLAN is written only as the "
+        "`encapsulation dot1q` tag of a sub-interface that carries it. A "
+        "VLAN no sub-interface carries is not written, and no VLAN's name, "
+        "description or port lists are.",
+        (
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
+            "/vlans/vlan/description",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+        ),
+    ),
+)
+
 
 @register
 class CiscoIOSXRCodec(CodecBase):
@@ -155,8 +256,8 @@ class CiscoIOSXRCodec(CodecBase):
             "/interfaces/interface/dot1q-inner-vlan",
             # Phase 2 — sub-interface `encapsulation dot1q` → synthesised
             # VLAN id-list (no port membership; name always empty)
-            "/vlans/vlan/id",
-            "/vlans/vlan/name",
+            # /vlans/vlan/id: written only in some cases, see _DROPPED.
+            # /vlans/vlan/name: written only in some cases, see _DROPPED.
             # Static routes — default VRF + per-VRF (`router static / vrf`)
             "/routing/static-route",
             "/routing/static-route/vrf",
@@ -309,6 +410,12 @@ class CiscoIOSXRCodec(CodecBase):
                     "— IOS-XR EVPN is a Tier-3 `l2vpn` / `evpn` surface."
                 ),
                 severity="warn",
+            ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
             ),
         ],
         unsupported=[
@@ -589,6 +696,12 @@ class CiscoIOSXRCodec(CodecBase):
                     "IOS-XR NAT (`nat64` / `cgnat`) is Tier-3.  Operator "
                     "authors NAT manually.  Parity with IOS-XE codec."
                 ),
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

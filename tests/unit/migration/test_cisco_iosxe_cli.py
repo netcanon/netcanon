@@ -1790,8 +1790,8 @@ class TestAnycastGateway:
         supported = set(caps.supported)
         lossy = {lp.path for lp in caps.lossy}
         unsupported = {u.path for u in caps.unsupported}
-        # Wave B + C wire-up.
-        assert "/interfaces/interface/vrrp-groups/group" in supported
+        # A VRRP group is written; an HSRP or CARP group is not.
+        assert "/interfaces/interface/vrrp-groups/group" in lossy
         # Demoted supported -> lossy (Bucket-C stage 3): SD-Access anycast
         # round-trips only vga == primary-IP; a separate cross-vendor VARP
         # VIP has no IOS-XE equivalent and drops on render.

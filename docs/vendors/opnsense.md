@@ -107,13 +107,21 @@ XML element mapping:
   or `mode="hsrp"` are SKIPPED on OPNsense render — the codec
   doesn't emit pure-VRRP `<virtualip>` envelopes in v0.2.0 (rare in
   practice).  Only `mode="carp"` round-trips.
-- **One VIP per VHID.**  Each `<vip>` carries one `<subnet>`.
-  Multi-VIP canonical groups (Junos, IOS-XE secondaries) would need
-  multiple VHIDs on render — same constraint as Aruba AOS-S.
+- **One VIP per VHID, IPv4 only.**  Each `<vip>` carries one
+  `<subnet>`.  Multi-VIP canonical groups (Junos, IOS-XE
+  secondaries) would need multiple VHIDs on render — same
+  constraint as Aruba AOS-S — so the render writes the first IPv4
+  virtual IP and drops the others, and an IPv6 virtual IP with
+  them.  Declared `lossy` (`virtual-ips`, `virtual-ipv6s`).
 - **Password is mandatory and bcrypt-opaque.**  Real CARP
   deployments always have a password; cross-vendor migration into
   VRRP targets surfaces a review comment because the bcrypt hash
-  isn't a VRRP authentication-key.
+  isn't a VRRP authentication-key.  Onto OPNsense a group is written
+  with no `<password>`: set it on the device (`authentication`,
+  declared `lossy`).
+- **No tracked interface, no virtual MAC.**  A group is written
+  tracking no interface, and CARP takes its MAC from the VHID, so a
+  virtual MAC the source set is dropped (both `lossy`).
 - **No anycast-gateway grammar.**  OPNsense is a firewall codec
   without fabric primitives; all three anycast canonical paths
   parse-and-ignore as `unsupported`.

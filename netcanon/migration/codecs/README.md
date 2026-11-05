@@ -288,7 +288,10 @@ class MyVendorCodec(CodecBase):
         # Plus lossy / unsupported as needed.  A record's path covers
         # none of its leaves: declare each leaf the walker yields under
         # a surface your render drops, or each one classifies
-        # `supported` (see `_NOT_RENDERED` in the IOS-XE NETCONF codec).
+        # `supported`.  Keep them in two tables of `codec.py`, by the
+        # reason: `_NOT_RENDERED` (unsupported) and `_DROPPED` (lossy,
+        # severity warn), spread into `unsupported` / `lossy` (see the
+        # NX-OS or IOS XR codec).
     )
 
     @property
@@ -505,6 +508,22 @@ for the reference pattern).
    (`test_no_broad_handler_swallows_a_refusal`).
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
+   `classify` is an exact-string match and a path no list names is
+   `supported`, so what the render does NOT write has to be declared,
+   leaf by leaf: a path it has no form for, and every field of a
+   record it declares unsupported, in `_NOT_RENDERED`; a path it
+   writes only in some cases, or a record it writes without the
+   field, in `_DROPPED`.
+   `tests/unit/migration/test_a_supported_path_is_written.py` renders
+   the smallest tree for each walkable path onto every public codec,
+   reads it back with the codec's own parser, and fails for a path the
+   matrix calls `supported` that does not come back; a line the parser
+   does not read back but may be right is pinned in its `KNOWN_OPEN`.
+   It cannot tell whether the DEVICE takes a line its parser reads back
+   from where it was written: check the vendor's documentation for each
+   form you write (FortiOS IPv6 VRRP and Junos IPv6 VRRP were each
+   written in a place the device does not take it, and read back from
+   the same place).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with
    provenance in `tests/fixtures/real/NOTICE.md`.  The harness at
    `tests/unit/migration/test_real_captures.py` picks them up automatically.

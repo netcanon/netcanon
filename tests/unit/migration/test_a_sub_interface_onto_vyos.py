@@ -224,9 +224,9 @@ def test_a_sub_interface_is_a_vif_of_its_tag(key: str) -> None:
 
 
 #: What else a source's tree holds that VyOS declares unsupported.  The
-#: IOS XR parser makes a VLAN record of each sub-interface's tag, and
-#: VyOS has no VLAN table.
-_HELD_FOR_ANOTHER_PATH = {"iosxr": ["/vlans/vlan/id"]}
+#: IOS XR parser makes a VLAN record, with a name, of each
+#: sub-interface's tag, and VyOS has no VLAN table.
+_HELD_FOR_ANOTHER_PATH = {"iosxr": ["/vlans/vlan/id", "/vlans/vlan/name"]}
 
 
 @pytest.mark.parametrize("key", sorted(SOURCES))

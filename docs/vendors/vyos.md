@@ -112,6 +112,20 @@ translatable with caveats:
 - **`/interfaces/interface/config/type`** — inferred from the name
   shape (`ethN` → ethernetCsmacd, `lo`/`dumN` → softwareLoopback,
   `bondN` → ieee8023adLag); best-effort.
+- **`/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}`**
+  — VyOS writes a VRF as its name and its table only: its
+  description, route distinguisher and route targets are not
+  written.
+- **`/routing/static-route/interface`** — a route that names an
+  interface and no gateway is written as `next-hop <interface>`,
+  which is not a next hop VyOS takes (an interface route is
+  `interface <name>`): the route is not written as one out of that
+  interface.
+- **`/snmp/trap-host`** — the codec writes no SNMP trap target: the
+  trap hosts are dropped.
+
+The last three are severity `warn`: the job says so and stays
+`completed`.
 
 ## What we don't do
 
@@ -125,7 +139,11 @@ visible, not silent):
   pools, RADIUS servers (host + secret).  *(NTP, `domain`, and DNS
   name-servers ARE supported — #347.)*
 - **Top-level VLAN database** — VyOS has none; 802.1Q VLANs are `vif`
-  sub-interfaces (which ARE supported)
+  sub-interfaces (which ARE supported).  Nothing held on a VLAN
+  record is written as a VLAN's: neither its name, its description,
+  its port lists nor its address
+- **First-hop redundancy** — no VRRP group is written, so neither
+  are its virtual IPs, its tracked interfaces or its virtual MAC
 - **Per-VRF static routes** — the `vrf name <X>` instances + the
   per-interface binding are supported, but `vrf name <X> { protocols
   static route … }` is deferred past the Phase-3 VRF wire-up

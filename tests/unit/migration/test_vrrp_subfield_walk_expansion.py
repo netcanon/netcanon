@@ -54,11 +54,16 @@ _EXPECTED: dict[str, dict[str, str]] = {
     _BASE + "advertisement-interval": dict.fromkeys(_NO_FHRP, "unsupported") | {
         "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",
     },
+    # OPNsense writes a CARP group with no `<password>`.
     _BASE + "authentication": dict.fromkeys(_NO_FHRP, "unsupported") | {
-        "aruba_aoss": "lossy", "dell_os10": "lossy",
+        "aruba_aoss": "lossy", "dell_os10": "lossy", "opnsense": "lossy",
     },
+    # FortiOS and Junos write an IPv6 virtual IP where the device does not
+    # take one (`test_a_supported_path_is_written.py`); OPNsense writes one
+    # `<subnet>` per CARP group.
     _BASE + "virtual-ipv6s": dict.fromkeys(_NO_FHRP, "unsupported") | {
         "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",
+        "fortigate_cli": "lossy", "juniper_junos": "lossy", "opnsense": "lossy",
     },
     _BASE + "description": dict.fromkeys(_NO_FHRP, "unsupported") | {
         "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",

@@ -108,6 +108,11 @@ Canonical mapping:
 
 ### Known limitations
 
+- **Only IETF VRRP is written.**  A group of another protocol (NX-OS
+  HSRP, OPNsense CARP) is not written; a `! review:` line in its
+  interface says so, and the redundancy has to be made again on the
+  target.  The capability matrix declares the group `lossy`
+  (severity `warn`), so the job says so.
 - **Per-IP virtual MAC is lossy.** EOS only supports a system-wide
   `ip virtual-router mac-address`; per-address MAC overrides (Junos
   `virtual-gateway-v4-mac` / `-v6-mac`) have no Arista equivalent.
@@ -148,6 +153,9 @@ Canonical mapping:
   config of EOS.  From another platform the account is given `role
   network-admin` at privilege 15 and `role network-operator` below it,
   chosen from the privilege level; the source's role is not carried.
+- **`/interfaces/interface/dhcp-client`** — EOS spells a DHCP client
+  `ip address dhcp`, which the codec neither reads nor writes: the
+  interface is written without one (severity `warn`).
 
 ## What we don't do
 

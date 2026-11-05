@@ -1425,19 +1425,14 @@ class TestVRRPGroups:
             == second.model_dump(exclude=keys)
         )
 
-    def test_capability_matrix_marks_vrrp_supported(self):
-        """v0.2.0 Wave B flipped the VRRP path from unsupported to
-        supported; the matrix must reflect that."""
+    def test_capability_matrix_marks_vrrp_lossy(self):
+        """A VRRP group is written; a group of another protocol is not,
+        so the path is lossy, not supported."""
         caps = MikroTikRouterOSCodec().capabilities
         assert (
-            "/interfaces/interface/vrrp-groups/group" in caps.supported
+            "/interfaces/interface/vrrp-groups/group" not in caps.supported
         )
-        # And it must NOT still appear under unsupported.
-        unsupported_paths = [u.path for u in caps.unsupported]
-        assert (
-            "/interfaces/interface/vrrp-groups/group"
-            not in unsupported_paths
-        )
+        assert caps.classify("/interfaces/interface/vrrp-groups/group") == "lossy"
 
     def test_parse_unknown_parent_still_attaches(self):
         """When the VRRP ``interface=`` value didn't appear in any
