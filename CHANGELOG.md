@@ -28,6 +28,33 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **A row of the sections not translated shows no secret.**  The
+  rows of `dropped_tier3_sections` are painted on the migrate page
+  and returned in every job's answer.  A detector that takes a
+  header's whole line took what the line holds, and an IOS `crypto
+  isakmp key <key> address <peer>` line holds the IKE pre-shared key:
+  its row was the key, in plain text or type 6, from the IOS-XE CLI,
+  EOS, AOS-S and NX-OS parsers, in a job onto every target -- and so
+  was the PIN of `crypto pki token <name> user-pin <pin>`.  No output
+  held it, and every check compared trees or read the output.  A
+  detector's row is now cut after the first word that names a
+  secret, the cut marked (`crypto isakmp key ...`), and two such
+  lines are one row.  A word names a secret by a part of it cut at
+  `-` and `_` (`key`, `password`, `passwd`, `passphrase`, `secret`,
+  `psk`, `psksecret`, `pin`), so a word that merely holds one
+  (`keyring`, `mapping`) stays whole; `community` and `authentication`
+  are words of a path in such a line (`extcommunity-set <name>`, `aaa
+  authentication login`) and are not among them.  No row of the
+  committed captures changes.  No job is stored and no row is
+  logged, so up to 0.7.7 the key went to the client that sent the
+  config and nowhere else; the sanitiser strips every row.  If a screenshot of the migrate page or
+  a saved answer of such a job was shared, change the key.  Guarded
+  by `tests/unit/migration/test_a_row_holds_no_secret.py`, which
+  writes each grammar's lines that hold a secret into every committed
+  capture and looks for the secret in every row, a parser's own
+  included, and in the rows of a job onto every public codec; with
+  the cut taken out it finds those `crypto` lines.
+
 - **A local user's role crosses only between two configs of one
   platform.**  A role is a name the target looks up among the roles
   it has.  Seven renderers (EOS, AOS-CX, IOS XR, NX-OS, OS10, Junos

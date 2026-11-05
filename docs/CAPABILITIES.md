@@ -720,7 +720,16 @@ after the first word that names one (a word with `community`,
 `password`, `secret`, `key`, `psk` or `authentication` in it) and
 the cut is marked: `inactive: snmp community ...`.  A deactivated
 leaf is named by its first word, without its value.  A row for a
-section is the stanza header as the config has it.
+section is the stanza header as the config has it, cut where the
+detector takes the whole line: after the first word one of whose
+parts (cut at `-` and `_`) is `key`, `password`, `passwd`,
+`passphrase`, `secret`, `psk`, `psksecret` or `pin`.  So `crypto
+isakmp key <key> address <peer>` is the row `crypto isakmp key ...`,
+and a word that merely holds one (`keyring`, `mapping`) cuts
+nothing; `community` and
+`authentication` are words of a header's path there (`set
+policy-options community <name>`, `aaa authentication login`).  Up
+to 0.7.7 such a row held the key.
 
 A job whose only rows are of this kind, and which recognised
 nothing else, is `partial`: a statement is named whether or not
@@ -749,7 +758,7 @@ Per-vendor detection patterns
 
 | Source codec | Patterns matched (excerpt) |
 |---|---|
-| `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
+| `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki` (the whole line, cut after a word that names a secret), `zone-pair security` |
 | `juniper_junos` (set form, and the hierarchical form as it is read: converted to set form first) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
 | `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
 | `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |

@@ -44,6 +44,14 @@ Each returns a list of section labels like::
      "ip nat inside source list 10",
      "crypto isakmp policy 10"]
 
+A row shows a statement's path and never a value: a row is painted on
+the migrate page and returned in every job's answer.  Where a pattern
+takes a header's whole line, its label is cut after the first word
+that names a secret (``crypto isakmp key <key> address <peer>`` is the
+row ``crypto isakmp key ...``); ``tests/unit/migration/
+test_a_row_holds_no_secret.py`` writes each grammar's secret lines
+into every committed capture and looks for the secrets in every row.
+
 Detection is best-effort heuristic on stanza headers — not a parse.
 False positives are preferred to false negatives (the goal is
 "operator sees something" not "operator sees an exact list").  The
@@ -88,6 +96,9 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^class-map\b.*$", re.MULTILINE),
     re.compile(r"^policy-map\b.*$", re.MULTILINE),
     re.compile(r"^route-map\s+\S+", re.MULTILINE),
+    # The whole line, cut after a word that names a secret
+    # (`_shown_label`): `crypto isakmp key <key> address <peer>` holds
+    # the pre-shared key, `crypto pki token <name> user-pin <pin>` a PIN.
     re.compile(r"^crypto (?:isakmp|ipsec|map|pki)\b.*$", re.MULTILINE),
     re.compile(r"^zone-pair security\b.*$", re.MULTILINE),
     # Arista MLAG.  Neither half has a canonical surface — there is no
@@ -617,7 +628,8 @@ def _detect_regex(
         raw: Source config text.
         patterns: Ordered tuple of compiled regexes; each match's
             ``group(0)`` is taken as the section label after stripping
-            trailing whitespace.
+            white space at its ends, and cut after a word that names
+            a secret (:func:`_shown_label`).
 
     Returns:
         Ordered list of unique section labels.
@@ -630,8 +642,50 @@ def _detect_regex(
     known: set[str] = set()
     for pattern in patterns:
         for match in ticked(pattern.finditer(raw)):
-            label = match.group(0).strip()
+            label = _shown_label(match.group(0).strip())
             if label and label not in known:
                 known.add(label)
                 seen.append(label)
     return seen
+
+
+#: A part of a word (cut at ``-`` and ``_``) that names a secret in a
+#: line a detector took (:func:`_shown_label`).  By part, not by
+#: substring: a header's own words hold these as substrings
+#: (``keyring``, ``mapping``).  ``community`` and
+#: ``authentication`` are not here, as they are in
+#: :data:`_NAMES_A_SECRET`: in a detector's line they are words of a
+#: path (a BGP community's name, ``set policy-options community
+#: <name>``; ``aaa authentication login``), and no detector takes an
+#: SNMP line, which every parser reads.
+_REDACT_AFTER_PART = frozenset({
+    "key", "password", "passwd", "passphrase", "secret", "psk", "psksecret", "pin",
+})
+
+
+def _redacts_what_follows(word: str) -> bool:
+    """Whether a part of *word* is one of :data:`_REDACT_AFTER_PART`."""
+    return any(part in _REDACT_AFTER_PART for part in word.lower().replace("_", "-").split("-"))
+
+
+def _shown_label(label: str) -> str:
+    """*label*, a line a detector took, as a row may show it: whole, or
+    cut after the first word that names a secret
+    (:func:`_redacts_what_follows`) and has something after it, the cut
+    marked ``...``.
+
+    A row is painted on the migrate page and returned in every job's
+    answer, so it shows a statement's path and never a value.  A
+    pattern that takes a header's whole line (``crypto ...``, ``aaa
+    ...``, ``class-map ...``) takes what the line holds, and an IOS
+    ``crypto isakmp key <key> address <peer>`` line holds the
+    pre-shared key: its row was the key, in plain text or type 6, from
+    every parser that uses such a pattern (IOS-XE CLI, EOS, AOS-S and
+    NX-OS).  It is now ``crypto isakmp key ...``, and two such lines
+    are one row.
+    """
+    words = label.split()
+    for at, word in enumerate(words[:-1]):
+        if _redacts_what_follows(word):
+            return " ".join([*words[: at + 1], "..."])
+    return label

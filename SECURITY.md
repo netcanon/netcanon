@@ -1142,6 +1142,38 @@ Guarded by
 
 ---
 
+## Input Validation — Config Text (what a row shows)
+
+**Files:** `netcanon/migration/_tier3_detection.py` (`_shown_label`,
+`shown_words`)
+
+A job's `dropped_tier3_sections` -- the sections of the source config
+that are not translated, and the statements a parser read and left
+out -- is painted on the migrate page and returned in the job's
+answer.  A row shows a statement's path and never a value.  The row
+of a statement left out (a deactivated Junos statement, an IOS XR
+`interface preconfigure` stanza) is cut after the first word with a
+secret's name in it (`community`, `password`, `secret`, `key`, `psk`,
+`authentication`).  The row of a section is the header line a
+detector took, and where the detector takes the whole line, it is cut
+after the first word one of whose parts (cut at `-` and `_`) is a
+secret's name (`key`, `password`, `passwd`, `passphrase`, `secret`,
+`psk`, `psksecret`, `pin`); the cut is marked `...`.  Up to 0.7.7 it
+was not cut: an IOS `crypto isakmp key <key> address <peer>` line was
+its row, the pre-shared key in plain text or type 6, from the IOS-XE
+CLI, EOS, AOS-S and NX-OS parsers.  No job is stored and no row is
+logged, so the key went to the client that sent the config and
+nowhere else; the sanitiser strips every row.  Guarded by
+`tests/unit/migration/test_a_row_holds_no_secret.py`, which writes
+each grammar's lines that hold a secret into every committed capture
+and looks for the secret in every row, a parser's own included, and
+in the rows of a job onto every public codec; with the cut taken out
+it finds the `crypto` lines.  It does not see a secret in a line of a
+grammar it does not write, nor one that a header line holds after a
+word that names none.
+
+---
+
 ## Data Directory Isolation
 
 Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)

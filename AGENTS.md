@@ -474,7 +474,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   sends each stored form of each grammar through its parser onto
   every target and reads the output as text and with the target's
   parser; and the envelope-registry test now fails for a snippet its
-  parser reads no keyed server from.
+  parser reads no keyed server from.  (4) A credential reaches a
+  client by more than the output.  The rows of
+  `dropped_tier3_sections` are painted on the migrate page and
+  returned in every job's answer, and a detector that takes a
+  header's whole line took what the line holds: an IOS `crypto isakmp
+  key <key> address <peer>` line was its row, the pre-shared key in
+  plain text or type 6, from the IOS-XE CLI, EOS, AOS-S and NX-OS
+  parsers onto every target, with no output holding it -- and every
+  check compared trees or read the output.  A detector's label is cut
+  after a word that names a secret, by a PART of the word
+  (`_tier3_detection._shown_label`: by substring, `keyring` and
+  `mapping` would be cut too).  Guarded by
+  `tests/unit/migration/test_a_row_holds_no_secret.py`, which writes
+  each grammar's secret lines into every committed capture, looks for
+  the secrets in every row and every job's rows, and is handed the
+  defect.  A new place that shows a client text of the config is a
+  credential surface: plant a secret in it before calling it safe.
 - **Never** write a local user's role from another platform's config.
   A role is a NAME the target looks up among the roles it has, and
   another platform's name is one the target does not ship, or ships

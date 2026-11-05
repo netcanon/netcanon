@@ -201,7 +201,13 @@ Deliberately deferred to [Tier
 
 - **Firewall ACLs** — zone-based firewall, CBAC, reflexive ACLs
 - **NAT rules** — `ip nat inside source list` etc.
-- **IPsec VPN** — crypto maps, IKEv2 profiles, tunnel-protection
+- **IPsec VPN** — crypto maps, IKEv2 profiles, tunnel-protection.
+  Each `crypto isakmp|ipsec|map|pki` line is a row of the sections
+  not translated, cut after a word that names a secret: `crypto
+  isakmp key <key> address <peer>` is `crypto isakmp key ...`.
+  ⚠️ Up to 0.7.7 that row held the pre-shared key, in plain text or
+  type 6, on the migrate page and in the job's answer (never in the
+  output, a file or a log)
 - **QoS** — `class-map` / `policy-map` / `service-policy`
 - **Routing protocols** — BGP / OSPF / EIGRP stanzas (informational
   only; not auto-rendered to other vendors)
