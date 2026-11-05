@@ -269,10 +269,16 @@ per_field_expectation:
     references: [fg-nxos-surface]
 
   "interfaces[].dhcp_client":
-    disposition: good
-    note: >
-      The IPv4 DHCP-client flag (FortiOS `set mode dhcp`) round-trips on all 4
-      cells.
+    disposition: lossy
+    reason: >
+      Drifts on the 2 cells with a port that takes its address from a DHCP
+      server (FortiOS `set mode dhcp`).  The NX-OS codec reads and writes no
+      DHCP client -- its matrix declares `/interfaces/interface/dhcp-client`
+      lossy, and the job's report lists it -- so the interface comes out with
+      no address and has to be given one on the Nexus (`ip address dhcp`, or
+      a static address).  Up to 0.7.7 the FortiGate parser did not read
+      `set mode dhcp`: the field was empty on every cell, and the loss could
+      not be seen.
     references: [fg-nxos-surface]
 
   "interfaces[].dhcp_client_v6":
@@ -280,11 +286,11 @@ per_field_expectation:
     reason: >
       Drifts on 1 cell: `kevinguenay_fgt_70g_branch` runs `wan1` and `wan2` on
       FortiOS `set ip6-mode dhcp` (canonical `dhcp_client_v6="dhcp6"`) and
-      both come back empty.  The NX-OS render carries no IPv6 DHCP-client
-      form, so a dual-stack WAN port migrates with its IPv4 DHCP client intact
-      and its IPv6 one silently gone -- the interface will not acquire a v6
-      address after cutover until it is re-declared (or given static v6
-      addressing).
+      both come back empty.  The NX-OS render carries no DHCP-client form,
+      IPv4 or IPv6, so a dual-stack WAN port migrates with neither (see
+      `interfaces[].dhcp_client`; the job's report lists both fields) -- the
+      interface will not acquire an address after cutover until it is
+      re-declared (or given static addressing).
     references: [fg-nxos-surface]
 
   "interfaces[].tunnel_type":

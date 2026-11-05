@@ -380,10 +380,9 @@ class TestTheValueComesBack:
             for r in back.static_routes
         ] == [
             ("10.9.0.0/16", "192.0.2.254", "my port", _HOSTILE),
-            # A gateway that is an interface alone is read into
-            # ``gateway``, as the parser always has: it does not tell a
-            # name from an address there.
-            ("10.8.0.0/16", "my port", "", ""),
+            # A gateway that is an interface alone is the route's
+            # interface, and is read back as one.
+            ("10.8.0.0/16", "", "my port", ""),
         ]
         assert back.snmp is not None
         assert (back.snmp.community, back.snmp.contact, back.snmp.location) == (

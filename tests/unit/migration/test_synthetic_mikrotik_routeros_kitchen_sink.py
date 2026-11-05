@@ -179,12 +179,12 @@ def test_populates_every_expected_canonical_field(
     assert "0.0.0.0/0" in destinations
     assert "::/0" in destinations
     assert "10.50.0.0/16" in destinations
-    # via-interface route stores iface name in gateway field
+    # via-interface route: ``gateway=bridge1`` is the route's interface
     blackhole = next(
         r for r in intent.static_routes
         if r.destination == "192.168.99.0/24"
     )
-    assert blackhole.gateway == "bridge1"
+    assert (blackhole.gateway, blackhole.interface) == ("", "bridge1")
 
     # ----- LAGs (Tier 2) -----
     assert len(intent.lags) >= 2

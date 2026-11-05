@@ -140,6 +140,10 @@ firewall translation is your primary need, see
   cut to the 25 characters an alias holds; where it states one, the
   alias is the interface's description and the label is in a `#
   review:` line beside it.
+- A DHCP client (`set mode dhcp` on the interface) — ⚠️ written and
+  not read up to 0.7.7, so a FortiOS interface that takes its address
+  by DHCP was an interface with no address on every target.  `set
+  mode pppoe` is not read.
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
   member lists; a member with no `edit` of its own, as in a pasted

@@ -1388,11 +1388,41 @@ timestamp if your timezone matters for an audit.
   record declared unsupported that is not declared too.  It reads
   with the codec's own parser, so a line written where the device
   does not take it, and read back from there, passes -- which is how
-  the two VRRP forms above went unseen.  Four lines are written and
-  not read back, and pinned there until their parsers read them:
-  IOS-XE CLI `ip address dhcp`, FortiOS `set mode dhcp`, a RouterOS
-  `/user` line's `password=`, and a RouterOS route whose `gateway=` is
-  an interface name.
+  the two VRRP forms above went unseen.  Four lines were written and
+  not read back, and were pinned there until their parsers read them;
+  they do now (next entry).
+- **Four lines a codec writes are read back by its own parser.**
+  IOS-XE CLI `ip address dhcp` and FortiOS `set mode dhcp` were
+  written for a DHCP client and read as nothing, so an interface of
+  either that takes its address by DHCP was an interface with no
+  address on every target, in a job that said `completed`; it is a
+  DHCP client now, written as one where the target writes one and
+  declared where it does not.  A RouterOS `/user` line's `password=`
+  was read as no password, so the account was a `review:` line on
+  every target, RouterOS included; it is the password as typed now,
+  written where a target takes a typed password and refused under a
+  `review:` line on Junos and OPNsense, which take only a hash.  A
+  RouterOS route whose `gateway=` is one interface's name was read
+  with the name as its gateway; it is the route's interface now.
+  FortiOS writes it `set device`, where it had written the name as a
+  gateway address, and a target that writes no route out of an
+  interface says so in the job: AOS-S, whose job said `completed`,
+  and Junos, which had written the name as a next hop the device
+  does not have.  A list of gateways and a
+  routing-table suffix are kept as written.  With devices declared,
+  such a route goes where the pairing sends its port, and with its
+  port where the port is dropped (`lost_routes`); it had stayed on the
+  source device's name, and held the job as a stale next hop.  The
+  cross-mesh audit had read each of these lines as lost on the targets
+  that write them -- OPNsense's DHCP client onto IOS-XE CLI and
+  FortiOS among them -- and, with the field empty on every capture,
+  had read NX-OS, which writes no DHCP client, as keeping one: the
+  IOS-XE CLI and FortiGate expectations onto NX-OS are `lossy` for it
+  now, and the ones that claimed a loss the output does not have are
+  `good`.  The pins in
+  `tests/unit/migration/test_a_supported_path_is_written.py` are
+  gone, and `tests/unit/migration/test_what_is_written_is_read_back.py`
+  holds each form and the forms near it that are not read so.
 - **`detect-deployment` counts a sub-interface as the port it rides
   on.**  The check of a proposal against the config listed every
   sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port

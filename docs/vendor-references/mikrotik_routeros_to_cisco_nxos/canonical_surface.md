@@ -121,6 +121,9 @@ them and what makes a `good` disposition on one of these a manufactured
   interface-as-gateway form (`gateway=bridge1`) lands in
   `CanonicalStaticRoute.gateway`, and the NX-OS render/re-parse pair moves the
   same token into `.interface`. The route survives; the slot changes.
+  **Update 2026-11-05:** no longer — the RouterOS parser reads a `gateway=`
+  that is one interface's name as the route's `.interface`, both fields align
+  on the one cell that holds such a route, and both are recorded `good`.
 * **`static_routes[].description`.** The NX-OS matrix is explicit — "Render
   emits destination + next-hop + metric only; the static-route name /
   description is dropped".

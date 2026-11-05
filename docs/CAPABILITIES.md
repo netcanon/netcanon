@@ -904,7 +904,8 @@ in rendered output find every such site.
      RouterOS user added with no password has a blank one.
   5. A password a human typed (`plaintext` to the policy: IOS-XE
      `password 0`, AOS-CX `password plaintext`, VyOS
-     `plaintext-password`) is an algorithm like any other, accepted only
+     `plaintext-password`, a RouterOS `/user` line's `password=`) is
+     an algorithm like any other, accepted only
      where the target has a line that takes a typed password and hashes
      it itself.  Junos and OPNsense have none (`encrypted-password` and
      `<password>` hold a hash; Junos's `plain-text-password` asks at a

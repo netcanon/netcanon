@@ -626,8 +626,12 @@ end
 #: fills it, and the names to exchange in it.  (And the one of
 #: :data:`_KEPT`, which a capture has come to catch as well.)
 _SMALL_CONFIGS: dict[str, tuple[str, str, dict[str, str]]] = {
+    # A Junos next hop that is a unit of an interface stays in
+    # ``gateway``.  (RouterOS ``gateway=ether1`` did too, until the
+    # parser read a gateway that is one interface's name as the route's
+    # interface.)
     "static_routes[].gateway": (
-        "mikrotik_routeros", _ROUTEROS_NEXT_HOPS, {"ether1": "ether2", "ether2": "ether1"},
+        "juniper_junos", _JUNOS_NEXT_HOP, {"xe-0/0/1": "xe-0/0/2", "xe-0/0/2": "xe-0/0/1"},
     ),
     "interfaces[].vrrp_groups[].track_interfaces": (
         "cisco_iosxe_cli", _IOS_TRACK,

@@ -390,26 +390,22 @@ per_field_expectation:
     references: [routeros-nxos-surface]
 
   "static_routes[].gateway":
-    disposition: lossy
-    reason: >
-      Drifts where a RouterOS route uses the interface-as-gateway form
-      (`gateway=bridge1`): the source holds the token in `.gateway` and the
-      target returns `.gateway=""`, having moved it into `.interface` (see
-      the paired entry).  The route still forwards out the same interface —
-      nothing is dropped — but any check that asserts "every route has a
-      next-hop address" will now see an empty gateway on the target, and a
-      route whose RouterOS gateway was an interface will need a real next-hop
-      address on the Nexus if you want one.
+    disposition: good
+    note: >
+      An address next hop is preserved on every cell.  A RouterOS route
+      that uses the interface-as-gateway form (`gateway=bridge1`) has no
+      gateway address: the RouterOS parser reads the name as the route's
+      interface (see the paired entry), and NX-OS writes it as
+      `ip route <prefix> <interface>`.  Up to 0.7.7 the parser kept the name
+      in `.gateway`, the NX-OS re-parse moved it to `.interface`, and both
+      fields compared as changed on the one cell that holds such a route.
     references: [routeros-nxos-surface]
 
   "static_routes[].interface":
-    disposition: lossy
-    reason: >
-      The other half of the same re-mount: `""` -> `bridge1`.  The RouterOS
-      interface-as-gateway token arrives in `.gateway` and the NX-OS
-      render/re-parse pair relocates it to `.interface`.  Declared lossy on
-      both slots because a comparison of either field alone reports a change;
-      only reading the two together shows the route intact.
+    disposition: good
+    note: >
+      The other half of the same route: `gateway=bridge1` is `.interface`
+      on both sides.
     references: [routeros-nxos-surface]
 
   "static_routes[].metric":

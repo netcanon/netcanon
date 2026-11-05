@@ -89,10 +89,15 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   auth-password + encryption-protocol + encryption-password)
 - RADIUS — `/radius`
 - Local users — `/user`.  An export prints no passwords, so as a
-  source every user is a `review:` line on every target, RouterOS
-  included (no target writes an account with no password; RouterOS
-  gives one an empty password): add each on the device with a
-  password
+  source every user of an export is a `review:` line on every target,
+  RouterOS included (no target writes an account with no password;
+  RouterOS gives one an empty password): add each on the device with
+  a password.  A `password=` on an `add` line (a config written by
+  hand, or Netcanon's own output) is the password as typed, and goes
+  to every target that takes a typed password; Junos and OPNsense
+  take only a hash, and leave the account out under a `review:` line.
+  ⚠️ Up to 0.7.7 it was read as no password, so such a user was a
+  `review:` line on every target, RouterOS included
 - DHCP server pools — `/ip pool` + `/ip dhcp-server network`
   (per-pool subnet, gateway, range, options)
 - **Renamed-port preservation** — RouterOS lets operators rename
@@ -372,7 +377,13 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix
-  (`ether3@main`) are left as written.
+  (`ether3@main`) are left as written.  A gateway that is one name
+  and not an address is read as the route's interface, the form
+  RouterOS output is written in for a route out of an interface.
+  ⚠️ Up to 0.7.7 it was read as the route's gateway: onto a target
+  whose matrix declares a route out of an interface lost (AOS-S,
+  which writes none), the job said `completed`; Junos wrote the name
+  as a next hop, and FortiOS as a gateway address.
 - **A VLAN interface's parent** (`/interface vlan add
   interface=bridge name=mgmtvlan11 vlan-id=11`) is kept, and onto
   RouterOS the VLAN is written on it again.  An entry of

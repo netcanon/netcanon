@@ -5160,9 +5160,13 @@ class TestAManagementShapedLanding:
 class TestMoreNextHops:
     def test_a_port_the_config_names_only_as_a_next_hop(self) -> None:
         """``ether1`` and ``sfp-sfpplus1`` are ports of the declared
-        CRS310 that this config has no interface record for.  The
-        translator cannot know they are ports and leaves the routes;
-        the pairing knows where each went."""
+        CRS310 that this config has no interface record for.  A
+        ``gateway=`` that is one interface's name is the route's
+        interface, which the translator rewrites: each route goes where
+        the pairing sent its port.  (Read as a gateway, up to 0.7.7, the
+        routes were left on the CRS310's names and held the job.)  Given
+        an operator's name, the port is looked up by no line of the
+        output, and that holds the job instead."""
         mikrotik = get_codec("mikrotik_routeros")
         text = (
             "/interface ethernet\n"
@@ -5177,8 +5181,19 @@ class TestMoreNextHops:
         job = run_plan_with_models(
             mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
         )
-        assert job.port_mapping_plan.stale_next_hops == ["0.0.0.0/0", "10.9.0.0/16"]
-        assert job.status == MigrationJobStatus.partial
+        assert job.port_mapping_plan.stale_next_hops == []
+        assert job.port_renames["ether1"] == "sfp-sfpplus1"
+        assert job.port_renames["sfp-sfpplus1"] == "sfp28-1"
+        assert "add dst-address=0.0.0.0/0 gateway=sfp-sfpplus1" in job.rendered
+        assert "add dst-address=10.9.0.0/16 gateway=sfp28-1" in job.rendered
+        assert job.status == MigrationJobStatus.completed
+        named = run_plan_with_models(
+            mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether1": "WAN"},
+        )
+        assert "add dst-address=0.0.0.0/0 gateway=WAN" in named.rendered
+        assert named.port_mapping_plan.unbound_ports == {"ether1": "sfp-sfpplus1"}
+        assert named.status == MigrationJobStatus.partial
         same = _profile(_CRS310)
         job = run_plan_with_models(mikrotik, mikrotik, text, same, same)
         assert job.port_mapping_plan.stale_next_hops == []
@@ -6366,17 +6381,21 @@ class TestSmallerRulesOfTheFactoryNameHandling:
         (line,) = [w for w in plan.warnings if "taken as NAMES" in w]
         assert "(core-b stays on sfp-sfpplus7, which the mapping did not choose for it)" in line
 
-    def test_a_next_hop_naming_an_unplaced_port_with_no_interface_is_stale(self) -> None:
+    def test_a_route_out_an_unplaced_port_with_no_interface_goes_with_it(self) -> None:
         """``sfp-sfpplus9`` has no place on the CRS310 and no interface
-        in the config, so the translator does not know it is a port
-        and leaves the route as written: naming a port that is gone."""
+        in the config.  ``gateway=sfp-sfpplus9`` is the route's
+        interface, so the route is removed with the dropped port and
+        the job says so.  (Read as a gateway, up to 0.7.7, the route
+        was left as written, naming a port that is gone.)"""
         mikrotik = get_codec("mikrotik_routeros")
         job = run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS_A_HOP_BY_A_NINTH_PORT,
             _profile(_CCR2004), _profile(_CRS310),
             port_rename_map={"ether1": None},
         )
-        assert job.port_mapping_plan.stale_next_hops == ["10.9.0.0/16"]
+        plan = job.port_mapping_plan
+        assert plan.stale_next_hops == [] and plan.lost_routes == ["10.9.0.0/16"]
+        assert "10.9.0.0/16" not in job.rendered and "sfp-sfpplus9" not in job.rendered
         assert job.status == MigrationJobStatus.partial
 
     def test_a_lag_known_only_from_its_members_is_compared_the_same_way(self) -> None:

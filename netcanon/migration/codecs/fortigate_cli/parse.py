@@ -511,6 +511,14 @@ def _apply_system_interface(  # noqa: C901
                     ),
                 ))
 
+        # ``set mode {static | dhcp | pppoe}``: with ``dhcp`` the
+        # interface takes its IPv4 address from a DHCP server -- the line
+        # the renderer writes for ``dhcp_client``, read back.  ``static``
+        # is the default; ``pppoe`` is not modelled.
+        mode_tokens = edit.settings.get("mode")
+        if mode_tokens and mode_tokens[0].lower().strip('"') == "dhcp":
+            iface.dhcp_client = True
+
         # Additional interface IPs live in a nested ``config secondaryip``
         # sub-table (``set secondary-IP enable`` gates it).  Without this
         # every secondary subnet vanishes on parse — a whole-subnet

@@ -71,7 +71,10 @@ vendors (or vice versa), use `cisco_iosxe_cli`.
 - Interfaces — name, description, enabled state, IPv4 + IPv6
   addresses, MTU, `ip mtu` (the IP MTU, a field of its own; ⚠️ not
   read up to 0.7.7), VRF binding, `kind` override.  `ipv6 mtu` is
-  not read.
+  not read.  A DHCP client (`ip address dhcp`; its `client-id` and
+  `hostname` options are not read) — ⚠️ written and not read up to
+  0.7.7, so an IOS-XE interface that takes its address by DHCP was an
+  interface with no address on every target.
 - VLANs — ID, name, tagged/untagged port lists, SVI L3 (via
   VLAN-centric projection from the `switchport` per-interface form)
 - Static routes

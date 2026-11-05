@@ -380,12 +380,14 @@ per_field_expectation:
     references: [opn-laggs, fgt-lags]
 
   interfaces[].dhcp_client:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       OPNsense ``<ipaddr>dhcp</ipaddr>`` (common on the WAN zone)
-      ↔ FortiGate ``set mode dhcp``.  Neither codec currently wires
-      this into ``CanonicalInterface.dhcp_client``; cross-pair
-      drops pending wire-up.
+      ↔ FortiGate ``set mode dhcp``.  The OPNsense parser fills
+      ``CanonicalInterface.dhcp_client``, the FortiGate render writes
+      ``set mode dhcp`` and its parser reads it back.  Up to 0.7.7 the
+      FortiGate parser did not read the line, so every cell compared
+      as a loss the output did not have.
     references: [opn-interfaces, fgt-interfaces]
 
   interfaces[].vrf:
