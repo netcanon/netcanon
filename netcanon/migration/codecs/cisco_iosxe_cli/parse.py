@@ -2425,7 +2425,9 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
             name=name,
             privilege_level=privilege,
             hashed_password=hashed,
-            role="admin" if privilege == 15 else "operator",
+            # IOS-XE states a privilege level and no role: a role
+            # made up here was written by other targets as a name of
+            # theirs (netcanon/migration/_roles.py).
         ))
     return users
 

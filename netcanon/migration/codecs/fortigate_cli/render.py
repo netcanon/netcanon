@@ -62,6 +62,7 @@ from ..._radius_secrets import (
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
+from ..._roles import below_admin, format_below_admin_comment, own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -1268,6 +1269,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     target_label="FortiOS",
                 ))
                 continue
+            # An account below an administrator keeps the profile a
+            # FortiGate gave it, and is otherwise a review line:
+            # FortiOS documents no built-in profile below super_admin,
+            # and the other one, prof_admin, can change the
+            # configuration.  Up to 2026-11 such an account was
+            # written with another platform's role as its profile, or
+            # with prof_admin.  :mod:`netcanon.migration._roles`.
+            if below_admin(user, tree.source_vendor, "fortigate_cli"):
+                out.append("    " + format_below_admin_comment(
+                    user, "fortigate_cli", comment_syntax="hash",
+                ))
+                continue
             # This device's own blob is written bare, so one that holds
             # white space is not one value; the account is left out whole
             # rather than written with no password.
@@ -1310,10 +1323,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(f"        set password {payload}")
                 else:
                     out.append(f'        set password "{_esc(payload)}"')
-            # Map canonical privilege back to accprofile.
+            # An administrator is super_admin; any other account here
+            # names a profile of a FortiGate (below_admin, above).
             accprofile = (
-                "super_admin" if user.privilege_level == 15
-                else (user.role or "prof_admin")
+                "super_admin" if user.privilege_level >= 15
+                else own_role(user, tree.source_vendor, "fortigate_cli")
             )
             out.append(f'        set accprofile "{_esc(accprofile)}"')
             out.append("    next")

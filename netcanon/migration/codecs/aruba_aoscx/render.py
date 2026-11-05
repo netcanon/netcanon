@@ -49,6 +49,7 @@ import ipaddress
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
+from ..._roles import own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -129,7 +130,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Local users (Phase 2) ──
     for user in tree.local_users:
-        lines.append(_render_local_user(user))
+        lines.append(_render_local_user(user, tree.source_vendor))
 
     # ── SNMP (Phase 2b) ──
     if tree.snmp is not None:
@@ -230,12 +231,14 @@ def _render_vxlan(tree: CanonicalIntent) -> list[str]:
     return block
 
 
-def _render_local_user(user) -> str:
+def _render_local_user(user, source_vendor: str = "") -> str:
     """Render ``user <name> group <group> password ciphertext <blob>``.
 
-    ``role`` (the AOS-CX group) is emitted verbatim when set (same-vendor
-    round-trip) and otherwise derived from the privilege level
-    (administrators >= 15, else operators).  A user with no stored secret
+    ``role`` (the AOS-CX group) is emitted as it stands only from a
+    tree read by an AOS-CX parser, and otherwise derived from the
+    privilege level (administrators >= 15, else operators): another
+    platform's role is a group AOS-CX does not have
+    (:mod:`netcanon.migration._roles`).  A user with no stored secret
     is a review line: the bare form is an account with no password.
 
     The secret passes the shared :func:`is_migratable` gate first.  The
@@ -244,7 +247,7 @@ def _render_local_user(user) -> str:
     an account nobody could log in to.  Genuine plaintext now uses ``password
     plaintext``; anything else drops the user with a review comment.
     """
-    role = user.role or (
+    role = own_role(user, source_vendor, "aruba_aoscx") or (
         "administrators" if user.privilege_level >= 15 else "operators"
     )
     # Name, group and password are one word each (a local user's name and

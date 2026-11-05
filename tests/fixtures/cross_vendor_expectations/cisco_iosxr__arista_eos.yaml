@@ -426,16 +426,13 @@ per_field_expectation:
     references: [iosxr-arista-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      Role is preserved on every user record that survives the round-trip —
-      `root-lr` stays `root-lr`, `operator` stays `operator`, zero role
-      drift measured on any cell.  Both matrices declare
-      `/local-users/user/role` supported.
-      This key measures what happens to the VALUE when the record survives,
-      and the answer is: nothing.  The accounts that vanish entirely are
-      accounted for once, under `local_users[].name` — recording the same
-      disappearance a second time here would double-count one loss.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and EOS are different platforms, so the group an IOS XR `username`
+      block names is not carried.  EOS is given `role network-admin` at
+      privilege 15 and `role network-operator` below it, chosen from the
+      privilege level.
     references: [iosxr-arista-surface]
 
   "local_users[].hashed_password":

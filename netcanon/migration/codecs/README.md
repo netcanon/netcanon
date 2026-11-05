@@ -563,6 +563,26 @@ the policy locally:
   a new user-rendering codec goes in `_TYPED_FORM` in
   `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`.
 
+* **`netcanon/migration/_roles.py`** — a local user's role crosses
+  only between two codecs of one platform.  Public API:
+  `same_platform(source_vendor, target_codec)`, `own_role(user,
+  source_vendor, target_codec)` (the source's role where it may be
+  written, else `""`), `below_admin(user, source_vendor,
+  target_codec)`, `format_below_admin_comment(user, target_codec,
+  comment_syntax)`, `below_admin_warnings(users, source_vendor,
+  target_codec, target_label)`, `BELOW_ADMIN_WHY`.  A codec that
+  renders users writes `own_role(...)` where it is not empty and
+  otherwise chooses one of its built-in roles from
+  `privilege_level`; a target with no built-in role below an
+  administrator goes in `BELOW_ADMIN_WHY` and writes the review line
+  and the warning in place of such an account.  A parser records
+  the role its config names, or none -- never one made up from the
+  privilege level.  A new user-rendering codec goes in `BUILT_IN`
+  (and, if it keeps its own platform's role, `KEEPS_ITS_OWN`) in
+  `tests/unit/migration/test_a_role_is_the_platforms_own.py`, which
+  reads every target's output as text and fails for a foreign role
+  or an account below an administrator written as one.
+
 * **`netcanon/migration/_comments.py`** — a value written into a
   comment stays in it.  Public API: `comment(text, syntax)` (the
   comment with its delimiters) and `comment_text(text, syntax)` (the

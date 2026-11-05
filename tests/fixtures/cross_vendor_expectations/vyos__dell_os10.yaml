@@ -238,11 +238,12 @@ per_field_expectation:
     references: [vyos-os10-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 12 of 13 cells. On the 13th the list shrinks by the account
-      with no stored secret, counted under `local_users[].name`; nothing else
-      drifts. Both codecs model this surface.
+    disposition: lossy
+    reason: >
+      VyOS states no role for a local account (every VyOS login user is read
+      at privilege 15), so the source has none to carry, and the output reads
+      back with the target's own.  OS10 is given `role sysadmin` at privilege
+      15 and `role netoperator` below it, chosen from the privilege level.
     references: [vyos-os10-surface]
 
   ntp_servers:

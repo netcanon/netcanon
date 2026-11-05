@@ -237,10 +237,12 @@ per_field_expectation:
     references: [os10-iosxr-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and OS10
+      and IOS XR are different platforms, so the role an OS10 `username` line
+      names is not carried.  IOS XR is given `group root-lr` at privilege 15
+      and `group operator` below it, chosen from the privilege level.
     references: [os10-iosxr-surface]
 
   ntp_servers:

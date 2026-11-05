@@ -619,19 +619,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: good
     note: >
-      On the 2 accounts that survive, the role is unchanged. Up to 0.7.7 the 4
-      accounts with no stored secret, `user` on the source, also arrived, as
-      `admin`, with the companion field moving `1` -> `15`; they now vanish
-      (see `local_users[].name`). For an account that does arrive the mapping
-      stands. Mechanism: the vyos parser assigns every `system login user`
-      `role="admin"` and `privilege_level=15`, because VyOS login accounts
-      carry no role or numeric privilege in the common case (vyos declares
-      `/local-users/user/privilege-level` lossy for exactly this). This fails
-      OPEN: a less-privileged account arrives with more authority. Re-apply
-      least privilege on the target before cutover. Recorded `good`: on this
-      corpus no account that arrives changes role, and where a list shrinks
-      the record-count change is claimed first by `local_users[].name`, which
-      reclassifies this key STRUCTURAL_ONLY there.
+      Neither side states a role: OPNsense records none (OPNsense puts a user
+      in a group by the `<group>` that lists it as a `<member>`, which is not
+      read, and `<groupname>` gives the privilege level only), and VyOS writes
+      no role (an account below privilege 15 is a review comment, counted
+      under `local_users[].name`).  The account's rights travel as its
+      privilege level.
     references: [opnsense-vyos-surface]
 
   "local_users[].hashed_password":

@@ -542,17 +542,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the 9 accounts that survive, the role changes: `root-lr` -> `admin` on
-      8, `operator` -> `admin` on 1, with the companion field moving `1` -> `15`
-      on 1. Mechanism: the vyos parser assigns every `system login user`
-      `role="admin"` and `privilege_level=15`, because VyOS login accounts carry
-      no role or numeric privilege in the common case (vyos declares
-      `/local-users/user/privilege-level` lossy for exactly this). This fails
-      OPEN: a less-privileged account arrives with more authority. Re-apply
-      least privilege on the target before cutover. Accounts refused for their
-      secret vanish with their role and are counted once, under
-      `local_users[].name`; this key is about the value on accounts that
-      survive.
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and VyOS are different platforms, so the group an IOS XR `username`
+      block names is not carried.  VyOS writes no role; an account below
+      privilege 15 is a review comment in place of the account, and a job
+      warning, since every VyOS login user has full configuration access and
+      sudo.
     references: [iosxr-vyos-surface]
 
   "local_users[].hashed_password":

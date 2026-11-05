@@ -353,10 +353,10 @@ class TestCanonicalCoverage:
         # operator1 — type 8 (PBKDF2-SHA-256 $8$).
         assert users_by_name["operator1"].privilege_level == 5
         assert users_by_name["operator1"].hashed_password.startswith("8 $8$")
-        # Cisco's parser maps non-15 privilege to canonical role
-        # ``operator`` (15 → ``admin``).
-        assert users_by_name["admin1"].role == "admin"
-        assert users_by_name["operator1"].role == "operator"
+        # IOS-XE states a privilege level and no role, and the parser
+        # makes none up (netcanon/migration/_roles.py).
+        assert users_by_name["admin1"].role == ""
+        assert users_by_name["operator1"].role == ""
 
     # --- SNMP ----------------------------------------------------------
 

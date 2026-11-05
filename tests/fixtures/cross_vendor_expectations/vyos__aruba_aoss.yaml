@@ -544,15 +544,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on the corpus (see `local_users[].name`), so there is
-      no role on the target to compare; the drift on this key is the parent
-      record-count collapse.  Every VyOS login user is read with the role
-      `admin` and privilege 15; on an account that arrives that is the AOS-S
-      `manager`, and only the first such account is written: AOS-S holds one
-      manager account, so the others are review comments with a job warning.
-      Recorded `lossy` for the change of canonical string.  vyos separately
-      declares `/local-users/user/privilege-level` lossy on the source side.
-      The accounts that vanish are counted ONCE, under `local_users[].name`.
+      VyOS states no role for a local account (every VyOS login user is read
+      at privilege 15), so the source has none to carry, and the output reads
+      back with the target's own.  AOS-S writes its `manager` account at
+      privilege 15 and its `operator` account below it.
     references: [vyos-aoss-surface]
 
   "local_users[].hashed_password":

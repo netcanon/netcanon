@@ -40,6 +40,7 @@ from pydantic import ValidationError
 from ...models.migration import CapabilityMatrix
 from .._long_numbers import first_long_run, first_long_run_line, parse_refused, render_refused
 from .._one_line import first_control_character, first_line_break
+from .._roles import below_admin_warnings
 from .._user_secrets import empty_hash_warnings
 from ..limits import census, metered
 
@@ -556,14 +557,18 @@ class CodecBase(ABC):
             One sentence a record, naming it and never a secret of it.
             The default: one for each local user that holds no
             password, where :attr:`local_user_target_label` is set
-            (:func:`netcanon.migration._user_secrets.empty_hash_warnings`);
+            (:func:`netcanon.migration._user_secrets.empty_hash_warnings`),
+            and one for each account a target with no role below an
+            administrator leaves out
+            (:func:`netcanon.migration._roles.below_admin_warnings`);
             none otherwise.
         """
         label = self.local_user_target_label
         if not label:
             return []
-        return empty_hash_warnings(
-            getattr(tree, "local_users", None) or [], label,
+        users = getattr(tree, "local_users", None) or []
+        return empty_hash_warnings(users, label) + below_admin_warnings(
+            users, getattr(tree, "source_vendor", ""), self.name, label,
         )
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:

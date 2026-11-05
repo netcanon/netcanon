@@ -1568,7 +1568,9 @@ def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
             name=name,
             privilege_level=privilege,
             hashed_password="",   # /export omits hashes
-            role="admin" if privilege == 15 else "operator",
+            # The group the user is in, as written: RouterOS's own
+            # name for the account's rights (netcanon/migration/_roles.py).
+            role=kv.get("group") or "",
         ))
 
 

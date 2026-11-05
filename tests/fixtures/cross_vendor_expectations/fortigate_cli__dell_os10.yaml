@@ -253,9 +253,11 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 4 cells: drifted on 4, preserved on 0, both
-      sides empty on 0.
+      A local user's role is a name of the platform that defines it, and
+      FortiOS and OS10 are different platforms, so the admin profile a FortiOS
+      `set accprofile` names is not carried.  OS10 is given `role sysadmin` at
+      privilege 15 and `role netoperator` below it, chosen from the privilege
+      level.
     references: [fortigate-os10-surface]
 
   ntp_servers:

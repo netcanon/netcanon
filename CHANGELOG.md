@@ -28,6 +28,40 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **A local user's role crosses only between two configs of one
+  platform.**  A role is a name the target looks up among the roles
+  it has.  Seven renderers (EOS, AOS-CX, IOS XR, NX-OS, OS10, Junos
+  and FortiOS) wrote the source's role as it stood, from any
+  platform: a Junos `super-user` was written as an NX-OS role NX-OS
+  does not have, an NX-OS `network-admin` as a Junos class Junos does
+  not have, and an IOS-XE account at privilege 1 as a Junos
+  `operator`, which may clear, reset and trace.  VyOS, whose every
+  local login user has full configuration access and sudo, wrote
+  every account, so one the source kept at privilege 1 was an
+  administrator there.  Each job said `completed`, and the cross-mesh
+  audit counted the foreign role as preserved, since it was read back
+  as it was written.  The source's role is now written only where the
+  tree's `source_vendor` is the target's `vendor_id` (IOS-XE NETCONF
+  and CLI are one platform).  Everywhere else the target chooses one
+  of its built-in roles from the privilege level, 15 being an
+  administrator: EOS and NX-OS `network-admin` or `network-operator`,
+  OS10 `sysadmin` or `netoperator`, AOS-CX `administrators` or
+  `operators`, IOS XR `root-lr` or `operator`, Junos `super-user`,
+  `operator` (5 to 14) or `read-only`.  VyOS and FortiOS have no
+  built-in role below an administrator, so there an account below
+  privilege 15 is left out, with a review line in its place and a
+  warning in the job; an account of a FortiGate keeps the admin
+  profile it names.  The parsers record the role their config names,
+  or none: the IOS-XE CLI, RouterOS, OPNsense and VyOS parsers made
+  one up from the privilege level, and FortiOS wrote such a name back
+  as the profile of an admin that named none.  `/local-users/user/role`
+  is lossy on every target that writes accounts, and each pair's
+  expectation says what is carried.  Policy:
+  `netcanon/migration/_roles.py`.  Guarded by
+  `tests/unit/migration/test_a_role_is_the_platforms_own.py`, which
+  reads the output of every committed input on every target as text,
+  with what each target writes typed in the test.
+
 - **The AOS-S parser reads every account the switch prints.**  It
   read the `password <role> user-name ...` line only, and every one
   of them: a config with two `password manager` lines -- which the
@@ -5438,6 +5472,21 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A local user's role is a target's built-in role, or its own
+  platform's.**  A role the source config defines for itself (a Junos
+  login class, an EOS or NX-OS custom role, an AOS-CX or OS10 user
+  role) is not translated and not said, onto its own platform either,
+  where the account names it and the definition is left behind.
+  RouterOS and OPNsense write only their built-in groups, from their
+  own configs too: a custom RouterOS group is read as privilege 1 and
+  written `read`, and RouterOS's `read` still holds the reboot policy.
+  OS10 takes `netoperator` at `priv-lvl` 0 or 1 only, and an account
+  from 2 to 14 is written `role netoperator priv-lvl <n>`.  IOS XR's
+  `operator` group may not exist on the newest Cisco 8000 releases.
+  IOS-XE NETCONF writes no local users, and its capability matrix
+  declares them at a path (`/local_users`) the validation report does
+  not look up, so a job onto it with local users does not say they
+  are missing.
 - **AOS-S credentials.**  As a target, an output does not write
   `include-credentials` or `password non-plaintext-sha256`, which a
   hashed account line needs; a review line says so.  As a source, a

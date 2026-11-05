@@ -559,27 +559,11 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells and on every one of the 12 accounts, and it
-      fails OPEN.  Every role collapses to `admin`: 6 records go
-      `network-admin` -> `admin`, 5 go empty -> `admin`, and 1 goes
-      `network-operator` -> `admin`.  That last record is the one that
-      matters — a read-only operator on the EOS side arrives on VyOS as a
-      full administrator.
-      The companion `privilege_level` field moves the same way on the same
-      records (1 -> 15 on 4 of them).  That is the SAME mechanism, stated
-      for completeness, not independent corroboration of it.
-      vyos declares `/local-users/user/role` SUPPORTED while flattening
-      every role — an under-declaration on the target — and separately
-      declares `/local-users/user/privilege-level` LOSSY with the honest
-      reason that the codec maps every login user to one privilege level
-      because VyOS `system login user` accounts have no numeric privilege in
-      the common case.
-      Recorded `lossy` rather than `unsupported`: the account record
-      survives and the target models roles, so the value degrades rather
-      than vanishing (#436).  Review every migrated account's authority
-      before cutover.  A migration that silently PROMOTES a read-only
-      operator is more dangerous than one that drops the account, because
-      nothing looks wrong afterwards.
+      A local user's role is a name of the platform that defines it, and EOS
+      and VyOS are different platforms, so the role an EOS `username` line
+      names is not carried.  VyOS writes no role; an account below privilege
+      15 is a review comment in place of the account, and a job warning, since
+      every VyOS login user has full configuration access and sudo.
     references: [arista-vyos-surface]
 
   "local_users[].hashed_password":

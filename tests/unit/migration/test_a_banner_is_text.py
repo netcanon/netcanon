@@ -1008,7 +1008,9 @@ def _digest(codec: str, path: str) -> str:
 #: input with a VLAN interface, which is up unless it says ``shutdown``
 #: (``test_an_aoscx_vlan_interface_is_up.py``); and the AOS-S kitchen
 #: sink, which holds one manager and one operator account as a switch
-#: does (``codecs/aruba_aoss/test_one_account_per_role.py``).
+#: does (``codecs/aruba_aoss/test_one_account_per_role.py``); and every
+#: IOS-XE input with a local account, when the parser stopped making
+#: up a role from the privilege level (``netcanon/migration/_roles.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1044,22 +1046,22 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/batfish_cisco_ip_route.txt": "ab1f0cce8811",
     "real/cisco_iosxe/batfish_cisco_logging.txt": "b1aad8f82e94",
     "real/cisco_iosxe/batfish_cisco_snmp.txt": "ec27664e753c",
-    "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "516d7c944062",
-    "real/cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt": "9aab4d223d04",
+    "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "d4cdf42f627c",
+    "real/cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt": "e94bbbbcc894",
     # The IOSv capture whose every line is at column 0 was here: the
     # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
     # (``test_a_flat_text_is_refused.py``).
     "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
-    "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
-    "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "454f509eaaf8",
+    "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "c6fe61cfb3a2",
+    "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "879b0c3f72b4",
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "09d3725e0ed6",
     # Moved on purpose, by a row and nothing else: `switch 1 provision
     # c9300-24ux` is listed among the sections not translated
     # (TestCatalystStack): was "7192fbc5fd5e".
-    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "f0e87651085e",
+    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "3f77c6b89ade",
     # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "216dbc3fe4c3",
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "70caca86d542",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",

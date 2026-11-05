@@ -266,16 +266,13 @@ per_field_expectation:
     references: [junos-os10-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 7 of 11 cells. On 1 further cell the whole
-      `local_users` list drifted at once (records added or dropped),
-      and the reconciler attributes that single structural event to
-      one owner sub-field rather than counting it against every
-      sibling. So this field shows no loss of its own on this pair:
-      the parent-level drift is recorded against that owner key, and
-      declaring it lossy here would over-claim a second, independent
-      loss that the corpus does not exhibit.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and Junos
+      and OS10 are different platforms, so the login class a Junos `class`
+      statement names is not carried.  OS10 is given `role sysadmin` at
+      privilege 15 and `role netoperator` below it, chosen from the privilege
+      level.
     references: [junos-os10-surface]
 
   ntp_servers:

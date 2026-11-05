@@ -921,7 +921,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         CanonicalLocalUser(
             name=name,
             privilege_level=15,  # VyOS login users have full access
-            role="admin",
+            # VyOS states no role (netcanon/migration/_roles.py).
             hashed_password=users[name]["hash"],
         )
         for name in user_order

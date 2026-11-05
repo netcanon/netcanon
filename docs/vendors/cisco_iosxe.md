@@ -184,6 +184,10 @@ Canonical mapping:
 
 ## Lossy paths
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  IOS-XE writes a local account's privilege
+  level and no role, from any source; a role the source names is not
+  carried.
 - **`/routing-instances/instance`** — VRFs translate, but per-VRF
   static routes don't carry a VRF discriminator (route-table
   membership drops on round-trip).  `address-family ipv6` and EVPN

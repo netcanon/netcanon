@@ -225,6 +225,17 @@ Two things do change, on every record:
 
 ### Role → FortiOS accprofile
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The VyOS parser records no role (every VyOS login user is
+> read at privilege 15).  FortiOS is given `accprofile super_admin` at
+> privilege 15; an account below it is a review comment in place of the
+> account, and a job warning, since FortiOS documents no built-in admin
+> profile below super_admin.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`vyos__fortigate_cli.yaml`](../../../tests/fixtures/cross_vendor_expectations/vyos__fortigate_cli.yaml)
+> states what the code does now.
+
 `role` drifts on **17 of 17** records across all 13 cells, uniformly
 `admin` → `super_admin`. That is the FortiOS accprofile namespace, and
 `super_admin` is its full-privilege profile, so the privilege level is not

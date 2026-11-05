@@ -55,6 +55,11 @@ translatable with caveats:
 
 ## Lossy paths
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  It is written as it stands only from a
+  config of IOS XR.  From another platform the account is given `group
+  root-lr` at privilege 15 and `group operator` below it, chosen from
+  the privilege level; the source's role is not carried.
 - **`/routing/static-route/metric`** — render emits destination +
   next-hop only; the administrative distance (metric) drops.
 - **`/routing/static-route/description`** — the static-route name /

@@ -280,13 +280,11 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      An account that arrives has its role mapped onto the two OPNsense
-      groups (`admins` for an admin-tier account, `users` otherwise),
-      which the parser reads back as `admin` / `user`: on the kitchen
-      sink `sysadmin` comes back `admin` and `netoperator` `user`.  On
-      the two Azure Local captures no account arrives (see
-      `local_users`); the drift there is the parent record-count
-      collapse, reclassified STRUCTURAL_ONLY.
+      A local user's role is a name of the platform that defines it, and OS10
+      and OPNsense are different platforms, so the role an OS10 `username`
+      line names is not carried.  OPNsense puts the account in `admins` at
+      privilege 15 and in `users` below it, chosen from the privilege level,
+      and its parser reads no role back.
     references: [os10-opnsense-surface]
 
   ntp_servers:

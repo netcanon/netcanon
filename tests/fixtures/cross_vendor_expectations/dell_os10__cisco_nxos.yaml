@@ -225,15 +225,13 @@ per_field_expectation:
     references: [os10-nxos-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 2 of 3 cells that carry data for this
-      field -- the declared loss is never observed.  Authored `lossy`
-      against the synthetic kitchen-sink alone, which did not exercise
-      it; the real OS10 corpus committed alongside this change does,
-      and the field survives.  An unevidenced `lossy` over-claims loss
-      exactly as a missing declaration under-claims it, so the honest
-      disposition is `good`.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and OS10
+      and NX-OS are different platforms, so the role an OS10 `username` line
+      names is not carried.  NX-OS is given `role network-admin` at privilege
+      15 and `role network-operator` below it, chosen from the privilege
+      level.
     references: [os10-nxos-surface]
 
   ntp_servers:

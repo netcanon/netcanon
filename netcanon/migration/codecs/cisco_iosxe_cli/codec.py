@@ -181,6 +181,16 @@ class CiscoIOSXECLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  IOS-XE writes a local account's privilege level and "
+                    "no role, from any source; a role the source names is not "
+                    "carried."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "Renders the VRF as `vrf definition <name>` (see "

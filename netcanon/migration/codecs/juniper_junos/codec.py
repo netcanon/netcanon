@@ -188,7 +188,6 @@ class JunosCodec(CodecBase):
             "/snmp/v3-user",
             "/local-users/user/name",
             "/local-users/user/hashed-password",
-            "/local-users/user/role",
             "/vxlan-vnis/vni",                   # GAP 6
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
@@ -207,6 +206,18 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/ipv6/address/virtual-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  A login class is written as it stands only from a "
+                    "config of Junos.  From another platform the account is "
+                    "given `super-user` at privilege 15, `operator` from 5 to "
+                    "14 and `read-only` below 5, chosen from the privilege "
+                    "level; the source's role is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(

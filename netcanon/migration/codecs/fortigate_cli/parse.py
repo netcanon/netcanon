@@ -1184,17 +1184,20 @@ def _apply_system_admin(
             joined = " ".join(pw_tokens)
             hashed = f"fortios:{joined}"
         accprofile_tokens = edit.settings.get("accprofile")
-        accprofile = (
-            accprofile_tokens[0].lower() if accprofile_tokens else ""
-        )
+        # The profile as it is written: it is written back as
+        # ``set accprofile`` to a FortiGate, so its case is kept.
+        accprofile = accprofile_tokens[0] if accprofile_tokens else ""
         # super_admin is FortiOS's built-in full-access profile.
         # prof_admin / custom profiles are usually scoped.
-        is_admin = accprofile == "super_admin"
+        is_admin = accprofile.lower() == "super_admin"
         intent.local_users.append(CanonicalLocalUser(
             name=name,
             privilege_level=15 if is_admin else 1,
             hashed_password=hashed,
-            role=accprofile or ("admin" if is_admin else "operator"),
+            # The profile the admin names, or none: a name made up
+            # here was written back as `set accprofile` of a profile
+            # FortiOS does not have (netcanon/migration/_roles.py).
+            role=accprofile,
         ))
 
 

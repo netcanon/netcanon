@@ -392,14 +392,13 @@ per_field_expectation:
     references: [aoscx-arista-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      No account arrives on the corpus (see `local_users[].name`), so
-      there is no role on the target to compare; the only drift on this
-      key is the parent record-count collapse, which the audit
-      attributes to `local_users[].name` and reclassifies
-      STRUCTURAL_ONLY here.  On an account that arrives, the role is
-      written verbatim as `role <role>` and read back unchanged.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and
+      AOS-CX and EOS are different platforms, so the group an AOS-CX `user`
+      line names is not carried.  EOS is given `role network-admin` at
+      privilege 15 and `role network-operator` below it, chosen from the
+      privilege level.
     references: [aoscx-arista-surface]
 
   "local_users[].hashed_password":

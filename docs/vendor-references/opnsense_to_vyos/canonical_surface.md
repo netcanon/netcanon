@@ -201,6 +201,18 @@ another.
 
 ### 2. Local-user roles fail OPEN, and one cell makes it concrete
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The OPNsense parser records no role (OPNsense puts a user
+> in a group by the `<group>` that lists it as a `<member>`, which is not
+> read, and `<groupname>` gives the privilege level only).  VyOS writes no
+> role; an account below privilege 15 is a review comment in place of the
+> account, and a job warning, since every VyOS login user has full
+> configuration access and sudo.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`opnsense__vyos.yaml`](../../../tests/fixtures/cross_vendor_expectations/opnsense__vyos.yaml)
+> states what the code does now.
+
 <!-- secret-gate-462 -->
 > **Update 2026-09-15 (#462) — the local-user behaviour described in this document has changed.**  The shared secret classifier now reads the crypt id inside a Junos `junos:` envelope or an OPNsense `bcrypt:` tag instead of trusting the tag, and OPNsense accepts SHA-512 crypt.  Measured after the change: **6 of 14** local accounts arrive across the 7 cells that populate users. 8 are refused for a secret VyOS cannot consume (8 bcrypt (`$2y$` / `$2b$`)), with a `review:` comment and no user entry. Secrets that arrive are re-wrapped into the target's native form (2 SHA-512 crypt (`$6$`) as `encrypted-password`); the credential itself is unchanged.  Any statement below that these accounts are refused, arrive without a password, or are classified by that tag describes the behaviour before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__vyos.yaml`.
 

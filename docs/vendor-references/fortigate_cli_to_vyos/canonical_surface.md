@@ -211,6 +211,16 @@ before rendering and the whole surface crosses.
 
 ### 2. Passwords survive; authority does not, and it fails OPEN
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The admin profile a FortiOS `set accprofile` names is not
+> carried.  VyOS writes no role; an account below privilege 15 is a review
+> comment in place of the account, and a job warning, since every VyOS login
+> user has full configuration access and sudo.  Every target's capability
+> matrix declares `/local-users/user/role` lossy, and
+> [`fortigate_cli__vyos.yaml`](../../../tests/fixtures/cross_vendor_expectations/fortigate_cli__vyos.yaml)
+> states what the code does now.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **2 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret VyOS cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__vyos.yaml`.
 

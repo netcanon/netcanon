@@ -536,15 +536,9 @@ per_field_expectation:
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every one of the 16 user records that survive the
-      round-trip — `admin` stays `admin`, zero role drift on any cell.  vyos
-      declares `/local-users/user/role` supported (and
-      `/local-users/user/privilege-level` lossy, which no cell exercises
-      distinctly).
-      This key measures what happens to the VALUE when the record survives,
-      and the answer is: nothing.  The one account that vanishes entirely is
-      accounted for once, under `local_users[].name`; recording the same
-      disappearance again here would double-count a single loss.
+      Neither side states a role: VyOS records none (every VyOS login user is
+      read at privilege 15), and IOS-XE writes the account's privilege level
+      and no role.  The account's rights travel as its privilege level.
     references: [vyos-iosxe-cli-surface]
 
   "local_users[].hashed_password":

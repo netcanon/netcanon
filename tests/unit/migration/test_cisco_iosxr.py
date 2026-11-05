@@ -584,10 +584,11 @@ class TestCapabilityMatrix:
             "/lags/lag/members",
             "/lags/lag/mode",
             "/local-users/user/name",
-            "/local-users/user/role",
         ]:
             assert caps.classify(path) == "supported", path
         assert caps.classify("/routing-instances/instance") == "lossy"
+        # A role crosses only within a platform (netcanon/migration/_roles.py).
+        assert caps.classify("/local-users/user/role") == "lossy"
 
     def test_config_type_lossy(self, codec):
         assert codec.capabilities.classify(

@@ -107,6 +107,11 @@ in v1 (parity with the NX-OS / IOS-XE IPv6-anycast deferral).
   published capture holds a placeholder word there), and `plaintext`
   is a password as typed, which arrives on every target that takes
   one (not Junos or OPNsense).
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  It is written as it stands only from a
+  config of AOS-CX.  From another platform the account is given `group
+  administrators` at privilege 15 and `group operators` below it,
+  chosen from the privilege level; the source's role is not carried.
 - **`/snmp/v3-user/auth-passphrase`** — SNMPv3 auth/priv keys are
   device-key `ciphertext` blobs; emitted verbatim cross-vendor but the
   operator must re-key on the target.

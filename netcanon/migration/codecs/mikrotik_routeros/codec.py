@@ -183,6 +183,18 @@ class MikroTikRouterOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  RouterOS writes `group=full` at privilege 15, "
+                    "`group=write` from 10 to 14 and `group=read` below 10, "
+                    "chosen from the privilege level from any source, a "
+                    "RouterOS one included: a custom group is read as privilege"
+                    " 1 and written `read`."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(
                     "RouterOS has one MTU for the payload and the IP packet. An "

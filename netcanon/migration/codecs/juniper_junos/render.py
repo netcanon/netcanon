@@ -75,6 +75,7 @@ from ..._derived_values import (
     review_comment as derived_review_comment,
 )
 from ..._one_value import ADDRESSES, one_value_tree
+from ..._roles import own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -223,8 +224,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
             )
             continue
-        if user.role:
-            role = user.role
+        # A class is written as it stands only from a tree read by
+        # the Junos parser: another platform's role is a class Junos
+        # does not have, or one it has with rights of its own (an
+        # IOS-XE privilege-1 ``operator``).  :mod:`netcanon.migration._roles`.
+        own = own_role(user, tree.source_vendor, "juniper_junos")
+        if own:
+            role = own
         elif user.privilege_level >= 15:
             role = "super-user"
         elif user.privilege_level >= 5:

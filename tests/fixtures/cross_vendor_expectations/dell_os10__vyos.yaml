@@ -212,10 +212,13 @@ per_field_expectation:
     references: [os10-vyos-surface]
 
   local_users[].hashed_password:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      An account below privilege 15 is left out on VyOS, with a review comment
+      in its place and a job warning: every VyOS login user has full
+      configuration access and sudo, so written there such an account would be
+      an administrator.  One cell shows it, an OS10 `netoperator` account, and
+      the audit counts the account that is missing on this key.
     references: [os10-vyos-surface]
 
   local_users[].name:
@@ -228,9 +231,11 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      A local user's role is a name of the platform that defines it, and OS10
+      and VyOS are different platforms, so the role an OS10 `username` line
+      names is not carried.  VyOS writes no role; an account below privilege
+      15 is a review comment in place of the account, and a job warning, since
+      every VyOS login user has full configuration access and sudo.
     references: [os10-vyos-surface]
 
   ntp_servers:

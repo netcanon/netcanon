@@ -138,6 +138,15 @@ port type from them.
 
 ## Finding 3 — every local user vanishes, and the cause is the *missing* password
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The group a RouterOS user's `group=` names is not carried.
+> AOS-CX is given `group administrators` at privilege 15 and `group
+> operators` below it, chosen from the privilege level.  Every target's
+> capability matrix declares `/local-users/user/role` lossy, and
+> [`mikrotik_routeros__aruba_aoscx.yaml`](../../../tests/fixtures/cross_vendor_expectations/mikrotik_routeros__aruba_aoscx.yaml)
+> states what the code does now.
+
 Proved by round-tripping `tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc`:
 3 users in, **0 users out**. The mechanism is a three-step interaction, and it is
 worth spelling out because the target matrix does not predict it:

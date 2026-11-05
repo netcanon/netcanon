@@ -41,15 +41,15 @@ class TestCiscoLocalUsersParse:
         u = intent.local_users[0]
         assert u.name == "admin"
         assert u.privilege_level == 15
-        assert u.role == "admin"
+        assert u.role == ""  # IOS-XE states no role
         assert u.hashed_password == "9 $9$fake$hash"
 
-    def test_secret_type_5_priv_1_becomes_operator(self):
+    def test_secret_type_5_priv_1_states_no_role(self):
         raw = "username readonly privilege 1 secret 5 $1$fake$md5hash\n"
         intent = CiscoIOSXECLICodec().parse(raw)
         u = intent.local_users[0]
         assert u.privilege_level == 1
-        assert u.role == "operator"
+        assert u.role == ""  # IOS-XE states no role
 
     def test_password_legacy_type_7(self):
         """Legacy ``password 7 <reversible>`` form still parses (and
@@ -195,10 +195,10 @@ class TestOPNsenseLocalUsersParseRender:
         assert len(intent.local_users) == 2
         by_name = {u.name: u for u in intent.local_users}
         assert by_name["root"].privilege_level == 15
-        assert by_name["root"].role == "admin"
+        assert by_name["root"].role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
         assert by_name["root"].hashed_password == "bcrypt:$2y$10$fake"
         assert by_name["guest"].privilege_level == 1
-        assert by_name["guest"].role == "user"
+        assert by_name["guest"].role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
     def test_scope_does_not_determine_privilege(self):
         """<scope>system</scope> is a user-type distinction, not a
@@ -219,7 +219,7 @@ class TestOPNsenseLocalUsersParseRender:
 """
         intent = OPNsenseCodec().parse(raw)
         assert intent.local_users[0].privilege_level == 1
-        assert intent.local_users[0].role == "user"
+        assert intent.local_users[0].role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
     def test_render_emits_user_elements(self):
         intent = CanonicalIntent(

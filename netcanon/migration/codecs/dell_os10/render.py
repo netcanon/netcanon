@@ -97,6 +97,7 @@ exists in the ``cisco_nxos`` render for the same reason.
 from __future__ import annotations
 
 from ..._one_value import left_out, one_value_tree, splits
+from ..._roles import own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -225,7 +226,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Local users ── (device order: accounts sit just below hostname)
     for user in tree.local_users:
-        lines.append(_render_local_user(user))
+        lines.append(_render_local_user(user, tree.source_vendor))
     if tree.local_users:
         lines.append("!")
 
@@ -256,8 +257,13 @@ def render_intent(tree: CanonicalIntent) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_local_user(user) -> str:
+def _render_local_user(user, source_vendor: str = "") -> str:
     """Render one ``username ... password ... role ... priv-lvl ...`` line.
+
+    ``role`` is written as it stands only from a tree read by the OS10
+    parser, and otherwise derived from the privilege level (sysadmin
+    >= 15, else netoperator): another platform's role is a role OS10
+    does not have (:mod:`netcanon.migration._roles`).
 
     The secret goes through the shared :func:`is_migratable` gate first.
     A hash OS10 cannot consume DROPS the account and leaves a review
@@ -268,7 +274,7 @@ def _render_local_user(user) -> str:
     vendor-tagged secret such as ``junos:$6$…`` writes the bare crypt
     string OS10 actually accepts rather than the tag.
     """
-    role = user.role or (
+    role = own_role(user, source_vendor, "dell_os10") or (
         "sysadmin" if user.privilege_level >= 15 else "netoperator"
     )
     # Name, password and role are one word each (OS10 documents them as

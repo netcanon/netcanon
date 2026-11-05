@@ -413,16 +413,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 9 populated cells.  Aggregated over the corpus, 13 of 14
-      user records change role `root-lr` -> `admin`; the one `operator` account
-      passes through unchanged.  IOS-XR's `root-lr` (root-logical-router task
-      group) has no IOS-XE equivalent and the render maps it to `admin`, so
-      this is a specific mapping collapse rather than a blanket role drop.  The
-      user record itself survives with `name` and `hashed_password` untouched,
-      which is why this is `lossy` and not `unsupported`.  The mapping is
-      one-way: role granularity present on the XR side cannot be recovered from
-      the render.  Review the resulting privilege level of every migrated
-      account on the target before cutover.
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and IOS-XE are different platforms, so the group an IOS XR `username`
+      block names is not carried.  IOS-XE writes the account's privilege level
+      and no role.
     references: [iosxr-iosxecli-surface]
 
   "local_users[].hashed_password":

@@ -263,16 +263,14 @@ per_field_expectation:
     references: [opnsense-os10-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 2 of 8 cells. On 5 further cells the whole
-      `local_users` list drifted at once (records added or dropped),
-      and the reconciler attributes that single structural event to
-      one owner sub-field rather than counting it against every
-      sibling. So this field shows no loss of its own on this pair:
-      the parent-level drift is recorded against that owner key, and
-      declaring it lossy here would over-claim a second, independent
-      loss that the corpus does not exhibit.
+    disposition: lossy
+    reason: >
+      OPNsense states no role for a local account (OPNsense puts a user in a
+      group by the `<group>` that lists it as a `<member>`, which is not read,
+      and `<groupname>` gives the privilege level only), so the source has
+      none to carry, and the output reads back with the target's own.  OS10 is
+      given `role sysadmin` at privilege 15 and `role netoperator` below it,
+      chosen from the privilege level.
     references: [opnsense-os10-surface]
 
   ntp_servers:

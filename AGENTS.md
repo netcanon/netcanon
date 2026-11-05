@@ -475,6 +475,34 @@ tests use these exclusively — never CSS classes or element structure.  See
   every target and reads the output as text and with the target's
   parser; and the envelope-registry test now fails for a snippet its
   parser reads no keyed server from.
+- **Never** write a local user's role from another platform's config.
+  A role is a NAME the target looks up among the roles it has, and
+  another platform's name is one the target does not ship, or ships
+  with rights of its own.  Seven renderers wrote the source's role as
+  it stood: a Junos `super-user` became an NX-OS role NX-OS does not
+  have, and an IOS-XE account at privilege 1 a Junos `operator` that
+  may clear, reset and trace; and VyOS, whose every login user has
+  full configuration access and sudo, wrote an account the source
+  kept at privilege 1 as an administrator -- in jobs that said
+  `completed`.  The role is written only where `tree.source_vendor`
+  is the target's `vendor_id`; everywhere else the target chooses its
+  own built-in role from `privilege_level`, the one fact about an
+  account's rights every parser states on one scale, and a target
+  with no built-in role below an administrator leaves such an account
+  out, with a review line and a job warning, rather than make it one
+  (`netcanon/migration/_roles.py`).  A parser records the role its
+  config NAMES, or none: four made one up from the privilege level,
+  and FortiOS wrote such a made-up name back as an admin profile.
+  **The blind spot that hid it:** the cross-mesh audit compares the
+  source's tree with the target's parse, and a foreign role written
+  as it stands reads back as it stands, so the defect scored as
+  fidelity, and the expectation YAMLs called it `good`.  "Read back
+  the same" is not "means the same on the target": ask what the
+  target DOES with the value.  Guarded by
+  `tests/unit/migration/test_a_role_is_the_platforms_own.py`, which
+  reads every target's output as text, with what each target writes
+  typed in the test (`BUILT_IN`) rather than asked of the codec; a new
+  user-rendering codec goes there.
 - **Never** put a value of the tree into a comment that a terminator
   ends without breaking the terminator in it.  A review comment names
   what was left out, as the source holds the name, and a block comment

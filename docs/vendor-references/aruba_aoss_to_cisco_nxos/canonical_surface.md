@@ -158,6 +158,16 @@ not survive at all.
 
 ## Surfaces that survive, and why that is worth stating
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The account an AOS-S `password` line sets (`manager` or
+> `operator`) is not carried.  NX-OS is given `role network-admin` at
+> privilege 15 and `role network-operator` below it, chosen from the
+> privilege level.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`aruba_aoss__cisco_nxos.yaml`](../../../tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_nxos.yaml)
+> states what the code does now.
+
 * **`vlans[].ipv4_addresses`** — preserved on all 4 cells that carry an SVI.
   The `cisco_nxos` matrix declares `/vlans/vlan/ipv4/address/ip` lossy ("renders
   VLAN SVI L3 only from a sibling interface stanza"), but the `aruba_aoss`

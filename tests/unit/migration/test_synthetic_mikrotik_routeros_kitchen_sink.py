@@ -203,7 +203,7 @@ def test_populates_every_expected_canonical_field(
     assert len(intent.local_users) >= 3
     users_by_name = {u.name: u for u in intent.local_users}
     assert users_by_name["admin"].privilege_level == 15      # full
-    assert users_by_name["admin"].role == "admin"
+    assert users_by_name["admin"].role == "full"   # the group, as written
     assert users_by_name["operator"].privilege_level == 10   # write
     assert users_by_name["auditor"].privilege_level == 1     # read
 

@@ -359,7 +359,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 hashed_password=(
                     f"bcrypt:{password}" if password else ""
                 ),
-                role="admin" if is_admin else "user",
+                # No role: OPNsense puts a user in a group by the
+                # <group> element that lists it as a <member>, which
+                # is not read, and <groupname> is read above for the
+                # privilege level only.  A role made up here was
+                # written by other targets as a name of theirs
+                # (netcanon/migration/_roles.py).
             ))
 
     # ----- <interfaces> block — flatten into list -----

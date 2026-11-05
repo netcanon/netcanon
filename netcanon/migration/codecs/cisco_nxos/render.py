@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
+from ..._roles import own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -188,7 +189,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Local users + SNMP (Phase 2b) ──
     for user in tree.local_users:
-        lines.append(_render_local_user(user))
+        lines.append(_render_local_user(user, tree.source_vendor))
     if tree.local_users:
         lines.append("")
     if tree.snmp is not None:
@@ -364,7 +365,7 @@ def _render_static_route(route) -> str:
     return out
 
 
-def _render_local_user(user) -> str:
+def _render_local_user(user, source_vendor: str = "") -> str:
     """Render a ``username <name> password <type> <hash> role <role>``.
 
     The secret goes through the shared :func:`is_migratable` gate first.
@@ -373,11 +374,13 @@ def _render_local_user(user) -> str:
     (a VyOS ``$6$``, an OPNsense bcrypt, a FortiGate ``ENC`` blob) became
     the literal password.  A secret NX-OS cannot consume now drops the
     account and leaves a review comment instead; a consumable one is
-    re-tagged from :data:`_NXOS_PASSWORD_TYPE`.  ``role`` is emitted verbatim when set
-    (same-vendor round-trip) and otherwise derived from the privilege
-    level (network-admin >= 15, else network-operator).
+    re-tagged from :data:`_NXOS_PASSWORD_TYPE`.  ``role`` is emitted as it
+    stands only from a tree read by the NX-OS parser, and otherwise
+    derived from the privilege level (network-admin >= 15, else
+    network-operator): another platform's role is a role NX-OS does
+    not have (:mod:`netcanon.migration._roles`).
     """
-    role = user.role or (
+    role = own_role(user, source_vendor, "cisco_nxos") or (
         "network-admin" if user.privilege_level >= 15 else "network-operator"
     )
     # Name, password and role are one word each on this line: a second

@@ -222,9 +222,10 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+      A local user's role is a name of the platform that defines it, and OS10
+      and IOS-XE are different platforms, so the role an OS10 `username` line
+      names is not carried.  IOS-XE writes the account's privilege level and
+      no role.
     references: [os10-iosxe-surface]
 
   ntp_servers:

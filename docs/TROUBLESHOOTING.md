@@ -635,6 +635,51 @@ the account, and the job has a warning for it.
 **Action:** add the user on the device with a password, or set it up
 for remote login the way the target does that.
 
+### "My user's role is not the one the source names"
+
+By design.  A role is a name that a device looks up among the roles it
+has, and another platform's name is one the target does not ship, or
+ships with rights of its own: a Junos `super-user` is no NX-OS role,
+and a Junos `operator` may clear, reset and trace.  So the source's
+role is written only between two configs of one platform (EOS to EOS,
+IOS-XE CLI to IOS-XE NETCONF).  Onto any other platform the target
+chooses one of its own built-in roles from the account's privilege
+level, 15 being an administrator -- NX-OS `network-admin` or
+`network-operator`, Junos `super-user`, `operator` or `read-only`, and
+so on ([CAPABILITIES.md](CAPABILITIES.md), item 8 of the
+hash-portability policy).  A role the source defines for itself (a
+Junos login class, an NX-OS or EOS custom role, a RouterOS group) is
+not translated, nor said, on any target, its own platform included.
+`/local-users/user/role` is a lossy path, so the validation report of
+a job with local users says so.
+
+**Action:** where the account should have narrower or other rights
+than the built-in role gives it, re-create the role on the device and
+assign it there.
+
+### "A user below an administrator came out as a review comment on VyOS or FortiOS"
+
+By design.  Every local login user on VyOS has full configuration
+access and sudo, and FortiOS documents no built-in admin profile
+below `super_admin` (`prof_admin` can change the configuration).
+Written there, an account the source gives a privilege level below 15
+would be an administrator, so it is left out, with a review line in
+its place and a warning in the job:
+
+    /* user "<name>" -- review: the source gives this account privilege
+    level 1, below an administrator, and every local login user on VyOS
+    has full configuration access and sudo; it is left out: add it on
+    the device with the rights it should have */
+
+It holds from a VyOS source too, whose users are all read at
+privilege 15 and so never meet it.  An account of a FortiGate keeps
+the admin profile it names.
+
+**Action:** on FortiOS, make an admin profile with the rights the
+account should have and add the account with it; on VyOS, decide
+whether the account should exist at all, or give it a remote (RADIUS
+or TACACS+) login whose rights are set there.
+
 ### "An AOS-S output has one manager and one operator, and my other users are review comments"
 
 By design.  An AOS-S switch holds one manager and one operator account:
