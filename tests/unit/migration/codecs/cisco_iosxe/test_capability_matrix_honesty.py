@@ -57,6 +57,14 @@ from netcanon.migration.canonical.intent import (
     CanonicalVxlan,
 )
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli.codec import _walk_canonical
+from netcanon.migration.codecs.registry import get_codec
+from netcanon.models.migration import CapabilityMatrix, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
+from tests.unit.migration.test_registry_capability_honesty import (
+    _WALKABLE,
+    _maximal_intent,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -339,10 +347,92 @@ class TestRenderCoverageHonesty:
         )
 
 
+def _said_translated_but_dropped(caps: CapabilityMatrix) -> list[str]:
+    """Every walkable path the render does not write back that *caps*
+    still classifies ``supported``: a leaf a job onto this codec lists
+    among the paths it emits.
+
+    Found by experiment, not from a list: the registry-wide maximal
+    intent, rendered and parsed again, and walked.
+    """
+    codec = CiscoIOSXECodec()
+    emitted = set(_walk_canonical(codec.parse(codec.render(_maximal_intent()))))
+    return sorted(p for p in _WALKABLE - emitted if caps.classify(p) == "supported")
+
+
+def _outside_an_interface_not_unsupported(caps: CapabilityMatrix) -> list[str]:
+    """Every walkable path outside an interface's record that *caps* does
+    not classify ``unsupported``.  The render writes no record but an
+    interface, so nothing else survives, even in part."""
+    return sorted(
+        p for p in _WALKABLE if not p.startswith("/interfaces/") and caps.classify(p) != "unsupported"
+    )
+
+
+class TestEveryWalkablePath:
+    """``classify`` is an exact-string match and an undeclared path is
+    ``supported``, so a field marker (``/local_users``) or a record's own
+    path (``/vrrp-groups/group``) left each leaf under it reported as
+    translated: a job onto this codec listed local users, LAGs, VRFs,
+    VXLAN and DHCP pools among the paths it would emit.  These checks
+    read every path the canonical walker can yield, so a surface that
+    joins the tree and not the render fails them."""
+
+    def test_no_dropped_path_is_said_to_be_translated(self):
+        assert _said_translated_but_dropped(CiscoIOSXECodec().capabilities) == []
+
+    def test_no_record_but_an_interface_survives(self):
+        assert _outside_an_interface_not_unsupported(CiscoIOSXECodec().capabilities) == []
+
+    def test_the_checks_find_a_surface_declared_by_its_marker_alone(self):
+        """Handed the defect -- local users declared by ``/local_users``
+        alone, as they were -- both checks name the four leaves."""
+        caps = CiscoIOSXECodec().capabilities
+        marker_alone = caps.model_copy(
+            update={"unsupported": [u for u in caps.unsupported if not u.path.startswith("/local-users/")]}
+        )
+        assert "/local_users" in {u.path for u in marker_alone.unsupported}
+        leaves = [
+            "/local-users/user/hashed-password",
+            "/local-users/user/name",
+            "/local-users/user/privilege-level",
+            "/local-users/user/role",
+        ]
+        assert _said_translated_but_dropped(marker_alone) == leaves
+        assert _outside_an_interface_not_unsupported(marker_alone) == leaves
+
+    def test_a_job_that_drops_a_user_and_a_lag_is_not_completed(self):
+        """End to end, as an operator sees it: a config of a local user,
+        a LAG and its member (no hostname, which is ``unsupported`` and
+        would hold the job on its own).  Every leaf of the user and the
+        LAG used to classify ``supported``, so the job said ``completed``
+        with an output that held neither."""
+        text = (
+            "username opsuser privilege 15 secret 9 $9$fake$hash\n!\n"
+            "interface Port-channel1\n description uplink\n!\n"
+            "interface GigabitEthernet1/0/1\n description member\n"
+            " channel-group 1 mode active\n!\nend\n"
+        )
+        job = run_plan(get_codec("cisco_iosxe_cli"), CiscoIOSXECodec(), text)
+        assert "opsuser" not in (job.rendered or "")
+        assert job.status == MigrationJobStatus.partial
+        report = job.validation
+        assert report is not None
+        assert {
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/interfaces/interface/lag-member-of",
+        } <= {u.path for u in report.unsupported_paths}
+        assert [p for p in report.supported_paths if p.startswith(("/local-users/", "/lags/"))] == []
+
+
 class TestGranularXpathDeclarations:
     """The granular xpaths emitted by ``_walk_canonical`` for un-rendered
     surfaces must classify as ``unsupported`` so
     :func:`validate_against` correctly flags them on cross-codec runs.
+    (Named examples; :class:`TestEveryWalkablePath` reads every path.)
     """
 
     def test_walker_xpaths_for_unrendered_surfaces_classify_unsupported(self):
