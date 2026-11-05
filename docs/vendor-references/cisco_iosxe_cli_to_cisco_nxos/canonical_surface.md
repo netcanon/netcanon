@@ -82,6 +82,16 @@ Preserved on every populated cell: `interfaces[].name` (11),
 
 ## Why each drifting key drifts
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The IOS-XE parser records no role (an IOS-XE account's
+> rights are its privilege level).  NX-OS is given `role network-admin` at
+> privilege 15 and `role network-operator` below it, chosen from the
+> privilege level.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`cisco_iosxe_cli__cisco_nxos.yaml`](../../../tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__cisco_nxos.yaml)
+> states what the code does now.
+
 **`interfaces[].interface_type`** — `ianaift:ethernetCsmacd` arrives and
 re-parses as `ianaift:other`. The NX-OS parser infers ifType from a name-prefix
 table (`ethernet` / `loopback` / `vlan` / `port-channel` / `nve` / `tunnel` /

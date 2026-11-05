@@ -44,6 +44,7 @@ import re
 
 from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
+from ..._roles import below_admin, format_below_admin_comment
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -134,7 +135,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     if tree.domain:
         lines.append(f"    domain-name {tree.domain}")
     lines.append(f"    host-name {tree.hostname or 'vyos'}")
-    lines.extend(_render_login(tree.local_users))
+    lines.extend(_render_login(tree.local_users, tree.source_vendor))
     for _ns in tree.dns_servers:
         lines.append(f"    name-server {_ns}")
     lines.extend(_render_ntp(tree.ntp_servers))
@@ -352,7 +353,7 @@ def _bond_extra(lag, indent: str) -> list[str]:
     return out
 
 
-def _render_login(users: list) -> list[str]:
+def _render_login(users: list, source_vendor: str = "") -> list[str]:
     """Render the ``login { }`` sub-block (nested under ``system``).
 
     Each user emits ``user <name> { authentication { encrypted-password
@@ -367,6 +368,12 @@ def _render_login(users: list) -> list[str]:
     to.  A crypt payload is now unwrapped from its vendor tag, genuine
     plaintext goes to ``plaintext-password`` (VyOS hashes it on commit), and
     anything else drops the user with a ``/* review */`` comment.
+
+    Every local login user on VyOS 1.3 to 1.5 has full configuration
+    access and sudo (``level`` was removed in 1.3), so an account the
+    source gives a privilege level below 15 is a review comment too,
+    never an administrator: :mod:`netcanon.migration._roles`.  Up to
+    2026-11 every such account was written as one.
     """
     if not users:
         return []
@@ -382,6 +389,11 @@ def _render_login(users: list) -> list[str]:
             out.append("        " + format_review_comment(
                 u.name, algorithm,
                 comment_syntax="slash", target_label="VyOS",
+            ))
+            continue
+        if below_admin(u, source_vendor, "vyos"):
+            out.append("        " + format_below_admin_comment(
+                u, "vyos", comment_syntax="slash",
             ))
             continue
         # A user name is a tag node, one word; a password goes in quotes,

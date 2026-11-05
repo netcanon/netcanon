@@ -271,9 +271,11 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
-      sides empty on 2.
+      A local user's role is a name of the platform that defines it, and AOS-S
+      and OS10 are different platforms, so the account an AOS-S `password`
+      line sets (`manager` or `operator`) is not carried.  OS10 is given `role
+      sysadmin` at privilege 15 and `role netoperator` below it, chosen from
+      the privilege level.
     references: [aoss-os10-surface]
 
   ntp_servers:

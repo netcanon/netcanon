@@ -485,9 +485,10 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Same source-side gap as `local_users[].name`.  cisco_iosxr declares
-      `/local-users/user/role` supported and maps its task-groups `root-lr`
-      and `root-system` onto the cross-vendor admin privilege, so roles
-      re-authored on the target are modelled — but nothing arrives from this
+      `/local-users/user/role` lossy: a group is written as it stands only
+      from a config of IOS XR, and an account from another platform is given
+      `group root-lr` at privilege 15 and `group operator` below it — but
+      nothing arrives from this
       source to map.
     references: [iosxe-iosxr-surface]
 

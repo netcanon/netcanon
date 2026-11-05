@@ -249,9 +249,10 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 6 cells: drifted on 3, preserved on 3, both
-      sides empty on 0.
+      A local user's role is a name of the platform that defines it, and EOS
+      and OS10 are different platforms, so the role an EOS `username` line
+      names is not carried.  OS10 is given `role sysadmin` at privilege 15 and
+      `role netoperator` below it, chosen from the privilege level.
     references: [eos-os10-surface]
 
   ntp_servers:

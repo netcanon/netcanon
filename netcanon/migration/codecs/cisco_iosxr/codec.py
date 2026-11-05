@@ -172,9 +172,20 @@ class CiscoIOSXRCodec(CodecBase):
             # Phase 2 — local users (`username` block → group + secret)
             "/local-users/user/name",
             "/local-users/user/hashed-password",
-            "/local-users/user/role",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  It is written as it stands only from a config of IOS"
+                    " XR.  From another platform the account is given `group "
+                    "root-lr` at privilege 15 and `group operator` below it, "
+                    "chosen from the privilege level; the source's role is not "
+                    "carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(

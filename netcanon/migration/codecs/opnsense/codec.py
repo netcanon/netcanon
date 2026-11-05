@@ -169,7 +169,6 @@ class OPNsenseCodec(CodecBase):
             # target renderers can route appropriately.
             "/local-users/user/name",
             "/local-users/user/hashed-password",
-            "/local-users/user/role",
             # Wave B (v0.2.0) — CARP groups on /virtualip/vip.
             # OPNsense's BSD-CARP HA primitive parses + renders round-trip
             # through CanonicalVRRPGroup with ``mode="carp"``, but the path
@@ -178,6 +177,17 @@ class OPNsenseCodec(CodecBase):
             # intentionally NOT listed supported.
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  OPNsense writes `<groupname>admins</groupname>` at "
+                    "privilege 15 and `users` below it, chosen from the "
+                    "privilege level from any source, an OPNsense one included:"
+                    " a custom group is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(

@@ -583,17 +583,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the 1 account that survives, an AOS-S operator, the role changes:
-      `operator` -> `admin` on 1, and its privilege level `1` -> `15`.
-      Mechanism: the vyos parser assigns every `system login user`
-      `role="admin"` and `privilege_level=15`, because VyOS login accounts carry
-      no role or numeric privilege in the common case (vyos declares
-      `/local-users/user/privilege-level` lossy for exactly this), so an AOS-S
-      operator comes back an administrator: review every account an AOS-S
-      config brings to VyOS. Accounts
-      refused for their secret vanish with their role and are counted once,
-      under `local_users[].name`; this key is about the value on accounts that
-      survive.
+      A local user's role is a name of the platform that defines it, and AOS-S
+      and VyOS are different platforms, so the account an AOS-S `password`
+      line sets (`manager` or `operator`) is not carried.  VyOS writes no
+      role; an account below privilege 15 is a review comment in place of the
+      account, and a job warning, since every VyOS login user has full
+      configuration access and sudo.
     references: [aoss-vyos-surface]
 
   "local_users[].hashed_password":

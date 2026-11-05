@@ -487,14 +487,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every one of the 16 records that arrive — zero
-      role drift on
-      any cell.  Both matrices declare `/local-users/user/role` supported,
-      and opnsense re-derives admin status symmetrically on re-parse
-      (`groupname=admins`, or `scope=system` / `page-all` privilege).
-      vyos declares `/local-users/user/privilege-level` LOSSY on its own
-      side; that is the numeric privilege level, not the role token this key
-      measures, and the role token is clean.
+      Neither side states a role: VyOS records none (every VyOS login user is
+      read at privilege 15), and OPNsense writes `admins` or `users` by the
+      privilege level and reads no role back.  The account's rights travel as
+      its privilege level.
     references: [vyos-opnsense-surface]
 
   "local_users[].hashed_password":

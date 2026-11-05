@@ -180,6 +180,15 @@ that exists.
 
 ## Local users: the drift is real but it is not one of these keys
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The group an IOS XR `username` block names is not carried.
+> NX-OS is given `role network-admin` at privilege 15 and `role
+> network-operator` below it, chosen from the privilege level.  Every
+> target's capability matrix declares `/local-users/user/role` lossy, and
+> [`cisco_iosxr__cisco_nxos.yaml`](../../../tests/fixtures/cross_vendor_expectations/cisco_iosxr__cisco_nxos.yaml)
+> states what the code does now.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **6 of 14** local accounts now arrive across the 9 cells that populate users. 8 are refused for a secret NX-OS cannot consume (5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt): the render emits a `review:` comment naming the account and no user entry. 6 consumable secrets are carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__cisco_nxos.yaml`.
 

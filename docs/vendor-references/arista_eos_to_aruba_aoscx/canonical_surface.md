@@ -223,6 +223,15 @@ Two separable losses:
 
 ## Finding 5 — passwordless accounts vanish; the hash itself survives
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The role an EOS `username` line names is not carried.
+> AOS-CX is given `group administrators` at privilege 15 and `group
+> operators` below it, chosen from the privilege level.  Every target's
+> capability matrix declares `/local-users/user/role` lossy, and
+> [`arista_eos__aruba_aoscx.yaml`](../../../tests/fixtures/cross_vendor_expectations/arista_eos__aruba_aoscx.yaml)
+> states what the code does now.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 12** local accounts now arrive across the 6 cells that populate users. 9 are refused for a secret AOS-CX cannot consume (7 SHA-512 crypt (`$6$`), 2 MD5 crypt (Cisco type 5)): the render emits a `review:` comment naming the account and no user entry. 3 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__aruba_aoscx.yaml`.
 

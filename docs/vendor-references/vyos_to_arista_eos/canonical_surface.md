@@ -182,6 +182,16 @@ neither declaration ever bites, because there is nothing to carry.
 
 ### 1. Every VyOS user password is re-emitted under EOS's *cleartext* tag
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The VyOS parser records no role (every VyOS login user is
+> read at privilege 15).  EOS is given `role network-admin` at privilege 15
+> and `role network-operator` below it, chosen from the privilege level.
+> Every target's capability matrix declares `/local-users/user/role` lossy,
+> and
+> [`vyos__arista_eos.yaml`](../../../tests/fixtures/cross_vendor_expectations/vyos__arista_eos.yaml)
+> states what the code does now.
+
 This is the most consequential finding on the pair, and it is a clean
 mechanical chain, not an inference.
 

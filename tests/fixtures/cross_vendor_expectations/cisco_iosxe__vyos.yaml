@@ -551,7 +551,9 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Same source-side gap as `local_users[].name` — no user records exist to
-      carry a role.  vyos declares `/local-users/user/role` SUPPORTED.
+      carry a role.  vyos declares `/local-users/user/role` lossy: VyOS
+      writes no role, and an account below privilege 15 is a review comment
+      rather than an administrator.
       One target-side caveat, declared rather than observed: vyos declares
       `/local-users/user/privilege-level` LOSSY, because `system login user`
       accounts have no numeric privilege level in the common case and the

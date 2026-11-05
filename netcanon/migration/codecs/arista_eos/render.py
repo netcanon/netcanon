@@ -42,6 +42,7 @@ from ..._radius_secrets import (
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
+from ..._roles import same_platform
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -439,10 +440,24 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(review)
                 continue
             secret_tag = _ARISTA_SECRET_TYPE[algorithm]
+            # The role is written as it stands (or not at all) only
+            # from a tree an EOS parser read.  From another platform
+            # it is a name EOS does not have, and EOS gives an account
+            # whose role it does not have its default role
+            # (network-operator unless configured otherwise), so the
+            # role is chosen from the privilege level instead, as the
+            # switch prints its own administrator.
+            # :mod:`netcanon.migration._roles`.
+            if same_platform(tree.source_vendor, "arista_eos"):
+                role = user.role
+            elif user.privilege_level >= 15:
+                role = "network-admin"
+            else:
+                role = "network-operator"
             # Name, role and secret are one word each on this line (a
             # user name and a password take no white space); the account
             # is left out whole rather than altered.
-            if splits(user.name) or splits(user.role) or splits(payload):
+            if splits(user.name) or splits(role) or splits(payload):
                 out.append(
                     "! " + left_out(f"username {user.name}", "Arista EOS")
                 )
@@ -450,8 +465,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts = [f"username {user.name}"]
             if user.privilege_level and user.privilege_level != 1:
                 parts.append(f"privilege {user.privilege_level}")
-            if user.role:
-                parts.append(f"role {user.role}")
+            if role:
+                parts.append(f"role {role}")
             parts.append(f"secret {secret_tag} {payload}")
             out.append(" ".join(parts))
         out.append("!")

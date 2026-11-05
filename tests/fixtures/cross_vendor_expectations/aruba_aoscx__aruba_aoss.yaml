@@ -499,13 +499,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on the corpus (see `local_users[].name`), so
-      there is no role on the target to compare; the only drift on this
-      key is the parent record-count collapse, which the audit
-      attributes to `local_users[].name` and reclassifies
-      STRUCTURAL_ONLY here.  On an account that arrives, the role is
-      re-mapped onto the AOS-S two-level vocabulary: `administrators` ->
-      `manager`, `operators` -> `operator`.  Recorded `lossy` for that.
+      A local user's role is a name of the platform that defines it, and
+      AOS-CX and AOS-S are different platforms, so the group an AOS-CX `user`
+      line names is not carried.  AOS-S writes its `manager` account at
+      privilege 15 and its `operator` account below it.
     references: [aoscx-aoss-surface]
 
   "local_users[].hashed_password":

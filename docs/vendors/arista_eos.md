@@ -143,6 +143,11 @@ Canonical mapping:
   surface only when translating to vendors with sub-field drift
   (e.g. per-IP virtual-MAC overrides collapsing onto EOS's single
   chassis-wide virtual-router MAC).
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  It is written as it stands only from a
+  config of EOS.  From another platform the account is given `role
+  network-admin` at privilege 15 and `role network-operator` below it,
+  chosen from the privilege level; the source's role is not carried.
 
 ## What we don't do
 

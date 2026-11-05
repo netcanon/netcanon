@@ -610,19 +610,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on this pair now (see `local_users[].name`), so this
-      corpus no longer measures the role. Up to 0.7.7 the 2 accounts with no
-      stored secret arrived, and the role changed: `fortigate_admins` ->
-      `admin` on 1, `fortigate_ro` -> `admin` on 1, with the companion field
-      moving `1` -> `15` on 2. Mechanism: the vyos parser assigns every
-      `system login user` `role="admin"` and `privilege_level=15`, because
-      VyOS login accounts carry no role or numeric privilege in the common
-      case (vyos declares `/local-users/user/privilege-level` lossy for
-      exactly this). This fails OPEN: a less-privileged account arrives with
-      more authority. Re-apply least privilege on the target before cutover.
-      Accounts refused for their secret vanish with their role and are counted
-      once, under `local_users[].name`; this key is about the value on
-      accounts that arrive, which take that mapping.
+      A local user's role is a name of the platform that defines it, and
+      FortiOS and VyOS are different platforms, so the admin profile a FortiOS
+      `set accprofile` names is not carried.  VyOS writes no role; an account
+      below privilege 15 is a review comment in place of the account, and a
+      job warning, since every VyOS login user has full configuration access
+      and sudo.
     references: [fgt-vyos-surface]
 
   "local_users[].hashed_password":

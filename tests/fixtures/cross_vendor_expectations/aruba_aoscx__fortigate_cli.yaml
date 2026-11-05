@@ -562,15 +562,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on the corpus (see `local_users[].name`), so
-      there is no role on the target to compare; the only drift on this
-      key is the parent record-count collapse, which the audit
-      attributes to `local_users[].name` and reclassifies
-      STRUCTURAL_ONLY here.  On an account that arrives, FortiOS carries
-      an access profile: privilege 15 renders `super_admin`, anything
-      else the canonical role (or `prof_admin`), and the parser reads
-      the profile back as the role, so `administrators` comes back
-      `super_admin`.  Recorded `lossy` for that.
+      A local user's role is a name of the platform that defines it, and
+      AOS-CX and FortiOS are different platforms, so the group an AOS-CX
+      `user` line names is not carried.  FortiOS is given `accprofile
+      super_admin` at privilege 15; an account below it is a review comment in
+      place of the account, and a job warning, since FortiOS documents no
+      built-in admin profile below super_admin.
     references: [aoscx-fortigate-surface]
 
   "local_users[].hashed_password":

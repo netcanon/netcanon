@@ -40,8 +40,8 @@ via `dropped_tier3_sections`, **not** translated.
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
 translatable with caveats:
 
-- Local users — `system login user` (name + role +
-  `encrypted-password` hash).  A user with no `authentication` is a
+- Local users — `system login user` (name + `encrypted-password`
+  hash; VyOS states no role).  A user with no `authentication` is a
   `review:` line on every target, VyOS included: no target writes an
   account with no password
 - LAGs — `interfaces bonding bondN` (members + `lag-member-of`
@@ -88,9 +88,14 @@ translatable with caveats:
   the netdev name regenerated `vxlan<index>` on render (deterministic;
   same-vendor round-trip stable, cross-vendor advisory).
 - **`/local-users/user/privilege-level`** — VyOS login users have no
-  numeric privilege in the common case; the codec maps every login
-  user to privilege 15 / role `admin`.  The `encrypted-password` hash
+  numeric privilege in the common case; the codec reads every login
+  user as privilege 15 with no role.  The `encrypted-password` hash
   round-trips verbatim same-vendor; cross-vendor requires re-keying.
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  VyOS states no role: every login user on
+  VyOS 1.3 to 1.5 has full configuration access and sudo.  An account
+  at privilege 15 is written without its role, and one below it is a
+  review comment rather than an administrator.
 - **SNMPv3 `auth-passphrase` / `engine-id`** — v3 USM keys are opaque
   `encrypted-password` blobs (re-key cross-vendor); VyOS declares a
   single config-wide `engineid`, which the codec maps onto every v3

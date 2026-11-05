@@ -363,14 +363,12 @@ per_field_expectation:
     references: [nxos-iosxecli-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      No account arrives on this pair (see `local_users[].name`), so there is no
-      role on the target to compare. Recorded `good` rather than `lossy`: the
-      only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and NX-OS
+      and IOS-XE are different platforms, so the role an NX-OS `username` line
+      names is not carried.  IOS-XE writes the account's privilege level and
+      no role.
     references: [nxos-iosxecli-surface]
 
   radius_servers:

@@ -144,6 +144,12 @@ Canonical mapping:
 
 ## Lossy paths
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  A login class is written as it stands
+  only from a config of Junos.  From another platform the account is
+  given `super-user` at privilege 15, `operator` from 5 to 14 and
+  `read-only` below 5, chosen from the privilege level; the source's
+  role is not carried.
 - **`/routing-instances/instance`** — VRFs translate cleanly between
   Junos and Arista EOS; sub-field drift exists when targeting
   Cisco IOS-XE (per-VRF static-route VRF discriminator drops on

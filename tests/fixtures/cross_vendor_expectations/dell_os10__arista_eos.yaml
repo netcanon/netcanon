@@ -221,10 +221,12 @@ per_field_expectation:
     references: [os10-eos-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and OS10
+      and EOS are different platforms, so the role an OS10 `username` line
+      names is not carried.  EOS is given `role network-admin` at privilege 15
+      and `role network-operator` below it, chosen from the privilege level.
     references: [os10-eos-surface]
 
   ntp_servers:

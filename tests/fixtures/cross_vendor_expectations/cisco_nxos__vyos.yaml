@@ -572,48 +572,23 @@ per_field_expectation:
   # -- Identity -- the account and its secret arrive; its authority does not --
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account arrives: 10 user records across the 9 cells that populate
-      local users, 10 out, same names, zero dropped on any cell.  Both
-      matrices declare `/local-users/user/name` supported, and the render
-      emits `system { login { user <name> { ... } } }` for each.
-      Worth stating because the neighbouring pairs differ: on
-      `cisco_iosxr__arista_eos.yaml` accounts vanish based on their secret
-      type.  Nothing of the sort happens here — no account is filtered by
-      credential form.
+    disposition: lossy
+    reason: >
+      An account below privilege 15 is left out on VyOS, with a review comment
+      in its place and a job warning: every VyOS login user has full
+      configuration access and sudo, so written there such an account would be
+      an administrator.  One cell shows it, an NX-OS `network-operator`
+      account.
     references: [nxos-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on every populated record: 10 of 10 user records across 9 cells.
-      Nine go `network-admin` -> `admin`; one goes `network-operator` ->
-      `admin`.
-      The mechanism is a constant, not a mapping table.  The vyos render emits
-      `user <name> { authentication { encrypted-password <hash> } }` and no
-      role or level at all — the VyOS `system login user` grammar carries none
-      in the common case — and on re-parse the vyos parser assigns every login
-      user `role="admin"` and `privilege_level=15` unconditionally.
-      The consequence is a FAIL-OPEN, and it is the finding to act on: the
-      corpus's one read-only account (`netops` on `kitchen_sink.cfg`) goes in
-      with role `network-operator` and privilege level 1 and comes back with
-      role `admin` and privilege level 15.  Measured on exactly 1 record on 1
-      cell — the other 9 were already administrators, so only their role
-      STRING changes.  Role and privilege level are ONE mechanism; the
-      privilege-level side is not cited as separate evidence.
-      Recorded `lossy` rather than `unsupported`: the record survives with its
-      name and its stored secret, and only the value collapses.
-      Before cutover, diff the source account list against the render and
-      re-apply least privilege by hand.  A read-only operator silently
-      promoted to administrator is a worse outcome than an account that fails
-      to arrive.
-      Standing observation: BOTH matrices declare `/local-users/user/role`
-      supported while it drifts on 10 of 10 records.  The adjacent
-      `/local-users/user/privilege-level` IS declared lossy on both sides,
-      with vyos's reason describing the same collapse.  The role path is
-      under-declared — a codec change, not a fix for this file.  Independently
-      reproduced on `aruba_aoscx__vyos.yaml`.
+      A local user's role is a name of the platform that defines it, and NX-OS
+      and VyOS are different platforms, so the role an NX-OS `username` line
+      names is not carried.  VyOS writes no role; an account below privilege
+      15 is a review comment in place of the account, and a job warning, since
+      every VyOS login user has full configuration access and sudo.
     references: [nxos-vyos-surface]
 
   "local_users[].hashed_password":

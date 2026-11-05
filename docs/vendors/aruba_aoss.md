@@ -241,6 +241,11 @@ See per-codec `CapabilityMatrix.lossy` declarations in the codec
 source — most fields parse + render cleanly within the documented
 surface.
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  AOS-S has two accounts, `manager` and
+  `operator`, and chooses between them by the privilege level (15 is
+  `manager`) from any source; a role the source names is not carried.
+
 ## What we don't do
 
 [Tier 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered):

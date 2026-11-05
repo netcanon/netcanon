@@ -445,14 +445,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on the corpus (see `local_users[].name`), so there is
-      no role on the target to compare; the drift on this key is the parent
-      record-count collapse.  On an account that arrives, the role is the AOS-S
-      account of its privilege level: 15 is `manager` and any other `operator`,
-      so `root-lr` lands on the manager account and a finer IOS-XR task-group
-      distinction collapses.  An account that was deliberately scoped on IOS-XR
-      can therefore arrive with full management rights.  Review the privilege
-      of every account after cutover.
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and AOS-S are different platforms, so the group an IOS XR `username`
+      block names is not carried.  AOS-S writes its `manager` account at
+      privilege 15 and its `operator` account below it.
     references: [iosxr-aoss-surface]
 
   "local_users[].hashed_password":

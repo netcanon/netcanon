@@ -550,14 +550,14 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      No account arrives on this pair (see `local_users[].name`), so there is no
-      role on the target to compare. Recorded `good` rather than `lossy`: the
-      only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+    disposition: lossy
+    reason: >
+      OPNsense states no role for a local account (OPNsense puts a user in a
+      group by the `<group>` that lists it as a `<member>`, which is not read,
+      and `<groupname>` gives the privilege level only), so the source has
+      none to carry, and the output reads back with the target's own.  NX-OS
+      is given `role network-admin` at privilege 15 and `role
+      network-operator` below it, chosen from the privilege level.
     references: [opnsense-nxos-surface]
 
   # -- EVPN-VXLAN fabric + VRF surface: structurally absent on the source --

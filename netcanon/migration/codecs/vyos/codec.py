@@ -159,7 +159,6 @@ class VyOSCodec(CodecBase):
             "/routing/static-route",
             # ── Phase 2: local users (`system login user`) ──
             "/local-users/user/name",
-            "/local-users/user/role",
             "/local-users/user/hashed-password",
             # ── Phase 2: NTP servers (`system`/`service` ntp) ──
             "/system/ntp-server",
@@ -184,6 +183,17 @@ class VyOSCodec(CodecBase):
             "/vxlan-vnis/udp-port",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  VyOS states no role: every login user on VyOS 1.3 to"
+                    " 1.5 has full configuration access and sudo.  An account "
+                    "at privilege 15 is written without its role, and one below"
+                    " it is a review comment rather than an administrator."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(
@@ -254,8 +264,8 @@ class VyOSCodec(CodecBase):
                 reason=(
                     "VyOS `system login user` accounts have no numeric "
                     "privilege level in the common case (configured users "
-                    "have full operator/admin access); the codec maps every "
-                    "login user to privilege 15 / role `admin`.  The "
+                    "have full operator/admin access); the codec reads every "
+                    "login user as privilege 15 with no role.  The "
                     "`encrypted-password` hash round-trips verbatim "
                     "same-vendor; cross-vendor migration requires re-keying."
                 ),

@@ -405,19 +405,13 @@ per_field_expectation:
     references: [iosxr-junos-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      Deliberately `good` even though the mesh records drift on 4 cells.  That
-      drift is purely the parent list changing length — the dropped accounts
-      described under `local_users[].name`, which owns the structural signal —
-      and the reconciler's structural-only collapse means a loss declared here
-      could never be evidenced by any cell.  On every account that SURVIVES the
-      role is intact: IOS-XR `group root-lr` / `group operator` map onto Junos
-      `class root-lr` / `class operator` unchanged on all 5 cells that preserve
-      the list.  Separately, `privilege_level` re-parses as 1 regardless of its
-      source value because Junos carries authorisation in `class`; there is no
-      audited key for it, so that drift is recorded in the reference note
-      rather than declared here.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and Junos are different platforms, so the group an IOS XR `username`
+      block names is not carried.  Junos is given `class super-user` at
+      privilege 15, `class operator` from 5 to 14 and `class read-only` below
+      5, chosen from the privilege level.
     references: [iosxr-junos-surface]
 
   "local_users[].hashed_password":

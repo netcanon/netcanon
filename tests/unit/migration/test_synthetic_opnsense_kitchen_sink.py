@@ -171,14 +171,13 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     user_names = [u.name for u in intent.local_users]
     assert user_names == ["root", "netops", "readonly"]
     by_user = {u.name: u for u in intent.local_users}
-    # admins group => privilege 15 + role admin
+    # admins group => privilege 15; OPNsense records no role
+    # (netcanon/migration/_roles.py).
     assert by_user["root"].privilege_level == 15
-    assert by_user["root"].role == "admin"
     assert by_user["netops"].privilege_level == 15
-    assert by_user["netops"].role == "admin"
-    # users group => privilege 1 + role user
+    # users group => privilege 1
     assert by_user["readonly"].privilege_level == 1
-    assert by_user["readonly"].role == "user"
+    assert {u.role for u in intent.local_users} == {""}
     # Hashes are tagged with the bcrypt: prefix per parser convention.
     for user in intent.local_users:
         assert user.hashed_password.startswith("bcrypt:$2b$")

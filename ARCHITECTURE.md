@@ -841,6 +841,23 @@ account on every target, and `CodecBase.render_warnings` gives the
 job a warning for each, worded with the codec's
 `local_user_target_label`.
 
+**A role crosses only within a platform** (`netcanon/migration/_roles.py`).
+A local user's role is a name the device looks up among the roles it
+has, so a render path writes `CanonicalLocalUser.role` only where
+`same_platform(tree.source_vendor, target)` holds: the tree's
+`source_vendor` is the target codec's `vendor_id` (IOS-XE NETCONF
+and CLI share one).  Everywhere else the target chooses one of its
+own built-in roles from `privilege_level`, which every parser states
+on one scale (15 is an administrator).  A tree with no
+`source_vendor` has no platform, so its role is not written either.
+A target with no built-in role below an administrator
+(`BELOW_ADMIN_WHY`: VyOS, FortiOS) asks `below_admin(...)` and writes
+`format_below_admin_comment(...)` in place of such an account, and
+`below_admin_warnings(...)` gives the job a warning for each, so that
+no account the source kept below an administrator becomes one.  The
+parsers record the role their config names, or none.  Every target's
+capability matrix declares `/local-users/user/role` lossy.
+
 **RADIUS shared-secret portability policy**
 (`netcanon/migration/_radius_secrets.py`).  The third credential
 surface, sibling to `_user_secrets.py` (password hashes) and

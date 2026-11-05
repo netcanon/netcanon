@@ -270,13 +270,12 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      On the 4 accounts that survive, the role changes: `sysadmin` ->
-      `super_admin` on 4. Mechanism: FortiOS carries an access profile:
-      privilege 15 renders `super_admin`, anything else the canonical role (or
-      `prof_admin`), and the parser reads the profile back as the role. Accounts
-      refused for their secret vanish with their role and are counted once,
-      under `local_users[].name`; this key is about the value on accounts that
-      survive.
+      A local user's role is a name of the platform that defines it, and OS10
+      and FortiOS are different platforms, so the role an OS10 `username` line
+      names is not carried.  FortiOS is given `accprofile super_admin` at
+      privilege 15; an account below it is a review comment in place of the
+      account, and a job warning, since FortiOS documents no built-in admin
+      profile below super_admin.
     references: [os10-fortigate-surface]
 
   ntp_servers:

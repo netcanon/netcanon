@@ -163,6 +163,14 @@ Declared `unsupported` — the loss is reported, never silent:
 Declared `lossy` means: translated, but something measurable is left
 behind.  Never silent — each one is reported in the migration diff.
 
+**Local users** — a role is the platform's own:
+
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  It is written as it stands only from a
+  config of OS10.  From another platform the account is given `role
+  sysadmin` at privilege 15 and `role netoperator` below it, chosen
+  from the privilege level; the source's role is not carried.
+
 **VRRP sub-fields** — the group itself round-trips; these do not:
 
 - **`…/vrrp-groups/group/mode`** — a cross-family source (HSRP, CARP)

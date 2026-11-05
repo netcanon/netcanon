@@ -171,7 +171,6 @@ class ArubaAOSCXCodec(CodecBase):
             # kind-`lag` interface re-parses as static; audit bb47f21 T0-1).
             # ── Phase 2: local users (`user X group G password ciphertext`) ──
             "/local-users/user/name",
-            "/local-users/user/role",
             "/local-users/user/hashed-password",
             # ── Phase 2b: SNMP (v2c community + v3 USM) ──
             "/snmp/community",
@@ -188,6 +187,18 @@ class ArubaAOSCXCodec(CodecBase):
             "/vxlan-vnis/vni",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  It is written as it stands only from a config of "
+                    "AOS-CX.  From another platform the account is given `group"
+                    " administrators` at privilege 15 and `group operators` "
+                    "below it, chosen from the privilege level; the source's "
+                    "role is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/lags/lag/mode",
                 reason=(

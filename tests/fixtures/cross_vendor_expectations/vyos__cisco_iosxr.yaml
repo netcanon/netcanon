@@ -541,20 +541,13 @@ per_field_expectation:
     references: [vyos-iosxr-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      Preserved on all 16 records that arrive — `admin` in, `admin` out,
-      zero drift on any cell.  Both matrices declare `/local-users/user/role` supported; the
-      render emits ` group <role>` and the IOS-XR parser maps the task-group
-      back to `role` verbatim.
-      One thing this key does NOT cover, said here so the `good` is not read
-      as broader than it is: the numeric `privilege_level` DOES degrade, 15 ->
-      1 on all 16 records that arrive, because the IOS-XR parser maps only
-      `root-lr` and
-      `root-system` to privilege 15.  The audited key set has no key for
-      `privilege_level`, so it is documented in the reference doc rather than
-      claimed here.  An operator diffing roles will see nothing wrong; check
-      privilege on the target too.
+    disposition: lossy
+    reason: >
+      VyOS states no role for a local account (every VyOS login user is read
+      at privilege 15), so the source has none to carry, and the output reads
+      back with the target's own.  IOS XR is given `group root-lr` at
+      privilege 15 and `group operator` below it, chosen from the privilege
+      level.
     references: [vyos-iosxr-surface]
 
   "local_users[].hashed_password":

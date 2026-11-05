@@ -1410,7 +1410,8 @@ class TestCrossVendorHashGate:
             ],
         )
         out = AristaEOSCodec().render(intent)
-        assert "username legacy secret 5 $1$foo$barbazquux" in out
+        # A tree of no platform: the role is chosen from the level.
+        assert "username legacy role network-operator secret 5 $1$foo$barbazquux" in out
         assert "review:" not in out
 
     def test_arista_plaintext_emits_secret_zero(self):
@@ -1428,7 +1429,8 @@ class TestCrossVendorHashGate:
             ],
         )
         out = AristaEOSCodec().render(intent)
-        assert "username seeded secret 0 hunter2" in out
+        # A tree of no platform: the role is chosen from the level.
+        assert "username seeded role network-operator secret 0 hunter2" in out
 
 
 # ---------------------------------------------------------------------------
@@ -1651,7 +1653,8 @@ class TestHashGateFullDrop:
             ],
         )
         out = AristaEOSCodec().render(intent)
-        assert "username seeded secret 0 hunter2" in out
+        # A tree of no platform: the role is chosen from the level.
+        assert "username seeded role network-operator secret 0 hunter2" in out
         assert "review:" not in out
 
 

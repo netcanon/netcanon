@@ -207,6 +207,16 @@ recorded where it is measured.
 
 ### 2. Every local account is promoted to `admin` — a fail-open
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The role an EOS `username` line names is not carried.  VyOS
+> writes no role; an account below privilege 15 is a review comment in place
+> of the account, and a job warning, since every VyOS login user has full
+> configuration access and sudo.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`arista_eos__vyos.yaml`](../../../tests/fixtures/cross_vendor_expectations/arista_eos__vyos.yaml)
+> states what the code does now.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **12 of 12** local accounts now arrive across the 6 cells that populate users. Surviving secrets are re-wrapped into the target's native form (7 SHA-512 crypt (`$6$`) as `encrypted-password`, 2 MD5 crypt (Cisco type 5) as `encrypted-password`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__vyos.yaml`.
 

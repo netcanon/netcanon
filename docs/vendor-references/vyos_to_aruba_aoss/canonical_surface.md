@@ -209,6 +209,15 @@ no key material.
 
 ### 2. An account with no password disappears entirely
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The VyOS parser records no role (every VyOS login user is
+> read at privilege 15).  AOS-S writes its `manager` account at privilege 15
+> and its `operator` account below it.  Every target's capability matrix
+> declares `/local-users/user/role` lossy, and
+> [`vyos__aruba_aoss.yaml`](../../../tests/fixtures/cross_vendor_expectations/vyos__aruba_aoss.yaml)
+> states what the code does now.
+
 One account vanishes across the corpus: `netadmin` on
 `houdev_vyos_dhcpv6_pd_client.conf`, the only user on that cell, whose canonical
 `hashed_password` is the **empty string**. The render still emits a line —

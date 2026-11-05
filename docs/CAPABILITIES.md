@@ -145,7 +145,9 @@ lossy where vendors disagree on representation.
   that the target's CLI cannot consume surface as comment-form
   review lines (see "Hash-portability policy" below) — **never** as
   a plaintext fallback; an account with no password is such a line
-  too, never an account
+  too, never an account.  A role is carried only between two codecs
+  of one platform; onto another the target chooses its own from the
+  privilege level (item 8 of that policy)
 * `radius_servers`
 * `dhcp_servers` (per-pool — network, gateway, range, options)
 * `vxlan_vnis`, `evpn_type5_routes` (shipped schema-first; `vxlan_vnis`
@@ -267,6 +269,7 @@ text").
 | `/firewall` | Unsupported | Zone-based firewall (zone-pair / policy-map type inspect) is Tier 3. |
 | `/interfaces/interface/dot1q-native` | Supported | `encapsulation dot1Q N native` -- the sub-interface that takes the untagged frames of its port -- is read and written, and reaches Junos as `native-vlan-id N` with `flexible-vlan-tagging`.  What such a sub-interface sends untagged is not established.  A second one on a port (a device prints none: "only one subinterface can have the encapsulation as native") is written without `native`, with a row.  Every other target reports `/interfaces/interface/dot1q-native` unsupported, and the job is `partial`. |
 | `/nat` | Unsupported | NAT is Tier 3 — semantics are tightly coupled to interface zone designations. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  IOS-XE writes a local account's privilege level and no role, from any source; a role the source names is not carried. |
 
 #### `cisco_iosxe` (NETCONF / OpenConfig, bidirectional Phase 0.5 stub)
 
@@ -334,6 +337,7 @@ gotchas").
 | `/routing/bgp` | Unsupported | BGP neighbour tables / redistribution / address-families parse-and-ignore in v1. |
 | `/routing/ospf` | Unsupported | OSPF areas / redistribution / per-interface cost tuning parse-and-ignore in v1. |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of EOS.  From another platform the account is given `role network-admin` at privilege 15 and `role network-operator` below it, chosen from the privilege level; the source's role is not carried. |
 
 #### `aruba_aoss` (bidirectional)
 
@@ -361,6 +365,7 @@ text").
 | `/snmp/v3-user/auth-passphrase` | Lossy | `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's passphrase and AOS-S derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmpv3 user` line, and the `snmpv3 group` binding drops with it) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from AOS-S itself; re-key the v3 user on the target. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — AOS-S is a campus L2/L3 codec. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  AOS-S has two accounts, `manager` and `operator`, and chooses between them by the privilege level (15 is `manager`) from any source; a role the source names is not carried. |
 
 #### `juniper_junos` (bidirectional)
 
@@ -381,6 +386,7 @@ text").
 | `/interfaces/interface/dot1q-native` | Supported | A routed device's `native-vlan-id N` names the unit of `vlan-id N` that takes its untagged frames; it is read onto that unit and written back with `flexible-vlan-tagging`, and reaches IOS-XE as `encapsulation dot1Q N native`.  A `native-vlan-id` that names no unit of one tag is not translated, with a row.  Every other target reports `/interfaces/interface/dot1q-native` unsupported, and the job is `partial`. |
 | `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  A login class is written as it stands only from a config of Junos.  From another platform the account is given `super-user` at privilege 15, `operator` from 5 to 14 and `read-only` below 5, chosen from the privilege level; the source's role is not carried. |
 
 #### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
 
@@ -414,6 +420,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — a foreign privacy key is refused with the user; a portable passphrase is emitted without the prefix. |
 | `/nat/rule` | Unsupported | FortiGate NAT lives inside firewall policy and address / VIP objects — not auto-translatable. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — FortiGate is a firewall codec. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  An admin profile is written as it stands only from a config of a FortiGate.  From another platform an account at privilege 15 is given `super_admin`, and one below it is a review comment, since FortiOS documents no built-in profile below super_admin (prof_admin can change the configuration); the source's role is not carried. |
 
 #### `mikrotik_routeros` (bidirectional)
 
@@ -434,6 +441,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from RouterOS itself. |
 | `/nat/rule` | Unsupported | NAT rules are Tier 3 — informational only. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | RouterOS VXLAN exists but is rare in canonical scope and not modelled in v1. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  RouterOS writes `group=full` at privilege 15, `group=write` from 10 to 14 and `group=read` below 10, chosen from the privilege level from any source, a RouterOS one included: a custom group is read as privilege 1 and written `read`. |
 
 #### `opnsense` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
 
@@ -455,6 +463,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
 | `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — OPNsense is a firewall codec. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  OPNsense writes `<groupname>admins</groupname>` at privilege 15 and `users` below it, chosen from the privilege level from any source, an OPNsense one included: a custom group is not carried. |
 
 #### `cisco_nxos` (Cisco NX-OS, bidirectional, certified)
 
@@ -480,6 +489,7 @@ text").  The lossy / unsupported exceptions:
 | `/system/raw-sections/vdc` | Lossy | `vdc <name> id N / limit-resource …` (N7K virtualisation) has no canonical primitive; the source block is discarded and a default single-VDC `vdc <hostname> id 1` wrapper is synthesised on render. |
 | `/system/raw-sections/features` | Lossy | `feature <name>` lines are derived on render from the canonical-tree shape (any SVI → `feature interface-vlan`, etc).  Source features not motivated by a canonical surface (`feature scp-server`, `feature telnet`) are dropped; re-authorise on the target. |
 | `/local-users/user/privilege-level` | Lossy | NX-OS uses a named `role` (network-admin / network-operator / custom), not a numeric privilege.  network-admin / vdc-admin → 15, everything else → 1.  The named role round-trips losslessly same-vendor. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of NX-OS.  From another platform the account is given `role network-admin` at privilege 15 and `role network-operator` below it, chosen from the privilege level; the source's role is not carried. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | The trailing `localizedkey` keyword is a CLAIM that the digest is already localised against this agent's engine ID, so it is both read and re-emitted per line: a key from another agent is refused (review comment, no `snmp-server user` line), a genuine passphrase renders WITHOUT the keyword and the Nexus localises it on commit, and a localised digest keeps its keyword.  NX-OS 10.x `localizedV2key` is normalised to the older `localizedkey` form on render.  Re-key SNMPv3 users on the target across OS-version boundaries. |
 | `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
 | `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled. |
@@ -538,6 +548,7 @@ banner is text").  The lossy / unsupported exceptions:
 | `/access-list/{extended,ipv6}` | Unsupported | `ipv4 access-list NAME / N permit …` is Tier-3 — auto-translating ACL semantics risks subtly-permissive rules (parity with IOS-XE). |
 | `/firewall` | Unsupported | IOS-XR firewall features are Tier-3 stateful surfaces (parity with IOS-XE). |
 | `/nat` | Unsupported | IOS-XR NAT (`nat64` / `cgnat`) is Tier-3. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of IOS XR.  From another platform the account is given `group root-lr` at privilege 15 and `group operator` below it, chosen from the privilege level; the source's role is not carried. |
 
 #### `aruba_aoscx` (Aruba AOS-CX, bidirectional, certified)
 
@@ -565,6 +576,7 @@ undetected (see [`vendors/aruba_aoscx.md`](vendors/aruba_aoscx.md) §
 | `/interfaces/interface/config/type` | Lossy | No IANA ifType is declared; inferred from the name shape (`1/1/1` → ethernetCsmacd, `vlan N` → l3ipvlan, `lag N` → ieee8023adLag, `loopback N` → softwareLoopback, `mgmt` → ethernetCsmacd, `vxlan N` → tunnel).  Best-effort. |
 | `/system/raw-sections/version-banner` | Lossy | The `!Version ArubaOS-CX <release>` banner + service footer lines (`ssh server`, `https-server`, `clock`, `ntp`, `spanning-tree`, `system interface-group`) are discarded on parse and a synthesised banner is emitted on render; re-apply management-plane services on the target. |
 | `/local-users/user/privilege-level` | Lossy | Named `group` (administrators / operators / auditors / custom), not numeric: administrators → 15, everything else → 1.  The `password ciphertext` blob is AES-encrypted with the device key (portable same-device only); cross-vendor migration requires re-keying. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of AOS-CX.  From another platform the account is given `group administrators` at privilege 15 and `group operators` below it, chosen from the privilege level; the source's role is not carried. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | Two distinct losses.  (1) AOS-CX renders SHA-1 auth / AES-128 priv only, so a stronger source algorithm is DOWNGRADED — a crypto change, not a re-key.  (2) `auth-pass ciphertext <blob>` claims the value is encrypted under this device's key, true only of a key this switch produced, so a key belonging to another agent is refused (review comment, no `snmpv3 user` line).  A source passphrase is portable and renders through `auth-pass plaintext`, which the switch encrypts itself; the parser already accepts both keywords, so the recovered form round-trips. |
 | `/vxlan-vnis/source-interface` | Lossy | AOS-CX states the VTEP source as an IPv4 *address* (`interface vxlan 1 / source ip <X>`), not an interface name (NX-OS / Arista `source-interface loopbackN`).  Stored verbatim in the opaque `source_interface` field; a cross-vendor source carrying an interface *name* has no `source ip` form so the line is omitted on render (VLAN↔VNI bindings still emit).  Set the loopback→IP mapping on the target manually. |
 | `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
@@ -591,7 +603,8 @@ curly-brace form.  The lossy / unsupported exceptions:
 |---|---|---|
 | `/interfaces/interface/config/type` | Lossy | No IANA ifType; inferred from the name shape (`ethN` → ethernetCsmacd, `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag).  Best-effort. |
 | `/system/raw-sections/version-banner` | Lossy | The `// vyos-config-version` trailer + not-yet-modelled `service` / `system` management blocks (SSH / syslog / DNS) are discarded on parse and a synthesised trailer is emitted on render; re-apply those services on the target. |
-| `/local-users/user/privilege-level` | Lossy | `system login user` accounts have no numeric privilege in the common case; every login user maps to privilege 15 / role `admin`.  The `encrypted-password` hash round-trips verbatim same-vendor; cross-vendor migration requires re-keying. |
+| `/local-users/user/privilege-level` | Lossy | `system login user` accounts have no numeric privilege in the common case; every login user is read as privilege 15 with no role.  The `encrypted-password` hash round-trips verbatim same-vendor; cross-vendor migration requires re-keying. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  VyOS states no role: every login user on VyOS 1.3 to 1.5 has full configuration access and sudo.  An account at privilege 15 is written without its role, and one below it is a review comment rather than an administrator. |
 | `/lags/lag/mode` | Lossy | Bonding `mode 802.3ad` (LACP) → `active`; the non-LACP modes (`active-backup` / `balance-rr` / `balance-xor` / …) collapse to `static` (the balancing algorithm is dropped — re-select on the target). |
 | `/snmp/v3-user/auth-passphrase` | Lossy | v3 USM auth/privacy keys carry one of two leaves under both `auth` and `privacy`: `encrypted-password` (localised against VyOS's own engine ID) or `plaintext-password` (VyOS hashes it on commit).  Both are parsed — `plaintext-password` was previously dropped on the floor, building the user with an empty key — and each is re-emitted through the leaf matching its recorded kind, so a passphrase is never relabelled as this agent's own localised key.  Round-trips verbatim same-vendor; cross-vendor migration requires re-keying (vendor-specific salts), and a foreign key is never accepted INTO VyOS. |
 | `/snmp/v3-user/engine-id` | Lossy | VyOS declares a single config-wide `engineid` for the whole agent; the canonical model carries it per-user, so the one value maps onto every v3 user (and a single `engineid` is emitted when the users share one). |
@@ -665,6 +678,7 @@ text").  The lossy / unsupported exceptions:
 | `/firewall` | Unsupported | Tier-3. |
 | `/nat` | Unsupported | OS10 does not host typical edge NAT. |
 | `/qos` | Unsupported | QoS / DCB is Tier-3 — too platform-specific to auto-translate. |
+| `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of OS10.  From another platform the account is given `role sysadmin` at privilege 15 and `role netoperator` below it, chosen from the privilege level; the source's role is not carried. |
 
 
 ### B. Tier-3 sections detected banner
@@ -872,6 +886,42 @@ in rendered output find every such site.
      `<user>` with no `<password>`, a VyOS user with no
      `authentication` and every user of a RouterOS export, which
      prints no passwords, are added on the device by hand.
+  8. A role is a name that a device looks up among the roles it
+     has (EOS, NX-OS and OS10 `role`, AOS-CX and IOS XR `group`,
+     Junos `class`, FortiOS `accprofile`), so it crosses only
+     between two codecs of one platform
+     ([`_roles.py`](../netcanon/migration/_roles.py)): the source's
+     role is written where the tree's `source_vendor` is the
+     target's `vendor_id`, IOS-XE NETCONF and CLI being one
+     platform.  Onto any other platform the target chooses one of
+     its built-in roles from the privilege level, 15 being an
+     administrator: EOS and NX-OS `network-admin` or
+     `network-operator`, OS10 `sysadmin` or `netoperator`, AOS-CX
+     `administrators` or `operators`, IOS XR `root-lr` or
+     `operator`, Junos `super-user`, `operator` (5 to 14) or
+     `read-only`.  AOS-S, IOS-XE, RouterOS and OPNsense choose from
+     the privilege level whatever the source, their own included.
+     VyOS has no role below an administrator (every login user has
+     full configuration access and sudo), and FortiOS documents no
+     built-in admin profile below `super_admin`, so there an
+     account below 15 is left out, with a warning in the job and a
+     review line in its place:
+
+         # user "<name>" -- review: the source gives this account
+         privilege level 1, below an administrator, and FortiOS
+         documents no built-in admin profile below super_admin
+         (prof_admin can change the configuration); it is left
+         out: add it on the device with the rights it should have
+
+     An account of a FortiGate keeps the profile it names.  The
+     parsers record the role their config names, or none: IOS-XE
+     CLI, VyOS and OPNsense record none (IOS-XE, RouterOS, OPNsense
+     and VyOS used to make one up from the privilege level).
+     Seven renderers used to write the source's role as it stood,
+     whatever platform it came from, and a role another platform
+     names is one the target does not ship, or ships with rights
+     of its own.  `/local-users/user/role` is lossy on every public
+     codec that writes local users (IOS-XE NETCONF writes none).
 
 * **SNMPv3 USM key portability**
   ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth

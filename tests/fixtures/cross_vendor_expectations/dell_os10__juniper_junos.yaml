@@ -247,13 +247,13 @@ per_field_expectation:
     references: [os10-junos-surface]
 
   local_users[].role:
-    disposition: good
-    note: >
-      An account that arrives keeps its role: 2 of 2 on the kitchen
-      sink.  On the two Azure Local captures no account arrives (see
-      `local_users`); the only drift on this key there is the parent
-      record-count collapse, which the audit attributes to
-      `local_users[].hashed_password` and reclassifies STRUCTURAL_ONLY.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and OS10
+      and Junos are different platforms, so the role an OS10 `username` line
+      names is not carried.  Junos is given `class super-user` at privilege
+      15, `class operator` from 5 to 14 and `class read-only` below 5, chosen
+      from the privilege level.
     references: [os10-junos-surface]
 
   ntp_servers:

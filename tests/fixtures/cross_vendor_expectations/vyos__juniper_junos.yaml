@@ -572,21 +572,13 @@ per_field_expectation:
     references: [vyos-junos-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      Role is preserved on all 16 records that arrive — zero drift on any
-      cell.  Every
-      account in the corpus is `admin`, rendered as
-      `set system login user <name> class admin`, so coverage is one role
-      value wide and this file says so rather than claiming the whole role
-      surface is proven.  Both matrices declare `/local-users/user/role`
-      supported.
-      Adjacent and NOT scored by this key: the separate
-      `local_users[].privilege_level` scalar goes 15 -> 1 on all 16 records
-      that arrive.
-      vyos already declares `/local-users/user/privilege-level` lossy on its
-      own side.  It is recorded in the reference doc so the next reader does
-      not re-hunt it; no expectation key on this pair covers it.
+    disposition: lossy
+    reason: >
+      VyOS states no role for a local account (every VyOS login user is read
+      at privilege 15), so the source has none to carry, and the output reads
+      back with the target's own.  Junos is given `class super-user` at
+      privilege 15, `class operator` from 5 to 14 and `class read-only` below
+      5, chosen from the privilege level.
     references: [vyos-junos-surface]
 
   "local_users[].hashed_password":

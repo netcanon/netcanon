@@ -715,11 +715,14 @@ class TestPhase2bSNMPUsers:
         for path in [
             "/snmp/community", "/snmp/location", "/snmp/contact",
             "/snmp/trap-host", "/snmp/v3-user",
-            "/local-users/user/name", "/local-users/user/role",
+            "/local-users/user/name",
             "/local-users/user/hashed-password",
         ]:
             assert caps.classify(path) == "supported", path
         for path in [
+            # A role crosses only within a platform
+            # (netcanon/migration/_roles.py).
+            "/local-users/user/role",
             "/local-users/user/privilege-level",
             "/snmp/v3-user/auth-passphrase",
             "/snmp/v3-user/engine-id",

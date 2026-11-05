@@ -169,7 +169,7 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     assert len(intent.local_users) == 2
     user_by_name = {u.name: u for u in intent.local_users}
     assert user_by_name["vyos"].hashed_password == "$6$FAKEKITCHENSINKHASHvyos"
-    assert user_by_name["vyos"].role == "admin"
+    assert user_by_name["vyos"].role == ""   # VyOS states no role
     assert user_by_name["vyos"].privilege_level == 15
     assert user_by_name["netops"].hashed_password == "$6$FAKEKITCHENSINKHASHnetops"
 

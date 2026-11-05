@@ -753,9 +753,11 @@ class TestRenderUsers:
         assert "set system login user auditor class read-only" in out
 
     def test_render_explicit_role_wins_over_privilege(self):
-        """A role like ``super-user`` on the canonical user takes
-        precedence over the privilege-to-role fallback."""
+        """A class like ``super-user`` on a tree a Junos parser read
+        takes precedence over the privilege-to-role fallback; from any
+        other platform it is not carried (netcanon/migration/_roles.py)."""
         intent = CanonicalIntent(
+            source_vendor="juniper_junos",
             local_users=[
                 CanonicalLocalUser(
                     name="admin",

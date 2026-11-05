@@ -165,6 +165,17 @@ class ArubaAOSSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  AOS-S has two accounts, `manager` and `operator`, "
+                    "and chooses between them by the privilege level (15 is "
+                    "`manager`) from any source; a role the source names is not"
+                    " carried."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/local-users/user/privilege-level",
                 reason=(
                     "AOS-S has two accounts, one manager and one operator, "

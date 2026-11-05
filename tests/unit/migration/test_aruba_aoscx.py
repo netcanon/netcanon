@@ -650,7 +650,6 @@ def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
     "/vlans/vlan/untagged-ports",
     "/lags/lag/name",
     "/local-users/user/name",
-    "/local-users/user/role",
     "/snmp/community",
     "/snmp/location",
     "/snmp/contact",
@@ -671,6 +670,8 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     # no `interface lag N` stanza and the mode re-parses as `static` — declared
     # lossy, pinned by the LAG-mode fidelity guard.
     "/lags/lag/mode",
+    # A role crosses only within a platform (netcanon/migration/_roles.py).
+    "/local-users/user/role",
     "/local-users/user/privilege-level",
     "/snmp/v3-user/auth-passphrase",
     # PR-2a (audit e5b77d7): the SNMPv3 sub-field leaves are now WALKED, so

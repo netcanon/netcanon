@@ -161,11 +161,11 @@ class FortiGateCLICodec(CodecBase):
             # Tier 2 — local admin users.  FortiGate admin accounts
             # map to CanonicalLocalUser: super_admin accprofile →
             # privilege 15; other profiles → privilege 1 with the
-            # profile name preserved in ``role`` for lossless intra-
-            # vendor round-trip.  Hashes carry the ``fortios:`` tag.
+            # profile name preserved in ``role`` for a FortiGate
+            # target (the role is declared lossy above, for any other
+            # source).  Hashes carry the ``fortios:`` tag.
             "/local-users/user/name",
             "/local-users/user/hashed-password",
-            "/local-users/user/role",
             # -- Wave B (v0.2.0) -- VRRP groups (FHRP) --
             # Nested ``config vrrp / edit N`` block inside ``config
             # system interface / edit X``.  Parses ``vrip``, ``vrip6``,
@@ -178,6 +178,19 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  An admin profile is written as it stands only from a"
+                    " config of a FortiGate.  From another platform an account "
+                    "at privilege 15 is given `super_admin`, and one below it "
+                    "is a review comment, since FortiOS documents no built-in "
+                    "profile below super_admin (prof_admin can change the "
+                    "configuration); the source's role is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(

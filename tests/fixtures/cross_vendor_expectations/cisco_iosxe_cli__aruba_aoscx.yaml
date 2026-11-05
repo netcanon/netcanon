@@ -490,16 +490,13 @@ per_field_expectation:
     references: [iosxecli-aoscx-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      On the 1 account that survives, the role is unchanged. Mechanism:
-      aruba_aoscx writes the role into the `group` slot and maps only
-      `administrators` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
-      the only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+    disposition: lossy
+    reason: >
+      IOS-XE states no role for a local account (an IOS-XE account's rights
+      are its privilege level), so the source has none to carry, and the
+      output reads back with the target's own.  AOS-CX is given `group
+      administrators` at privilege 15 and `group operators` below it, chosen
+      from the privilege level.
     references: [iosxecli-aoscx-surface]
 
   "local_users[].hashed_password":

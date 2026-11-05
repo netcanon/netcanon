@@ -174,7 +174,6 @@ class CiscoNXOSCodec(CodecBase):
             "/snmp/v3-user",
             # Local users (Phase 2b)
             "/local-users/user/name",
-            "/local-users/user/role",
             "/local-users/user/hashed-password",
             # VRF (name + description + rt-exports).  route-distinguisher and
             # rt-imports classify lossy (declared below), so they are
@@ -201,6 +200,18 @@ class CiscoNXOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  It is written as it stands only from a config of "
+                    "NX-OS.  From another platform the account is given `role "
+                    "network-admin` at privilege 15 and `role network-operator`"
+                    " below it, chosen from the privilege level; the source's "
+                    "role is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(

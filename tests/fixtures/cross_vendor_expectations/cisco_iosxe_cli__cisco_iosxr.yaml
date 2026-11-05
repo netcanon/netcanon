@@ -457,18 +457,13 @@ per_field_expectation:
     references: [iosxecli-iosxr-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      Preserved on all 7 populated cells — `admin` and `operator` both survive
-      as IOS-XR task groups (` group admin` / ` group operator` under the
-      username block).
-      Not a declared key on this pair but worth knowing when reading this
-      `good`: the adjacent `privilege_level` does NOT survive.  It reads 15 on
-      the source and 1 after the round-trip, on 11 user records across 4
-      cells, because XR expresses authorisation as a task group and the
-      numeric IOS privilege has nowhere to land.  The direction is
-      fail-closed, so nothing is over-granted — but automation keyed on
-      privilege level will break.
+    disposition: lossy
+    reason: >
+      IOS-XE states no role for a local account (an IOS-XE account's rights
+      are its privilege level), so the source has none to carry, and the
+      output reads back with the target's own.  IOS XR is given `group
+      root-lr` at privilege 15 and `group operator` below it, chosen from the
+      privilege level.
     references: [iosxecli-iosxr-surface]
 
   "local_users[].hashed_password":

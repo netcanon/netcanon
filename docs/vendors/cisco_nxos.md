@@ -125,6 +125,11 @@ identical IPv6-anycast deferral).
   numeric privilege (network-admin / vdc-admin → 15, else → 1) for
   cross-vendor targets; the named role round-trips losslessly
   same-vendor.
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  It is written as it stands only from a
+  config of NX-OS.  From another platform the account is given `role
+  network-admin` at privilege 15 and `role network-operator` below it,
+  chosen from the privilege level; the source's role is not carried.
 - **SNMPv3 `auth-passphrase` / `engine-id`** — the 10.x
   `localizedV2key` digest normalises to the older `localizedkey`
   form, and engineIDs are colon-decimal; cross-vendor / cross-version

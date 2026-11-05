@@ -483,17 +483,13 @@ per_field_expectation:
   "local_users[].role":
     disposition: unsupported
     reason: >
-      Drifts for exactly the same single reason as `local_users[].name` — the
-      whole user record is left out of the render — and carries no independent
-      signal of its own. Recorded separately because the key is declared
-      separately, not because it is a second finding. One detail that matters
-      for an account that does arrive from another source: the renderer emits
-      the canonical role verbatim as the AOS-CX group token (`group admin`,
-      `group operator`), not one of the AOS-CX group names (administrators /
-      operators / auditors), so the line would re-parse cleanly and still need
-      editing before a real switch accepts it. The target additionally
-      declares `/local-users/user/privilege-level` lossy, mapping
-      administrators -> 15 and everything else -> 1.
+      A local user's role is a name of the platform that defines it, and
+      RouterOS and AOS-CX are different platforms, so the group a RouterOS
+      user's `group=` names is not carried.  AOS-CX is given `group
+      administrators` at privilege 15 and `group operators` below it, chosen
+      from the privilege level.  No account of a committed RouterOS export
+      arrives on any target: an export prints no passwords, and an account
+      with none is a review comment (see `local_users[].name`).
     references: [mikrotik-aoscx-surface]
 
   "local_users[].hashed_password":

@@ -260,13 +260,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         parts = [f"username {u.name}"]
         if u.privilege_level and u.privilege_level != 1:
             parts.append(f"privilege {u.privilege_level}")
-        if u.role and u.role not in ("admin", "operator"):
-            # Cisco supports `role <name>` only on platforms that
-            # enabled `aaa new-model` — emit only when the role is
-            # non-canonical (admin/operator are derived defaults
-            # from privilege; emitting them as roles would be
-            # noisy and frequently wrong).
-            pass
+        # No role is written: an IOS-XE account's rights are its
+        # privilege level, and a role the source names is a name of
+        # another platform (netcanon/migration/_roles.py; the
+        # capability matrix declares the role lossy).
         hash_type, hash_val = _split_cisco_hash(u.hashed_password)
         parts.append(f"secret {hash_type} {hash_val}")
         out.append(" ".join(parts))

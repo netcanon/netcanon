@@ -254,10 +254,10 @@ per_field_expectation:
   local_users[].role:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 3 cells: drifted on 3, preserved on 0, both
-      sides empty on 0.  OS10's `sysadmin` comes back as AOS-S's
-      `manager`.
+      A local user's role is a name of the platform that defines it, and OS10
+      and AOS-S are different platforms, so the role an OS10 `username` line
+      names is not carried.  AOS-S writes its `manager` account at privilege
+      15 and its `operator` account below it.
     references: [os10-aoss-surface]
 
   ntp_servers:

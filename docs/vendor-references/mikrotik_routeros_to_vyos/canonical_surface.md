@@ -257,6 +257,16 @@ badly understate a branch router arriving with no DHCP service.
 
 ### 4. Credentials and roles: everything collapses to `admin`
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The group a RouterOS user's `group=` names is not carried.
+> VyOS writes no role; an account below privilege 15 is a review comment in
+> place of the account, and a job warning, since every VyOS login user has
+> full configuration access and sudo.  Every target's capability matrix
+> declares `/local-users/user/role` lossy, and
+> [`mikrotik_routeros__vyos.yaml`](../../../tests/fixtures/cross_vendor_expectations/mikrotik_routeros__vyos.yaml)
+> states what the code does now.
+
 <!-- snmpv3-key-gate-463 -->
 > **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 4** USM users arrive across the 3 cells that carry one, 4 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
 

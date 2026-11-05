@@ -139,6 +139,11 @@ XML element mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec
   source.  Most fields parse + render cleanly within the
   documented surface.
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  OPNsense writes
+  `<groupname>admins</groupname>` at privilege 15 and `users` below
+  it, chosen from the privilege level from any source, an OPNsense one
+  included: a custom group is not carried.
 - **A VLAN's name is its device.**  An OPNsense `<vlan>` has no name
   of its own: the parser names a VLAN after its device (`<vlanif>`),
   and the renderer writes another vendor's VLAN name as the `<descr>`

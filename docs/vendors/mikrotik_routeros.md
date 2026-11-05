@@ -168,6 +168,11 @@ can appear BEFORE `/interface vrrp` in the source.
 
 ## Lossy paths
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  RouterOS writes `group=full` at privilege
+  15, `group=write` from 10 to 14 and `group=read` below 10, chosen
+  from the privilege level from any source, a RouterOS one included: a
+  custom group is read as privilege 1 and written `read`.
 - **Tunnels** — `/interface gre`, `/interface eoip`,
   `/interface ipip`.  The canonical model holds no tunnel endpoints,
   so a tunnel is written with a placeholder `remote-address=0.0.0.0`

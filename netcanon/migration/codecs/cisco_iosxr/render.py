@@ -40,6 +40,7 @@ from __future__ import annotations
 import re
 
 from ..._one_value import left_out, one_value_tree, splits
+from ..._roles import own_role
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -143,7 +144,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Local users (Phase 2) ──
     for user in tree.local_users:
-        lines.extend(_render_local_user(user))
+        lines.extend(_render_local_user(user, tree.source_vendor))
 
     # ── VRF stanzas (Phase 2) — emit in tree order so a same-vendor
     # round-trip preserves routing_instances ordering (the round-trip
@@ -168,12 +169,14 @@ def render_intent(tree: CanonicalIntent) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_local_user(user) -> list[str]:
+def _render_local_user(user, source_vendor: str = "") -> list[str]:
     """Render one ``username`` block.
 
-    Emits ``group <role>`` (the verbatim IOS-XR task-group, or one derived
-    from the privilege level for a cross-vendor source) and the secret in
-    the form :data:`_IOSXR_SECRET_FORM` maps its algorithm to.
+    Emits ``group <role>`` (the IOS-XR user group as it stands, from a
+    tree read by the IOS-XR parser; from any other source, one derived
+    from the privilege level, since another platform's role is a group
+    IOS XR does not have -- :mod:`netcanon.migration._roles`) and the
+    secret in the form :data:`_IOSXR_SECRET_FORM` maps its algorithm to.
 
     The secret passes the shared :func:`is_migratable` gate first.  This
     codec used to render any value without a leading type digit as
@@ -183,7 +186,7 @@ def _render_local_user(user) -> list[str]:
     account) and leaves a review comment, and so does an account the
     source gives no password.
     """
-    role = user.role or (
+    role = own_role(user, source_vendor, "cisco_iosxr") or (
         "root-lr" if user.privilege_level >= 15 else "operator"
     )
     # Name, group and secret are one word each; the block is left out

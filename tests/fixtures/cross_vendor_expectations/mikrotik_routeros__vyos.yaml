@@ -578,24 +578,14 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on this pair now (see `local_users[].name`), so no
-      role reaches the target to compare, and the only drift on this key is
-      the record-count change the audit attributes to `local_users[].name`. Up
-      to 0.7.7 the accounts arrived and authority collapsed upward: `admin`
-      stayed `admin`, but the two `role: operator` accounts came back as
-      `admin`, with `privilege_level` 10 -> 15 and 1 -> 15. That is the target
-      codec's mapping, not a fact of this corpus: vyos declares
-      `/local-users/user/privilege-level` LOSSY because VyOS `system login
-      user` accounts have no numeric privilege level in the common case, so
-      "the codec maps every login user to privilege 15 / role `admin`". Kept
-      `lossy` for that mapping, which this corpus no longer measures. Re-apply
-      the intended authorisation on the target and diff it against the source
-      account list before cutover. Standing observation, not a pair fact: vyos
-      declares `/local-users/user/role` SUPPORTED while that mapping changes
-      the role — a declaration-versus-behaviour mismatch to raise against the
-      codec, and `mikrotik_routeros` declares no path under `/local-users/` at
-      all while populating name, role and privilege level. Both are left for
-      codec changes rather than fixed here.
+      A local user's role is a name of the platform that defines it, and
+      RouterOS and VyOS are different platforms, so the group a RouterOS
+      user's `group=` names is not carried.  VyOS writes no role; an account
+      below privilege 15 is a review comment in place of the account, and a
+      job warning, since every VyOS login user has full configuration access
+      and sudo.  No account of a committed RouterOS export arrives on any
+      target: an export prints no passwords, and an account with none is a
+      review comment (see `local_users[].name`).
     references: [mikrotik-vyos-surface]
 
   "local_users[].hashed_password":

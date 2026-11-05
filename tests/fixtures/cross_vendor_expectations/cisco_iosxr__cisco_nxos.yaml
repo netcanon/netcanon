@@ -473,16 +473,13 @@ per_field_expectation:
     references: [iosxr-nxos-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      On the 6 accounts that survive, the role is unchanged. Mechanism:
-      cisco_nxos renders the canonical role verbatim and maps only
-      `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
-      the only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and IOS
+      XR and NX-OS are different platforms, so the group an IOS XR `username`
+      block names is not carried.  NX-OS is given `role network-admin` at
+      privilege 15 and `role network-operator` below it, chosen from the
+      privilege level.
     references: [iosxr-nxos-surface]
 
   "local_users[].hashed_password":

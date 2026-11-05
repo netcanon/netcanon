@@ -492,25 +492,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      The role is MATERIALISED, not dropped, and the distinction matters at
-      review time.  IOS-XR renders the canonical role as `group <role>`, and
-      when the source user carries no role at all the codec derives one from
-      `privilege_level`.  Reproduced with a hand-built config: a privilege-15
-      user with an empty role renders `username X` + `group root-lr` and
-      re-parses as role `root-lr`; a privilege-1 user with an empty role
-      renders `group operator`.  That is exactly what the two drifting cells
-      show — one user on `karneliuk_a_eos1_eos4260` and four on
-      `ksator_dcs_7150s64_eos4224`.
-      Read precisely: this is NOT a privilege escalation.  An EOS
-      `username X privilege 15` already carries full authority and `root-lr`
-      is the faithful IOS-XR spelling of it.  What changes is that an implicit
-      authority becomes an explicit named grant written into the target
-      config, which an operator reviewing the migrated file should see and
-      confirm.  Roles that were explicitly set survive as group names.
-      One adjacent observation on the same records, recorded rather than
-      declared because `privilege_level` has no schema field key: a surviving
-      group name can re-derive a different privilege number
-      (`network-admin` 15 -> 1).
+      A local user's role is a name of the platform that defines it, and EOS
+      and IOS XR are different platforms, so the role an EOS `username` line
+      names is not carried.  IOS XR is given `group root-lr` at privilege 15
+      and `group operator` below it, chosen from the privilege level.
     references: [arista-iosxr-surface]
 
   "local_users[].hashed_password":

@@ -267,6 +267,16 @@ Neither corroborates the other.
 
 ### 4. Every migrated user arrives as an administrator
 
+> **Superseded in part (2026-11).**  The local-user role measured in this
+> section is of the code before a role crossed only between two codecs of
+> one platform.  The group an AOS-CX `user` line names is not carried.  VyOS
+> writes no role; an account below privilege 15 is a review comment in place
+> of the account, and a job warning, since every VyOS login user has full
+> configuration access and sudo.  Every target's capability matrix declares
+> `/local-users/user/role` lossy, and
+> [`aruba_aoscx__vyos.yaml`](../../../tests/fixtures/cross_vendor_expectations/aruba_aoscx__vyos.yaml)
+> states what the code does now.
+
 7 user records across 6 cells. Names: **7 of 7 preserved**. Stored secret:
 **7 of 7 byte-identical**. Role: **7 of 7 drifted**.
 

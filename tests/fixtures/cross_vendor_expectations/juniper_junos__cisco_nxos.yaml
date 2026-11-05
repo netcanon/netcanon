@@ -626,13 +626,13 @@ per_field_expectation:
   "local_users[].privilege_level":
     disposition: lossy
     reason: >
-      On the 4 accounts that survive, the privilege level changes: `15` -> `1`
-      on 4. Mechanism: cisco_nxos renders the canonical role verbatim and maps
-      only `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Accounts refused for their secret
-      vanish with their privilege level and are counted once, under
-      `local_users[].name`; this key is about the value on accounts that
-      survive.
+      On the accounts that survive the privilege level is unchanged: the
+      Junos parser reads `super-user` as 15 and every other class as 1, and
+      NX-OS is given `role network-admin` at 15 and `role network-operator`
+      below it, which read back as 15 and 1.  The drift the audit counts on
+      this key is accounts refused whole for their secret ("all N
+      local_users dropped" on four cells), the loss the whole-record
+      `local_users` key declares.
     references: [junos-nxos-surface]
 
   "local_users[].name":
@@ -670,16 +670,13 @@ per_field_expectation:
     references: [junos-nxos-surface]
 
   "local_users[].role":
-    disposition: good
-    note: >
-      On the 4 accounts that survive, the role is unchanged. Mechanism:
-      cisco_nxos renders the canonical role verbatim and maps only
-      `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
-      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
-      the only drift on this key is the parent record-count collapse, which the
-      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
-      here. Accounts refused for their secret vanish with their role and are
-      counted once, under `local_users[].name`.
+    disposition: lossy
+    reason: >
+      A local user's role is a name of the platform that defines it, and Junos
+      and NX-OS are different platforms, so the login class a Junos `class`
+      statement names is not carried.  NX-OS is given `role network-admin` at
+      privilege 15 and `role network-operator` below it, chosen from the
+      privilege level.
     references: [junos-nxos-surface]
 
   radius_servers:

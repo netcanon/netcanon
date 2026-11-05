@@ -140,7 +140,6 @@ class AristaEOSCodec(CodecBase):
             "/snmp/v3-user",
             "/local-users/user/name",
             "/local-users/user/hashed-password",
-            "/local-users/user/role",
             "/vxlan-vnis/vni",                   # GAP 6 demoted
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
@@ -154,6 +153,18 @@ class AristaEOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  It is written as it stands only from a config of "
+                    "EOS.  From another platform the account is given `role "
+                    "network-admin` at privilege 15 and `role network-operator`"
+                    " below it, chosen from the privilege level; the source's "
+                    "role is not carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu-beside-mtu",
                 reason=(

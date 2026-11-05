@@ -191,7 +191,7 @@ def test_opnsense_parse_system_scope_user_gets_privilege_15() -> None:
     user = intent.local_users[0]
     assert user.name == "root"
     assert user.privilege_level == 15
-    assert user.role == "admin"
+    assert user.role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
 
 def test_opnsense_parse_page_all_priv_gets_privilege_15() -> None:
@@ -215,7 +215,7 @@ def test_opnsense_parse_page_all_priv_gets_privilege_15() -> None:
     user = intent.local_users[0]
     assert user.name == "api"
     assert user.privilege_level == 15
-    assert user.role == "admin"
+    assert user.role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
 
 def test_opnsense_parse_regular_user_keeps_default_privilege() -> None:
@@ -236,7 +236,7 @@ def test_opnsense_parse_regular_user_keeps_default_privilege() -> None:
     intent = parse_intent(raw)
     user = intent.local_users[0]
     assert user.privilege_level == 1
-    assert user.role == "user"
+    assert user.role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
 
 def test_opnsense_parse_groupname_users_overrides_system_scope() -> None:
@@ -260,7 +260,7 @@ def test_opnsense_parse_groupname_users_overrides_system_scope() -> None:
     intent = parse_intent(raw)
     user = intent.local_users[0]
     assert user.privilege_level == 1
-    assert user.role == "user"
+    assert user.role == ""  # OPNsense records no role (netcanon/migration/_roles.py)
 
 
 def test_opnsense_parse_priv_other_than_page_all_does_not_elevate() -> None:

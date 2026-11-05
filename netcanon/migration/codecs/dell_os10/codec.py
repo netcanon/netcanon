@@ -185,7 +185,6 @@ class DellOS10Codec(CodecBase):
             # numeric `priv-lvl` alongside the named role, so the privilege
             # level round-trips rather than being derived from the role.
             "/local-users/user/name",
-            "/local-users/user/role",
             "/local-users/user/hashed-password",
             "/local-users/user/privilege-level",
             # VRRP (Phase 3b).  OS10 runs REAL VRRP, so a group renders as
@@ -204,6 +203,18 @@ class DellOS10Codec(CodecBase):
         # `tests/unit/migration/test_dell_os10.py::TestDeclaredLossesAreReal`,
         # rather than merely asserted here.
         lossy=[
+            LossyPath(
+                path="/local-users/user/role",
+                reason=(
+                    "A local user's role is a name of the platform that defines"
+                    " it.  It is written as it stands only from a config of "
+                    "OS10.  From another platform the account is given `role "
+                    "sysadmin` at privilege 15 and `role netoperator` below it,"
+                    " chosen from the privilege level; the source's role is not"
+                    " carried."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/ip-mtu",
                 reason=(

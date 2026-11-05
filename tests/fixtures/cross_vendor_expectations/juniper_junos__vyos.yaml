@@ -642,21 +642,12 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      On the accounts that arrive the role changes to `admin`: measured per
-      record on the 6 cells whose list is stable, `super-user` -> `admin` on
-      6; on the 2 cells whose list shrinks the record-count change is booked
-      under `local_users[].name` and roles are not compared there. Up to 0.7.7
-      the one account with no stored secret, `read-only` on the source, also
-      arrived, as `admin`; it now vanishes (see `local_users[].name`).
-      Mechanism: the vyos parser assigns every `system login user`
-      `role="admin"` and `privilege_level=15`, because VyOS login accounts
-      carry no role or numeric privilege in the common case (vyos declares
-      `/local-users/user/privilege-level` lossy for exactly this). This fails
-      OPEN: a less-privileged account arrives with more authority. Re-apply
-      least privilege on the target before cutover. Accounts refused for their
-      secret vanish with their role and are counted once, under
-      `local_users[].name`; this key is about the value on accounts that
-      survive.
+      A local user's role is a name of the platform that defines it, and Junos
+      and VyOS are different platforms, so the login class a Junos `class`
+      statement names is not carried.  VyOS writes no role; an account below
+      privilege 15 is a review comment in place of the account, and a job
+      warning, since every VyOS login user has full configuration access and
+      sudo.
     references: [junos-vyos-surface]
 
   "local_users[].hashed_password":

@@ -244,6 +244,13 @@ parse.
 
 ## Lossy paths
 
+- **`/local-users/user/role`** — a local user's role is a name of the
+  platform that defines it.  An admin profile is written as it stands
+  only from a config of a FortiGate.  From another platform an account
+  at privilege 15 is given `super_admin`, and one below it is a review
+  comment, since FortiOS documents no built-in profile below
+  super_admin (prof_admin can change the configuration); the source's
+  role is not carried.
 - **`/system/dns`** with view scoping — view definitions parse-and-
   ignore (`config system dns-database`); cross-vendor mappings
   collapse to global DNS.

@@ -501,15 +501,10 @@ per_field_expectation:
   "local_users[].role":
     disposition: lossy
     reason: >
-      No account arrives on the corpus (see `local_users[].name`), so
-      there is no role on the target to compare; the only drift on this
-      key is the parent record-count collapse, which the audit
-      attributes to `local_users[].name` and reclassifies
-      STRUCTURAL_ONLY here.  On an account that arrives,
-      `administrators` renders `privilege 15` and re-parses as `admin`,
-      while `operators` renders with no privilege keyword and re-parses
-      as `operator`; the privilege intent survives, the role string does
-      not.  Recorded `lossy` for that.
+      A local user's role is a name of the platform that defines it, and
+      AOS-CX and IOS-XE are different platforms, so the group an AOS-CX `user`
+      line names is not carried.  IOS-XE writes the account's privilege level
+      and no role.
     references: [aoscx-iosxecli-surface]
 
   "local_users[].hashed_password":
