@@ -652,7 +652,13 @@ the policy locally:
   XR `interface preconfigure` stanza, which the router holds and
   does not run, and a section row for an `interface range` header
   and for a `<dhcpd>` zone that has no device, whose pool is left
-  out.)  Output is NOTIFICATION-ONLY — never read by render or any
+  out.)  A row shows a path and never a value: a detector's
+  whole-line label is cut after a word that names a secret
+  (`_shown_label`), so a new pattern that takes a whole line needs no
+  cut of its own, and a row a parser makes itself must not copy a
+  line's value -- `tests/unit/migration/test_a_row_holds_no_secret.py`
+  plants a secret in each grammar's lines and looks in every row.
+  Output is NOTIFICATION-ONLY — never read by render or any
   transform.  Patterns target stanzas the canonical schema doesn't
   model (firewall, NAT, QoS, route-maps, crypto/IPsec, OPNsense filter
   / NAT / VPN XML); supported stanzas are deliberately excluded so the
