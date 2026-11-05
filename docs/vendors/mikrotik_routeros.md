@@ -144,7 +144,9 @@ can appear BEFORE `/interface vrrp` in the source.
   has no description field and no native interface-track grammar
   (priority adjustments come from `on-master` / `on-backup` scripts).
   Canonical `description` and `track_interfaces` round-trip empty
-  when RouterOS is the target.
+  when RouterOS is the target, and nothing in the output says so.
+  No virtual MAC is written either.  The capability matrix declares
+  the three `lossy` (severity `warn`), so the job says so.
 - **`on-master` / `on-backup` scripts are Tier-3** and drop with
   a review comment.
 - **No anycast-gateway grammar.**  All three anycast canonical
@@ -152,9 +154,10 @@ can appear BEFORE `/interface vrrp` in the source.
   are declared `unsupported` — RouterOS targets a SOHO / SMB
   router niche without fabric-anycast primitives.
 - **HSRP / CARP / anycast modes** on incoming canonical records
-  (e.g. cross-vendor migration FROM an Arista VARP or OPNsense
+  (e.g. cross-vendor migration FROM an NX-OS HSRP or OPNsense
   CARP source) surface as `# review:` comments on render instead of
-  silently dropping.
+  silently dropping; the group itself is not written, and is
+  declared `lossy`.
 
 ### Cross-references
 
@@ -184,6 +187,12 @@ can appear BEFORE `/interface vrrp` in the source.
 - **`/queue tree`** — QoS queue tree carry-through; cross-vendor QoS
   translation doesn't share semantics, so this drops on cross-
   vendor render (intra-MikroTik round-trip preserves it).
+- **`/interfaces/interface/dhcp-client`** — RouterOS keeps a DHCP
+  client in `/ip dhcp-client`, which the codec neither reads nor
+  writes: the interface is written without one (severity `warn`).
+- **No VRF is written.**  `/routing-instances/instance` is
+  `unsupported`, and so is each field of a VRF and each interface's
+  VRF: no interface is placed in one.
 - See per-codec `CapabilityMatrix.lossy` declarations.
 
 ## What we don't do

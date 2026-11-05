@@ -204,6 +204,19 @@ parse.
 
 ### Known limitations
 
+- **Only IETF VRRP is written.**  A group of another protocol (NX-OS
+  HSRP, OPNsense CARP) is not written; a `# review:` line in its
+  `config vrrp` says so, and the redundancy has to be made again on
+  the target.  The capability matrix declares the group `lossy`
+  (severity `warn`), so the job says so.
+- **An IPv6 virtual IP is not written where FortiOS takes one.**  The
+  renderer writes it as `set vrip6` in the interface's `config vrrp`,
+  beside `set version 3`, and the parser reads it from there.
+  Fortinet's administration guide configures IPv6 VRRP in the
+  interface's `config ipv6` / `config vrrp6`, so that line is not one
+  the device takes.  And the parser reads no group that has no
+  `set vrip`, so a group with IPv6 virtual IPs only does not come
+  back.  Declared `lossy` (`virtual-ipv6s`).
 - **Single VIP per group.**  FortiOS `set vrip` accepts a single
   address per group.  Cross-vendor migration from multi-IP sources
   (Cisco IOS-XE secondaries, Junos `virtual-address [ X Y Z ]`)

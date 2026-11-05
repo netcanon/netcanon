@@ -68,6 +68,96 @@ from . import port_names as _port_names
 from .parse import parse_intent
 from .render import render_intent
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
+        "no field of one is: its gateway, DNS servers, domain and lease go "
+        "with it.",
+        (
+            "/dhcp-servers/pool/gateway",
+            "/dhcp-servers/pool/dns-servers",
+            "/dhcp-servers/pool/domain-name",
+            "/dhcp-servers/pool/lease-time",
+        ),
+    ),
+    (
+        "No IPv4 virtual gateway is written "
+        "(`ipv4/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRRP group is written (`vrrp-groups/group` is unsupported), so "
+        "neither are its tracked interfaces, its other virtual IPs or its "
+        "virtual MAC.",
+        (
+            "/interfaces/interface/vrrp-groups/group/track-interfaces",
+            "/interfaces/interface/vrrp-groups/group/virtual-ips",
+            "/interfaces/interface/vrrp-groups/group/virtual-mac",
+        ),
+    ),
+    (
+        "No EVPN Type-5 route is written: the codec has no form for one.",
+        ("/evpn-type5-routes/route",),
+    ),
+    (
+        "VyOS has no VLAN database (`/vlans/vlan/id` is unsupported): "
+        "nothing held on a VLAN record is written as a VLAN's, neither its "
+        "name, its description, its port lists nor its address. A VLAN "
+        "interface is written as a `vif` of its interface.",
+        (
+            "/vlans/vlan/name",
+            "/vlans/vlan/description",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+            "/vlans/vlan/ipv4/address/ip",
+        ),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "VyOS writes a VRF as its name and its table only: its description, "
+        "route distinguisher and route targets are not written.",
+        (
+            "/routing-instances/instance/description",
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+        ),
+    ),
+    (
+        "A route that names an interface and no gateway is written as "
+        "`next-hop <interface>`, which is not a next hop VyOS takes (an "
+        "interface route is `interface <name>`): the route is not written "
+        "as one out of that interface.",
+        ("/routing/static-route/interface",),
+    ),
+    (
+        "The codec writes no SNMP trap target: the trap hosts are dropped.",
+        ("/snmp/trap-host",),
+    ),
+)
+
 
 @register
 class VyOSCodec(CodecBase):
@@ -390,6 +480,12 @@ class VyOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -646,6 +742,12 @@ class VyOSCodec(CodecBase):
             UnsupportedPath(
                 path="/access-list/extended",
                 reason="VyOS `policy` route-maps / prefix-lists are Tier-3.",
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

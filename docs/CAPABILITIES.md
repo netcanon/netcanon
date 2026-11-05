@@ -125,7 +125,10 @@ names the canonical surface, not a blanket guarantee.
   unsupported on all 12), so those drops are always bannered, never silent.
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
-  across the bidirectional codecs.  See
+  across the bidirectional codecs, each of which writes one
+  protocol (most IETF VRRP, NX-OS HSRP, OPNsense CARP): a group of
+  another protocol is not written as that protocol on any other
+  target, and the job says so (§A).  See
   [`v0.2.0-planning/01-vrrp-canonical/`](v0.2.0-planning/01-vrrp-canonical/)
   for the design rationale and the
   [Cross-vendor L3-redundancy grammar reference](#cross-vendor-l3-redundancy-grammar-reference)
@@ -228,6 +231,27 @@ in `netcanon/migration/codecs/<vendor>/codec.py`.
 > enumeration and may lag the code between releases.  When a table and the
 > live matrix disagree, the live matrix wins.
 
+**How a matrix is held to its render.**  `classify` matches a path
+exactly and calls a path it does not find `supported`.  So a record
+declared unsupported once left every field under it reported as
+translated, and a VRRP group written for one protocol only was
+reported as written for all of them.  Each codec now lists, with the
+reason, every walkable path it writes nothing for (`_NOT_RENDERED` in
+its `codec.py`, declared `unsupported`) and every path it writes only
+in some cases (`_DROPPED`, declared `lossy` with severity `warn`: the
+job says so and stays `completed`).
+`tests/unit/migration/test_a_supported_path_is_written.py` builds a
+small tree for each walkable path, renders it onto every public
+codec, reads the output back with that codec's own parser, and fails
+for a path the matrix calls `supported` that does not come back.  It
+also fails for a field called `supported` under a record called
+`unsupported`.  **Its blind spot:** a codec's own parser cannot say
+whether a line is one the device takes.  FortiOS and Junos write an
+IPv6 VRRP virtual IP in a place neither vendor documents; their own
+parsers read it back, and it was found by reading the vendors'
+documentation, not by the test.  The tables below name the rows this
+changed; the reasons are the matrix's own.
+
 #### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
 
 A text with no indentation is REFUSED in words rather than
@@ -251,7 +275,8 @@ text").
 
 | Path | Class | Reason summary |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward). |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward).  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  No virtual MAC is written (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported. |
+| `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy (IPv4) / Unsupported (IPv6) | The MAC of a virtual gateway is written only with the one gateway the codec writes, an SD-Access anycast gateway that is the interface's own address; the MAC of any other is dropped with it.  No IPv6 virtual gateway is written, so neither is its MAC. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Lossy (Wave C) | SD-Access anycast-gateway (`virtual_gateway_address == the interface primary IP`) round-trips via `fabric forwarding mode anycast-gateway`, but a SEPARATE cross-vendor VARP virtual IP (the Arista/Junos shape, `virtual_gateway_address != the interface IP`) has no IOS-XE equivalent and drops on render (review comment only).  Demoted from supported to **lossy** so the separate-VIP loss surfaces instead of reporting `severity:ok` (silent-loss guard). |
 | `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
 | `/interfaces/interface/vrrp-groups/group/address-family` | Lossy (Wave B) | IOS-XE 17.12+ modern multi-line `vrrp <VRID> address-family ipv4` nested block is detected (so lossiness is visible) but not deep-populated; render always emits the classic single-line form (accepted by every IOS-XE 15.x+).  A config that uses ONLY the modern AF form round-trips as an empty group shell — the lossiness is intentional and operator-visible. |
@@ -341,7 +366,8 @@ gotchas").
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  ⚠️ Up to 0.7.7 the group was declared supported. |
+| `/interfaces/interface/dhcp-client` | Lossy (warn) | EOS spells a DHCP client `ip address dhcp`, which the codec neither reads nor writes: the interface is written without one. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | VARP: `ip address virtual X/M` populates the address record's `virtual_gateway_address`; secondary trailer preserved via `is_secondary` flag. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 VARP: `ipv6 address virtual` parses to the IPv6 address record. |
 | `/anycast-gateway-mac` | Supported (Wave C) | Chassis-wide `ip virtual-router mac-address <MAC>` round-trips to `CanonicalIntent.anycast_gateway_mac`. |
@@ -372,7 +398,11 @@ text").
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority 255 (the RFC 5798 address-owner value — the full 0-255 range is now representable, and render inverts 255 back to `owner`). |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority 255 (the RFC 5798 address-owner value — the full 0-255 range is now representable, and render inverts 255 back to `owner`).  IETF VRRP only, and only in a VLAN: a group of another protocol (HSRP, CARP) is not written, and a `; review:` line in the VLAN says so; a group on an interface that is not a VLAN's is not written, and nothing says so.  No tracked interface and no virtual MAC is written (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported. |
+| `/interfaces/interface/config/vrf` | Lossy (warn) | AOS-S has no VRF.  A management port that lands on `oobm` is written in the out-of-band context, which HPE documents as a management plane apart from the data plane, so the port stays apart as its management VRF kept it; any other interface is written without its VRF. |
+| `/interfaces/interface/config/mtu` | Lossy (warn) | AOS-S sets the frame size of a VLAN (`jumbo`) or of the whole switch, not of a port: an interface's MTU is not written. |
+| `/interfaces/interface/dhcp-client` | Lossy (warn) | AOS-S spells a DHCP client `ip address dhcp-bootp` in a VLAN, which the codec neither reads nor writes: the interface is written without one. |
+| Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/routing-instances/instance/*`, `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, VRF, VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
@@ -390,7 +420,9 @@ text").
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  Both classic IPv4 and IPv6 (`vrrp-inet6-group`) wire-up landed. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, and nothing in the output stands in its place.  A group is written under an IPv4 address, so a group with no IPv4 virtual IP is not written either.  No virtual MAC is written (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said IPv6 (`vrrp-inet6-group`) was wired: it is not (next row). |
+| `/interfaces/interface/vrrp-groups/group/virtual-ipv6s` | Lossy (warn) | An IPv6 virtual IP is written as `virtual-inet6-address` in the group under the interface's IPv4 address.  Juniper documents IPv6 VRRP as a `vrrp-inet6-group` under a `family inet6 address`, with a `virtual-link-local-address` it requires, so that line is not one the device takes.  The codec's own parser reads the line back, so the round trip does not show it. |
+| `/interfaces/interface/tunnel-type` | Lossy (warn) | Junos states a tunnel's type by the name of its interface (`gr-` GRE, `ip-` IP-in-IP, `st0` IPsec) and writes no type otherwise: a tunnel whose name does not have that form is written without its type. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | One-line `set interfaces irb unit N family inet address X virtual-gateway-address Y` stores both pieces on the same `CanonicalIPv4Address` record. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Supported (Wave C) | Per-IRB-unit `virtual-gateway-v4-mac M` populates the per-address MAC override. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 form: `family inet6 address X virtual-gateway-address Y`. |
@@ -420,7 +452,10 @@ several lines").  Such a value reaches every target on one line (§ C1).
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in its `config vrrp` says so, and the redundancy has to be made again on the target.  ⚠️ Up to 0.7.7 the group was declared supported. |
+| `/interfaces/interface/vrrp-groups/group/virtual-ipv6s` | Lossy (warn) | An IPv6 virtual IP is written as `set vrip6` in the interface's `config vrrp`, beside `set version 3`.  Fortinet documents IPv6 VRRP in the interface's `config ipv6` / `config vrrp6`, so that line is not one the device takes; and the parser reads no group that has no `vrip`, so a group with IPv6 virtual IPs only does not come back. |
+| `/interfaces/interface/config/vrf` + `/routing-instances/instance/*` | Unsupported | No VRF is written (`/routing-instances/instance` is unsupported), so no field of one is, and no interface is placed in one.  ⚠️ Up to 0.7.7 each interface's VRF and each field of a VRF were declared supported. |
+| Fields of records the codec does not write: `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | FortiOS `config vrrp / edit N` accepts a single `set vrip` per group.  Multi-IP canonical groups (IOS-XE repeated `vrrp N ip X`, Junos `virtual-address [ X Y Z ]`) emit the first VIP and drop the tail with a `# review:` line — operator must split into multiple groups manually. |
 | `/interfaces/interface/vrrp-groups/group/virtual-mac` | Lossy (Wave B) | FortiOS uses `set vrrp-virtual-mac enable/disable` as an interface-wide toggle (defaults to disable, meaning FortiOS uses its own NPU MAC instead of `00:00:5E:00:01:VRID`).  The canonical `virtual_mac` per-group override has no FortiOS equivalent and is silently dropped — cross-vendor renders into FortiGate cannot pin a custom VRID MAC at the group level. |
 | `/interfaces/interface/vrrp-groups/group/track-interfaces` | Lossy (Wave B) | FortiOS `set vrdst <iface>` accepts a single destination-tracking entry per group.  Multi-track canonical groups (IOS-XE `track` objects, Arista `vrrp N track Ethernet1 decrement 10`) emit the first and drop the rest.  The decrement value is also lossy — FortiOS vrdst is a binary up/down trigger, not a priority-decrement scheme. |
@@ -445,7 +480,10 @@ several lines").  Such a value reaches every target on one line (§ C1).
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`.  Cross-vendor tracking and authentication surfaces emit review comments rather than dropping silently. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |
+| `/interfaces/interface/dhcp-client` | Lossy (warn) | RouterOS keeps a DHCP client in `/ip dhcp-client`, which the codec neither reads nor writes: the interface is written without one. |
+| `/interfaces/interface/config/vrf` + `/routing-instances/instance/*` | Unsupported | No VRF is written (`/routing-instances/instance` is unsupported), so no field of one is, and no interface is placed in one.  ⚠️ Up to 0.7.7 each interface's VRF and each field of a VRF were declared supported. |
+| Fields of records the codec does not write: `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
@@ -467,6 +505,9 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (Wave B, CARP variant) | Hosts CARP-only HA groups via `<virtualip><vip><mode>carp</mode><vhid>N</vhid>…</vip></virtualip>` with a `mode="carp"` discriminator on the canonical record.  Lossy because `CanonicalVRRPGroup` records with `mode="vrrp"` or `mode="hsrp"` are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under `<virtualip>` is rarely deployed and not yet emitted; only `mode="carp"` round-trips.  Additionally, the `advskew`↔`priority` mapping (`priority = 254 - advskew`) preserves relative HA-pair ordering but not exact election timing. |
+| `/interfaces/interface/vrrp-groups/group/{virtual-ips,virtual-ipv6s,authentication,track-interfaces,virtual-mac}` | Lossy (warn) | A CARP group is written with one IPv4 virtual IP (`<subnet>`) and no `<password>`: its other virtual IPs, an IPv6 virtual IP, its authentication and the interfaces it tracks are dropped, and CARP takes its MAC from the VHID, so a virtual MAC the source set is dropped too.  Set the password on the device.  ⚠️ Up to 0.7.7 each was declared supported. |
+| `/interfaces/interface/config/vrf` + `/routing-instances/instance/*` | Unsupported | No VRF is written (`/routing-instances/instance` is unsupported), so no field of one is, and no interface is placed in one.  ⚠️ Up to 0.7.7 each interface's VRF and each field of a VRF were declared supported. |
+| Fields of records the codec does not write: `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | OPNsense uses CARP for HA (distinct semantics); no anycast-gateway grammar. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
@@ -480,7 +521,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/interfaces/interface/dot1q-vlan` | Supported | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is written as OPNsense's own VLAN device on its port, `<vlan>` with `<if>igb1</if>`, `<tag>200</tag>` and `<vlanif>igb1.100</vlanif>`: the tag is the sub-interface's own, not the number in its name, and its zone assigns the device (one that holds a description and nothing else is the device alone, its `<descr>` the description: a zone would assign and enable it).  The parser reads a VLAN device by its parent: on a port or a LAGG it is a sub-interface of it (read back as one, and, from an OPNsense config, sent onto another vendor where its parent goes, named by its tag); on a bridge, another VLAN device, a zone's key (`lan`, `opt3`), or a name that says it is a VLAN interface, a loopback or a tunnel, a VLAN interface and a VLAN.  Zones are not typed, so a parent that is none of those is a port whatever its name.  OPNsense's VLAN form refuses a device name with a dot in it when the VLAN is saved (a `<!-- review: -->` comment says so).  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a review comment.  OPNsense keeps one VLAN device for a tag on a parent: where the output has a tag twice on one, the second `<vlan>` holds a review comment that names the first.  A sub-interface of two tags is written with its outer tag: its inner tag (`/interfaces/interface/dot1q-inner-vlan`, unsupported) is reported as a drop and the job is `partial`. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
-| `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
+| `/snmp/v3-user` (and every field of one) | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3.  No user is written, so neither is its passphrase or its engine ID. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — OPNsense is a firewall codec. |
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  OPNsense writes `<groupname>admins</groupname>` at privilege 15 and `users` below it, chosen from the privilege level from any source, an OPNsense one included: a custom group is not carried. |
 
@@ -511,7 +552,10 @@ text").  The lossy / unsupported exceptions:
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of NX-OS.  From another platform the account is given `role network-admin` at privilege 15 and `role network-operator` below it, chosen from the privilege level; the source's role is not carried. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | The trailing `localizedkey` keyword is a CLAIM that the digest is already localised against this agent's engine ID, so it is both read and re-emitted per line: a key from another agent is refused (review comment, no `snmp-server user` line), a genuine passphrase renders WITHOUT the keyword and the Nexus localises it on commit, and a localised digest keeps its keyword.  NX-OS 10.x `localizedV2key` is normalised to the older `localizedkey` form on render.  Re-key SNMPv3 users on the target across OS-version boundaries. |
 | `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
-| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled: the HSRP group written tracks no interface and has no virtual MAC (`…/group/{track-interfaces,virtual-mac}`, lossy). |
+| `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
+| `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy (IPv4) / Unsupported (IPv6) | The MAC of a virtual gateway is written only with the gateway the codec writes, a Distributed Anycast Gateway that is the interface's own address; the MAC of any other is dropped with it.  No IPv6 virtual gateway is written, so neither is its MAC. |
+| `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so no field of one is. |
 | `/routing-instances/instance/route-distinguisher` | Lossy | `rd auto` tells the device to derive the RD itself (`<BGP router-id>:<internal VRF ID>` for an IP-VRF) — a value that exists only at runtime and cannot be recovered from a config file. Netcanon preserves the keyword for same-vendor round-trips and, on targets whose grammar has no `auto` form (Junos, IOS-XE CLI), drops it with a review comment rather than inventing a value. An explicit `rd <asn>:<nn>` round-trips losslessly. |
 | `/routing-instances/instance/rt-imports` | Lossy | `route-target both <rt> evpn` advertises in both IPv4-unicast and L2VPN-EVPN; the `evpn` address-family scope does not round-trip cross-vendor (RT value preserved, scope reverts to IPv4 unicast).  Same-vendor round-trips. |
 | `/vxlan-vnis/vni` | Lossy | `interface nve1 / member vni N` per-VNI sub-flags (`suppress-arp`, alternate ingress-replication) do not round-trip — render always emits the modern BGP-EVPN head-end shape (`host-reachability protocol bgp`).  The VLAN↔VNI binding round-trips via `vlan N / vn-segment`. |
@@ -556,7 +600,10 @@ banner is text").  The lossy / unsupported exceptions:
 | `/interfaces/interface/config/type` | Lossy | Type inferred from the name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback, Bundle-Ether → ieee8023adLag, MgmtEth → ethernetCsmacd, tunnel-ip/te → tunnel); sub-interfaces with vendor-specific encapsulation classify as `other`. |
 | `/interfaces/interface/4th-port-segment` | Lossy | IOS-XR port names use 4 segments (rack/slot/module/port); the cross-vendor `PortIdentity` supports 3.  Slot, module and port are carried; the rack round-trips same-vendor via `PortIdentity.meta['iosxr_rack']` and is not carried cross-vendor (it is 0 on every non-clustered system) — verify via the rename modal. |
 | `/routing-instances/instance` | Lossy | `vrf <name>` + `address-family ipv4 unicast` / `import\|export route-target` + per-interface `vrf <name>` membership round-trip, but `route_distinguisher` must be read from / rendered to the BGP block (`router bgp <asn> / vrf <name> / rd <rd>`).  A minimal BGP-RD carrier is synthesised on render with ASN derived from the RD administrator field; a config whose BGP ASN differs re-emits the normalised ASN (cosmetic — the RD round-trips).  No `router bgp` ⇒ `route_distinguisher=''`.  `l3_vni` (EVPN Type-5) is not modelled. |
-| `/snmp/community` | Unsupported | SNMP parse + render is out of the v1 XR scope. |
+| `/snmp/{community,location,contact,trap-host,v3-user}` (and every field of a v3 user) | Unsupported | SNMP parse + render is out of the v1 XR scope: no location, contact, trap host or SNMPv3 user reaches the output.  ⚠️ Up to 0.7.7 only the community was declared. |
+| `/vlans/vlan/{id,name,description,tagged-ports,untagged-ports}` | Lossy (warn) | IOS-XR has no VLAN database: a VLAN is written only as the `encapsulation dot1q` tag of a sub-interface that carries it.  A VLAN no sub-interface carries is not written, and no VLAN's name, description or port lists are.  From IOS XR the parser makes a VLAN record, with a name, of each sub-interface's tag. |
+| `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
+| Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/interfaces/interface/vrrp-groups/group/*`, `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac` | Unsupported | No DHCP pool, VRRP group, VNI or virtual gateway is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/routing/bgp` | Unsupported | `router bgp <asn>` is Tier-3 (a minimal per-VRF RD harvest aside); full BGP modelling stays unsupported. |
 | `/routing/ospf` | Unsupported | `router ospf <pid>` parse-and-ignore (Tier-3). |
 | `/routing/isis` | Unsupported | `router isis <name>` parse-and-ignore (Tier-3). |
@@ -601,7 +648,9 @@ undetected (see [`vendors/aruba_aoscx.md`](vendors/aruba_aoscx.md) §
 | `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
 | `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Unsupported | The `vrf <name>` stanza is a bare name in v1; descriptions / RD / route-targets live under the deferred `evpn` / `router bgp` blocks. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in Phase 1; only default-VRF `ip route` is wired. |
-| `/interfaces/interface/vrrp-groups/group` | Unsupported | AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is a later phase; the `active-gateway` distributed-gateway anycast surface IS supported. |
+| `/interfaces/interface/vrrp-groups/group` (and every field of one) | Unsupported | AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is a later phase; the `active-gateway` distributed-gateway anycast surface IS supported.  ⚠️ Up to 0.7.7 a group's virtual IPs, tracked interfaces and virtual MAC were declared supported. |
+| `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
+| Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/interfaces/interface/ipv6/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, IPv6 virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv4 active-gateway is supported; the IPv6 anycast companion parses-and-ignores in v1 (parity with NX-OS / IOS-XE). |
 | `/vxlan-vnis/l2vni-route-target` | Unsupported | The per-VLAN L2VNI RD/RT (`evpn / vlan N / rd auto / route-target …`) is almost always `auto`-derived and has no cross-vendor canonical home; the VLAN↔VNI binding IS translated, the RD/RT is re-derived on the target. |
 | `/routing-instances/instance/l3-vni` | Unsupported | EVPN symmetric-IRB L3VNI (`vni N / vrf <name>` under the VTEP + `router bgp / vrf`) is a later phase; the L2VNI binding IS supported. |
@@ -632,7 +681,11 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/vxlan-vnis/vlan-id` | Lossy | VyOS models ONE VNI per `vxlan vxlanN` netdev with no on-device VLAN (the L2 binding lives on a separate `bridge`); the required canonical `vlan_id` is synthesised from the VNI and the netdev name regenerated `vxlan<index>` on render — both deterministic (stable same-vendor, advisory cross-vendor). |
 | `/interfaces/interface/dot1q-inner-vlan` | Unsupported | VyOS QinQ (`vif-s <id> vif-c <id>`) is not this field: its service tag is 802.1ad, Ethertype 0x88a8 by default.  The parser leaves a `vif-s` block out with a row of the Tier-3 banner, and a source's inner 802.1Q tag is reported as a drop. |
 | `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is a `vif` under its port, and a vif's number IS its tag: the port translator names it `eth1.200`, `vif 200`, so its unit number is not kept where it is not its tag, and two units of one port with one tag are one name (listed in `fused_ports`; the job is `partial`).  Only the port translator makes that name: the bare pipeline writes a sub-interface of another vendor's name under that name with no tag, beneath a `/* review */` line that says so.  An entry that names a unit with another number is a warning and a `/* review */` line.  A source's `vif 0` is left out with a row of the Tier-3 banner: VID 0 is a priority tag and no VLAN. |
-| `/vlans/vlan/id` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported. |
+| `/vlans/vlan/{id,name,description,tagged-ports,untagged-ports,ipv4/address/ip}` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported.  Nothing held on a VLAN record is written as a VLAN's: neither its name, its description, its port lists nor its address.  ⚠️ Up to 0.7.7 only the id was declared. |
+| `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Lossy (warn) | VyOS writes a VRF as its name and its table only: its description, route distinguisher and route targets are not written. |
+| `/routing/static-route/interface` | Lossy (warn) | A route that names an interface and no gateway is written as `next-hop <interface>`, which is not a next hop VyOS takes (an interface route is `interface <name>`): the route is not written as one out of that interface. |
+| `/snmp/trap-host` | Lossy (warn) | The codec writes no SNMP trap target: the trap hosts are dropped. |
+| Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/interfaces/interface/vrrp-groups/group/{virtual-ips,track-interfaces,virtual-mac}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, VRRP group, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static routes (`vrf name <X> { protocols static route … }`) are deferred past the Phase-3 VRF wire-up; the `vrf name` instances + per-interface binding ARE supported. |
 | `/vxlan-vnis/l2vni-route-target` | Unsupported | EVPN per-VNI RD/RT lives under `protocols bgp … address-family l2vpn-evpn` (Tier-3, dropped); the L2 VLAN↔VNI binding is supported but the control-plane RD/RT is not auto-translated. |
 | `/routing-instances/instance/l3-vni` | Unsupported | Symmetric-IRB L3VNI (a VNI bound to a VRF for inter-subnet routing) is out of scope for the Phase-5 per-netdev L2-VNI model. |
@@ -3090,9 +3143,10 @@ different bytes on the wire.
 
 | Vendor | Native grammar (canonical mapping) | Canonical `mode` |
 |---|---|---|
-| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (HSRP via `standby` grammar parses but renders as VRRP) |
+| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (the HSRP `standby` grammar is not read: an IOS-XE HSRP group is not translated, and nothing says so) |
+| Cisco NX-OS | `interface VlanN / hsrp 10 / ip 192.168.1.254 / priority 110 / preempt` | `hsrp` (every group is written as HSRP, whatever its source `mode`) |
 | Arista EOS | `interface VlanN / vrrp 10 ipv4 192.168.1.254 / vrrp 10 priority 110` (modern multi-line) | `vrrp` |
-| Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv6 via `vrrp-inet6-group`) |
+| Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv4 groups only: an IPv6 virtual IP is written as `virtual-inet6-address` under the IPv4 address, not as the `vrrp-inet6-group` Juniper documents) |
 | Aruba AOS-S | `router vrrp` + `vlan N / vrrp vrid 10 / virtual-ip-address Y / priority 110 / preempt / enable` | `vrrp` |
 | FortiGate | `config system interface / edit X / config vrrp / edit 10 / set vrip Y / set priority 110 / set preempt enable / next / end` | `vrrp` |
 | MikroTik RouterOS | `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` | `vrrp` |
@@ -3138,17 +3192,23 @@ into routinely:
   (`fabric forwarding mode anycast-gateway`); IPv6 VARP DROPS
   because `/interfaces/interface/ipv6/address/virtual-gateway-address`
   is `unsupported` on `cisco_iosxe_cli` (no fixture coverage today).
-* **IOS-XE HSRP → any non-Cisco target.**  The IOS-XE parser folds
-  HSRP grammar into the canonical record; targets render VRRP.
-  Election timing is operator-equivalent but the wire protocol
-  flips — operator must verify both ends agree on VRID / virtual-IP
-  on a per-VLAN basis before deploy.
+* **NX-OS HSRP → any other target.**  The NX-OS parser reads
+  `hsrp N` as a group with `mode="hsrp"`, and only NX-OS writes
+  HSRP.  IOS-XE CLI, EOS, AOS-S, FortiOS and RouterOS do not write
+  such a group, and a review line in the output says so; Junos and
+  OPNsense do not write it, and nothing in the output says so; OS10
+  writes it as VRRP.  Each of those declares the group `lossy` (OS10
+  its `mode`), so the job says so; AOS-CX, IOS XR and VyOS write no group at all
+  (`unsupported`, the job is `partial`).  The redundancy has to be
+  made again on the target.  (An IOS-XE `standby` group is not read
+  at all: see the table above.)
 * **OPNsense CARP ↔ VRRP devices.**  The `mode="carp"`
   discriminator carries through.  OPNsense as target renders only
-  `mode="carp"` records (`mode="vrrp"` / `"hsrp"` records are
-  SKIPPED with a review banner).  Cross-vendor migration *toward*
+  `mode="carp"` records: a `mode="vrrp"` / `"hsrp"` record is not
+  written and no line says so, while the matrix declares the group
+  `lossy`, so the job does.  Cross-vendor migration *toward*
   OPNsense from VRRP devices currently requires the operator to
-  flip `mode` manually, or accept the silent skip.
+  make the CARP group on the target.
 
 ---
 

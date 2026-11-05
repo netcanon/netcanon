@@ -83,6 +83,88 @@ from .render import render_intent
 __all__ = ["MikroTikRouterOSCodec"]
 
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No IPv4 virtual gateway is written "
+        "(`ipv4/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRF is written (`/routing-instances/instance` is unsupported), "
+        "so no field of one is and no interface is placed in one: its name, "
+        "description, route distinguisher, route targets and L3 VNI go with "
+        "it, and so does each interface's VRF.",
+        (
+            "/routing-instances/instance/name",
+            "/routing-instances/instance/description",
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+            "/routing-instances/instance/l3-vni",
+            "/interfaces/interface/config/vrf",
+        ),
+    ),
+    (
+        "No VXLAN VNI is written (`/vxlan-vnis/vni` is unsupported), so "
+        "neither is its VLAN, its multicast group or its flood list.",
+        (
+            "/vxlan-vnis/vlan-id",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+        ),
+    ),
+    (
+        "No EVPN Type-5 route is written: the codec has no form for one.",
+        ("/evpn-type5-routes/route",),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "RouterOS keeps a DHCP client in `/ip dhcp-client`, which this "
+        "codec neither reads nor writes: the interface is written without a "
+        "DHCP client.",
+        ("/interfaces/interface/dhcp-client",),
+    ),
+    (
+        "RouterOS writes IETF VRRP only: a group of another protocol (HSRP, "
+        "CARP) is not written, a `# review:` line in `/interface vrrp` says "
+        "so, and the redundancy has to be made again on the target.",
+        ("/interfaces/interface/vrrp-groups/group",),
+    ),
+    (
+        "The codec writes no tracked interface for a VRRP group: the "
+        "interfaces it tracks are dropped.",
+        ("/interfaces/interface/vrrp-groups/group/track-interfaces",),
+    ),
+    (
+        "The codec writes no virtual MAC for a VRRP group: a MAC the source "
+        "set is dropped, and the group uses its platform's own.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-mac",),
+    ),
+)
+
+
 @register
 class MikroTikRouterOSCodec(CodecBase):
     """Codec for MikroTik RouterOS ``/export verbose`` text.
@@ -179,7 +261,7 @@ class MikroTikRouterOSCodec(CodecBase):
             # HSRP / CARP / anycast modes have no native RouterOS
             # equivalent — the renderer surfaces them as review
             # comments instead of dropping silently.
-            "/interfaces/interface/vrrp-groups/group",
+            # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
         ],
         lossy=[
             LossyPath(
@@ -220,8 +302,9 @@ class MikroTikRouterOSCodec(CodecBase):
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "RouterOS renders only IETF VRRP; a cross-family source "
-                    "mode (HSRP / CARP) drops to a review comment on render -- "
-                    "the FHRP protocol silently changes, verify."
+                    "mode (HSRP / CARP) is not written (see /interfaces/"
+                    "interface/vrrp-groups/group) -- the redundancy has "
+                    "to be made again on the target."
                 ),
                 severity="warn",
             ),
@@ -411,6 +494,12 @@ class MikroTikRouterOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -563,6 +652,12 @@ class MikroTikRouterOSCodec(CodecBase):
                     "wire-up scheduled for v0.2.0 (closes existing "
                     "per-VRF static-route lossy declaration)."
                 ),
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

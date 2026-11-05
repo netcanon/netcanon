@@ -52,16 +52,16 @@ no false positives across a single universal kitchen-sink:
    ~30 intentional markers — so the guard is a documented-allowlist gate,
    not a blanket assertion.)
 
-The third honesty direction — *dropped*-field ⇒ ``unsupported`` — is
-NOT enforced here.  Detecting a "drop" from a single universal
-kitchen-sink produces vendor-naming false positives (e.g. a LAG whose
-member interface name isn't valid for a given vendor fails to render,
-which looks like "drops all LAGs" when the codec supports LAGs with
-native names).  Forcing declarations from those false positives would
-make the matrices *less* honest.  That direction stays covered by the
-per-codec round-trip tests (``parse(render(x)) == x`` for the supported
-subset) and the offline cross-mesh fidelity audit, plus the dedicated
-cisco_iosxe stub guard.
+The third honesty direction — *dropped*-field ⇒ declared — is NOT
+enforced here.  Detecting a "drop" from a single universal kitchen-sink
+produces vendor-naming false positives (e.g. a LAG whose member
+interface name isn't valid for a given vendor fails to render, which
+looks like "drops all LAGs" when the codec supports LAGs with native
+names).  It is enforced in ``test_a_supported_path_is_written.py``,
+which builds the smallest tree for each walkable path, moves it into
+the target's port names with the port translator, and holds every path
+a codec classifies ``supported`` to the walk of what its own parser
+reads back from the render.
 """
 
 from __future__ import annotations

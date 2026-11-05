@@ -56,6 +56,26 @@ from . import port_names as _port_names
 from .parse import parse_intent, without_bodies
 from .render import render_intent
 
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "EOS spells a DHCP client `ip address dhcp`, which this codec "
+        "neither reads nor writes: the interface is written without a DHCP "
+        "client.",
+        ("/interfaces/interface/dhcp-client",),
+    ),
+    (
+        "EOS writes IETF VRRP only: a group of another protocol (HSRP, "
+        "CARP) is not written, a `! review:` line in its interface says so, "
+        "and the redundancy has to be made again on the target.",
+        ("/interfaces/interface/vrrp-groups/group",),
+    ),
+)
+
 
 @register
 class AristaEOSCodec(CodecBase):
@@ -146,7 +166,7 @@ class AristaEOSCodec(CodecBase):
             "/routing-instances/instance",       # GAP 6 demoted
             "/dhcp-servers/pool",                # Cluster E.1-A
             # -- v0.2.0 Wave B (VRRP) -- per-codec wire-up landed --
-            "/interfaces/interface/vrrp-groups/group",
+            # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
             # -- v0.2.0 Wave C (VARP / anycast-gateway) --
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/interfaces/interface/ipv6/address/virtual-gateway-address",
@@ -193,9 +213,9 @@ class AristaEOSCodec(CodecBase):
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Arista EOS renders only IETF VRRP; a cross-family source "
-                    "mode (HSRP / CARP) drops to a review comment on render, so "
-                    "the FHRP protocol silently changes -- verify the "
-                    "redundancy intent survived."
+                    "mode (HSRP / CARP) is not written (see "
+                    "/interfaces/interface/vrrp-groups/group) -- the "
+                    "redundancy has to be made again on the target."
                 ),
                 severity="warn",
             ),
@@ -387,6 +407,12 @@ class AristaEOSCodec(CodecBase):
                     "vendors will see a review-required banner."
                 ),
                 severity="warn",
+            ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
             ),
         ],
         unsupported=[

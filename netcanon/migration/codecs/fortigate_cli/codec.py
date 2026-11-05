@@ -59,6 +59,81 @@ __all__ = [
 ]
 
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No IPv4 virtual gateway is written "
+        "(`ipv4/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRF is written (`/routing-instances/instance` is unsupported), "
+        "so no field of one is and no interface is placed in one: its name, "
+        "description, route distinguisher, route targets and L3 VNI go with "
+        "it, and so does each interface's VRF.",
+        (
+            "/routing-instances/instance/name",
+            "/routing-instances/instance/description",
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+            "/routing-instances/instance/l3-vni",
+            "/interfaces/interface/config/vrf",
+        ),
+    ),
+    (
+        "No VXLAN VNI is written (`/vxlan-vnis/vni` is unsupported), so "
+        "neither is its VLAN, its multicast group or its flood list.",
+        (
+            "/vxlan-vnis/vlan-id",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+        ),
+    ),
+    (
+        "No EVPN Type-5 route is written: the codec has no form for one.",
+        ("/evpn-type5-routes/route",),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "FortiOS writes IETF VRRP only: a group of another protocol (HSRP, "
+        "CARP) is not written, a `# review:` line in its `config vrrp` says "
+        "so, and the redundancy has to be made again on the target.",
+        ("/interfaces/interface/vrrp-groups/group",),
+    ),
+    (
+        "An IPv6 virtual IP is written as `set vrip6` in the interface's "
+        "`config vrrp`, beside `set version 3`.  Fortinet documents IPv6 "
+        "VRRP in the interface's `config ipv6` / `config vrrp6`, so the "
+        "line is not one the device takes; and the parser reads no group "
+        "that has no `vrip`, so a group with IPv6 virtual IPs only does not "
+        "come back.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-ipv6s",),
+    ),
+)
+
+
 @register
 class FortiGateCLICodec(CodecBase):
     """Codec for FortiGate CLI (``config/edit/set/next/end``)."""
@@ -175,7 +250,7 @@ class FortiGateCLICodec(CodecBase):
             # paths stay ``unsupported`` — FortiGate is a firewall /
             # edge platform with no native anycast surface (HA is
             # delivered via VRRP groups, not anycast-MAC fabrics).
-            "/interfaces/interface/vrrp-groups/group",
+            # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
         ],
         lossy=[
             LossyPath(
@@ -219,8 +294,9 @@ class FortiGateCLICodec(CodecBase):
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "FortiOS renders only IETF VRRP; a cross-family source "
-                    "mode (HSRP / CARP) drops to a review comment on render -- "
-                    "the FHRP protocol silently changes, verify."
+                    "mode (HSRP / CARP) is not written (see /interfaces/"
+                    "interface/vrrp-groups/group) -- the redundancy has "
+                    "to be made again on the target."
                 ),
                 severity="warn",
             ),
@@ -395,6 +471,12 @@ class FortiGateCLICodec(CodecBase):
                     "priority-decrement scheme."
                 ),
                 severity="warn",
+            ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
             ),
         ],
         unsupported=[
@@ -599,6 +681,12 @@ class FortiGateCLICodec(CodecBase):
                     "wire-up scheduled for v0.2.0 (closes existing "
                     "per-VRF static-route lossy declaration)."
                 ),
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

@@ -2275,11 +2275,14 @@ class TestVRRPAnycastCapabilities:
     ``unsupported`` (Junos uses per-unit MAC, not chassis-wide).
     """
 
-    def test_vrrp_groups_supported(self):
+    def test_vrrp_groups_lossy(self):
+        """A VRRP group with an IPv4 virtual IP is written; a group of
+        another protocol, or with IPv6 virtual IPs only, is not."""
         caps = JunosCodec().capabilities
         assert (
-            "/interfaces/interface/vrrp-groups/group" in caps.supported
+            "/interfaces/interface/vrrp-groups/group" not in caps.supported
         )
+        assert caps.classify("/interfaces/interface/vrrp-groups/group") == "lossy"
 
     def test_virtual_gateway_address_supported(self):
         caps = JunosCodec().capabilities

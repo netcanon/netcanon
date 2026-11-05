@@ -1444,13 +1444,12 @@ def _emit_vrrp_groups_for_address(
     address <ip>/<prefix> vrrp-group <gid>`` path so the round-trip
     parse re-binds the same group to the same address.
 
-    Groups with ``mode != "vrrp"`` (e.g. ``"hsrp"`` / ``"carp"``)
-    surface as a review comment — Junos has no native HSRP / CARP
-    primitive.  Groups with no virtual_ips on the IPv4 family also
-    surface a review comment (the operator's intent looks like
-    IPv6-only VRRP, which Junos expresses with
-    ``virtual-inet6-address``; we emit a comment because we don't
-    know which v6 address to anchor under in v0.2.0).
+    Groups with ``mode != "vrrp"`` (e.g. ``"hsrp"`` / ``"carp"``) are
+    not written, and no line stands in their place — Junos has no
+    native HSRP / CARP primitive.  A group with no virtual_ips on the
+    IPv4 family is not written either (IPv6-only VRRP, which Junos
+    states as a ``vrrp-inet6-group`` under a ``family inet6`` address).
+    The capability matrix declares both (``_DROPPED`` in ``codec.py``).
     """
     if not vrrp_groups:
         return
@@ -1461,15 +1460,15 @@ def _emit_vrrp_groups_for_address(
     )
     for group in vrrp_groups:
         if group.mode != "vrrp":
-            # Tier-3: anycast / HSRP / CARP — surface a review
-            # marker.  Junos's native anycast surface lives on
+            # Anycast / HSRP / CARP: not written, and no line says so.
+            # Junos's native anycast surface lives on
             # CanonicalIPv4Address.virtual_gateway_address (handled
             # elsewhere); this branch only fires for the remaining
             # non-VRRP modes.
             continue
         if not group.virtual_ips:
             # All-v6 group — out of scope for v0.2.0 (would need a
-            # different anchor address); skip silently.
+            # different anchor address); not written.
             continue
         for vip in group.virtual_ips:
             out.append(

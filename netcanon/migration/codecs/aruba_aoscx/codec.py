@@ -70,6 +70,64 @@ from . import port_names as _port_names
 from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
+        "no field of one is: its gateway, DNS servers, domain and lease go "
+        "with it.",
+        (
+            "/dhcp-servers/pool/gateway",
+            "/dhcp-servers/pool/dns-servers",
+            "/dhcp-servers/pool/domain-name",
+            "/dhcp-servers/pool/lease-time",
+        ),
+    ),
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+    (
+        "No VRRP group is written (`vrrp-groups/group` is unsupported), so "
+        "neither are its tracked interfaces, its other virtual IPs or its "
+        "virtual MAC.",
+        (
+            "/interfaces/interface/vrrp-groups/group/track-interfaces",
+            "/interfaces/interface/vrrp-groups/group/virtual-ips",
+            "/interfaces/interface/vrrp-groups/group/virtual-mac",
+        ),
+    ),
+    (
+        "No EVPN Type-5 route is written: the codec has no form for one.",
+        ("/evpn-type5-routes/route",),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "The codec reads and writes no DHCP client, IPv4 or IPv6: the "
+        "interface is written without one.",
+        (
+            "/interfaces/interface/dhcp-client",
+            "/interfaces/interface/dhcp-client-v6",
+        ),
+    ),
+)
+
 
 @register
 class ArubaAOSCXCodec(CodecBase):
@@ -464,6 +522,12 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -700,6 +764,12 @@ class ArubaAOSCXCodec(CodecBase):
             UnsupportedPath(
                 path="/nat",
                 reason="AOS-CX does not host typical edge NAT.",
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

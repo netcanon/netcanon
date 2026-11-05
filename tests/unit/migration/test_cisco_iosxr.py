@@ -571,14 +571,16 @@ class TestCapabilityMatrix:
             assert caps.classify(path) == "unsupported", path
 
     def test_phase2_graduated_paths(self, codec):
-        """VRF / VLAN / LAG / users / per-iface-vrf graduated in Phase 2.
+        """VRF / LAG / users / per-iface-vrf graduated in Phase 2.
         The routing-instances path is supported AND lossy → classifies
-        lossy (the RD needs the `router bgp` block)."""
+        lossy (the RD needs the `router bgp` block).  A VLAN is written
+        only as the tag of a sub-interface that carries it, so its id
+        and name are lossy."""
         caps = codec.capabilities
+        assert caps.classify("/vlans/vlan/id") == "lossy"
+        assert caps.classify("/vlans/vlan/name") == "lossy"
         for path in [
             "/interfaces/interface/config/vrf",
-            "/vlans/vlan/id",
-            "/vlans/vlan/name",
             "/routing/static-route/vrf",
             "/lags/lag/name",
             "/lags/lag/members",

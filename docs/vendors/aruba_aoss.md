@@ -51,8 +51,11 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - SNMP v1/v2c/v3 — `snmpv3 user` + `snmpv3 group` mappings; engine
   ID; trap-host with `trap-level` filtering
 - RADIUS — `radius-server host <ip> key <secret>`
-- DHCP server pools (`dhcp-server pool` grammar with default-router
-  + dns-server + network + range)
+- DHCP server pools: **not translated either way.**  The parser
+  reads no `dhcp-server pool` stanza, and nothing in the job says
+  so; onto AOS-S a pool is written only as a `;` comment that names
+  its network, gateway and range (`/dhcp-servers/pool` and each of
+  its fields are declared `unsupported`)
 - Local users — one manager and one operator account, in the AOS-S
   forms (`sha1`, `sha256`, `plaintext`), and as a source the
   `aaa authentication local-user` accounts beside them; see
@@ -116,7 +119,14 @@ multiple `CanonicalVRRPGroup` records on the SVI.
   with no equivalent of Arista VARP / Junos virtual-gateway-address /
   Cisco SD-Access fabric forwarding.  All anycast canonical paths
   are declared `unsupported` and parse-and-ignore.
-- **No CARP, no HSRP.**  Only IETF VRRP.
+- **No CARP, no HSRP.**  Only IETF VRRP.  A group of another
+  protocol is not written, and a `; review:` line in the VLAN says
+  so.
+- **A group is written only in a VLAN.**  A group on an interface
+  that is not a VLAN's (a routed port of another vendor) is not
+  written, and nothing in the output says so.  No tracked interface
+  and no virtual MAC is written for a group.  The capability matrix
+  declares all three `lossy` (severity `warn`), so the job says so.
 - **AOS-S vendor default is `preempt=False`**, opposite to most
   other vendors — the parser overrides the canonical default (True)
   when the `preempt` token is absent from the source.
@@ -245,6 +255,23 @@ surface.
   platform that defines it.  AOS-S has two accounts, `manager` and
   `operator`, and chooses between them by the privilege level (15 is
   `manager`) from any source; a role the source names is not carried.
+- **`/interfaces/interface/config/vrf`** — AOS-S has no VRF.  A
+  management port of another vendor that lands on `oobm` is written
+  in the out-of-band context, which HPE documents as a management
+  plane apart from the data plane, so the port stays apart as its
+  management VRF kept it; any other interface is written without
+  its VRF.
+- **`/interfaces/interface/config/mtu`** — AOS-S sets the frame size
+  of a VLAN (`jumbo`) or of the whole switch, not of a port: an
+  interface's MTU is not written.
+- **`/interfaces/interface/dhcp-client`** — AOS-S spells a DHCP
+  client `ip address dhcp-bootp` in a VLAN, which the codec neither
+  reads nor writes: the interface is written without one.
+
+Each is severity `warn`: the job says so and stays `completed`.  A
+field of a record AOS-S does not write (a VRF, a DHCP pool, a VXLAN
+VNI, a virtual gateway's MAC) is declared `unsupported` with its
+record.
 
 ## What we don't do
 

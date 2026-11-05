@@ -247,17 +247,27 @@ separate session.
 
 ### 6. Capability matrix declaration
 
-Each codec's `_CAPS` needs a new entry in `supported_paths` (or
-`lossy_paths` / `unsupported_paths` as appropriate):
+Each codec's `_CAPS` needs a new entry in `supported` (or `lossy` /
+`unsupported` as appropriate):
 
 ```python
 _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
-    supported_paths=[
+    supported=[
         # ...
         "/interfaces/interface/config/mtu",
     ],
 )
 ```
+
+`classify` matches a path as an exact string, and a path no list
+names is `supported`: on a codec that does not write the field, the
+entry is not optional.  Put it in that codec's `_NOT_RENDERED`
+(`unsupported`) or `_DROPPED` (`lossy`, severity `warn`), by the
+reason.  Give the field a probe in `PROBES` and its record in `OWNER`
+in `tests/unit/migration/test_a_supported_path_is_written.py`:
+`test_the_probes_hold_every_walkable_path` fails until it has one, and
+then the module fails for every codec that calls the field
+`supported` and does not write it.
 
 ### 7. Update the roadmap
 

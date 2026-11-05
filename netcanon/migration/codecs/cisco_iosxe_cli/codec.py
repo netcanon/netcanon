@@ -65,6 +65,49 @@ from . import port_names as _port_names
 from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
+#: Every walkable path this codec writes nothing for -- a record it has
+#: no form for, or a field of a record declared unsupported -- by the
+#: reason.  ``CapabilityMatrix.classify`` is an exact-string match and an
+#: undeclared path is ``supported``, so a record declared unsupported
+#: left each field under it reported as translated.  Spread into
+#: ``_CAPS.unsupported``; ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "No IPv6 virtual gateway is written "
+        "(`ipv6/address/virtual-gateway-address` is unsupported), so "
+        "neither is the MAC that goes with one.",
+        ("/interfaces/interface/ipv6/address/virtual-gateway-mac",),
+    ),
+)
+
+
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "The MAC of a virtual gateway is written only with the gateway the "
+        "codec writes, an anycast gateway that is the interface's own "
+        "address (see `ipv4/address/virtual-gateway-address`): the MAC of "
+        "any other virtual gateway is dropped with it.",
+        ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
+    ),
+    (
+        "IOS-XE writes IETF VRRP only: a group of another protocol (HSRP, "
+        "CARP) is not written, a `! review:` line in its interface says so, "
+        "and the redundancy has to be made again on the target.",
+        ("/interfaces/interface/vrrp-groups/group",),
+    ),
+    (
+        "The codec writes no virtual MAC for a VRRP group: a MAC the source "
+        "set is dropped, and the group uses its platform's own.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-mac",),
+    ),
+)
+
 
 @register
 class CiscoIOSXECLICodec(CodecBase):
@@ -156,7 +199,7 @@ class CiscoIOSXECLICodec(CodecBase):
             # authentication|track|timers`` family inside ``interface``
             # stanzas; renders the classic single-line per-attribute
             # form (broadest IOS-XE compatibility, 15.x onward).
-            "/interfaces/interface/vrrp-groups/group",
+            # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
             # NB: ``/interfaces/interface/ipv4/address/virtual-gateway-address``
             # is declared LOSSY below — SD-Access anycast only round-trips the
             # primary-IP-as-gateway shape (vga == ip); a separate cross-vendor
@@ -205,9 +248,9 @@ class CiscoIOSXECLICodec(CodecBase):
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Cisco IOS-XE CLI renders only IETF VRRP (`vrrp`); a "
-                    "cross-family source mode (HSRP / CARP) drops to a review "
-                    "comment on render -- the FHRP protocol silently changes, "
-                    "verify."
+                    "cross-family source mode (HSRP / CARP) is not written (see "
+                    "/interfaces/interface/vrrp-groups/group) -- the "
+                    "redundancy has to be made again on the target."
                 ),
                 severity="warn",
             ),
@@ -406,6 +449,12 @@ class CiscoIOSXECLICodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
+            ),
         ],
         unsupported=[
             # ── Tier-1 surfaces this codec drops on render — declared so the
@@ -481,6 +530,12 @@ class CiscoIOSXECLICodec(CodecBase):
                     "address/virtual-gateway-address`` in the "
                     "``supported`` list)."
                 ),
+            ),
+            # -- Paths this codec writes nothing for (see _NOT_RENDERED). --
+            *(
+                UnsupportedPath(path=path, reason=reason)
+                for reason, paths in _NOT_RENDERED
+                for path in paths
             ),
         ],
     )

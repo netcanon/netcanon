@@ -180,6 +180,14 @@ Canonical mapping:
   is fully wired; IPv6 (`fabric forwarding ipv6 mode
   anycast-gateway`) is rare in production captures and stays
   declared `unsupported` until demand arrives.
+- **Only IETF VRRP is written.**  A group of another protocol (NX-OS
+  HSRP, OPNsense CARP) is not written; a `! review:` line in its
+  interface says so, and the redundancy has to be made again on the
+  target.  No virtual MAC is written for a group.  The capability
+  matrix declares both `lossy` (severity `warn`), so the job says so.
+- **HSRP (`standby`) is not read.**  The parser reads no `standby`
+  line, so an IOS-XE HSRP group is not translated, and nothing in
+  the job says so.
 - **Cross-vendor `virtual_gateway_address` divergent from primary.**
   When a Junos / Arista VARP source carries a virtual IP DIFFERENT
   from the SVI's primary IP, IOS-XE SD-Access has no equivalent

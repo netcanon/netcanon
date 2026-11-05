@@ -91,6 +91,17 @@ translatable with caveats:
   inferred from the name prefix (GigabitEthernet → ethernetCsmacd,
   Bundle-Ether → ieee8023adLag, etc.); sub-interfaces with
   vendor-specific encapsulation classify as `other`.
+- **`/vlans/vlan/{id,name,description,tagged-ports,untagged-ports}`**
+  — IOS-XR has no VLAN database: a VLAN is written only as the
+  `encapsulation dot1q` tag of a sub-interface that carries it.  A
+  VLAN no sub-interface carries is not written, and no VLAN's name,
+  description or port lists are.
+- **`/interfaces/interface/{dhcp-client,dhcp-client-v6}`** — the codec
+  reads and writes no DHCP client, IPv4 or IPv6: the interface is
+  written without one.
+
+The last two are severity `warn`: the job says so and stays
+`completed`.
 
 ## What we don't do
 
@@ -103,7 +114,12 @@ is visible, not silent):
 - **Management plane** — `timezone`, DHCP server pools, RADIUS servers
   (host + secret).  (DNS / NTP / syslog servers now round-trip —
   promotion #13.)
-- **SNMP** — parse + render is out of the v1 XR scope
+- **SNMP** — parse + render is out of the v1 XR scope: no community,
+  location, contact, trap host or SNMPv3 user reaches the output
+- **First-hop redundancy** — no VRRP group is written, so neither are
+  its virtual IPs, its tracked interfaces or its virtual MAC; nor is
+  an IPv4 or IPv6 virtual gateway address, or the MAC that goes with
+  one
 
 Deliberately deferred to [Tier
 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered):

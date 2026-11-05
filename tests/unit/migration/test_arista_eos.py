@@ -1981,13 +1981,12 @@ class TestVRRPGroups:
         # silently turn a BSD CARP group into IETF VRRP.
         assert "vrrp 10 ipv4 10.0.10.254" not in out
 
-    def test_vrrp_groups_capability_supported(self):
-        """Wave B matrix flip: vrrp-groups path declared supported."""
+    def test_vrrp_groups_capability_lossy(self):
+        """A VRRP group is written; an HSRP or CARP group is not (the
+        test above), so the path is lossy, not supported."""
         caps = AristaEOSCodec().capabilities
-        supported = set(caps.supported)
-        assert "/interfaces/interface/vrrp-groups/group" in supported
-        unsupported = {u.path for u in caps.unsupported}
-        assert "/interfaces/interface/vrrp-groups/group" not in unsupported
+        assert "/interfaces/interface/vrrp-groups/group" not in caps.supported
+        assert caps.classify("/interfaces/interface/vrrp-groups/group") == "lossy"
 
 
 # ---------------------------------------------------------------------------

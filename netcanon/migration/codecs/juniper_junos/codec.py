@@ -71,6 +71,43 @@ from . import port_names as _port_names
 from .parse import _looks_like_blockform, drop_session_lines, read_intent
 from .render import render_intent
 
+#: Every walkable path this codec writes only in some cases, or a record
+#: it writes without the field, by the reason.  Spread into
+#: ``_CAPS.lossy`` (severity ``warn``: the job says so and stays
+#: ``completed``); ``tests/unit/migration/
+#: test_a_supported_path_is_written.py`` holds the matrix to the render.
+_DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Junos states a tunnel's type by the name of its interface (`gr-` "
+        "GRE, `ip-` IP-in-IP, `st0` IPsec) and writes no type otherwise: a "
+        "tunnel whose name does not have that form is written without its "
+        "type.",
+        ("/interfaces/interface/tunnel-type",),
+    ),
+    (
+        "Junos writes IETF VRRP only: a group of another protocol (HSRP, "
+        "CARP) is not written, nothing in the output stands in its place, "
+        "and the redundancy has to be made again on the target.  A group "
+        "is written under an IPv4 address, so a group with no IPv4 virtual "
+        "IP is not written either.",
+        ("/interfaces/interface/vrrp-groups/group",),
+    ),
+    (
+        "The codec writes no virtual MAC for a VRRP group: a MAC the source "
+        "set is dropped, and the group uses its platform's own.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-mac",),
+    ),
+    (
+        "An IPv6 virtual IP is written as `virtual-inet6-address` in the "
+        "group under the interface's IPv4 address.  Juniper documents IPv6 "
+        "VRRP as a `vrrp-inet6-group` under a `family inet6 address`, with "
+        "a `virtual-link-local-address` it requires, so the line is not "
+        "one the device takes; and a group with no IPv4 virtual IP is not "
+        "written at all.",
+        ("/interfaces/interface/vrrp-groups/group/virtual-ipv6s",),
+    ),
+)
+
 
 @register
 class JunosCodec(CodecBase):
@@ -160,7 +197,7 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/dhcp-client-v6",          # IPv6 dhcpv6-client (no SLAAC keyword on Junos)
-            "/interfaces/interface/tunnel-type",             # gr- / ip- / st0 prefix discriminator
+            # /interfaces/interface/tunnel-type: written only in some cases, see _DROPPED.
             "/interfaces/interface/config/vrf",   # GAP 6
             # GAP 7: routed sub-interface 802.1Q tag (`unit N vlan-id`).
             # Junos is the first (source) codec wired for this dedicated
@@ -198,7 +235,7 @@ class JunosCodec(CodecBase):
             # (promotion #5 — a bundle with no lacp line is static, not active).
             "/lags/lag/mode",
             # -- v0.2.0 Wave B: classic FHRP redundancy groups --
-            "/interfaces/interface/vrrp-groups/group",
+            # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
             # -- v0.2.0 Wave C: anycast-gateway companions --
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/interfaces/interface/ipv4/address/virtual-gateway-mac",
@@ -222,8 +259,9 @@ class JunosCodec(CodecBase):
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Junos renders only IETF VRRP; a cross-family source mode "
-                    "(HSRP / CARP) is skipped on render -- the FHRP protocol "
-                    "silently changes, verify the redundancy intent survived."
+                    "(HSRP / CARP) is not written (see /interfaces/interface/"
+                    "vrrp-groups/group) -- the redundancy has to be made "
+                    "again on the target."
                 ),
                 severity="warn",
             ),
@@ -375,6 +413,12 @@ class JunosCodec(CodecBase):
                     "rather than relying on this list."
                 ),
                 severity="warn",
+            ),
+            # -- Paths written only in some cases (see _DROPPED). --
+            *(
+                LossyPath(path=path, reason=reason, severity="warn")
+                for reason, paths in _DROPPED
+                for path in paths
             ),
         ],
         unsupported=[

@@ -131,6 +131,21 @@ Canonical mapping:
   decrement / Arista decrement — only the interface name survives).
 - **Sub-second `fast-interval`** drops to canonical
   `advertisement_interval=1` (lossy).
+- **Only IETF VRRP is written, and only under an IPv4 address.**  A
+  group of another protocol (HSRP from IOS-XE or NX-OS, CARP from
+  OPNsense) is not written as Junos, and no line of the output stands
+  in its place: the redundancy has to be made again on the target.
+  A group with no IPv4 virtual IP is not written either.  The
+  capability matrix declares the group `lossy` (severity `warn`), so
+  the job says so.
+- **An IPv6 virtual IP is not written where Junos takes one.**  The
+  renderer puts it in the group under the IPv4 address, as
+  `virtual-inet6-address`.  Juniper documents IPv6 VRRP as a
+  `vrrp-inet6-group` under a `family inet6 address`, with a
+  `virtual-link-local-address` it requires, so that line is not one
+  the device takes.  Declared `lossy` (`virtual-ipv6s`).
+- **No virtual MAC is written** for a VRRP group: a MAC the source
+  set is dropped, and the group uses Junos's own (`lossy`).
 
 ### Cross-references
 
