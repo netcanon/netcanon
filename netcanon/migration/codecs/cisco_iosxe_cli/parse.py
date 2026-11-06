@@ -90,6 +90,7 @@ from .._helpers import (
     without_keyword_stanzas,
     without_unread_tags,
 )
+from .._hsrp import GROUP_STATEMENTS, Groups, Unread, group_number
 from .._input_shape import detect_input_shape
 from .._scanner import (
     Body,
@@ -938,9 +939,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # declarations + their RD / RT metadata.
     intent.routing_instances = _parse_routing_instances(raw)
 
-    # Interfaces
-    intent.interfaces = _parse_interfaces(raw)
+    # Interfaces.  An HSRP statement the tree does not hold is said, a
+    # row for each kind (``standby timers``, ``standby track``, ...).
+    standby_unread = Unread("standby")
+    intent.interfaces = _parse_interfaces(raw, standby_unread)
     intent.dropped_tier3_sections.extend(_one_native_per_port(intent.interfaces))
+    intent.dropped_tier3_sections.extend(standby_unread.rows())
 
     # VLANs (top-level `vlan N / name X` stanzas)
     intent.vlans = _parse_vlans(raw)
@@ -1265,8 +1269,16 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
     return records, l3vni_by_vrf
 
 
-def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
-    """Extract interface stanzas from IOS config text."""
+def _parse_interfaces(  # noqa: C901
+    raw: str, standby_unread: Unread | None = None,
+) -> list[CanonicalInterface]:
+    """Extract interface stanzas from IOS config text.
+
+    Args:
+        raw: The config text.
+        standby_unread: Given what each interface's ``standby`` lines
+            did not read, for the rows the caller makes of it.
+    """
     # What each interface states about its trunk, by the name its
     # header writes: a stanza can be met twice, and the list is the
     # interface's.  So is its native VLAN, and the words that say a
@@ -1321,6 +1333,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             # record.  Materialised into list[CanonicalVRRPGroup] at
             # :func:`_build_canonical_interface` time.
             "vrrp_groups": {},
+            # HSRP groups, from the ``standby`` lines (``.._hsrp``).
+            "hsrp": Groups(),
             # SD-Access anycast-gateway flag.  ``fabric forwarding
             # mode anycast-gateway`` inside this interface stanza
             # sets the flag; at stanza-close time every primary IPv4
@@ -1553,8 +1567,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         # specific-first: ``vrrp N ip X`` must lose to ``vrrp N ipv6 X``
         # only when ipv6 is checked first, and the priority / preempt /
         # description / auth / track / timers regexes are mutually
-        # exclusive so order between them doesn't matter.
-        if _dispatch_vrrp_line(line, current):
+        # exclusive so order between them doesn't matter.  An HSRP
+        # ``standby`` line goes to its own reader.
+        if _fhrp_line(line, current):
             return
 
         # Routed-interface L3 markers: SD-Access anycast-gateway mode +
@@ -1570,14 +1585,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # the former hand-rolled rule verbatim (a column-0 `!` or any
     # non-indented line closes the stanza).  Behaviour-identical to the
     # previous loop.
+    def _build(scratch: dict[str, Any]) -> CanonicalInterface:
+        if standby_unread is not None:
+            standby_unread.add(scratch["name"], scratch["hsrp"])
+        return trunks.made(scratch["trunk_key"], _build_canonical_interface(scratch))
+
     interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
         open_scratch=_open,
         on_line=_on_line,
-        build=lambda scratch: trunks.made(
-            scratch["trunk_key"], _build_canonical_interface(scratch),
-        ),
+        build=_build,
         is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
     )
     # A trunk with no allowed line carries what the platform's trunk
@@ -1591,6 +1609,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # another mode is given none, whatever trunk lines it keeps.
     trunks.settle()
     return interfaces
+
+
+def _fhrp_line(line: str, current: dict[str, Any]) -> bool:
+    """Whether *line* is a VRRP or an HSRP statement of the interface,
+    which is then read into ``current``."""
+    return _dispatch_vrrp_line(line, current) or _standby_line(line, current["hsrp"])
 
 
 def _dispatch_vrrp_line(line: str, current: dict[str, Any]) -> bool:
@@ -1691,6 +1715,41 @@ def _dispatch_vrrp_line(line: str, current: dict[str, Any]) -> bool:
     return False
 
 
+def _standby_line(line: str, hsrp: Groups) -> bool:
+    """Read *line* into *hsrp* if it is an HSRP statement; ``True`` if
+    it was.
+
+    IOS-XE writes each statement of a group on a line of its own,
+    ``standby [<group>] <statement>``: "If you do not configure a group
+    number, the default group number is 0" (Cisco's HSRP guide).  A
+    line ``standby <statement>`` whose statement is not a group's
+    (``version``, ``use-bia``, ``delay``) is the interface's.  What the
+    words mean, and which of them the tree holds, is ``.._hsrp``'s.
+    """
+    head = line.lstrip()[:7].lower()
+    if head != "standby" and not head.startswith("no"):
+        return False
+    words = line.split()
+    negated = words[0].lower() == "no"
+    if negated:
+        words = words[1:]
+    if len(words) < 2 or words[0].lower() != "standby":
+        return False
+    words = words[1:]
+    gid = group_number(words[0])
+    if gid is not None and len(words) > 1:
+        hsrp.group_statement(gid, words[1:], negated=negated)
+    elif gid is not None:
+        hsrp.left_out("another statement", gid)
+    elif words[0].lower() in GROUP_STATEMENTS:
+        hsrp.group_statement(0, words, negated=negated)
+    elif negated:
+        hsrp.left_out("another statement")
+    else:
+        hsrp.interface_statement(words)
+    return True
+
+
 def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
     """Convert the parse-time dict into a CanonicalInterface.
 
@@ -1741,6 +1800,9 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
             track_interfaces=list(g.get("track_interfaces", [])),
             description=g.get("description", ""),
         ))
+    # HSRP groups after them, from the ``standby`` lines.
+    if "hsrp" in raw:
+        vrrp_groups.extend(raw["hsrp"].built())
 
     # IOS treats an interface carrying `switchport access vlan N` as an
     # access port even when the explicit `switchport mode access` line is

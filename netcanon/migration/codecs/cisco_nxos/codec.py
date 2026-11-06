@@ -530,9 +530,11 @@ class CiscoNXOSCodec(CodecBase):
                     "cross-vendor VRRP / CARP group normalises to HSRP on "
                     "NX-OS — the operator's redundancy intent for the "
                     "virtual IP survives, but the wire protocol changes.  "
-                    "Same-vendor HSRP round-trips losslessly.  Sub-second "
-                    "timers, virtual-MAC, and track objects are not "
-                    "modelled in v1."
+                    "A statement of a group the parser does not read "
+                    "(timers, a preempt delay, a type-7 key, an IPv6 "
+                    "group, a group past 4095) is said in a row of the "
+                    "job; the virtual MAC and tracked interfaces are not "
+                    "written."
                 ),
                 severity="warn",
             ),

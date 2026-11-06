@@ -263,10 +263,10 @@ per_field_expectation:
       be lossy about.  Recorded `unsupported` on that declaration, not on an
       observation: no committed cell populates a VRRP group, and the measured
       drift on this key is the shared interface record drift, nothing more.
-      For a source that DOES emit FHRP groups the target is only partly able
-      to help — cisco_iosxe_cli declares `.../group/mode` lossy ("renders only
-      IETF VRRP; a cross-family source mode (HSRP / CARP) drops to a review
-      comment").  Re-author first-hop redundancy on the IOS-XE side by hand.
+      For a source that DOES emit FHRP groups the target writes VRRP (`vrrp`)
+      and HSRP (`standby`), and declares `.../group/mode` lossy because a
+      CARP group is not written.  Re-author first-hop redundancy on the
+      IOS-XE side by hand.
     references: [aoscx-iosxecli-surface]
 
   # -- VLANs -- the campus surface that mostly survives ----------------------

@@ -183,14 +183,34 @@ Canonical mapping:
   is fully wired; IPv6 (`fabric forwarding ipv6 mode
   anycast-gateway`) is rare in production captures and stays
   declared `unsupported` until demand arrives.
-- **Only IETF VRRP is written.**  A group of another protocol (NX-OS
-  HSRP, OPNsense CARP) is not written; a `! review:` line in its
+- **VRRP and HSRP are written; CARP is not.**  A VRRP group is
+  written as `vrrp` lines and an HSRP group (an IOS-XE `standby`
+  group, an NX-OS `hsrp` block) as `standby <group> ...` lines.  An
+  OPNsense CARP group is not written; a `! review:` line in its
   interface says so, and the redundancy has to be made again on the
-  target.  No virtual MAC is written for a group.  The capability
-  matrix declares both `lossy` (severity `warn`), so the job says so.
-- **HSRP (`standby`) is not read.**  The parser reads no `standby`
-  line, so an IOS-XE HSRP group is not translated, and nothing in
-  the job says so.
+  target.  A virtual MAC is written for an HSRP group only.  The
+  capability matrix declares both `lossy` (severity `warn`), so the
+  job says so.
+- **What of an HSRP group is read.**  The parser reads `standby
+  [<group>] ip <address> [secondary]`, a link-local `ipv6 <address>`,
+  `priority`, `preempt`, `authentication text <key>`, `authentication
+  md5 key-string [0] <key>` and `mac-address`, with Cisco's defaults
+  for what a group does not state (group 0, priority 100, no
+  preemption).  Every other statement -- `timers`, `track`, `name`,
+  `follow`, a preempt `delay`, a key chain, a key the device printed
+  encrypted (`key-string 7`) -- is said in a row of the sections not
+  translated, one row for each kind, naming a few of the interfaces
+  and groups and never a value.  An encrypted key is not the key, so
+  the group is kept with no authentication.  On render, what a group
+  holds that HSRP has no line for here (a description, tracked
+  interfaces, an advertisement interval) is named in a `! review:`
+  line.  Up to 0.7.7 no `standby` line was read, and nothing said so.
+- **The HSRP version is not kept.**  `standby version 2` is written
+  only where a group needs it (a group above 255, or an IPv6
+  address).  A group of a version-2 pair that needs neither is written
+  for version 1, which does not talk to a version-2 peer: set the
+  version on the target.  A row says so where the source states
+  version 2 and no group of the interface needs it.
 - **Cross-vendor `virtual_gateway_address` divergent from primary.**
   When a Junos / Arista VARP source carries a virtual IP DIFFERENT
   from the SVI's primary IP, IOS-XE SD-Access has no equivalent

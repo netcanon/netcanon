@@ -96,14 +96,16 @@ _DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("/interfaces/interface/ipv4/address/virtual-gateway-mac",),
     ),
     (
-        "IOS-XE writes IETF VRRP only: a group of another protocol (HSRP, "
-        "CARP) is not written, a `! review:` line in its interface says so, "
-        "and the redundancy has to be made again on the target.",
+        "IOS-XE writes VRRP (`vrrp`) and HSRP (`standby`): a group of "
+        "another protocol (CARP) is not written, a `! review:` line in its "
+        "interface says so, and the redundancy has to be made again on the "
+        "target.",
         ("/interfaces/interface/vrrp-groups/group",),
     ),
     (
-        "The codec writes no virtual MAC for a VRRP group: a MAC the source "
-        "set is dropped, and the group uses its platform's own.",
+        "The codec writes a virtual MAC for an HSRP group only (`standby "
+        "<group> mac-address`): the MAC of a VRRP group is dropped, and the "
+        "group uses its platform's own.",
         ("/interfaces/interface/vrrp-groups/group/virtual-mac",),
     ),
 )
@@ -198,7 +200,8 @@ class CiscoIOSXECLICodec(CodecBase):
             # ``vrrp <vrid> ip|ipv6|priority|preempt|description|
             # authentication|track|timers`` family inside ``interface``
             # stanzas; renders the classic single-line per-attribute
-            # form (broadest IOS-XE compatibility, 15.x onward).
+            # form (broadest IOS-XE compatibility, 15.x onward).  HSRP
+            # ``standby`` lines are read and written through ``_hsrp.py``.
             # /interfaces/interface/vrrp-groups/group: written only in some cases, see _DROPPED.
             # NB: ``/interfaces/interface/ipv4/address/virtual-gateway-address``
             # is declared LOSSY below — SD-Access anycast only round-trips the
@@ -247,8 +250,8 @@ class CiscoIOSXECLICodec(CodecBase):
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
-                    "Cisco IOS-XE CLI renders only IETF VRRP (`vrrp`); a "
-                    "cross-family source mode (HSRP / CARP) is not written (see "
+                    "Cisco IOS-XE CLI renders VRRP (`vrrp`) and HSRP "
+                    "(`standby`); a CARP group is not written (see "
                     "/interfaces/interface/vrrp-groups/group) -- the "
                     "redundancy has to be made again on the target."
                 ),

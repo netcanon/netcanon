@@ -91,6 +91,7 @@ from .._helpers import (
     trunk_list_says,
     wants_no_untagged_vlan,
 )
+from .._hsrp import V1_GROUP_MAX
 from ..base import RenderError
 
 #: The line that carries a port's allowed list, up to its first id
@@ -629,10 +630,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # broadest IOS-XE compatibility (15.x onward).  Modern address-
         # family form (17.12+) is declared lossy in the capability
         # matrix; cross-vendor groups round-trip through the classic
-        # form.  Cross-vendor mode discriminators that have no IOS-XE
-        # equivalent (``hsrp`` / ``carp``) surface as a review comment.
+        # form.  An HSRP group is written as ``standby`` lines
+        # (:func:`_standby_lines`), after ``standby version 2`` where a
+        # group needs it.  A mode that has no IOS-XE equivalent
+        # (``carp``) surfaces as a review comment.
+        if any(_needs_hsrp_version_2(g) for g in iface.vrrp_groups):
+            body.append(" standby version 2")
         for group in iface.vrrp_groups:
             gid = group.group_id
+            if group.mode == "hsrp":
+                body.extend(_standby_lines(group))
+                continue
             if group.mode and group.mode != "vrrp":
                 body.append(
                     f" ! review: vrrp_groups[{gid}].mode="
@@ -1059,6 +1067,85 @@ _IS_CISCO_PHYSICAL_PORT_RE = re.compile(
     rf"^(?:{_CISCO_PORT_PREFIX_ALTS})[\s\d/.:]*$",
     re.IGNORECASE,
 )
+
+
+def _needs_hsrp_version_2(group: Any) -> bool:
+    """Whether *group* is an HSRP group that version 1 cannot hold.
+
+    "The group number range is from 0 to 255 for HSRP version 1 and
+    from 0 to 4095 for HSRP version 2", and "HSRP version 2 must be
+    enabled on an interface before HSRP IPv6 can be configured"
+    (Cisco's HSRP guides).
+    """
+    return group.mode == "hsrp" and (
+        group.group_id > V1_GROUP_MAX or bool(group.virtual_ipv6s)
+    )
+
+
+def _standby_lines(group: Any) -> list[str]:
+    """An HSRP group as IOS-XE writes it: a ``standby <group>`` line for
+    each statement (Cisco's HSRP guide: ``standby [group-number] ip
+    [ip-address [secondary]]``, ``priority``, ``preempt``,
+    ``authentication text`` / ``md5 key-string``, ``mac-address``).
+
+    What is not written is said in a review line: a key that is not one
+    word, a key of another scheme, and the fields an HSRP group of
+    IOS-XE has no statement for (a description; tracked interfaces,
+    which IOS-XE tracks as objects).
+    """
+    gid = group.group_id
+    lines = [
+        f" standby {gid} ip {vip}" + (" secondary" if idx else "")
+        for idx, vip in enumerate(group.virtual_ips)
+    ]
+    lines.extend(f" standby {gid} ipv6 {vip6}" for vip6 in group.virtual_ipv6s)
+    if group.priority != 100:
+        lines.append(f" standby {gid} priority {group.priority}")
+    # Preemption is off by default in HSRP ("that router will not become
+    # the active router, even if its priority is higher"), so only the
+    # statement that turns it on is written.
+    if group.preempt:
+        lines.append(f" standby {gid} preempt")
+    scheme, _, key = group.authentication.partition(":")
+    if group.authentication and scheme in ("md5", "plain") and splits(key):
+        lines.append(" ! " + left_out(f"standby {gid} authentication", "Cisco IOS-XE"))
+    elif scheme == "md5" and key:
+        lines.append(f" standby {gid} authentication md5 key-string {key}")
+    elif scheme == "plain" and key:
+        lines.append(f" standby {gid} authentication text {key}")
+    elif group.authentication:
+        # The value is a secret: the line says where, never what.
+        lines.append(
+            f" ! standby {gid} authentication -- review: the source's "
+            f"authentication is not a key IOS-XE takes as typed, so the "
+            f"group is written with none"
+        )
+    mac = _mac_to_dotted_triplet(group.virtual_mac)
+    if mac:
+        lines.append(f" standby {gid} mac-address {mac}")
+    # An HSRP hello is not a VRRP advertisement (their defaults are 3 and
+    # 1 seconds, and HSRP pairs it with a hold time), so an interval
+    # other than the canonical default is said, not converted.
+    unwritten = [
+        name for name, value in (
+            ("description", group.description),
+            ("track_interfaces", group.track_interfaces),
+            ("advertisement_interval", group.advertisement_interval != 1),
+        ) if value
+    ]
+    if unwritten:
+        lines.append(
+            f" ! review: vrrp_groups[{gid}] (HSRP): {', '.join(unwritten)} "
+            f"not written"
+        )
+    if not lines:
+        # A group at every default with no address has no line: IOS-XE
+        # writes a group only by its statements.
+        lines.append(
+            f" ! review: HSRP group {gid} has no virtual address and no "
+            f"other statement to write, so it is not written"
+        )
+    return lines
 
 
 def _mac_to_dotted_triplet(mac: str) -> str:

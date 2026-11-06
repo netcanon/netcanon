@@ -53,6 +53,7 @@ from .._helpers import (
     switchport_trunk_native_value,
     wants_no_untagged_vlan,
 )
+from .._hsrp import V1_GROUP_MAX
 from . import port_names as _port_names
 
 #: Written where a native line would be, on a trunk that carries no
@@ -726,10 +727,17 @@ def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -
 
     # ── HSRP groups (Phase 2c) ── every FHRP group normalises to an
     # NX-OS ``hsrp`` block (the mode discriminator is declared lossy).
+    # "HSRP version 1 supports group numbers from 0 to 255" (Cisco's
+    # Nexus HSRP guide), so a group above it needs ``hsrp version 2``,
+    # a statement of the interface; and a second address of a group is
+    # a ``secondary`` one -- ``ip <address>`` again sets the group's
+    # one primary address.
+    if any(g.group_id > V1_GROUP_MAX for g in iface.vrrp_groups):
+        block.append("  hsrp version 2")
     for group in iface.vrrp_groups:
         block.append(f"  hsrp {group.group_id}")
-        for vip in group.virtual_ips:
-            block.append(f"    ip {vip}")
+        for idx, vip in enumerate(group.virtual_ips):
+            block.append(f"    ip {vip}" + (" secondary" if idx else ""))
         if group.priority != 100:
             block.append(f"    priority {group.priority}")
         if group.preempt:
@@ -743,10 +751,19 @@ def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -
                         f"hsrp {group.group_id} authentication", "Cisco NX-OS",
                     )
                 )
-            elif scheme == "md5":
-                block.append(f"    authentication md5 key-string {key}")
-            elif scheme == "plain":
+            elif scheme == "md5" and key:
+                # ``key-string {0 | 7} <text>`` (the Nexus HSRP guide):
+                # the key is written as typed, type 0.
+                block.append(f"    authentication md5 key-string 0 {key}")
+            elif scheme == "plain" and key:
                 block.append(f"    authentication text {key}")
+            else:
+                # The value is a secret: the line says where, never what.
+                block.append(
+                    f"    ! hsrp {group.group_id} authentication -- review: "
+                    f"the source's authentication is not a key NX-OS takes "
+                    f"as typed, so the group is written with none"
+                )
 
     if iface.lag_member_of:
         m = re.search(r"(?<!\d)(\d+)\s*$", iface.lag_member_of)

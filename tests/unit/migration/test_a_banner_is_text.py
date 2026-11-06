@@ -1073,11 +1073,18 @@ BEFORE: dict[str, str] = {
     "real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt": "bb10e8a95a2d",
     "real/cisco_nxos/batfish_nxos_hsrp_nxos2.txt": "811a7b6f87eb",
     "real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt": "563911b052c0",
-    "real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt": "d0775abcee6e",
+    # Moved on purpose, by its HSRP group and nothing else: its
+    # `key-string 7` is a type-7 key that is not read (the "7" was read
+    # as the key), and the statements of the group that are not
+    # translated are rows (test_hsrp_is_read.py): was "d0775abcee6e".
+    "real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt": "42b61064b057",
     "real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt": "1729a6024e35",
     "real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg": "34109f2ee06c",
     "real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg": "a473a68a8205",
-    "synthetic/cisco_nxos/kitchen_sink.cfg": "f3cb7a5a89f3",
+    # Moved on purpose, by a row and nothing else: its `hsrp version 2`
+    # is not kept, and a row says so (test_hsrp_is_read.py): was
+    # "f3cb7a5a89f3".
+    "synthetic/cisco_nxos/kitchen_sink.cfg": "1b4b327e3945",
     "real/dell_os10/azlocal_tor1.txt": "254896e1a85a",
     "real/dell_os10/azlocal_tor2.txt": "88bb0da08716",
     "real/dell_os10/azsupport_TOR1_Sample.cfg": "4751d5837437",

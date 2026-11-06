@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-11-05T20:26:22+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261105T202125Z.json",
-  "mesh_run_started_utc": "2026-11-05T20:21:14+00:00",
+  "started_utc": "2026-11-06T04:34:25+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261106T043423Z.json",
+  "mesh_run_started_utc": "2026-11-06T04:34:03+00:00",
   "cells_total": 1469,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -603,10 +603,10 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8763,
+    "ALIGNED": 8767,
     "CODEC_BUG": 4,
     "EXPECTED_LOSSY": 4193,
-    "EXPECTED_UNSUPPORTED": 2701,
+    "EXPECTED_UNSUPPORTED": 2697,
     "METHODOLOGY_ISSUE_under": 1980,
     "METHODOLOGY_ISSUE_over": 16,
     "STRUCTURAL_ONLY": 5802,

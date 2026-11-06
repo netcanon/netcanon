@@ -75,7 +75,29 @@ codec emits **every** group as an `hsrp` block regardless of the
 source `mode` — so a cross-vendor VRRP / CARP group normalises to
 HSRP on NX-OS.  The operator's redundancy intent for the virtual IP
 survives; the wire protocol changes (this is declared
-[lossy](#lossy-paths)).  Same-vendor HSRP round-trips losslessly.
+[lossy](#lossy-paths)).
+
+What the parser reads of a group's block: `ip <address> [secondary]`,
+`priority`, `preempt`, `authentication text <key>` and
+`authentication md5 key-string [0] <key>`, with Cisco's defaults for
+what the block does not state (priority 100, no preemption).  Every
+other statement -- `timers`, `track`, `name`, a preempt `delay`, a key
+chain, a key the switch printed encrypted (`key-string 7`), an `hsrp
+<group> ipv6` block, a group past 4095 -- is said in a row of the
+sections not translated, one row for each kind, never with its value.
+An encrypted key is not the key, so the group is kept with no
+authentication (up to 0.7.7 the parser read `key-string 7 <key>` as
+the key `7`).  A `!` line inside a block is a comment, not a
+statement.
+
+The interface's `hsrp version 2` is not kept: the renderer writes it
+where a group needs it (a group above 255), and a row says so where
+the source states it and no group of the interface needs it.  So a
+same-vendor round trip keeps a group's
+addresses, priority, preemption and key, and a version-2 pair whose
+groups are all 255 or below comes out for version 1 -- set the
+version on the target (Cisco's HSRP guides: "Version 1 is the default
+version of HSRP").
 
 ### IPv4 Distributed Anycast Gateway
 
@@ -106,8 +128,10 @@ identical IPv6-anycast deferral).
 ## Lossy paths
 
 - **`/interfaces/interface/vrrp-groups/group`** — VRRP / CARP groups
-  normalise to HSRP on render (see above); sub-second timers,
-  virtual-MAC, and track objects are not modelled in v1.  Each of the
+  normalise to HSRP on render (see above); a statement of a group the
+  parser does not read (timers, a preempt delay, a type-7 key, an IPv6
+  group) is said in a row of the job, and the version is kept only
+  where a group needs it.  Each of the
   two fields is declared lossy on its own
   (`vrrp-groups/group/{track-interfaces,virtual-mac}`): the group is
   written tracking no interface, and with HSRP's own MAC.
@@ -418,7 +442,9 @@ translate it again from `show running-config` as the switch prints it.
   are in the
   [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 - **HSRP is the FHRP, not VRRP.**  Cross-vendor VRRP / CARP groups
-  render as `hsrp` blocks; same-vendor HSRP round-trips cleanly.
+  render as `hsrp` blocks; same-vendor HSRP round-trips but for the
+  version and the statements the parser says in rows (see
+  [HSRP](#hsrp-fhrp)).
 - **`nve1` is the VTEP, not a routed port.**  The codec intercepts
   `interface nve1` as the VXLAN tunnel-endpoint container (`tunnel`
   kind), not an L3 interface.
