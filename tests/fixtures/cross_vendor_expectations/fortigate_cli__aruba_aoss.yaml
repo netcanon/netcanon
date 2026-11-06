@@ -8,11 +8,11 @@
 # authors the dispositions independently rather than mirroring.
 # Several fields are direction-asymmetric:
 #
-#   * dhcp_servers: aruba -> fortigate is not_applicable (Aruba
-#     source carries no pools).  fortigate -> aruba is unsupported
+#   * dhcp_servers: aruba -> fortigate is good (the Aruba parser
+#     reads a `dhcp-server pool`).  fortigate -> aruba is unsupported
 #     (FortiGate-source carries pools that have no Aruba target —
-#     AOS-S is relay-only and the codec does not advertise
-#     /dhcp/pool).
+#     the aruba_aoss render writes no pool, and declares
+#     /dhcp-servers/pool unsupported).
 #   * vlans port-membership: aruba -> fortigate loses the per-VLAN
 #     port list (canonical has it; FortiGate render does not
 #     synthesise child VLAN interfaces).  fortigate -> aruba is
@@ -290,16 +290,15 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       FortiGate-source ``config system dhcp server`` populates
-      CanonicalDHCPPool records cleanly on parse.  Aruba AOS-S is
-      primarily a DHCP relay platform — the aruba_aoss codec does
-      NOT advertise ``/dhcp/pool`` in its supported set, so the
-      Aruba render drops the pool config entirely and the codec
-      emits a relay-comment block describing what was lost.
-      Effectively unsupported on this direction — FortiGate
-      operators migrating to AOS-S must redirect DHCP-server
-      duties to a separate appliance / IP-helper relay flow.
-      Promote to lossy when AOS-S 16.11+ DHCP-server support is
-      wired through the codec.
+      CanonicalDHCPPool records cleanly on parse.  The aruba_aoss
+      render writes no pool (``/dhcp-servers/pool`` is unsupported):
+      AOS-S has a DHCP server of its own (``dhcp-server pool``, which
+      the aruba_aoss parser reads), but the Aruba render emits a
+      comment for each pool describing what was lost, not a stanza.
+      FortiGate operators migrating to AOS-S configure each pool on
+      the switch by hand, or move DHCP to a separate server behind
+      an IP-helper relay.  Promote to lossy when the render writes
+      ``dhcp-server pool``.
     references: [dhcp]
 
   snmp:

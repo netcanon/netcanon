@@ -372,14 +372,14 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: not_applicable
-    note: >
-      AOS-S is primarily a DHCP relay platform, not a server.  The
-      aruba_aoss codec does not advertise /dhcp/pool in its
-      supported set, so intent.dhcp_servers is always empty on
-      this direction — nothing to render.  cisco_iosxe also has
-      no first-class OpenConfig DHCP-server model, so the field
-      stays not_applicable bidirectionally.
+    disposition: unsupported
+    reason: >
+      The aruba_aoss parser reads the 3 pools of the one cell that has
+      any (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose
+      DHCP server is enabled).  cisco_iosxe renders no DHCP XML -- it
+      declares `/dhcp-servers/pool` unsupported, OpenConfig having no
+      DHCP-server model the codec bridges -- so all 3 are dropped.
+      Re-author the pools on the target by hand.
 
   snmp:
     disposition: unsupported

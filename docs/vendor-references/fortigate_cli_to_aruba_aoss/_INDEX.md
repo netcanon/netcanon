@@ -31,7 +31,7 @@ cross-vendor-migration perspective:
 | [`snmp.md`](snmp.md) | FortiGate `config system snmp community / user` -> Aruba `snmp-server community / snmpv3 user ...`.  Multi-community configs collapse on canonical-side; v3 USM passphrases not cross-compatible (engineID-salting). |
 | [`local_users.md`](local_users.md) | FortiGate accprofile strings -> Aruba two-role model (super_admin -> manager; others -> operator).  Hash formats incompatible (FortiOS ENC vs Aruba sha1/bcrypt). |
 | [`radius.md`](radius.md) | FortiGate edit-table -> Aruba flat host-keyed form.  Shared-secret format incompatible. |
-| [`dhcp.md`](dhcp.md) | FortiGate first-class DHCP-server pools have NO Aruba target — AOS-S is relay-only and the codec doesn't render pools.  **Unsupported** on this direction. |
+| [`dhcp.md`](dhcp.md) | FortiGate first-class DHCP-server pools have NO Aruba target — the codec doesn't render pools (AOS-S has a DHCP server, which it reads but does not write).  **Unsupported** on this direction. |
 | [`lags.md`](lags.md) | FortiGate operator-named aggregates -> Aruba `Trk<N>` synthesised integer ID.  Mode coercion loses FortiGate `passive` distinction. |
 | [`vrf.md`](vrf.md) | FortiGate VDOMs / per-interface integer VRF unmodelled in canonical v1; Aruba has no VRF concept.  Unsupported. |
 | [`routing_protocols.md`](routing_protocols.md) | FortiOS BGP / OSPF / IS-IS / RIP not in canonical model; Aruba has no BGP / IS-IS at all. |

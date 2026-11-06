@@ -361,6 +361,12 @@ def test_real_capture_round_trips_stable(
         # field the codec CAN render.
         if codec.capabilities.classify("/routing/static-route") != "supported":
             d.pop("static_routes", None)
+        # The same for a DHCP pool the codec reads and declares it does
+        # not write (aruba_aoss: `dhcp-server pool` is parsed, and the
+        # render writes a comment for each pool): the first parse has
+        # the pools, the re-parse none.
+        if codec.capabilities.classify("/dhcp-servers/pool") == "unsupported":
+            d.pop("dhcp_servers", None)
         # An account with no password is not written, on its own
         # codec too (test_an_account_with_no_password.py): the first
         # parse has it, the re-parse does not.

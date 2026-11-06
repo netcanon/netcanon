@@ -1851,8 +1851,11 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # names them, onto EOS, AOS-CX, IOS-XE CLI, NX-OS, OS10 and Junos
     # (+6 left as the source has it).  The template render's three
     # VLAN addresses are read: onto Junos its `Vlan<N>` names are left
-    # as well, beside its fused uplink (-1 fused, +1 several).
-    "aruba_aoss": (7, 0, 0, 0, 12, 1),
+    # as well, beside its fused uplink (-1 fused, +1 several).  The
+    # DHCP-server capture's three pools are read: onto AOS-CX and OS10,
+    # which write no pool, its job is `partial` for them before a name
+    # is looked at (-2 left as the source has it).
+    "aruba_aoss": (7, 0, 0, 0, 10, 1),
     # From (10, 0, 0, 0, 3, 20): the IOSv capture whose every line is
     # at column 0 is refused by the IOS-XE CLI parser now, and is no
     # longer among the captures (it is under `refused/`); two of its
@@ -1985,8 +1988,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 72, 5, 66, 49]
-        assert sum(by_reason) == 232
+        assert by_reason == [40, 0, 72, 5, 64, 49]
+        assert sum(by_reason) == 230
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

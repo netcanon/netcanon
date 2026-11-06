@@ -780,7 +780,11 @@ a stanza, neither one called `preconfigure` nor the port it names,
 and nothing in it is read.  An IOS XR or EOS sub-interface of a port
 or a bundle that states no tag, which the device does not bring up,
 is listed as `untagged: interface <name>`, and nothing of it is in
-the output.  The banner counts only the sections,
+the output.  An AOS-S DHCP pool or server setting of a switch whose
+DHCP server is not enabled is listed as `disabled: dhcp-server pool
+<name>`, and a pool the server discards, with neither a network and
+a range nor a static binding, as `incomplete: dhcp-server pool
+<name>`: neither served anything.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
@@ -1093,13 +1097,14 @@ in rendered output find every such site.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
-  AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
-  DHCP server.  When canonical carries DHCP pools, the renderer
-  emits a header comment block:
+  AOS-S runs a DHCP server of its own (`dhcp-server pool`,
+  `dhcp-server enable`), which the parser reads, but the renderer
+  writes no pool.  When canonical carries DHCP pools, it emits a
+  header comment block:
 
-      ; DHCP pools from source codec are not supported
-      ; by AOS-S (AOS-S is a DHCP relay platform, not a
-      ; DHCP server).  Reconfigure on a sibling server.
+      ; DHCP pools of the source, not written here.  AOS-S
+      ; has a DHCP server of its own (dhcp-server pool,
+      ; dhcp-server enable): configure each pool by hand.
 
   …followed by one summary comment line per pool.
 
@@ -2855,10 +2860,25 @@ matter; the matrix is honest about both.
   beside an `interface Vlan10`.  Where it states one, the
   interface keeps it and the label is in a `# review:` line beside
   it (`/vlans/vlan/name` and `/vlans/vlan/description`, lossy).
-* **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
-  (`ip helper-address`) — it is not a DHCP server.  Source DHCP
-  pools surface as a comment block, not as `dhcp-server pool`
-  syntax.
+* **Aruba AOS-S DHCP pools.**  As a source, a `dhcp-server pool` is
+  read where the switch's server is enabled (`dhcp-server enable`;
+  HPE: the server defaults to disabled), on the `Vlan<N>` whose
+  subnet is its network and whose stanza states `dhcp-server`, or on
+  no interface for a pool that serves relayed clients.  A pool of a
+  server that is not enabled is a `disabled:` row, and a pool the
+  server discards (neither a network and a range nor a static
+  binding) an `incomplete:` row; a second range or router, a static
+  binding, an option and a setting of the server are rows too.  As a
+  target, AOS-S writes no pool: source pools surface as a comment
+  block, not as `dhcp-server pool` syntax.
+* **An IOS-XE CLI output's DHCP pool hands out its whole subnet.**
+  An IOS-XE pool states no range (addresses are kept out with `ip
+  dhcp excluded-address`, which the codec neither reads nor writes)
+  and names no interface (it serves the interface whose subnet is its
+  network).  A pool from AOS-S, FortiOS, Junos, OPNsense or RouterOS
+  that served part of its subnet serves all of it on IOS-XE, and the
+  job says `completed`: no path of the matrix names a pool's range.
+  Exclude by hand what the source's range left out.
 * **A trunk's allowed list means what it says.**  On a trunk an
   empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
   and any other list is the list.  A trunk that states no allowed

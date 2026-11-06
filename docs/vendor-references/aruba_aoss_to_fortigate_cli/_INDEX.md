@@ -35,7 +35,7 @@ switch surface).  The two product roles diverge sharply:
 | [`snmp.md`](snmp.md) | v1/v2c surface good (Operator/Manager collapses to single canonical scalar); v3 USM passphrases not cross-compatible (engineID-salted). |
 | [`local_users.md`](local_users.md) | Aruba two-role model (manager/operator) -> FortiGate accprofile strings (super_admin/prof_admin).  Hash formats incompatible. |
 | [`radius.md`](radius.md) | Aruba flat host-keyed form -> FortiGate edit-table.  A key written as typed migrates; an `encrypted-key` is refused; a non-default acct-port is lost. |
-| [`dhcp.md`](dhcp.md) | Aruba is relay-only (codec doesn't parse pools); not_applicable on this direction.  helper-address relay intent unmodelled. |
+| [`dhcp.md`](dhcp.md) | An AOS-S `dhcp-server pool` of an enabled server is read onto its VLAN and written as an interface-bound FortiGate pool; good on this direction.  helper-address relay intent unmodelled. |
 | [`lags.md`](lags.md) | Aruba `Trk<N>` -> FortiGate operator-named aggregates.  Members + LACP modes round-trip; HP-proprietary `dt-lacp` / `fec` lossy. |
 | [`vrf.md`](vrf.md) | Aruba has no VRF concept; FortiGate VDOMs / per-interface integer VRF unmodelled in canonical v1.  Not applicable. |
 | [`routing_protocols.md`](routing_protocols.md) | OSPF / RIP / BGP not in canonical model; both codecs parse-and-ignore. |

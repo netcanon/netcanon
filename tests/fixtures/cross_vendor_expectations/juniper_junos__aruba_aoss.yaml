@@ -522,10 +522,11 @@ per_field_expectation:
       Junos's two-stage ``set system services dhcp-local-server`` +
       ``set access address-assignment pool`` model populates
       ``CanonicalIntent.dhcp_servers`` (when wired); the
-      aruba_aoss codec is primarily a relay platform and does NOT
-      advertise ``/dhcp/pool`` in its supported set, so Aruba
-      render emits no DHCP-pool directives.  The pool list drops
-      on render; helper-address directives are not modelled
+      aruba_aoss render writes no pool (``/dhcp-servers/pool`` is
+      unsupported, though the aruba_aoss parser reads an AOS-S
+      ``dhcp-server pool``), so Aruba render emits a comment for each
+      pool and no DHCP-pool directives.  The pool list drops on
+      render; helper-address directives are not modelled
       canonically.
 
   # ── Tier 2 — SNMP ──

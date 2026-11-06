@@ -1,5 +1,7 @@
 # DHCP: Aruba AOS-S relay versus OPNsense `<dhcpd>` server
 
+> **Update 2026-11-05 — an AOS-S switch's own DHCP server is now read.**  This page was written when the aruba_aoss parser read no `dhcp-server pool` and took AOS-S for a relay platform with no pool to translate.  AOS-S runs a DHCP server of its own (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the parser now reads each pool of a server that is enabled: onto the `Vlan<N>` whose subnet is its network (no interface for a pool of relayed clients), with its network, range, default router, DNS servers, domain name and lease.  A server that is not enabled, a pool that is incomplete, and what the canonical pool has no place for (a second range or router, a static binding, an option) are rows of the sections not translated.  Of the committed inputs, `hpe_community_2930f_wc1610_dhcp_server.cfg` holds 3 pools and the others none.  On OPNsense each pool is written under the zone of its VLAN's interface with its range, gateway, DNS servers and lease; an OPNsense pool states no network (the zone's address gives it), so `dhcp_servers` is `lossy` on this pair, not `not_applicable`.
+
 ## Aruba AOS-S
 
 Source: [Aruba AOS-S 16.10 IPv4 Configuration Guide — DHCP relay /

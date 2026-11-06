@@ -1035,7 +1035,10 @@ BEFORE: dict[str, str] = {
     # `password manager` is an account that holds no secret
     # (test_every_account_form.py): was "06c7aeab8a24".
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "09066a0fddd7",
-    "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "dd1030133a7a",
+    # Moved on purpose, by its DHCP pools and nothing else: the switch's
+    # server is enabled, and its three `dhcp-server pool` stanzas are
+    # read (test_dhcp_server_pools.py): was "dd1030133a7a".
+    "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "6e06c1bf649e",
     # Moved on purpose, by a row each and nothing else: the `oobm` and
     # `stacking` stanzas are listed among the sections not translated
     # (TestArubaAOSSStack): were "a4e275c2c670" and "fa27e0f87457".

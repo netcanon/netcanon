@@ -15,7 +15,8 @@
 #   * Hash formats (Cisco type-9 scrypt vs Aruba sha1 / sha256;
 #     not cross-compatible).
 #   * Feature surface (Cisco supports VRF / BGP / EIGRP / DHCP-server
-#     pools; Aruba AOS-S has no VRF concept and is relay-only).
+#     pools; Aruba AOS-S has no VRF concept, and the codec writes no
+#     DHCP pool).
 
 meta:
   source_vendor: cisco_iosxe_cli
@@ -234,13 +235,12 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Cisco's ``ip dhcp pool <name>`` syntax populates
-      CanonicalDHCPPool records on parse.  The aruba_aoss codec does
-      NOT advertise /dhcp/pool in its supported set — AOS-S is
-      primarily a DHCP relay platform, not a server.  Cross-vendor
-      render drops the pool config on Cisco -> Aruba; codec emits a
-      relay-comment block describing what was lost.  Deferred to a
-      subsequent audit pass once AOS-S 16.11+ DHCP-server support
-      is wired.
+      CanonicalDHCPPool records on parse.  The aruba_aoss render
+      writes no pool (``/dhcp-servers/pool`` is unsupported): AOS-S
+      has a DHCP server of its own (``dhcp-server pool``, which the
+      aruba_aoss parser reads), but the Cisco -> Aruba render emits a
+      comment for each pool describing what was lost, not a stanza.
+      Configure each pool on the switch by hand.
     references: [dhcp_relay_versus_pool]
 
   snmp:

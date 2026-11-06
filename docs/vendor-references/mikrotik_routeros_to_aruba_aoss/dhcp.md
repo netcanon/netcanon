@@ -1,5 +1,7 @@
 # DHCP: MikroTik RouterOS versus Aruba AOS-S
 
+> **Update 2026-11-05 — AOS-S has a DHCP server of its own; the codec still writes no pool.**  This page describes AOS-S as a relay platform.  AOS-S 16.x switches run a DHCP server (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the aruba_aoss parser now reads one.  What is unchanged on this direction is the render: an output for AOS-S has a comment for each pool, not a `dhcp-server pool` stanza (`/dhcp-servers/pool` is still declared unsupported), so the pools of this source are configured on the switch by hand, or served by a central server through `ip helper-address`.  The disposition below stands.
+
 ## MikroTik RouterOS
 
 Source: [DHCP — RouterOS](https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP)

@@ -505,6 +505,15 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "untagged: ",
         "states no 802.1Q tag, so the source passes no traffic on it; not translated",
     ),
+    "disabled": (
+        "disabled: ",
+        "the source's DHCP server is not enabled, so it serves nothing; not translated",
+    ),
+    "incomplete": (
+        "incomplete: ",
+        "a DHCP pool with neither a network and a range nor a static binding, "
+        "which the source's server discards; not translated",
+    ),
 }
 
 #: A word of a path that names a secret.  What follows it is the
@@ -545,7 +554,10 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             ``"preconfigure"`` (an IOS XR ``interface preconfigure``
             stanza: configuration for an interface that is not there)
             or ``"untagged"`` (an IOS XR or EOS sub-interface that
-            states no tag, which passes no traffic there).
+            states no tag, which passes no traffic there), or
+            ``"disabled"`` (an AOS-S ``dhcp-server`` statement of a
+            server that is not enabled) or ``"incomplete"`` (an AOS-S
+            DHCP pool the server discards).
         path: The words of the statement's path, outermost first.
 
     Returns:

@@ -89,7 +89,9 @@ translatable with caveats:
 - SNMP v1 / v2c / v3 USM (community, contact, location, trap-hosts;
   v3 with auth + priv per user)
 - RADIUS servers
-- DHCP server pools (per-pool network, gateway, range, options)
+- DHCP server pools (per-pool network, default router, DNS servers,
+  domain name and lease; not a range or an option -- see "Lossy
+  paths")
 - Local users with hashed passwords — `$5$` / `$6$` / `$8$` / `$9$`
   form-preserving cross-vendor migration
 
@@ -237,6 +239,15 @@ Canonical mapping:
   membership drops on round-trip).  `address-family ipv6` and EVPN
   sub-stanzas inside `vrf definition` are parse-and-ignore in v1.
   See the codec's `CapabilityMatrix.lossy` declarations.
+- **A DHCP pool's range** — an IOS-XE pool states no range: the
+  addresses it does not hand out are `ip dhcp excluded-address`
+  lines, which `cisco_iosxe_cli` neither reads nor writes.  A pool
+  from another vendor that served part of its subnet (AOS-S, FortiOS,
+  Junos, OPNsense, RouterOS) therefore serves ALL of it on IOS-XE,
+  and the job says `completed`, since no path of the matrix names a
+  pool's range.  Write the exclusions by hand before the pool goes
+  live.  Nor does an IOS-XE pool name its interface: it serves the
+  interface whose subnet is its network.
 
 ## What we don't do
 

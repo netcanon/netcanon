@@ -424,15 +424,12 @@ per_field_expectation:
   dhcp_servers:
     disposition: unsupported
     reason: >
-      Symmetric gap: BOTH matrices declare `/dhcp-servers/pool` unsupported —
-      aruba_aoss never populates the canonical pool from an AOS-S `dhcp-server
-      pool` stanza, and the vyos render emits no DHCP server pool
-      ("intent.dhcp_servers are dropped on migration").  Measured empty on
-      both sides of all 7 cells, so this is declared rather than observed.
-      Recorded `unsupported` rather than `not_applicable` precisely because
-      the target gap is real too: unlike `domain`, re-authoring DHCP will not
-      be carried by this codec pair in either direction, so it is bare-metal
-      hand work on the VyOS side.
+      The vyos render emits no DHCP server pool ("intent.dhcp_servers are
+      dropped on migration"; `/dhcp-servers/pool` unsupported).  The
+      aruba_aoss parser reads the 3 pools of the one cell that has any
+      (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose DHCP
+      server is enabled), and all 3 are dropped on this target; the other 6
+      cells hold none.  Re-authoring DHCP is hand work on the VyOS side.
     references: [aoss-vyos-surface]
 
   # -- SNMP -- three keys clean, three losses of three different kinds -------

@@ -1449,6 +1449,26 @@ timestamp if your timezone matters for an audit.
   `tests/unit/migration/test_hsrp_is_read.py` holds each form, typed
   from Cisco's guides, through both codecs, and that no type-7 key
   reaches the output of any target.
+- **An AOS-S switch's own DHCP server is read, and what it does not
+  serve is said.**  The AOS-S parser skipped every `dhcp-server pool`
+  stanza without a word, so a switch that served its VLANs came out
+  with no pool on every target, in jobs that said `completed`, and the
+  renderer's comment called the platform relay-only.  A pool is read
+  now where the server is enabled (`dhcp-server enable`, which HPE
+  says defaults to disabled; the last such line is the switch's), and
+  is on `Vlan<N>` where its network is the subnet of a VLAN whose
+  stanza states `dhcp-server`, and on no interface where it serves
+  clients a relay forwards.  A pool of a server that is not enabled is
+  left out and said (`disabled:`), and so is a pool the server
+  discards, with neither a network and a range nor a static binding
+  (`incomplete:`); the migrate page's banner names both.  What the
+  tree has no place for -- a second range or default router, a static
+  binding, an option, a setting of the server -- is a row of the
+  sections not translated, one a kind, naming a few pools and no
+  value.  `tests/unit/migration/codecs/aruba_aoss/test_dhcp_server_pools.py`
+  holds each form, typed from HPE's guide; the expectations of AOS-S
+  onto each codec are re-authored from the regenerated mesh, and
+  CODEC_BUG stays at 4.
 - **`detect-deployment` counts a sub-interface as the port it rides
   on.**  The check of a proposal against the config listed every
   sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port
@@ -5637,10 +5657,20 @@ timestamp if your timezone matters for an audit.
   `operator` group may not exist on the newest Cisco 8000 releases.
   IOS-XE NETCONF writes no local users, and a job onto it with local
   users is `partial` and lists them (see "Fixed").
-- **A stanza is read by no parser and said by no job.**  The AOS-S
-  parser reads no `dhcp-server pool` stanza and adds no row to the
-  sections not translated for it, so a pool of such a config is in no
-  output and the job does not say so.  The vendor page says it.
+- **AOS-S writes no DHCP pool.**  A pool is read from an AOS-S config
+  (see "Fixed"), but an output for AOS-S has a comment for each pool,
+  not a `dhcp-server pool` stanza, and the job lists the pool as
+  unsupported.  A pool's second range or router, its static bindings
+  and its options are rows of the sections not translated, onto every
+  target.
+- **An IOS-XE CLI output's DHCP pool hands out its whole subnet.**  An
+  IOS-XE pool states no range (addresses are kept out of it with `ip
+  dhcp excluded-address`, which the codec neither reads nor writes) and
+  names no interface, so a pool from AOS-S, FortiOS, Junos, OPNsense or
+  RouterOS that served part of its subnet serves all of it there.  No
+  path of the capability matrix names a pool's range, so the job says
+  `completed`; exclude by hand what the source's range left out.  The
+  vendor page says it.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

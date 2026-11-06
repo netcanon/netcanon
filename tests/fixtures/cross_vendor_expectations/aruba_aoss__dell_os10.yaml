@@ -80,12 +80,12 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. NOT EXERCISED BY THIS
-      CORPUS — all 7 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 1
-      parses no DHCP server pool. Measured over 7 cells: drifted on 0,
-      preserved on 0, both sides empty on 7.
+      cannot exist on the target side at all.  The aruba_aoss parser
+      reads the 3 pools of the one cell that has any
+      (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose DHCP
+      server is enabled), and all 3 are dropped on this target.
+      Measured over 7 cells: drifted on 1, preserved on 0, both sides
+      empty on 6.
     references: [aoss-os10-surface]
 
   dns_servers:
