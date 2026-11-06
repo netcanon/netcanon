@@ -111,8 +111,11 @@ OPNsense -> Cisco:
   back-links members, but the Cisco renderer's ``Port-channel``
   membership emits via ``channel-group N mode active`` on the member
   side.  Member name translation runs through port-rename mesh.
-- ``dhcp_client``: **lossy** — OPNsense's ``<ipaddr>dhcp</ipaddr>``
-  shape is not currently wired into ``CanonicalInterface.dhcp_client``.
+- ``dhcp_client``: **good** (was **lossy**; updated 2026-11-05) —
+  the OPNsense parser fills ``CanonicalInterface.dhcp_client`` from
+  ``<ipaddr>dhcp</ipaddr>``, the IOS-XE render writes ``ip address
+  dhcp``, and its parser reads the line back.  Up to 0.7.7 it did not,
+  so the field compared as lost on every cell.
 - ``vrf``: **not_applicable** — OPNsense has no VRF model; the
   field is always empty on OPNsense-source intent.
 

@@ -236,12 +236,13 @@ per_field_expectation:
   local_users[].hashed_password:
     disposition: lossy
     reason: >
-      4 typed passwords are written as `password=`, which the RouterOS parser
-      does not read back (an export never prints a user's password), so the
-      comparison sees none; the output carries them. 2 accounts are refused for
-      their secret (2 SHA-512 crypt (`$6$`)) and vanish with it; that loss is
-      recorded once, under `local_users[].name`. Recorded `lossy` because the
-      value changes on surviving accounts. Up to 0.7.7 such an account was
+      4 typed passwords are written as `password=` and read back as typed (up
+      to 0.7.7 the RouterOS parser did not read `password=`, an export never
+      printing one, so every typed password compared as lost). 2 accounts are
+      refused for their secret (2 SHA-512 crypt (`$6$`)) and vanish with it,
+      on the one cell that holds them; that loss is recorded once, under
+      `local_users[].name`, and is the drift seen here. Recorded `lossy`
+      because those secrets do not arrive. Up to 0.7.7 such an account was
       written as `/user add` with no `password=`, which RouterOS gives a blank
       password; a refused secret now drops the whole account, as on every other
       target. No secret value is quoted here or in the reference doc; only

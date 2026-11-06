@@ -227,6 +227,13 @@ carries no IPv6 DHCP-client form and the field comes back empty. The IPv4
 `dhcp_client` flag round-trips on all four cells, so this is specifically the
 v6 half.
 
+> **Update 2026-11-05 — the IPv4 half is dropped too.**  The "round-trips"
+> above compared an empty field with an empty field: up to 0.7.7 the FortiGate
+> parser did not read `set mode dhcp`.  It does now, and the 2 cells with a
+> DHCP-client port drift: the NX-OS codec writes no DHCP client, IPv4 or IPv6
+> (its matrix declares both fields lossy).  `interfaces[].dhcp_client` is
+> recorded `lossy` in the expectation YAML.
+
 ### Fields declared from the matrices because no fixture exercises them
 
 Stated so the basis is explicit rather than implied:

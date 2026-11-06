@@ -117,6 +117,13 @@ _IP_RE = re.compile(
     r"(?:\s+(secondary))?",
     re.IGNORECASE,
 )
+#: ``ip address dhcp [client-id <interface>] [hostname <name>]``: the
+#: interface takes its IPv4 address from a DHCP server
+#: (``CanonicalInterface.dhcp_client``).  The renderer writes the bare
+#: form; the options name nothing the tree holds, and are not read.
+_IP_ADDRESS_DHCP_RE = re.compile(
+    r"^[^\S\n]+ip[^\S\n]+address[^\S\n]+dhcp(?:[^\S\n]|$)", re.IGNORECASE,
+)
 # GAP-EVPN-3: ``ipv6 address 2001:db8::1/64`` (global) or
 # ``ipv6 address fe80::1 link-local`` (explicit link-local; bare
 # address with no prefix on IOS-XE).  Captures the address-token
@@ -1306,6 +1313,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             "ipv6": [],
             "vrf": "",
             "kind": "",
+            "dhcp_client": False,
             "dhcp_client_v6": "",
             "tunnel_type": "",
             # VRRP groups: dict keyed by group_id so multiple sub-
@@ -1347,29 +1355,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         if current["body_indent"] is None and line.strip():
             current["body_indent"] = len(line) - len(line.lstrip())
 
-    def _on_line(line: str, current: dict[str, Any]) -> None:
-        _note_body_indent(line, current)
-        dm = _DESC_RE.match(line)
-        if dm:
-            current["description"] = dm.group(1).strip()
-            return
-
-        if _SHUTDOWN_RE.match(line):
-            current["enabled"] = False
-            return
-
-        if _NO_SHUTDOWN_RE.match(line):
-            current["enabled"] = True
-            return
-
-        mm = _MTU_RE.match(line)
-        if mm:
-            try:
-                current["ip_mtu" if mm.group(1) else "mtu"] = int(mm.group(2))
-            except ValueError:
-                pass
-            return
-
+    def _on_ipv4_line(line: str, current: dict[str, Any]) -> bool:
+        # An interface's IPv4 address: a static one, or ``ip address
+        # dhcp``.  True when the line was one of them.
         im = _IP_RE.match(line)
         if im:
             ip_str = im.group(1)
@@ -1393,6 +1381,38 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
                     "is_secondary": im.group(3) is not None,
                 },
             )
+            return True
+        # ``ip address dhcp``: the line the renderer writes for
+        # ``dhcp_client``, read back.
+        if _IP_ADDRESS_DHCP_RE.match(line):
+            current["dhcp_client"] = True
+            return True
+        return False
+
+    def _on_line(line: str, current: dict[str, Any]) -> None:
+        _note_body_indent(line, current)
+        dm = _DESC_RE.match(line)
+        if dm:
+            current["description"] = dm.group(1).strip()
+            return
+
+        if _SHUTDOWN_RE.match(line):
+            current["enabled"] = False
+            return
+
+        if _NO_SHUTDOWN_RE.match(line):
+            current["enabled"] = True
+            return
+
+        mm = _MTU_RE.match(line)
+        if mm:
+            try:
+                current["ip_mtu" if mm.group(1) else "mtu"] = int(mm.group(2))
+            except ValueError:
+                pass
+            return
+
+        if _on_ipv4_line(line, current):
             return
 
         # GAP-EVPN-3: IPv6 address.  IOS-XE uses CIDR form natively
@@ -1775,6 +1795,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         ),
         vrf=raw.get("vrf", ""),
         kind=raw.get("kind", ""),
+        dhcp_client=raw.get("dhcp_client", False),
         dhcp_client_v6=raw.get("dhcp_client_v6", ""),
         tunnel_type=raw.get("tunnel_type", ""),
         vrrp_groups=vrrp_groups,

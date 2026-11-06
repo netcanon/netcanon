@@ -1010,7 +1010,9 @@ def _digest(codec: str, path: str) -> str:
 #: sink, which holds one manager and one operator account as a switch
 #: does (``codecs/aruba_aoss/test_one_account_per_role.py``); and every
 #: IOS-XE input with a local account, when the parser stopped making
-#: up a role from the privilege level (``netcanon/migration/_roles.py``).
+#: up a role from the privilege level (``netcanon/migration/_roles.py``);
+#: and every IOS-XE input with an ``ip address dhcp`` interface, when the
+#: parser read the line back (``test_what_is_written_is_read_back.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1055,7 +1057,7 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "c6fe61cfb3a2",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "879b0c3f72b4",
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "09d3725e0ed6",
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "a4c84dfdfed7",
     # Moved on purpose, by a row and nothing else: `switch 1 provision
     # c9300-24ux` is listed among the sections not translated
     # (TestCatalystStack): was "7192fbc5fd5e".

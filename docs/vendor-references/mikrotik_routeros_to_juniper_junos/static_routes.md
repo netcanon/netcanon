@@ -50,9 +50,13 @@ multi-NH, and `discard` / `reject` for blackhole.
 
 * CIDR -> CIDR: direct mapping for IPv4 and IPv6.
 * `gateway=` -> `next-hop`: identical semantic for IP next-hops.
-  RouterOS interface-as-gateway form (`gateway=ether1`) maps to
-  Junos's `next-hop` of the corresponding interface name (Junos
-  accepts interface next-hops as well).
+  A route whose `gateway=` is an interface alone (`gateway=ether1`)
+  is read as the route's interface, and is not written: the Junos
+  renderer writes `next-hop <gateway>` only and declares
+  `/routing/static-route/interface` unsupported, so the job's report
+  lists the route.  (Updated 2026-11-05: up to 0.7.7 the RouterOS
+  parser read the name as the gateway, and it was written as a Junos
+  next hop naming an interface the device does not have.)
 * IPv6 default (`::/0`): supported on both via the same CIDR shape.
   RouterOS `/ipv6 route` is parsed by the codec separately; canonical
   records carry the v6 prefix shape.

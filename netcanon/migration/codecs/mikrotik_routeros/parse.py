@@ -1547,9 +1547,12 @@ def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
     """Parse ``/user`` section entries into CanonicalLocalUser records.
 
     RouterOS ``/export`` intentionally omits password hashes (they
-    live in a separate protected store), so canonical
-    ``hashed_password`` will be empty from this parser.  Group membership
-    maps to canonical privilege:
+    live in a separate protected store), so a user of an export has an
+    empty ``hashed_password``.  A ``password=`` on an ``add`` line -- a
+    config written by hand, or this codec's own render -- is the
+    password as typed (RouterOS hashes it itself), and is kept as the
+    tree keeps a typed password: the bare value, as IOS-XE's
+    ``password 0`` is.  Group membership maps to canonical privilege:
         full   -> 15 (admin)
         write  -> 10 (operator, elevated)
         read   -> 1  (operator, read-only)
@@ -1567,7 +1570,9 @@ def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
         intent.local_users.append(CanonicalLocalUser(
             name=name,
             privilege_level=privilege,
-            hashed_password="",   # /export omits hashes
+            # /export omits the password; one written on the line is
+            # the password as typed.
+            hashed_password=kv.get("password", ""),
             # The group the user is in, as written: RouterOS's own
             # name for the account's rights (netcanon/migration/_roles.py).
             role=kv.get("group") or "",
@@ -1677,9 +1682,23 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
                 metric=metric,
                 description=kv.get("comment", ""),
             )
+        elif _names_an_interface(gateway_raw):
+            # A bare interface name: a route out of that interface, with
+            # no next hop -- the form the renderer writes for a route
+            # that has an ``interface`` and no ``gateway``.  Kept in
+            # ``gateway`` it was a next hop another vendor writes as an
+            # address, and the port translator rewrote it only where
+            # the tree had an interface of that name.
+            route = CanonicalStaticRoute(
+                destination=dest,
+                interface=gateway_raw,
+                metric=metric,
+                description=kv.get("comment", ""),
+            )
         else:
-            # Bare IP or bare interface name — kept in ``gateway`` as before
-            # (render's gateway/interface ladder round-trips both).
+            # An address, or a form the tree holds no field for (a list
+            # of gateways, ``<ip>@<table>``): kept in ``gateway`` as it
+            # is written.
             route = CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway_raw,
@@ -1687,6 +1706,24 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
                 description=kv.get("comment", ""),
             )
         intent.static_routes.append(route)
+
+
+def _names_an_interface(gateway: str) -> bool:
+    """Whether a route's ``gateway=`` value is one interface's name.
+
+    A route's gateway is an IP address or an interface, and an ECMP
+    route has several (RouterOS manual, IP Routing); ``<ip>%<interface>``
+    pins an address to an interface, and is split by the caller.  One
+    value that is not an address, with no ``,`` (a list) and no ``@`` (a
+    routing table), is an interface's name.
+    """
+    if not gateway or "," in gateway or "@" in gateway:
+        return False
+    try:
+        ipaddress.ip_address(gateway)
+    except ValueError:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------

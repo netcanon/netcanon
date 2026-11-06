@@ -525,9 +525,13 @@ per_field_expectation:
       Default-table IPv4 + IPv6 routes round-trip cleanly: RouterOS
       ``/ip route add dst-address=X/N gateway=Y`` -> Junos
       ``set routing-options static route X/N next-hop Y``.
-      RouterOS interface-as-gateway form (``gateway=ether1``) maps
-      to Junos's ``next-hop <iface>`` (Junos accepts interface
-      next-hops as well).  Lossy bits: (1) RouterOS ``distance=`` and
+      A route whose ``gateway=`` is an interface alone
+      (``gateway=ether1``) is the route's interface, and is not
+      written: the Junos renderer writes ``next-hop <gateway>`` only
+      and declares ``/routing/static-route/interface`` unsupported,
+      so the job's report lists it.  Up to 0.7.7 the RouterOS parser
+      read the name as the gateway, and it was written as a Junos
+      next hop the device does not have.  Lossy bits: (1) RouterOS ``distance=`` and
       Junos ``preference`` are vendor-specific AD scalars not 1:1
       with canonical ``metric``; (2) per-VRF static routes
       (RouterOS ``routing-table=<name>``) flatten to global because

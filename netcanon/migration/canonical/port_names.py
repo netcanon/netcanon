@@ -576,8 +576,8 @@ def collect_port_names(intent: CanonicalIntent) -> list[str]:
     refers to the port by it, and an entry of a rename map keyed by
     it matches nothing.
 
-    A route's ``gateway`` can hold an interface name too (RouterOS
-    ``gateway=ether1``, Junos ``next-hop et-0/0/24.0``).  It adds no
+    A route's ``gateway`` can hold an interface name too (Junos
+    ``next-hop et-0/0/24.0``).  It adds no
     name to this list — it counts only when it is the name of an
     interface the tree already has — but the sweep rewrites it and a
     drop takes the route; see :func:`route_port_reference`.
@@ -610,8 +610,9 @@ def route_port_reference(
     """The interface a route's ``gateway`` names, when it names one.
 
     Some parsers keep a next hop that is an interface, not an
-    address, in ``gateway``: RouterOS ``gateway=ether1``, Junos
-    ``next-hop et-0/0/24.0``.  Such a route follows its interface
+    address, in ``gateway``: Junos ``next-hop et-0/0/24.0``.  (The
+    RouterOS parser reads ``gateway=ether1`` as the route's
+    ``interface``.)  Such a route follows its interface
     when the interface is renamed and goes with it when it is
     dropped, exactly as a route bound through ``interface`` does.
 

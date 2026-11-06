@@ -554,30 +554,14 @@ def _not_written(target: str, probe: str, classify: Callable[[str], str] | None 
 #: (codec, path) -> what is wrong.  Each is written by the renderer and
 #: not read back by the codec's own parser, so this module cannot see it
 #: written; the line itself has not been checked against the vendor.
-#: The change that mends the parser empties the pin.
-KNOWN_OPEN: dict[tuple[str, str], str] = {
-    ("cisco_iosxe_cli", f"{_I}/dhcp-client"): (
-        "The renderer writes `ip address dhcp`, which the parser does not read."
-    ),
-    ("fortigate_cli", f"{_I}/dhcp-client"): (
-        "The renderer writes `set mode dhcp`, which the parser does not read."
-    ),
-    ("mikrotik_routeros", "/local-users/user/hashed-password"): (
-        "The parser reads a `/user` line's `password=` as no password."
-    ),
-    ("mikrotik_routeros", "/routing/static-route/interface"): (
-        "A route whose `gateway=` is an interface name is read back with the "
-        "name as its gateway, not its interface."
-    ),
-}
+#: The change that mends the parser empties the pin.  None is open: the
+#: four this table held (IOS-XE CLI `ip address dhcp`, FortiOS `set mode
+#: dhcp`, a RouterOS `/user` line's `password=`, a RouterOS route whose
+#: `gateway=` is an interface name) are read back now.
+KNOWN_OPEN: dict[tuple[str, str], str] = {}
 
 #: The probe of each pin that shows it.
-_PIN_PROBE = {
-    ("cisco_iosxe_cli", f"{_I}/dhcp-client"): "dhcp",
-    ("fortigate_cli", f"{_I}/dhcp-client"): "dhcp",
-    ("mikrotik_routeros", "/local-users/user/hashed-password"): "users",
-    ("mikrotik_routeros", "/routing/static-route/interface"): "route_iface_only",
-}
+_PIN_PROBE: dict[tuple[str, str], str] = {}
 
 
 @pytest.mark.parametrize("probe", sorted(PROBES))

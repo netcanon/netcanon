@@ -281,12 +281,13 @@ per_field_expectation:
     references: [opnsense-laggs]
 
   interfaces[].dhcp_client:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       OPNsense ``<ipaddr>dhcp</ipaddr>`` ↔ Cisco ``ip address dhcp``.
-      Neither codec currently wires this into
-      ``CanonicalInterface.dhcp_client``; cross-pair drops pending
-      wire-up.
+      The OPNsense parser fills ``CanonicalInterface.dhcp_client``, the
+      IOS-XE render writes ``ip address dhcp`` and its parser reads it
+      back.  Up to 0.7.7 the IOS-XE CLI parser did not read the line,
+      so every cell compared as a loss the output did not have.
     references: [opnsense-interfaces]
 
   interfaces[].vrf:

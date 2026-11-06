@@ -165,7 +165,15 @@ per_field_expectation:
     references: [iosxecli-nxos-surface]
 
   "interfaces[].dhcp_client":
-    disposition: good
+    disposition: lossy
+    reason: >
+      Drifts on the one cell with an `ip address dhcp` interface.  The NX-OS
+      codec reads and writes no DHCP client -- its matrix declares
+      `/interfaces/interface/dhcp-client` lossy, and the job's report lists
+      it -- so the interface comes out with no address and has to be given
+      one on the Nexus.  Up to 0.7.7 the IOS-XE CLI parser did not read
+      `ip address dhcp`: the field was empty on every cell, and the loss could
+      not be seen.
     references: [iosxecli-nxos-surface]
 
   "interfaces[].dot1q_vlan":

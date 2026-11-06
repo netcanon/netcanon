@@ -111,10 +111,12 @@ shape.  Key points relevant to this direction:
   `set type aggregate / set member` on the parent.  Member naming
   differs (BSD `em2` versus FortiGate `port3`); rename mesh
   canonicalises.
-- `dhcp_client`: **lossy** — OPNsense `<ipaddr>dhcp</ipaddr>`
-  (common on the WAN zone) ↔ FortiGate `set mode dhcp`.  Neither
-  codec wires `dhcp_client` through canonical; cross-pair drops
-  pending wire-up.
+- `dhcp_client`: **good** (was **lossy**; updated 2026-11-05) —
+  OPNsense `<ipaddr>dhcp</ipaddr>` (common on the WAN zone) ↔
+  FortiGate `set mode dhcp`.  The OPNsense parser fills
+  `dhcp_client`, the FortiGate render writes `set mode dhcp`, and its
+  parser reads the line back.  Up to 0.7.7 it did not, so the field
+  compared as lost on every cell.
 - `vrf`: **not_applicable** — OPNsense has no VRF schema (canonical
   field always empty on parse); FortiGate target accepts
   `set vrf <id>` but nothing to render.

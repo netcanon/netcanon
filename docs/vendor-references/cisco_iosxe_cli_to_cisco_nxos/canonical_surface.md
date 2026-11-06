@@ -67,6 +67,13 @@ table preserved on every cell that carried data for it.
 | `local_users[].privilege_level` | 0 | 7 | 8 |
 | `static_routes[].description` | 0 | 2 | 13 |
 
+> **Update 2026-11-05 — `interfaces[].dhcp_client` is not preserved.**  It is
+> listed below because, up to 0.7.7, the IOS-XE CLI parser did not read
+> `ip address dhcp` and the field was empty on both sides of every cell.  It
+> reads the line now; the one cell with such an interface drifts, since the
+> NX-OS codec writes no DHCP client, and the field is recorded `lossy` in the
+> expectation YAML.
+
 Preserved on every populated cell: `interfaces[].name` (11),
 `interfaces[].enabled` (11), `interfaces[].dhcp_client` (11),
 `interfaces[].ipv4_addresses` (9), `interfaces[].description` (8),

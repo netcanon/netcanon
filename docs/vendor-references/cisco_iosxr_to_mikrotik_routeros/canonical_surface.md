@@ -233,6 +233,13 @@ hop moves into the gateway slot (`interface='Null0'` → `gateway='Null0'`), so
 the canonical route stops distinguishing "via interface" from "via gateway
 address"; a combined next hop (`gateway%interface`) round-trips intact.
 
+> **Update 2026-11-05 — the interface-only next hop no longer moves.**  The
+> RouterOS parser reads a `gateway=` that is one interface's name (not an
+> address, a list or `<ip>@<table>`) as the route's interface, so
+> `gateway=Null0` comes back as `interface='Null0'`, and 3 cells that drifted
+> for it now align.  It also reads a typed `password=` back; the IOS-XR
+> secrets are hashes, not typed passwords, so point 2 below stands.
+
 **2. No account arrives with a working credential, but the render says so.**
 `local_users[].hashed_password` drifts on all 9 cells that populate users, and
 the loss is structural in the target *parser*, documented in
