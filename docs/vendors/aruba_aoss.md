@@ -51,11 +51,19 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - SNMP v1/v2c/v3 — `snmpv3 user` + `snmpv3 group` mappings; engine
   ID; trap-host with `trap-level` filtering
 - RADIUS — `radius-server host <ip> key <secret>`
-- DHCP server pools: **not translated either way.**  The parser
-  reads no `dhcp-server pool` stanza, and nothing in the job says
-  so; onto AOS-S a pool is written only as a `;` comment that names
-  its network, gateway and range (`/dhcp-servers/pool` and each of
-  its fields are declared `unsupported`)
+- DHCP server pools: **read, not written.**  The parser reads a
+  `dhcp-server pool` where the server is enabled (`dhcp-server
+  enable`; the server defaults to disabled): its network, its first
+  range and default router, its DNS servers, domain and lease, on the
+  `Vlan<N>` whose subnet is its network and whose stanza states
+  `dhcp-server` (on no interface for a pool that serves relayed
+  clients).  A pool of a server that is not enabled is left out and
+  said (`disabled:`), and so is a pool the server discards
+  (`incomplete:`); a second range or router, a static binding, an
+  option and a setting of the server are rows of the sections not
+  translated.  Onto AOS-S a pool is written only as a `;` comment that
+  names its network, gateway and range (`/dhcp-servers/pool` and each
+  of its fields are declared `unsupported`)
 - Local users — one manager and one operator account, in the AOS-S
   forms (`sha1`, `sha256`, `plaintext`), and as a source the
   `aaa authentication local-user` accounts beside them; see
@@ -306,7 +314,7 @@ Provenance in
   `authorized-server` entries, NTP iburst, ACLs
 - **`hpe_community_2930f_wc1610_dhcp_server.cfg`** — 2930F on
   WC.16.10.0005 with `dhcp-server pool` grammar exercised across
-  3 pools and 4 VLANs
+  3 pools and 4 VLANs; each pool is read onto its VLAN
 - **`user_contrib_2930m_wc1611.cfg`** — 2930M stack on WC.16.11.0025
   (most-current WC LTS), JL323A chassis + JL083A flexible-module
   uplinks, `stacking` stanza, `oobm` per-member IP, SNMPv3 engineid,

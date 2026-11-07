@@ -347,14 +347,12 @@ per_field_expectation:
   dhcp_servers:
     disposition: unsupported
     reason: >
-      Symmetric gap: BOTH matrices declare `/dhcp-servers/pool` unsupported —
-      aruba_aoss never emits a pool and cisco_iosxr renders none.  Trivially
-      empty on all 7 cells, so this rests on the two declarations rather than
-      an observed round-trip.  Note one fixture is named for DHCP
-      (`hpe_community_2930f_wc1610_dhcp_server.cfg`) and still yields an
-      empty canonical `dhcp_servers` — the source-side gap is real, not a
-      corpus omission.  Re-author DHCP scopes on the target, or keep them off
-      the router entirely.
+      cisco_iosxr declares `/dhcp-servers/pool` unsupported and renders no
+      pool.  The aruba_aoss parser reads the 3 pools of the one cell that
+      has any (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose
+      DHCP server is enabled), and all 3 are dropped on this target; the
+      other 6 cells hold none.  Re-author DHCP scopes on the target, or keep
+      them off the router entirely.
     references: [aoss-iosxr-surface]
 
   "snmp.community":

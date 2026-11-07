@@ -32,7 +32,7 @@ This is a Cisco-to-Cisco pair: a Nexus 9000 DC leaf re-homed onto a Catalyst
 | `ntp_servers` | 1 | 0 | 12 | — |
 | `syslog_servers` | 1 | 0 | 12 | — |
 | `snmp` | 7 | 4 | 2 | `v3_users` only |
-| `interfaces` | 1 | 12 | 0 | `interface_type`, `lag_member_of`, `vrrp_groups` |
+| `interfaces` | 1 | 12 | 0 | `interface_type`, `lag_member_of` |
 | `lags` | 0 | 5 | 8 | `name` only (`members` / `mode` survive) |
 | `local_users` | 0 | 9 | 4 | `role` only |
 
@@ -50,7 +50,6 @@ preserved on every cell that carried data.
 |---|---:|---:|---:|
 | `interfaces[].interface_type` | 1 | 12 | 0 |
 | `interfaces[].lag_member_of` | 0 | 5 | 8 |
-| `interfaces[].vrrp_groups` | 0 | 4 | 9 |
 | `lags[].name` | 0 | 5 | 8 |
 | `local_users[].role` | 0 | 9 | 4 |
 | `snmp.v3_users` | 7 | 4 | 2 |
@@ -60,7 +59,8 @@ Preserved on every populated cell: `interfaces[].name` (13),
 `interfaces[].dhcp_client` (13), `interfaces[].vrf` (12),
 `interfaces[].description` (9), `interfaces[].access_vlan` (8),
 `interfaces[].switchport_mode` (8), `interfaces[].mtu` (6),
-`interfaces[].trunk_allowed_vlans` (4), `interfaces[].ipv6_addresses` (3),
+`interfaces[].trunk_allowed_vlans` (4), `interfaces[].vrrp_groups` (4),
+`interfaces[].ipv6_addresses` (3),
 `interfaces[].trunk_native_vlan` (2); `vlans[].id` (13),
 `vlans[].untagged_ports` (8), `vlans[].ipv4_addresses` (6), `vlans[].name` (5),
 `vlans[].tagged_ports` (4); `lags[].members` (5), `lags[].mode` (5);
@@ -76,15 +76,18 @@ Preserved on every populated cell: `interfaces[].name` (13),
 
 ## Notes grounding the dispositions
 
-* **`interfaces[].vrrp_groups` — the record VANISHES.** On all 4 cells that
-  carry a first-hop-redundancy group, the source holds one HSRP group on an
-  SVI (`mode="hsrp"`, a virtual IP, a priority, `preempt`, and on two cells an
-  authentication key) and the re-parsed target holds `[]`. The IOS-XE CLI
-  matrix declares `/interfaces/interface/vrrp-groups/group/mode` lossy —
-  "a cross-family source mode (HSRP / CARP) drops to a review comment on
-  render" — and a review comment is not configuration, so nothing survives
-  re-parse. This is `unsupported`, not `lossy`: the gateway redundancy, the
-  virtual IP and the authentication key all leave the config together.
+* **`interfaces[].vrrp_groups` — preserved.** On all 4 cells that carry a
+  first-hop-redundancy group, the source holds one HSRP group on an SVI
+  (`mode="hsrp"`, a virtual IP, `preempt`, on two cells a priority and on one
+  an MD5 key); the IOS-XE CLI codec writes it as `standby <group> ...` lines
+  and reads them back as the same group. What the NX-OS parser does not read
+  of a group (a type-7 key, on one cell; timers; a preempt delay) is said in
+  a row of the job and is in neither tree. Nor is the HSRP version kept: a
+  row says so where the source states `hsrp version 2` and no group of the
+  interface needs it, and `standby version
+  2` is written only for a group above 255 or an IPv6 address. (Up to the
+  change that taught the IOS-XE CLI codec `standby`, the group was written as
+  a review comment and the record vanished on all 4 cells.)
 * **`interfaces[].interface_type`** — drifts on 12 of 13 cells, always on the
   management port: source `ianaift:ethernetCsmacd` on `mgmt0`, target
   `ianaift:other`. The IOS-XE CLI parser infers the IANA type from the name

@@ -1,5 +1,7 @@
 # DHCP relay versus DHCP server pools: Cisco IOS-XE versus Aruba AOS-S
 
+> **Update 2026-11-05 — AOS-S has a DHCP server of its own; the codec still writes no pool.**  This page describes AOS-S as a relay platform.  AOS-S 16.x switches run a DHCP server (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the aruba_aoss parser now reads one.  What is unchanged on this direction is the render: an output for AOS-S has a comment for each pool, not a `dhcp-server pool` stanza (`/dhcp-servers/pool` is still declared unsupported), so the pools of this source are configured on the switch by hand, or served by a central server through `ip helper-address`.  The Cisco -> Aruba disposition below stands.  The Aruba -> Cisco half is no longer so: the pools of an enabled AOS-S server reach IOS-XE as `ip dhcp pool`, without their range and interface (`lossy`; see [`../aruba_aoss_to_cisco_iosxe_cli/dhcp_relay.md`](../aruba_aoss_to_cisco_iosxe_cli/dhcp_relay.md)).
+
 ## Cisco IOS-XE
 
 Source: [Cisco IOS XE 17.x DHCP Configuration Guide](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipaddr_dhcp/configuration/xe-17/dhcp-xe-17-book.html)

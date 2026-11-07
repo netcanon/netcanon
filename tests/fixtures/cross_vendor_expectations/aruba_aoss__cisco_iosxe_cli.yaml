@@ -13,8 +13,9 @@
 #     these (no platform support), so the canonical fields are
 #     empty and the Cisco render emits nothing.  Re-classified as
 #     not_applicable rather than unsupported.
-#   * DHCP server pools — Aruba is relay-only, so no source data
-#     to lose.
+#   * DHCP server pools — read from an AOS-S `dhcp-server pool`
+#     where the switch's server is enabled; lossy on this target
+#     (no range, no interface).
 #   * Hash formats are still incompatible (Aruba SHA-1/SHA-256 vs
 #     Cisco type-9 scrypt) — same lossy direction either way.
 
@@ -222,14 +223,19 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: not_applicable
-    note: >
-      Aruba AOS-S is primarily a DHCP relay platform, not a
-      server.  The aruba_aoss codec does not advertise /dhcp/pool
-      in its supported set, so CanonicalIntent.dhcp_servers is
-      always empty on this direction — nothing to lose.  ``ip
-      helper-address`` directives on Aruba VLAN stanzas are not
-      modelled (no canonical helper-address field).
+    disposition: lossy
+    reason: >
+      The aruba_aoss parser reads the 3 pools of the one cell that has
+      any (`hpe_community_2930f_wc1610_dhcp_server.cfg`), and each is
+      written as an `ip dhcp pool` with its network, default router, DNS
+      servers and lease.  Two fields do not come back.  The range: an
+      IOS-XE pool states none (addresses are kept out of it with `ip dhcp
+      excluded-address`, which the render does not write), so on IOS-XE
+      the pool hands out its whole subnet -- exclude what the AOS-S range
+      left out by hand.  The interface: an IOS-XE pool names none, and
+      serves the interface whose subnet is its network.  ``ip
+      helper-address`` directives on Aruba VLAN stanzas are not modelled
+      (no canonical helper-address field).
     references: [dhcp_relay]
 
   snmp:
@@ -390,9 +396,9 @@ per_field_expectation:
 #   * The reverse direction has FEWER lossy categories than
 #     cisco_iosxe_cli__aruba_aoss because Aruba source carries a
 #     smaller feature footprint.  VRF / VXLAN / EVPN / dynamic
-#     routing protocols / DHCP server pools are all not_applicable
-#     here (source field always empty) rather than unsupported (an
-#     active drop on render).
+#     routing protocols are all not_applicable here (source field
+#     always empty) rather than unsupported (an active drop on
+#     render).
 #
 #   * The keyword-stable surface (vlans / hostname / DNS / SNMP
 #     v1+v2c / radius-server / static-routes) is high-confidence

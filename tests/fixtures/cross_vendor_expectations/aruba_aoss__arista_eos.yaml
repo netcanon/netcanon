@@ -14,8 +14,8 @@
 #
 #   * VRF / EVPN-VXLAN / EVPN Type-5 — Aruba source never populates
 #     these (no platform support).
-#   * DHCP server pools — Aruba is relay-only, so no source data
-#     to lose.
+#   * DHCP server pools — read from an AOS-S `dhcp-server pool`
+#     where the switch's server is enabled; good on this target.
 #   * Routing protocols — Aruba supports OSPF/RIP only; both are
 #     Tier-3 informational and not modelled on either codec's
 #     canonical surface.
@@ -240,15 +240,17 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S is primarily a DHCP relay platform, not a
-      server.  The aruba_aoss codec does not advertise /dhcp/pool
-      in its supported set, so CanonicalIntent.dhcp_servers is
-      always empty on this direction — nothing to lose.  Arista
-      EOS supports DHCP server config but the arista_eos codec
-      similarly does not advertise /dhcp/pool, so the gap is
-      symmetric.
+      The aruba_aoss parser reads a `dhcp-server pool` where the
+      switch's DHCP server is enabled, and arista_eos writes and reads
+      back `ip dhcp pool`: the 3 pools of the one cell that has any
+      (`hpe_community_2930f_wc1610_dhcp_server.cfg`) round-trip with
+      interface, network, range, gateway, DNS servers and lease intact.
+      What the canonical pool has no place for (a second range or
+      default router, a static binding, an option) is a row of the
+      sections not translated on the AOS-S side.  `ip helper-address`
+      (relay) is not modelled.
 
   snmp:
     disposition: lossy

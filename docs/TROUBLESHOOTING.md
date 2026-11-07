@@ -64,6 +64,15 @@ up, so it was not in force there either, and is left out for that
 reason.  **Action:** none, unless it is to carry traffic on the
 target — then write it there by hand, with the tag it is to carry.
 
+A row that begins `disabled:` is an AOS-S DHCP pool, or a setting of
+the DHCP server, on a switch whose server is not enabled (no
+`dhcp-server enable`; the server defaults to disabled), and one that
+begins `incomplete:` is an AOS-S DHCP pool with neither a network and
+a range nor a static binding, which the server discards.  Neither
+served anything, and each is left out for that reason.  **Action:**
+none, unless the target is to serve the pool — then write it there by
+hand.
+
 Some rows are sections the parser itself took out, and are in no
 output: an `interface range ...` header in a text read as IOS-XE or
 IOS XR (configure the ports it covers by hand), an `interface
@@ -76,8 +85,8 @@ target by hand).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"
-and rows that all begin `inactive:`, `delete:`, `preconfigure:` or
-`untagged:`
+and rows that all begin `inactive:`, `delete:`, `preconfigure:`,
+`untagged:`, `disabled:` or `incomplete:`
 read nothing else: every statement it understood was one the
 source held and did not run, or the text is not a config of the
 vendor chosen.

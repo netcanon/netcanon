@@ -10,7 +10,7 @@ Extracted from ``codec.py`` during the parse/render split per the
 
 Emission order mirrors what AOS-S's own ``show running-config`` puts
 on the wire so device round-trips diff cleanly: hostname, DNS, SNTP,
-SNMP, RADIUS, DHCP-relay-comment-block, local users, LAG trunks,
+SNMP, RADIUS, a comment block for DHCP pools, local users, LAG trunks,
 VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** — a
 global ``router vrrp`` enable then ``vrrp vrid N / virtual-ip-address
 X / owner|priority / preempt / enable / exit`` inside the VLAN stanza),
@@ -761,16 +761,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"acct-port {server.acct_port}"
             )
 
-    # DHCP pools — AOS-S doesn't run a DHCP server on most
-    # platforms (it's a DHCP *relay* platform via
-    # `ip helper-address`).  When a canonical carries DHCP pools,
-    # emit a comment block so the data isn't silently dropped on
-    # the way across — the human reviewer knows something to
-    # reconfigure on a sibling DHCP server.
+    # DHCP pools.  AOS-S runs a DHCP server of its own (``dhcp-server
+    # pool`` / ``dhcp-server enable``, which the parser reads), but this
+    # renderer writes no pool: each is a comment, so that what the
+    # source served is not dropped in silence, and is configured by
+    # hand -- on the switch, or on another server.
     if tree.dhcp_servers:
-        lines.append("; DHCP pools from source codec are not supported")
-        lines.append("; by AOS-S (AOS-S is a DHCP relay platform, not a")
-        lines.append("; DHCP server).  Reconfigure on a sibling server.")
+        lines.append("; DHCP pools of the source, not written here.  AOS-S")
+        lines.append("; has a DHCP server of its own (dhcp-server pool,")
+        lines.append("; dhcp-server enable): configure each pool by hand.")
         for pool in tree.dhcp_servers:
             summary = (
                 f";   network={pool.network or '?'} "

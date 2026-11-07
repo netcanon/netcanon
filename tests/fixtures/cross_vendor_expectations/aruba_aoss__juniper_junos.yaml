@@ -500,12 +500,16 @@ per_field_expectation:
   # ── Tier 2 — DHCP server ──
 
   dhcp_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S is primarily a DHCP relay platform, not a server.
-      The aruba_aoss codec does not advertise ``/dhcp/pool`` in its
-      supported set, so ``CanonicalIntent.dhcp_servers`` is always
-      empty on Aruba parse — nothing to lose.  ``ip helper-address``
+      The aruba_aoss parser reads a `dhcp-server pool` where the
+      switch's DHCP server is enabled, and the Junos render writes and
+      reads back each pool: the 3 pools of the one cell that has any
+      (`hpe_community_2930f_wc1610_dhcp_server.cfg`) round-trip with
+      interface, network, range, gateway, DNS servers and lease intact.
+      What the canonical pool has no place for (a second range or
+      default router, a static binding, an option) is a row of the
+      sections not translated on the AOS-S side.  ``ip helper-address``
       directives on Aruba VLAN stanzas are not modelled (no
       canonical helper-address field).
 

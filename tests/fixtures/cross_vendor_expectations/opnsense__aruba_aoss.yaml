@@ -443,14 +443,15 @@ per_field_expectation:
       with one record per zone interface carrying a ``<dhcpd>``
       block (interface, range, gateway, dns_servers, lease_time,
       domain_name).  Aruba target has no destination for these
-      pools — the aruba_aoss codec does not advertise
-      ``/dhcp/pool`` in its capability matrix supported set
-      (AOS-S is primarily a DHCP relay platform, not a server).
-      Cross-pair render drops the pool config and emits a comment
-      block describing what was lost.  Operator-driven redesign:
-      deploy an external DHCP server and configure
-      ``ip helper-address`` on the Aruba VLAN SVIs (canonical
-      schema lacks a helper-address field today).
+      pools — the aruba_aoss render writes no pool and declares
+      ``/dhcp-servers/pool`` unsupported (AOS-S has a DHCP server of
+      its own, ``dhcp-server pool``, which the aruba_aoss parser
+      reads).  Cross-pair render drops the pool config and emits a
+      comment block describing what was lost.  Operator-driven
+      redesign: configure each pool on the switch by hand, or deploy
+      an external DHCP server and configure ``ip helper-address`` on
+      the Aruba VLAN SVIs (canonical schema lacks a helper-address
+      field today).
     references: [opnsense-dhcp, aruba-dhcp-relay]
 
   snmp:

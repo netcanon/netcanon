@@ -66,7 +66,6 @@ from ...canonical.intent import (
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
-    CanonicalVRRPGroup,
     CanonicalVxlan,
 )
 from ...limits import ticked
@@ -84,6 +83,7 @@ from .._helpers import (
     untags_its_native_vlan,
     without_unread_tags,
 )
+from .._hsrp import Groups, Unread, group_number
 from .._input_shape import detect_input_shape
 from .._scanner import (
     Body,
@@ -195,24 +195,19 @@ _NXOS_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
 # ── HSRP (Phase 2c) ──
 # NX-OS HSRP is a nested block under an L3 interface:
 #   interface Vlan10
-#     hsrp version 2          (interface-level; not modelled)
+#     hsrp version 2          (interface-level; kept where a group needs it)
 #     hsrp 10                 (2-indent — opens a group)
 #       ip 10.10.10.254       (4-indent — group sub-commands)
 #       priority 110
 #       preempt
-# Maps to CanonicalVRRPGroup(mode="hsrp").  NX-OS HSRP defaults preempt
-# DISABLED (unlike VRRP), so the scratch default is preempt=False.
-_HSRP_GROUP_RE = re.compile(r"^\s+hsrp\s+(\d+)\s*$", re.IGNORECASE)
-_HSRP_VERSION_RE = re.compile(r"^\s+hsrp\s+version\s+\d+\s*$", re.IGNORECASE)
-_HSRP_IP_RE = re.compile(r"^\s+ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE)
-_HSRP_PRIORITY_RE = re.compile(r"^\s+priority\s+(\d+)\s*$", re.IGNORECASE)
-_HSRP_PREEMPT_RE = re.compile(r"^\s+(no\s+)?preempt\b", re.IGNORECASE)
-_HSRP_AUTH_MD5_RE = re.compile(
-    r"^\s+authentication\s+md5\s+key-string\s+(\S+)", re.IGNORECASE,
-)
-_HSRP_AUTH_TEXT_RE = re.compile(
-    r"^\s+authentication\s+text\s+(\S+)", re.IGNORECASE,
-)
+# Maps to CanonicalVRRPGroup(mode="hsrp").  What the words of a group
+# mean, which of them the tree holds and what a group is when it states
+# nothing (preemption disabled, unlike VRRP) is ``.._hsrp``'s, shared
+# with the IOS-XE ``standby`` lines; see :func:`_hsrp_line`.
+
+#: The block of an ``hsrp`` line whose group is not read: its lines are
+#: the group's, and are said with it.
+_UNREAD_GROUP = "unread"
 
 # ── SNMP + local users (Phase 2b) ──
 _SNMP_COMMUNITY_RE = re.compile(
@@ -670,7 +665,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # :func:`_parse_interfaces`.
     intent.routing_instances, _vrf_static_routes = _parse_routing_instances(raw)
 
-    intent.interfaces = _parse_interfaces(raw)
+    # An HSRP statement the tree does not hold is said, a row for each
+    # kind (``hsrp timers``, ``hsrp authentication md5 key-string 7``).
+    hsrp_unread = Unread("hsrp")
+    intent.interfaces = _parse_interfaces(raw, hsrp_unread)
+    intent.dropped_tier3_sections.extend(hsrp_unread.rows())
 
     intent.vlans = _parse_vlans(raw)
     # Derive VLAN records from ``interface Vlan<N>`` SVIs that had no
@@ -937,13 +936,62 @@ def _new_iface_scratch(name: str) -> dict:
         # mode anycast-gateway`` → mirrors the primary IP into
         # virtual_gateway_address in _build_canonical_interface.
         "fabric_forwarding_anycast": False,
-        # HSRP (Phase 2c): {gid: {virtual_ips, priority, preempt, auth}}.
-        "hsrp_groups": {},
-        "_hsrp_gid": None,   # active group while inside an ``hsrp N`` block
+        # HSRP (Phase 2c): the interface's groups (``.._hsrp``).
+        "hsrp": Groups(),
+        # The group whose block the lines are in (``hsrp N``), or
+        # ``_UNREAD_GROUP``, or ``None``; and the indent of its line.
+        "_hsrp_gid": None,
+        "_hsrp_indent": 0,
     }
 
 
-def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
+def _hsrp_line(line: str, current: dict) -> bool:
+    """Read *line* if it is HSRP's; ``True`` if it was.
+
+    An ``hsrp`` line of the interface is a statement of it (``hsrp
+    version 2``), or opens a group's block (``hsrp <N>``, ``hsrp <N>
+    ipv4``), and the lines indented deeper than it are the group's
+    statements (Cisco's Nexus HSRP guide: ``ip``, ``priority``,
+    ``preempt``, ``authentication`` in "hsrp configuration mode").  An
+    IPv6 group (``hsrp <N> ipv6``) is not read, and said; so is a
+    group above 4095.  What the words of a group mean is ``.._hsrp``'s.
+    """
+    words = line.split()
+    if not words:
+        return False
+    indent = len(line) - len(line.lstrip())
+    hsrp: Groups = current["hsrp"]
+    block = current["_hsrp_gid"]
+    if block is not None and indent > current["_hsrp_indent"]:
+        # A ``!`` line is a comment (a review line the codec writes
+        # among them), not a statement of the group.
+        if isinstance(block, int) and not words[0].startswith("!"):
+            negated = words[0].lower() == "no" and len(words) > 1
+            hsrp.group_statement(block, words[1:] if negated else words, negated=negated)
+        return True
+    current["_hsrp_gid"] = None
+    if words[0].lower() != "hsrp" or len(words) < 2:
+        return False
+    current["_hsrp_indent"] = indent
+    gid = group_number(words[1])
+    family = words[2].lower() if len(words) == 3 else ""
+    if gid is not None and (len(words) == 2 or family == "ipv4"):
+        hsrp.open(gid)
+        current["_hsrp_gid"] = gid
+    elif gid is not None:
+        hsrp.left_out("ipv6 group" if family == "ipv6" else "another statement", gid)
+        current["_hsrp_gid"] = _UNREAD_GROUP
+    elif words[1].isdigit():
+        hsrp.left_out("a group number above 4095")
+        current["_hsrp_gid"] = _UNREAD_GROUP
+    else:
+        hsrp.interface_statement(words[1:])
+    return True
+
+
+def _parse_interfaces(  # noqa: C901
+    raw: str, hsrp_unread: Unread | None = None,
+) -> list[CanonicalInterface]:
     """Extract ``interface <name>`` stanzas from NX-OS config text.
 
     Per interface: description, enabled (shutdown / no shutdown), mtu,
@@ -954,6 +1002,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     ``management`` VRF to ``kind="mgmt"`` (mgmt0 already classifies mgmt
     by name).  ``interface nve1`` is intercepted as a VXLAN config
     container and not materialised here (see ``_open``).
+
+    Args:
+        raw: The config text.
+        hsrp_unread: Given what each interface's ``hsrp`` lines did
+            not read, for the rows the caller makes of it.
     """
     # What each interface states about its trunk, by the name its
     # header writes: a stanza can be met twice, and the list is the
@@ -982,55 +1035,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         scratch["trunk_key"] = trunks.key(m.string)
         return scratch
 
-    def _on_line(line: str, current: dict) -> None:  # noqa: C901
+    def _on_line(line: str, current: dict) -> None:
         # ── HSRP nested block (Phase 2c) ──
-        # ``hsrp <N>`` opens a group; its sub-commands are further-indented
-        # (>= 4 spaces).  Any shallower indented line ends the block.  This
-        # nested-block state lives in the scratch (``_hsrp_gid``), so it
-        # stays in this cascade rather than the shared scanner.
-        hg = _HSRP_GROUP_RE.match(line)
-        if hg:
-            gid = int(hg.group(1))
-            current["hsrp_groups"].setdefault(gid, {
-                "virtual_ips": [],
-                "priority": 100,
-                "preempt": False,   # NX-OS HSRP default: preempt disabled
-                "authentication": "",
-            })
-            current["_hsrp_gid"] = gid
+        # ``hsrp <N>`` opens a group; its sub-commands are indented
+        # deeper.  This nested-block state lives in the scratch
+        # (``_hsrp_gid``), so it stays in this cascade rather than the
+        # shared scanner.
+        if _hsrp_line(line, current):
             return
-        if _HSRP_VERSION_RE.match(line):
-            # ``hsrp version 2`` is interface-level; not modelled.
-            current["_hsrp_gid"] = None
-            return
-        _gid = current["_hsrp_gid"]
-        if _gid is not None and (len(line) - len(line.lstrip())) >= 4:
-            g = current["hsrp_groups"][_gid]
-            him = _HSRP_IP_RE.match(line)
-            if him:
-                g["virtual_ips"].append(him.group(1))
-                return
-            hpm = _HSRP_PRIORITY_RE.match(line)
-            if hpm:
-                g["priority"] = int(hpm.group(1))
-                return
-            hpe = _HSRP_PREEMPT_RE.match(line)
-            if hpe:
-                g["preempt"] = not bool(hpe.group(1))   # ``no preempt`` -> False
-                return
-            ham = _HSRP_AUTH_MD5_RE.match(line)
-            if ham:
-                g["authentication"] = f"md5:{ham.group(1)}"
-                return
-            hat = _HSRP_AUTH_TEXT_RE.match(line)
-            if hat:
-                g["authentication"] = f"plain:{hat.group(1)}"
-                return
-            # Unknown hsrp sub-command (timers / mac-address / track) —
-            # consume it; still inside the group block.
-            return
-        # Any other indented line ends the active hsrp group block.
-        current["_hsrp_gid"] = None
 
         dm = _DESC_RE.match(line)
         if dm:
@@ -1158,14 +1170,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # non-indented (column-0) line closes a stanza, so an indented ``!``
     # is consumed as body (not a separator).  Behaviour-identical to the
     # previous loop.
+    def _build(scratch: dict) -> CanonicalInterface:
+        if hsrp_unread is not None:
+            hsrp_unread.add(scratch["name"], scratch["hsrp"])
+        return trunks.made(scratch["trunk_key"], _build_canonical_interface(scratch))
+
     interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
         open_scratch=_open,
         on_line=_on_line,
-        build=lambda scratch: trunks.made(
-            scratch["trunk_key"], _build_canonical_interface(scratch),
-        ),
+        build=_build,
         is_terminator=lambda line: bool(line) and not line[0].isspace(),
     )
     # A trunk with no allowed line carries what the platform's trunk
@@ -1207,17 +1222,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     # HSRP groups (Phase 2c) -> CanonicalVRRPGroup(mode="hsrp"), sorted by
     # group id for deterministic ordering (the round-trip invariant does
     # not normalise vrrp_groups order).
-    vrrp_groups = [
-        CanonicalVRRPGroup(
-            group_id=gid,
-            mode="hsrp",
-            virtual_ips=list(g.get("virtual_ips", [])),
-            priority=g.get("priority", 100),
-            preempt=g.get("preempt", False),
-            authentication=g.get("authentication", ""),
-        )
-        for gid, g in sorted(raw.get("hsrp_groups", {}).items())
-    ]
+    vrrp_groups = raw["hsrp"].built() if "hsrp" in raw else []
 
     return CanonicalInterface(
         name=name,

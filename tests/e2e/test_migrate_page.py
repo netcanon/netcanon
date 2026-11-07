@@ -816,3 +816,43 @@ class TestADeactivatedStatement:
             "the target by hand, with the tag it is to carry, only if it is to "
             "carry traffic there."
         )
+
+    def test_a_dhcp_pool_of_a_server_that_is_not_enabled(self, page: Page, base_url: str):
+        """An AOS-S pool on a switch that states no ``dhcp-server
+        enable`` serves nothing there (the server is off by default): no
+        pool in the output, and a row under the heading of statements
+        the source held and did not run, with a sentence of its own."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("aruba_aoss")
+        mig.pick_target("cisco_iosxe_cli")
+        mig.fill_raw(
+            'hostname "sw1"\n'
+            'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-4\n'
+            "   ip address 192.0.2.1 255.255.255.0\n   dhcp-server\n   exit\n"
+            'dhcp-server pool "LAN"\n   network 192.0.2.0 255.255.255.0\n'
+            "   range 192.0.2.100 192.0.2.199\n   exit\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("192.0.2.1")
+        expect(mig.output).not_to_contain_text("ip dhcp pool")
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Statements the source held and did not run")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "disabled: dhcp-server pool LAN "
+            "(the source's DHCP server is not enabled, so it serves nothing; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
+            "A line that begins disabled: is a DHCP pool or setting of a switch "
+            "whose DHCP server is not enabled, and one that begins incomplete: is "
+            "a DHCP pool the server discards: neither served anything there, and "
+            "each is left out here for that reason. Write it on the target by "
+            "hand only if the target is to serve it."
+        )

@@ -1201,6 +1201,23 @@ the policy locally:
   for it: a space or a tab by default, any white space with
   `any_white_space` (the readers of the last four ask `str.isspace`).
 
+* **`netcanon/migration/codecs/_hsrp.py`** -- what an HSRP group
+  states, read the same way from the IOS-XE CLI grammar (`standby
+  [<group>] <statement>`, one line each) and the NX-OS grammar (an
+  `hsrp <group>` block whose lines are the statements alone).  A
+  parser keeps a `Groups()` per interface, hands it each statement
+  (`group_statement`, `interface_statement`), and takes the groups
+  with `built()` when the interface ends; what was not read of them is
+  handed to an `Unread(keyword)` (`add(interface, groups)`), whose
+  `rows()` give one row of
+  `dropped_tier3_sections` a kind of statement, naming a few of the
+  places and never a value.  Cisco's defaults for what a group does
+  not state (group 0, priority 100, no preemption) are the module's,
+  and so are the two policies a renderer has to agree with: a key the
+  device printed encrypted (`key-string 7`) is not read, and the
+  version is not kept (a renderer writes version 2 where a group above
+  `V1_GROUP_MAX`, or an IPv6 address, needs it).
+
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in
   `netcanon/migration/canonical/transforms.py`: `_canonical_lag_name`

@@ -45,8 +45,9 @@ _OUT_OF_RANGE_INPUTS = [
      "hostname n\nvlan 5000\n  name X\n", "id"),
     ("cisco_nxos", "ipv4-prefix-gt-32",
      "hostname n\ninterface Vlan10\n  ip address 10.0.0.1/33\n", "prefix_length"),
-    ("cisco_nxos", "hsrp-priority-gt-254",
-     "hostname n\ninterface Vlan10\n  hsrp 10\n    priority 300\n", "priority"),
+    # An HSRP priority above 255, or a group above 4095, no longer reaches
+    # the model: the HSRP reader (``codecs/_hsrp.py``) bounds both and says
+    # the statement in a row (``tests/unit/migration/test_hsrp_is_read.py``).
     ("cisco_iosxe_cli", "vlan-id-gt-4094",
      "hostname n\nvlan 5000\n name X\n", "id"),
     ("cisco_iosxe_cli", "vrrp-priority-gt-254",

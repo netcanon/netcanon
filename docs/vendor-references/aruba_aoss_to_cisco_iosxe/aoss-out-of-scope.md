@@ -1,5 +1,7 @@
 # AOS-S source content NOT carried through the OpenConfig render
 
+> **Update 2026-11-05 — an AOS-S switch's own DHCP server is now read.**  This page was written when the aruba_aoss parser read no `dhcp-server pool` and took AOS-S for a relay platform with no pool to translate.  AOS-S runs a DHCP server of its own (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the parser now reads each pool of a server that is enabled: onto the `Vlan<N>` whose subnet is its network (no interface for a pool of relayed clients), with its network, range, default router, DNS servers, domain name and lease.  A server that is not enabled, a pool that is incomplete, and what the canonical pool has no place for (a second range or router, a static binding, an option) are rows of the sections not translated.  Of the committed inputs, `hpe_community_2930f_wc1610_dhcp_server.cfg` holds 3 pools and the others none.  The NETCONF render writes no DHCP, so the 3 pools are dropped: `dhcp_servers` is `unsupported` on this pair, not `n/a`.
+
 Source: [Aruba ArubaOS-Switch 16.11 Management and Configuration Guide for 2930F/2930M/3810/5400R](https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm)
 Retrieved: 2026-05-01
 

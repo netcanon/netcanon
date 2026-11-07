@@ -11,7 +11,7 @@ is L2/basic-L3 only, so the Aruba source typically carries fewer
 features than the Cisco target accepts — the asymmetry shows up in:
 
 * `vrf_unsupported.md` — Aruba never populates VRFs (no concept).
-* `dhcp_relay.md` — Aruba is relay-only (no server pools).
+* `dhcp_relay.md` — Aruba relay, and (since 2026-11-05) the switch's own DHCP server pools, lossy on IOS-XE.
 * `routing_protocols_unsupported.md` — Aruba lacks BGP / IS-IS / EIGRP.
 
 The good news: the shared CLI lineage (Aruba ProCurve was originally
@@ -31,7 +31,7 @@ HP's Cisco-CLI-compatible offering) means the keyword-stable surface
 | `vrf_unsupported.md` | Aruba has no VRF concept; field always empty on this direction. |
 | `routing_protocols_unsupported.md` | Aruba lacks BGP/IS-IS/EIGRP; OSPF / RIP parse-and-ignore on both codecs. |
 | `radius.md` | Flat `radius-server host` + global key form -> Cisco modern `radius server <name>` form; an `encrypted-key` is refused. |
-| `dhcp_relay.md` | Aruba is relay-only (no DHCP server pools to migrate). |
+| `dhcp_relay.md` | Aruba relay (`ip helper-address`, not modelled); an AOS-S `dhcp-server pool` is read and written as `ip dhcp pool`, without its range and interface (lossy). |
 | `spanning_tree.md` | Aruba MSTP default vs Cisco rapid-pvst default; canonical not modelled, Tier 3. |
 
 Retrieved 2026-04-30 to 2026-05-01.

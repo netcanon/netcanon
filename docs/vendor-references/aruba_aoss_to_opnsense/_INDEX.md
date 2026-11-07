@@ -22,7 +22,7 @@ firmly out of scope on the Aruba side.
 | `interfaces.md` | Aruba bare-numeric ports (`1`, `A1`) versus OPNsense BSD device names + zone labels (`<wan>` / `<lan>` / `<optN>`). |
 | `vlans.md` | Aruba VLAN-centric port-membership versus OPNsense VLAN-as-tagged-sub-interface. |
 | `static_routes.md` | Aruba CIDR `ip route` versus OPNsense's two-block `<gateways>` + `<staticroutes>` model. |
-| `dhcp_relay_versus_pool.md` | Aruba is relay-only; canonical `dhcp_servers` always empty on this direction. |
+| `dhcp_relay_versus_pool.md` | An AOS-S `dhcp-server pool` is read and written under its VLAN's zone; an OPNsense pool states no network (lossy). |
 | `snmp.md` | v1/v2c surface round-trips; SNMPv3 USM lives in OPNsense plugin's snmpd.conf, not config.xml. |
 | `local_users.md` | Aruba SHA-1 / bcrypt / plaintext versus OPNsense bcrypt; hash formats are not cross-compatible. |
 | `radius.md` | RADIUS server config — round-trips host / port pair and a key written as typed; an `encrypted-key` is refused. |

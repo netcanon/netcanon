@@ -374,7 +374,6 @@ OPENERS = {
     "router": "router ospf",
     "stacking": "stacking",
     "vsf": "vsf",
-    "dhcp-server": 'dhcp-server pool "p"',
     "device-profile": 'device-profile name "d"',
 }
 
@@ -389,6 +388,15 @@ def test_a_context_the_top_does_not_read_ends_a_stanza(word: str) -> None:
     """The context's header ends the port's stanza: the line after it
     is the context's, not the port's."""
     _check_opener(word)
+
+
+def test_a_dhcp_pool_header_ends_a_stanza() -> None:
+    """A pool's header is a line the top reads now, not a context the
+    top skips: it ends the port's stanza all the same, and the line
+    after it is the pool's."""
+    tree = _parse('interface 1\n   disable\ndhcp-server pool "p"\nenable\nexit\n')
+    assert [(i.name, i.enabled) for i in tree.interfaces] == [("1", False)]
+    assert aoss_parse._DHCP_POOL_HEADER_RE in aoss_parse._TOP_LEVEL_LINES
 
 
 def test_every_context_the_rule_names_has_a_shape() -> None:
@@ -818,9 +826,9 @@ def test_the_stanza_rule_asks_what_the_top_reads() -> None:
     assert len(aoss_parse._TOP_LEVEL_LINES) == len(_the_tuple()) >= 20
 
 
-def test_the_three_stanza_readers_and_the_renderers_reader_ask_it() -> None:
+def test_the_stanza_readers_and_the_renderers_reader_ask_it() -> None:
     for fn in (aoss_parse._parse_vlan_stanza, aoss_parse._parse_vrrp_group_stanza,
-               aoss_parse._parse_interface_stanza):
+               aoss_parse._parse_interface_stanza, aoss_parse._parse_dhcp_pool_stanza):
         source = inspect.getsource(fn)
         assert "_ends_the_stanza(line, stripped)" in source, fn.__name__
         assert "isspace" not in source, fn.__name__

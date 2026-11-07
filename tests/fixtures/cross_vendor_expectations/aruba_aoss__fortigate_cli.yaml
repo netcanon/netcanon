@@ -34,10 +34,9 @@
 #     vendor-private and out of v1 scope).
 #   * VRF / VXLAN / EVPN are confidently not_applicable on this
 #     direction (Aruba source carries no VRF / VXLAN intent).
-#   * DHCP is medium-confidence lossy (model divergence: Aruba
-#     codec does not advertise /dhcp/pool but emits the pool config
-#     verbatim into a relay-comment block; the FortiGate target
-#     parses interface-bound pools).
+#   * DHCP pools are good: the Aruba parser reads a `dhcp-server
+#     pool` onto the VLAN whose subnet is its network, and the
+#     FortiGate target writes and reads back interface-bound pools.
 
 meta:
   source_vendor: aruba_aoss
@@ -290,16 +289,19 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S is primarily a DHCP relay platform, not a server.
-      The aruba_aoss codec does not advertise ``/dhcp/pool`` in its
-      supported set, so CanonicalIntent.dhcp_servers is always
-      empty on this direction — nothing to lose.  ``ip
+      The aruba_aoss parser reads a `dhcp-server pool` where the
+      switch's DHCP server is enabled, on the `Vlan<N>` whose subnet is
+      its network; FortiGate's ``config system dhcp server`` is bound to
+      an interface the same way.  The 3 pools of the one cell that has
+      any (`hpe_community_2930f_wc1610_dhcp_server.cfg`) round-trip with
+      interface, network, range, gateway, DNS servers and lease intact.
+      What the canonical pool has no place for (a second range or
+      default router, a static binding, an option) is a row of the
+      sections not translated on the AOS-S side.  ``ip
       helper-address`` directives on Aruba VLAN stanzas are not
-      modelled (no canonical helper-address field).  FortiGate
-      target's ``config system dhcp server`` interface-bound model
-      simply emits nothing on render.
+      modelled (no canonical helper-address field).
     references: [dhcp]
 
   snmp:
@@ -486,7 +488,7 @@ per_field_expectation:
 #     these concepts, and the canonical field is always empty on
 #     this direction.
 #
-#   * Timezone / DHCP / SNMPv3 USM passphrases / hash formats are
+#   * Timezone / SNMPv3 USM passphrases / hash formats are
 #     medium-confidence lossy: the format incompatibilities are
 #     well-documented but cross-vendor render involves codec policy
 #     decisions (minute-offset -> numeric index, AOS-S SHA-1 ->

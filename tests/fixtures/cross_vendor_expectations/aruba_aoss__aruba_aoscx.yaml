@@ -396,12 +396,12 @@ per_field_expectation:
   dhcp_servers:
     disposition: unsupported
     reason: >
-      Symmetric gap: both matrices declare `/dhcp-servers/pool` unsupported.
-      Worth stating plainly because one committed fixture is literally an
-      AOS-S DHCP-server config and the canonical field is STILL empty on it —
-      the source parser never populates a pool, so there is nothing for the
-      target to drop.  Re-author DHCP pools (or the relay configuration a
-      campus switch more usually carries) on the target by hand.
+      aruba_aoscx declares `/dhcp-servers/pool` unsupported and writes no
+      pool.  The aruba_aoss parser reads the 3 pools of the one cell that
+      has any (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose
+      DHCP server is enabled), and all 3 are dropped on this target.
+      Re-author DHCP pools (or the relay configuration a campus switch more
+      usually carries) on the target by hand.
     references: [aoss-aoscx-surface]
 
   "snmp.community":

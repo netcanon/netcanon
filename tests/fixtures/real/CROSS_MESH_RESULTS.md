@@ -35,7 +35,7 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | aruba_aoss/aruba_central_5memberstack_rendered.cfg | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
 | aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg | WARN 19/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
 | aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
-| aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 |
+| aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
 | aruba_aoss/hpe_community_5406rzl2_kb1515.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
 | aruba_aoss/user_contrib_2930m_wc1611.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | cisco_iosxe/batfish_cisco_aaa.txt | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 |
@@ -176,7 +176,7 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 
 ## Per-cell drill-downs — real captures
 
-One section per non-OK real-capture cell (1150 total).  Sections are ordered by source fixture then target codec.
+One section per non-OK real-capture cell (1151 total).  Sections are ordered by source fixture then target codec.
 
 ### arista_eos/batfish_duplicateprivate_eos4211.txt → aruba_aoscx  (WARN 19/21)
 
@@ -2001,12 +2001,19 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "a... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → aruba_aoscx  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → aruba_aoscx  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode":... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "ac... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 100, "name": "Wireless_Vlan", "description": "", "tagged_ports": [], "u... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"ipv4_addresses": {"source": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac"... |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
+
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → aruba_aoss  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 
 ### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_iosxe  (WARN 20/21)
 
@@ -2016,33 +2023,38 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "switchport_mode": {"source": "access", "target": null}}, "interfaces[1] {'name': '10'}": {"access_vlan": {"source":... |
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"untagged_ports": {"source": ["2", "4", "5", "... and 3 more"], "target": []}}, "vlans[1] {'id': 100, 'name': 'Wireless_Vlan'}": {"untagged_ports": {... |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| dhcp_servers | UNSUPPORTED (by design) | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 | snmp | UNSUPPORTED (by design) | {"community": "public", "location": "", "contact": "", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': []} → None |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_iosxe_cli  (WARN 20/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_iosxe_cli  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode":... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [{"interface": "", "network": "192.168.10.0/24", "start_ip": "", "end_ip": "", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "lease_time": 86400, "domain_name": ""... | {"dhcp_servers[0] {'network': '192.168.10.0/24'}": {"end_ip": {"source": "192.168.10.254", "target": ""}, "interface": {"source": "Vlan100", "target": ""}, "start_ip": {"source": "192.168.10.1", "t... |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_iosxr  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_iosxr  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode":... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "ac... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [] | all 4 vlans dropped |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 | snmp | UNSUPPORTED (by design) | {"community": "public", "location": "", "contact": "", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': []} → None |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_nxos  (WARN 20/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → cisco_nxos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode":... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → dell_os10  (WARN 20/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode":... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetC... |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 
 ### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → fortigate_cli  (WARN 19/21)
 
@@ -2057,27 +2069,30 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "a... | {"interfaces[0] {'name': '1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': '10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "targ... |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → mikrotik_routeros  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → mikrotik_routeros  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "acces... | count drift: 14 → 15 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [{"id": 1, "name": "Vlan1", "description": "DEFAULT_VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 100, "name": "Vlan100", "description": "Wireless_Vlan", "tagged_po... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"description": {"source": "", "target": "DEFAULT_VLAN"}, "ipv4_addresses": {"source": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secondary": fa... |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [{"interface": "", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "lease_time"... | {"dhcp_servers[0] {'network': '192.168.10.0/24'}": {"interface": {"source": "Vlan100", "target": ""}}, "dhcp_servers[1] {'network': '192.168.20.0/24'}": {"interface": {"source": "Vlan200", "target"... |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → opnsense  (WARN 18/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → opnsense  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "acces... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "targe... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [] | all 4 vlans dropped |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [{"interface": "Vlan100", "network": "", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "lease_time": 86400,... | {"dhcp_servers[0] {'network': '192.168.10.0/24'}": {"network": {"source": "192.168.10.0/24", "target": ""}}, "dhcp_servers[1] {'network': '192.168.20.0/24'}": {"network": {"source": "192.168.20.0/2... |
 
-### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → vyos  (WARN 19/21)
+### aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg → vyos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpo... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "acces... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "targe... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [] | all 4 vlans dropped |
+| dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "192.168.10.0/24", "start_ip": "192.168.10.1", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["62.179.104.196", "213.46.228.196"], "leas... | [] | all 3 dhcp_servers dropped |
 
 ### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → arista_eos  (WARN 20/21)
 

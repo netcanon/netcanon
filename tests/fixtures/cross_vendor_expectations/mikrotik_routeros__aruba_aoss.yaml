@@ -13,8 +13,8 @@
 # and the operator MUST set passwords manually post-migration).
 #
 # Aruba target also has structurally smaller feature footprint than
-# Cisco IOS-XE — fields like dhcp_servers (Aruba is relay-only) are
-# unsupported on the target side rather than lossy.  This is the
+# Cisco IOS-XE — fields like dhcp_servers (the Aruba render writes no
+# pool) are unsupported on the target side rather than lossy.  This is the
 # dominant difference from the inverse cisco_iosxe_cli pair.
 
 meta:
@@ -237,12 +237,13 @@ per_field_expectation:
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
       server network`` + ``/ip dhcp-server``) joins on parse to
       a single CanonicalDHCPPool per network and emits in
-      canonical scope.  The aruba_aoss codec does NOT advertise
-      ``/dhcp/pool`` in its supported set — Aruba AOS-S is
-      primarily a DHCP relay platform.  Cross-vendor render to
-      Aruba drops the pool config with a relay-comment banner;
-      operator is directed to configure relay-and-central-server
-      topology instead.  RouterOS-only static reservations
+      canonical scope.  The aruba_aoss render writes no pool
+      (``/dhcp-servers/pool`` is unsupported): AOS-S has a DHCP
+      server of its own (``dhcp-server pool``, which the aruba_aoss
+      parser reads), but cross-vendor render to Aruba drops the pool
+      config with a comment for each pool; the operator configures
+      each pool on the switch by hand, or a relay to a central
+      server.  RouterOS-only static reservations
       (``/ip dhcp-server lease``), DHCP option codes, and
       multi-range pools are not modelled canonically and drop to
       raw_sections.
@@ -438,10 +439,10 @@ per_field_expectation:
 #     simply does not capture as much as the RouterOS source carries.
 #
 #   * dhcp_servers is unsupported on the Aruba target side rather
-#     than lossy.  Aruba is relay-only on the campus platforms
-#     covered by AOS-S 16.x; the codec does not advertise
-#     /dhcp/pool in its supported set.  Operator-curated relay
-#     topology required.
+#     than lossy.  AOS-S 16.x has a DHCP server of its own, which
+#     the parser reads, but the render writes no pool and declares
+#     /dhcp-servers/pool unsupported.  The pools, or a relay
+#     topology, are configured by hand.
 #
 # Deferred items (not researched in depth this pass):
 #

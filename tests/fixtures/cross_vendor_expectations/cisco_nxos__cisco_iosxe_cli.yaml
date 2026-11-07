@@ -34,7 +34,8 @@ meta:
     VRFs with RD/RT and L3 VNIs, VXLAN bindings, LAG membership, static
     routes, SNMP v1/v2c and the anycast gateway MAC.  The losses that remain
     are concentrated where NX-OS has a construct IOS-XE spells differently or
-    not at all: HSRP first-hop redundancy, NX-OS RBAC role names, the
+    not at all: the HSRP version and what of an HSRP group the NX-OS parser
+    does not read (timers, a type-7 key), NX-OS RBAC role names, the
     per-user SNMPv3 engineID, and the lower-case `port-channel<N>` bundle
     name.
   certainty: medium
@@ -200,21 +201,20 @@ per_field_expectation:
     references: [nxos-iosxecli-surface]
 
   "interfaces[].vrrp_groups":
-    disposition: unsupported
-    reason: >
-      The first-hop-redundancy group does not survive at all.  On all 4 cells
-      that carry one, the source holds an HSRP group on an SVI (`mode="hsrp"`,
-      a virtual IP, a priority, `preempt`, and on two cells an authentication
-      key) and the re-parsed target holds an empty list.  The IOS-XE CLI
-      matrix declares `/interfaces/interface/vrrp-groups/group/mode` lossy
-      because a cross-family source mode drops to a review comment on render
-      -- and a comment is not configuration, so nothing comes back.  The
-      operator consequence is severe and silent: the migrated SVI has neither
-      HSRP nor VRRP, the virtual IP that hosts use as their default gateway is
-      never configured on the box, and the redundancy pair does not form.
-      Re-create the group as `standby <id>` (HSRP) or `vrrp <id>` on the
-      target, re-apply the virtual IP, priority, preempt and authentication,
-      and confirm the peer election before cutting traffic over.
+    disposition: good
+    note: >
+      Preserved on all 4 cells that carry one.  The source holds an HSRP
+      group on an SVI (`mode="hsrp"`, a virtual IP, `preempt`, on two cells
+      a priority and on one an MD5 key); the IOS-XE CLI codec writes it as
+      `standby <group> ...` lines and reads them back as the same group.
+      What the NX-OS parser does not read of a group is said in a row of the
+      job and is in no tree, so no cell reaches it: a type-7 key (one cell
+      holds one), timers, a preempt delay.  The HSRP version is not kept
+      either (a row says so where the source states version 2 and no group
+      of the interface needs it): `standby version
+      2` is written only where a group needs it, a group above 255 or an
+      IPv6 address, so a group of a version-2 pair that needs neither is
+      written for version 1 and has to be set to version 2 on the target.
     references: [nxos-iosxecli-surface]
 
   # -- VLANs.  Whole-record disposition: nothing under `vlans` drifts. --

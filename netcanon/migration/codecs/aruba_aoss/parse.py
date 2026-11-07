@@ -59,6 +59,15 @@ the synthesised ``VlanN`` :class:`CanonicalInterface` via the
 existing SVI-absorption path; an SVI is defensively synthesised
 when a VLAN has VRRP but no IP.
 
+The switch's own DHCP server is read too (:class:`_DhcpServer`): a
+``dhcp-server pool`` that the server would run becomes a DHCP pool of
+the tree, on the ``Vlan<N>`` whose subnet it is where that VLAN states
+``dhcp-server``, and on no interface where it is not (a pool HPE's
+examples serve to clients a relay forwards).  A pool the server would
+not run -- the server is not enabled, or the pool is neither a network
+with a range nor a static binding -- is left out and said, and what a
+pool states that the tree has no place for is said.
+
 Internal helpers re-exported from ``codec.py`` for tests that pin the
 parser's structural contract (``_parse_port_list``,
 ``_format_port_list`` is in :mod:`.render`):
@@ -72,12 +81,16 @@ parser's structural contract (``_parse_port_list``,
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 
 from ..._radius_secrets import AOSS_ENVELOPE
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -92,7 +105,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import census, charge, distinct, tick, ticked
-from .._helpers import GrowingIndex, _coalesce_vlan_ids, _mask_to_prefix, _parse_vlan_list
+from .._helpers import GrowingIndex, _coalesce_vlan_ids, _mask_to_prefix, _parse_vlan_list, a_few_named
 from .._input_shape import detect_input_shape
 from .._scanner import Body, ends_anywhere, without_text_bodies
 from ..base import ParseError
@@ -520,12 +533,12 @@ _PORT_LIST_HEADER_RE = re.compile(
 
 #: A line that enters a context the top of the config reads nothing
 #: of.  It still ends the context that was open.  (``vlan N``,
-#: ``interface X`` and ``oobm`` end it as lines of the top,
-#: :data:`_TOP_LEVEL_LINES`; ``interface`` is here for a name the
-#: header patterns do not take.)
+#: ``interface X``, ``oobm`` and ``dhcp-server pool <name>`` end it as
+#: lines of the top, :data:`_TOP_LEVEL_LINES`; ``interface`` is here for
+#: a name the header patterns do not take.)
 _OPENS_A_CONTEXT_RE = re.compile(
     r"^(?:interface[ \t]+\S+|router[ \t]+\S+|stacking|vsf"
-    r"|dhcp-server[ \t]+pool[ \t]+\S+|device-profile[ \t]+\S+[ \t]+\S+)[ \t]*$",
+    r"|device-profile[ \t]+\S+[ \t]+\S+)[ \t]*$",
     re.IGNORECASE,
 )
 
@@ -555,6 +568,31 @@ _OOBM_WORDS_RE = re.compile(
 #: in ``oobm``, with an ``exit`` of its own.
 _MEMBER_BLOCK_RE = re.compile(r"^member[ \t]+\S+[ \t]*$", re.IGNORECASE)
 
+#: ``dhcp-server pool <name>``: the context of a pool of the switch's
+#: own DHCP server (HPE: ``[no] dhcp-server pool <POOL-NAME>``).  The
+#: name is quoted, as the switch prints it, or a word.  What follows
+#: the name on the line is a statement of the pool, given from the top
+#: as the CLI takes a context's command with the context's words before
+#: it; the context is not entered then.
+_DHCP_POOL_HEADER_RE = re.compile(
+    r'^dhcp-server[ \t]+pool[ \t]+("(?:[^"\\]|\\.)*"|[^"\s]\S*)(?:[ \t]+(\S.*))?$',
+    re.IGNORECASE,
+)
+
+#: Any other line of the top that begins ``dhcp-server`` and a word:
+#: ``dhcp-server enable`` and ``disable`` (HPE: ``[no] dhcp-server
+#: [enable | disable]``, "Defaults to disabled"), and the server's own
+#: settings (``conflict-logging``, ``ping``, ``database``).  The word
+#: is all of it that is read.  ``dhcp-server`` alone is a VLAN's line
+#: (:data:`_VLAN_DHCP_SERVER_RE`), and no line of the top.
+_DHCP_SERVER_LINE_RE = re.compile(
+    r"^(no[ \t]+)?dhcp-server[ \t]+([^\s\"]+)(?![^ \t])", re.IGNORECASE,
+)
+
+#: ``dhcp-server`` alone, in a ``vlan`` stanza: the switch's DHCP server
+#: serves on that VLAN.
+_VLAN_DHCP_SERVER_RE = re.compile(r"^dhcp-server$", re.IGNORECASE)
+
 #: Every pattern the top-level loop of :func:`parse_intent` reads a line
 #: with.  A line one of them matches is the top's, and a stanza ends at
 #: it.  It is this one tuple that :func:`_ends_the_stanza` asks, and a
@@ -582,6 +620,8 @@ _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _TRUNK_LINE_RE,
     _GLOBAL_PORT_VLAN_RE,
     _OOBM_HEADER_RE,
+    _DHCP_POOL_HEADER_RE,
+    _DHCP_SERVER_LINE_RE,
     _VLAN_HEADER_RE,
     _PORT_LIST_HEADER_RE,
     _IFACE_HEADER_RE,
@@ -1016,7 +1056,7 @@ def _stated_since(ports: list[str], gone: dict[str, int]) -> list[str]:
 
 
 def _parse_vlan_stanza(
-    lines: list[str], start: int, vlan_id: int,
+    lines: list[str], start: int, vlan_id: int, dhcp_vlans: set[int] | None = None,
 ) -> tuple[
     CanonicalVlan, list[CanonicalVRRPGroup], list[CanonicalIPv6Address], int
 ]:
@@ -1034,6 +1074,13 @@ def _parse_vlan_stanza(
     synthesised ``Vlan<N>`` :class:`CanonicalInterface` by the caller
     (the SVI-absorption path in :func:`parse_intent`); ``CanonicalVlan``
     itself is IPv4-only.
+
+    Args:
+        lines: The config's lines.
+        start: The index of the stanza's first body line.
+        vlan_id: The VLAN's id.
+        dhcp_vlans: Given *vlan_id* if the stanza has a ``dhcp-server``
+            line (the switch's DHCP server serves on the VLAN).
     """
     vlan = CanonicalVlan(id=vlan_id)
     # ``no untagged`` takes a port out of everything stated above it.
@@ -1143,6 +1190,9 @@ def _parse_vlan_stanza(
             vrrp_groups.append(group)
             i = next_i
             continue
+
+        if dhcp_vlans is not None and _VLAN_DHCP_SERVER_RE.match(stripped):
+            dhcp_vlans.add(vlan_id)
 
         i += 1
     if untagged_gone:
@@ -1431,6 +1481,294 @@ def _past_the_oobm_stanza(lines: list[str], start: int) -> int:
             depth += 1
         i += 1
     return i
+
+
+# ---------------------------------------------------------------------------
+# The switch's own DHCP server
+# ---------------------------------------------------------------------------
+#
+# HPE, ArubaOS-Switch Management and Configuration Guide ("DHCPv4
+# server"): ``dhcp-server pool <POOL-NAME>`` configures a pool "with
+# either a static IP or a network IP range"; ``dhcp-server enable``
+# enables the server in the switch, which "Defaults to disabled";
+# "Range is configured to enable pool".  HPE's DHCP white paper: a pool
+# is valid only as a dynamic pool ("a network address, subnet mask and
+# IP range(s)") or a static pool ("a static IP-to-MAC binding"), and
+# "The DHCP server will discard the invalid and incomplete pools".  Its
+# examples enable the server on a VLAN with ``dhcp-server`` in the
+# VLAN's stanza, and serve pools whose network is no VLAN of the
+# switch to clients a relay forwards to it.  The switch refuses to
+# change the server's configuration while it is enabled, so a printout
+# has ``dhcp-server enable`` after its pools.
+
+#: ``network <address>/<length>`` (HPE's syntax) or ``network <address>
+#: <mask>`` (as the switch prints it).
+_POOL_NETWORK_RE = re.compile(
+    r"^network[ \t]+(\d{1,3}(?:\.\d{1,3}){3})(?:/(\d{1,2})|[ \t]+(\d{1,3}(?:\.\d{1,3}){3}))$", re.IGNORECASE,
+)
+#: ``range <low> [<high>]``.
+_POOL_RANGE_RE = re.compile(
+    r"^range[ \t]+(\d{1,3}(?:\.\d{1,3}){3})(?:[ \t]+(\d{1,3}(?:\.\d{1,3}){3}))?$", re.IGNORECASE,
+)
+#: ``default-router`` / ``dns-server``: up to eight addresses, printed in
+#: quotes and separated by commas.
+_POOL_ADDRESSES_RE = re.compile(r"^(?:default-router|dns-server)[ \t]+(\S.*)$", re.IGNORECASE)
+#: ``lease [DD:HH:MM | infinite]``; HPE: "The default lease period is
+#: one day".
+_POOL_LEASE_RE = re.compile(
+    r"^lease[ \t]+(?:(\d{1,5}):(\d{1,2}):(\d{1,2})|infinite)$", re.IGNORECASE,
+)
+_POOL_DOMAIN_RE = re.compile(r"^domain-name[ \t]+(\S.*)$", re.IGNORECASE)
+
+#: The statements of a pool, in HPE's syntax, that the tree has no
+#: place for.  Each is said by its word alone: an ``option`` holds what
+#: a vendor's client is given, a key among it often enough.
+_POOL_WORDS_NOT_READ = frozenset({
+    "authoritative", "bootfile-name", "netbios-name-server", "netbios-node-type",
+    "option", "tftp-server",
+})
+
+#: What a row of each kind (:func:`_pool_row`) says it stands for.  A
+#: kind of ``""`` is a line of a pool in a form the parser does not read
+#: (a ``no`` line among them).
+_POOL_KINDS = {
+    "": "a line in a form this parser does not read",
+    "range": "a range after the pool's first",
+    "default-router": "a default router after the pool's first",
+    "static-bind": "a static binding of an address to a MAC address",
+}
+
+#: Lease time HPE calls ``infinite``: DHCP's own "infinity" (RFC 2131),
+#: as the IOS-XE CLI parser writes it.
+_INFINITE_LEASE = 0xFFFFFFFF
+
+
+@dataclass
+class _Pool:
+    """What a ``dhcp-server pool`` states, from every stanza of its name
+    (a context entered again is the same pool)."""
+
+    name: str
+    network: str = ""
+    ranges: list[tuple[str, str]] = field(default_factory=list)
+    routers: list[str] = field(default_factory=list)
+    dns_servers: list[str] = field(default_factory=list)
+    lease_time: int = 86400
+    domain_name: str = ""
+    static_binds: int = 0
+    #: The kinds of statement not read, in the order they were met.
+    unread: dict[str, None] = field(default_factory=dict)
+
+
+def _addresses(text: str) -> list[str]:
+    """The IPv4 addresses of a ``default-router`` or ``dns-server`` line,
+    quoted and separated by commas as the switch prints them, or by
+    spaces as they are typed; none if one of them is no address."""
+    found: list[str] = []
+    for word in ticked(_unquote(text).replace(",", " ").split()):
+        try:
+            found.append(str(ipaddress.IPv4Address(word)))
+        except ValueError:
+            return []
+    return found
+
+
+def _read_pool_statement(pool: _Pool, statement: str) -> None:
+    """Read *statement*, a line of *pool*'s context without its white
+    space, into *pool*.  A statement the tree has no place for, or in a
+    form this parser does not read, is noted by its kind and nothing of
+    its value."""
+    word = statement.split(None, 1)[0].lower()
+    if word == "network":
+        found = _POOL_NETWORK_RE.match(statement)
+        if found:
+            try:
+                pool.network = str(ipaddress.IPv4Network(
+                    f"{found.group(1)}/{found.group(2) or found.group(3)}", strict=False,
+                ))
+                return
+            except ValueError:
+                pass
+    elif word == "range":
+        found = _POOL_RANGE_RE.match(statement)
+        if found:
+            try:
+                low = str(ipaddress.IPv4Address(found.group(1)))
+                high = str(ipaddress.IPv4Address(found.group(2) or found.group(1)))
+                pool.ranges.append((low, high))
+                return
+            except ValueError:
+                pass
+    elif word in ("default-router", "dns-server"):
+        found = _POOL_ADDRESSES_RE.match(statement)
+        addresses = _addresses(found.group(1)) if found else []
+        if addresses:
+            if word == "default-router":
+                pool.routers = addresses
+            else:
+                pool.dns_servers = addresses
+            return
+    elif word == "lease":
+        found = _POOL_LEASE_RE.match(statement)
+        if found:
+            days, hours, minutes = found.group(1, 2, 3)
+            pool.lease_time = (
+                _INFINITE_LEASE if days is None
+                else int(days) * 86400 + int(hours) * 3600 + int(minutes) * 60
+            )
+            return
+    elif word == "domain-name":
+        found = _POOL_DOMAIN_RE.match(statement)
+        if found:
+            pool.domain_name = _unquote(found.group(1))
+            return
+    elif word == "static-bind":
+        pool.static_binds += 1
+        return
+    elif word in _POOL_WORDS_NOT_READ:
+        pool.unread.setdefault(word, None)
+        return
+    pool.unread.setdefault("", None)
+
+
+def _parse_dhcp_pool_stanza(lines: list[str], start: int, pool: _Pool) -> int:
+    """Read the body of a ``dhcp-server pool`` stanza, which starts at
+    *start*, into *pool*; the index of the first line after it.  The
+    stanza ends as every stanza ends (:func:`_ends_the_stanza`)."""
+    i = start
+    while i < len(lines):
+        tick()
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            i += 1
+            continue
+        if _leaves(stripped):
+            i += 1
+            break
+        if _ends_the_stanza(line, stripped):
+            break
+        _read_pool_statement(pool, stripped)
+        i += 1
+    return i
+
+
+def _pool_row(kind: str, names: list[str]) -> str:
+    """The row for the statements of a kind that the pools *names* hold
+    and the tree has no place for."""
+    head = f"dhcp-server pool {kind}" if kind else "dhcp-server pool"
+    what = _POOL_KINDS.get(kind, "a statement of a DHCP pool")
+    pools = "pool" if len(names) == 1 else "pools"
+    return f"{head} (in {pools} {a_few_named(names)}: {what}; not translated)"
+
+
+class _DhcpServer:
+    """The switch's DHCP server, as the lines of a config state it.
+
+    What is in force is known only once the last line has been read
+    (``dhcp-server enable`` comes after the pools), so the lines are
+    kept and :meth:`finish` makes the tree's pools and the rows.
+    """
+
+    def __init__(self) -> None:
+        self.enabled = False
+        self.pools: dict[str, _Pool] = {}
+        #: The VLANs whose stanza states ``dhcp-server``.
+        self.vlans: set[int] = set()
+        #: The first words of each line that sets something of the
+        #: server, as it begins (``no dhcp-server ping``): no value.
+        self._settings: list[list[str]] = []
+
+    def pool(self, name: str) -> _Pool:
+        """The pool of *name*, made the first time it is named."""
+        found = self.pools.get(name)
+        if found is None:
+            found = self.pools[name] = _Pool(name)
+        return found
+
+    def server_line(self, no: bool, word: str, rest: str) -> None:
+        """A line of the top that begins ``dhcp-server`` and *word*.
+        ``enable`` and ``disable`` (or ``no`` before either) turn the
+        server on and off, and the last such line is the switch's."""
+        lowered = word.lower()
+        if lowered in ("enable", "disable") and not rest.strip():
+            self.enabled = (lowered == "enable") != no
+        else:
+            self._settings.append([*(["no"] if no else []), "dhcp-server", _shown(lowered)])
+
+    def finish(
+        self, vlans: Iterable[CanonicalVlan], say: Callable[[str], None],
+    ) -> tuple[list[CanonicalDHCPPool], list[tuple[str, list[str]]]]:
+        """The pools of the tree, and the statements left out because
+        they are not in force (for :func:`left_out_rows`).  What is in
+        force and has no place in the tree is given to *say*: one row
+        a kind, which names a few pools."""
+        left_out: list[tuple[str, list[str]]] = []
+        if not self.enabled:
+            for pool in ticked(self.pools.values()):
+                left_out.append(("disabled", ["dhcp-server", "pool", _shown(pool.name)]))
+            for setting in ticked(self._settings):
+                left_out.append(("disabled", setting))
+            return [], left_out
+        for setting in ticked(self._settings):
+            say(f"{' '.join(setting)} (a setting of the DHCP server; not translated)")
+        served = self._served(vlans)
+        pools: list[CanonicalDHCPPool] = []
+        unread: dict[str, list[str]] = {}
+        for pool in ticked(self.pools.values()):
+            kinds = list(pool.unread)
+            if pool.network and pool.ranges:
+                pools.append(self._record(pool, served))
+                if len(pool.ranges) > 1:
+                    kinds.append("range")
+                if len(pool.routers) > 1:
+                    kinds.append("default-router")
+                if pool.static_binds:
+                    kinds.append("static-bind")
+            elif pool.static_binds:
+                # A static pool: a binding the tree has no place for.
+                kinds = ["static-bind"]
+            else:
+                left_out.append(("incomplete", ["dhcp-server", "pool", _shown(pool.name)]))
+                continue
+            for kind in kinds:
+                unread.setdefault(kind, []).append(f'"{_shown(pool.name)}"')
+        for kind, names in unread.items():
+            say(_pool_row(kind, names))
+        return pools, left_out
+
+    def _served(self, vlans: Iterable[CanonicalVlan]) -> dict[ipaddress.IPv4Network, int]:
+        """The subnet of each address of a VLAN the server serves on,
+        and the VLAN (the first, of two with one subnet)."""
+        served: dict[ipaddress.IPv4Network, int] = {}
+        for vlan in ticked(vlans):
+            if vlan.id not in self.vlans:
+                continue
+            for address in vlan.ipv4_addresses:
+                try:
+                    subnet = ipaddress.IPv4Network(f"{address.ip}/{address.prefix_length}", strict=False)
+                except ValueError:
+                    continue
+                served.setdefault(subnet, vlan.id)
+        return served
+
+    @staticmethod
+    def _record(pool: _Pool, served: dict[ipaddress.IPv4Network, int]) -> CanonicalDHCPPool:
+        """The tree's pool for a dynamic *pool*: its first range and its
+        first default router (the rest are said), on the ``Vlan<N>``
+        whose subnet the pool's network is."""
+        vlan_id = served.get(ipaddress.IPv4Network(pool.network))
+        low, high = pool.ranges[0]
+        return CanonicalDHCPPool(
+            interface=f"Vlan{vlan_id}" if vlan_id is not None else "",
+            network=pool.network,
+            start_ip=low,
+            end_ip=high,
+            gateway=pool.routers[0] if pool.routers else "",
+            dns_servers=list(pool.dns_servers),
+            lease_time=pool.lease_time,
+            domain_name=pool.domain_name,
+        )
 
 
 #: The most rows :class:`_Memberships` gives for the lines it left out.
@@ -1916,6 +2254,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # the record still lists it, and nothing in the loop reads an
     # earlier VLAN's list).
     memberships = _Memberships(intent)
+    # The DHCP server's lines: what is in force is known after the last.
+    dhcp = _DhcpServer()
     # The account each role has (the last line's), and each local user
     # by name (the last line's): the tree is given the two accounts
     # first, after the last line.
@@ -2261,7 +2601,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if vm:
             vlan_id = int(vm.group(1))
             vlan, vrrp_groups, svi_ipv6, next_i = _parse_vlan_stanza(
-                lines, i + 1, vlan_id,
+                lines, i + 1, vlan_id, dhcp_vlans=dhcp.vlans,
             )
             # Aruba AOS-S VLAN reassignment semantic: when a port
             # is added to a later VLAN's ``untagged`` list, it is
@@ -2330,6 +2670,26 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i = _past_the_oobm_stanza(lines, i + 1)
             continue
 
+        # The switch's own DHCP server (:class:`_DhcpServer`): a pool's
+        # stanza, a pool's statement given from the top, and the lines
+        # that enable the server or set something of it.
+        pool_header = _DHCP_POOL_HEADER_RE.match(stripped_line)
+        if pool_header:
+            pool = dhcp.pool(_unquote(pool_header.group(1)))
+            if pool_header.group(2):
+                _read_pool_statement(pool, pool_header.group(2))
+                i += 1
+            else:
+                i = _parse_dhcp_pool_stanza(lines, i + 1, pool)
+            continue
+        server_line = _DHCP_SERVER_LINE_RE.match(stripped_line)
+        if server_line:
+            dhcp.server_line(
+                bool(server_line.group(1)), server_line.group(2), stripped_line[server_line.end():],
+            )
+            i += 1
+            continue
+
         im = _IFACE_HEADER_RE.match(stripped_line) or _PORT_LIST_HEADER_RE.match(stripped_line)
         if im:
             iface_name = one_spelling(im.group(1).strip('"'))
@@ -2385,7 +2745,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
     # What each VLAN lost to a later line leaves it now.
     memberships.finish()
-    intent.dropped_tier3_sections = memberships.rows()
+    # The DHCP server's pools, once every VLAN has its addresses: what
+    # is in force and has no place in the tree is said with the lines
+    # above, and what is not in force is left out and said after them.
+    intent.dhcp_servers, dhcp_left_out = dhcp.finish(intent.vlans, memberships.say)
+    intent.dropped_tier3_sections = [
+        *memberships.rows(),
+        *left_out_rows(dhcp_left_out, rest="disabled"),
+    ]
 
     # LAG-member linkage post-pass.  The inline linking at the
     # ``trunk`` line above only catches members whose

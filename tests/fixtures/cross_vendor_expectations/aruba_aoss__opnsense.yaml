@@ -19,8 +19,8 @@
 #     no first-class SVI)
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     model is two-stage, codec doesn't currently render either)
-#   * DHCP server scopes — N/A (Aruba is relay-only; canonical list
-#     always empty on parse)
+#   * DHCP server scopes — lossy (read from an AOS-S `dhcp-server
+#     pool`; an OPNsense pool states no network)
 #   * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in plugin's
 #     snmpd.conf, not config.xml)
 #   * Local users — lossy (Aruba sha1 / sha256 / plaintext vs
@@ -494,14 +494,16 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: not_applicable
-    note: >
-      Aruba AOS-S is primarily a DHCP relay platform.  The
-      aruba_aoss codec does not advertise ``/dhcp/pool`` in its
-      supported set, so ``CanonicalIntent.dhcp_servers`` is always
-      empty on this direction — nothing to lose.  Aruba's per-
-      VLAN ``ip helper-address`` directives also drop because the
-      canonical schema has no helper-address field.
+    disposition: lossy
+    reason: >
+      The aruba_aoss parser reads the 3 pools of the one cell that has
+      any (`hpe_community_2930f_wc1610_dhcp_server.cfg`), each on its
+      `Vlan<N>`, and each is written under the zone of that VLAN's
+      interface with its range, gateway, DNS servers and lease.  The
+      network does not come back: an OPNsense pool states none (the
+      zone's address gives it), and the parser does not infer it.
+      Aruba's per-VLAN ``ip helper-address`` directives also drop
+      because the canonical schema has no helper-address field.
     references: [aruba-dhcp-relay]
 
   snmp:
@@ -660,7 +662,7 @@ per_field_expectation:
 #     / RADIUS / LAG-name-collision round-trip cleanly.
 #
 #   * The wire-up gaps on the OPNsense side (no DNS / NTP / syslog /
-#     timezone / static-route render path; no /dhcp/pool advertised;
+#     timezone / static-route render path; a DHCP pool keyed by zone;
 #     no /lag/aggregate advertised) push several Tier-1 fields into
 #     'lossy' rather than 'good'.  These are codec-implementation
 #     gaps, not vendor-modelling gaps, and would close as wire-up

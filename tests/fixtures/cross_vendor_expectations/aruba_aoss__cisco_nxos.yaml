@@ -4,7 +4,7 @@
 # Target: cisco_nxos codec — NX-OS `show running-config` render.
 #
 # Asymmetric pair by device class: AOS-S is a campus access switch (L2 +
-# basic L3, no VRF / VXLAN / EVPN / DHCP-server surface) while NX-OS is a DC
+# basic L3, no VRF / VXLAN / EVPN surface) while NX-OS is a DC
 # leaf/spine.  Most of the NX-OS-only fabric surface is therefore
 # STRUCTURALLY ABSENT on the source — those rows are `not_applicable` (the
 # source never populates them), not `unsupported` (the target drops them).
@@ -349,14 +349,13 @@ per_field_expectation:
   dhcp_servers:
     disposition: unsupported
     reason: >
-      Both matrices declare `/dhcp-servers/pool` unsupported: AOS-S is
-      primarily a relay platform and the cisco_nxos render "emits no DHCP
-      server pool; intent.dhcp_servers are dropped on migration".  No fixture
-      populates the field, and unlike the `not_applicable` rows, closing the
-      AOS-S parse side would not rescue it — the target renders nothing
-      either way.  An AOS-S box acting as a DHCP server (as
-      `hpe_community_2930f_wc1610_dhcp_server.cfg` does on the wire) needs its
-      pools re-created on the Nexus by hand.
+      The cisco_nxos render "emits no DHCP server pool; intent.dhcp_servers
+      are dropped on migration" (`/dhcp-servers/pool` unsupported).  The
+      aruba_aoss parser reads the 3 pools of the one cell that has any
+      (`hpe_community_2930f_wc1610_dhcp_server.cfg`, a switch whose DHCP
+      server is enabled), and all 3 are dropped on this target.  An AOS-S
+      box acting as a DHCP server needs its pools re-created on the Nexus by
+      hand.
     references: [aoss-nxos-surface]
 
   # -- SNMP.  Sub-field keys; nothing under this parent drifts. --

@@ -125,10 +125,10 @@ names the canonical surface, not a blanket guarantee.
   unsupported on all 12), so those drops are always bannered, never silent.
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
-  across the bidirectional codecs, each of which writes one
-  protocol (most IETF VRRP, NX-OS HSRP, OPNsense CARP): a group of
-  another protocol is not written as that protocol on any other
-  target, and the job says so (§A).  See
+  across the bidirectional codecs, most of which write one protocol
+  (most IETF VRRP, NX-OS HSRP, OPNsense CARP; IOS-XE CLI writes VRRP
+  and HSRP): a group of another protocol is not written as that
+  protocol, and the job says so (§A).  See
   [`v0.2.0-planning/01-vrrp-canonical/`](v0.2.0-planning/01-vrrp-canonical/)
   for the design rationale and the
   [Cross-vendor L3-redundancy grammar reference](#cross-vendor-l3-redundancy-grammar-reference)
@@ -275,7 +275,7 @@ text").
 
 | Path | Class | Reason summary |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward).  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  No virtual MAC is written (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward).  HSRP is read and written too: `standby [<group>]` with `ip <address> [secondary]`, `ipv6`, `priority`, `preempt`, `authentication text` or `authentication md5 key-string [0]`, and `mac-address`; every other `standby` statement (timers, track, a key chain, a type-7 key, the version) is said in a row of the job, never with its value; `standby version 2` is written only where a group needs it (a group above 255, an IPv6 address).  A CARP group is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  A virtual MAC is written for an HSRP group only (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 no `standby` line was read, and nothing said so.  ⚠️ Up to 0.7.7 the group was declared supported. |
 | `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy (IPv4) / Unsupported (IPv6) | The MAC of a virtual gateway is written only with the one gateway the codec writes, an SD-Access anycast gateway that is the interface's own address; the MAC of any other is dropped with it.  No IPv6 virtual gateway is written, so neither is its MAC. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Lossy (Wave C) | SD-Access anycast-gateway (`virtual_gateway_address == the interface primary IP`) round-trips via `fabric forwarding mode anycast-gateway`, but a SEPARATE cross-vendor VARP virtual IP (the Arista/Junos shape, `virtual_gateway_address != the interface IP`) has no IOS-XE equivalent and drops on render (review comment only).  Demoted from supported to **lossy** so the separate-VIP loss surfaces instead of reporting `severity:ok` (silent-loss guard). |
 | `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
@@ -552,7 +552,7 @@ text").  The lossy / unsupported exceptions:
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  It is written as it stands only from a config of NX-OS.  From another platform the account is given `role network-admin` at privilege 15 and `role network-operator` below it, chosen from the privilege level; the source's role is not carried. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | The trailing `localizedkey` keyword is a CLAIM that the digest is already localised against this agent's engine ID, so it is both read and re-emitted per line: a key from another agent is refused (review comment, no `snmp-server user` line), a genuine passphrase renders WITHOUT the keyword and the Nexus localises it on commit, and a localised digest keeps its keyword.  NX-OS 10.x `localizedV2key` is normalised to the older `localizedkey` form on render.  Re-key SNMPv3 users on the target across OS-version boundaries. |
 | `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
-| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled: the HSRP group written tracks no interface and has no virtual MAC (`…/group/{track-interfaces,virtual-mac}`, lossy). |
+| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  A group's `ip <vip> [secondary]`, `priority`, `preempt` and a key typed as it is (`authentication text`, `authentication md5 key-string [0]`) are read; every other statement (timers, a preempt delay, track, a key chain, a type-7 key, an IPv6 group, a group past 4095, the interface's `hsrp version 2`) is said in a row of the job, never with its value.  `hsrp version 2` is written only where a group above 255 needs it.  The HSRP group written tracks no interface and has no virtual MAC (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 `key-string 7 <key>` was read as the key `7`. |
 | `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
 | `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy (IPv4) / Unsupported (IPv6) | The MAC of a virtual gateway is written only with the gateway the codec writes, a Distributed Anycast Gateway that is the interface's own address; the MAC of any other is dropped with it.  No IPv6 virtual gateway is written, so neither is its MAC. |
 | `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so no field of one is. |
@@ -780,7 +780,11 @@ a stanza, neither one called `preconfigure` nor the port it names,
 and nothing in it is read.  An IOS XR or EOS sub-interface of a port
 or a bundle that states no tag, which the device does not bring up,
 is listed as `untagged: interface <name>`, and nothing of it is in
-the output.  The banner counts only the sections,
+the output.  An AOS-S DHCP pool or server setting of a switch whose
+DHCP server is not enabled is listed as `disabled: dhcp-server pool
+<name>`, and a pool the server discards, with neither a network and
+a range nor a static binding, as `incomplete: dhcp-server pool
+<name>`: neither served anything.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
@@ -1093,13 +1097,14 @@ in rendered output find every such site.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
-  AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
-  DHCP server.  When canonical carries DHCP pools, the renderer
-  emits a header comment block:
+  AOS-S runs a DHCP server of its own (`dhcp-server pool`,
+  `dhcp-server enable`), which the parser reads, but the renderer
+  writes no pool.  When canonical carries DHCP pools, it emits a
+  header comment block:
 
-      ; DHCP pools from source codec are not supported
-      ; by AOS-S (AOS-S is a DHCP relay platform, not a
-      ; DHCP server).  Reconfigure on a sibling server.
+      ; DHCP pools of the source, not written here.  AOS-S
+      ; has a DHCP server of its own (dhcp-server pool,
+      ; dhcp-server enable): configure each pool by hand.
 
   …followed by one summary comment line per pool.
 
@@ -2855,10 +2860,25 @@ matter; the matrix is honest about both.
   beside an `interface Vlan10`.  Where it states one, the
   interface keeps it and the label is in a `# review:` line beside
   it (`/vlans/vlan/name` and `/vlans/vlan/description`, lossy).
-* **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
-  (`ip helper-address`) — it is not a DHCP server.  Source DHCP
-  pools surface as a comment block, not as `dhcp-server pool`
-  syntax.
+* **Aruba AOS-S DHCP pools.**  As a source, a `dhcp-server pool` is
+  read where the switch's server is enabled (`dhcp-server enable`;
+  HPE: the server defaults to disabled), on the `Vlan<N>` whose
+  subnet is its network and whose stanza states `dhcp-server`, or on
+  no interface for a pool that serves relayed clients.  A pool of a
+  server that is not enabled is a `disabled:` row, and a pool the
+  server discards (neither a network and a range nor a static
+  binding) an `incomplete:` row; a second range or router, a static
+  binding, an option and a setting of the server are rows too.  As a
+  target, AOS-S writes no pool: source pools surface as a comment
+  block, not as `dhcp-server pool` syntax.
+* **An IOS-XE CLI output's DHCP pool hands out its whole subnet.**
+  An IOS-XE pool states no range (addresses are kept out with `ip
+  dhcp excluded-address`, which the codec neither reads nor writes)
+  and names no interface (it serves the interface whose subnet is its
+  network).  A pool from AOS-S, FortiOS, Junos, OPNsense or RouterOS
+  that served part of its subnet serves all of it on IOS-XE, and the
+  job says `completed`: no path of the matrix names a pool's range.
+  Exclude by hand what the source's range left out.
 * **A trunk's allowed list means what it says.**  On a trunk an
   empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
   and any other list is the list.  A trunk that states no allowed
@@ -3144,7 +3164,7 @@ different bytes on the wire.
 
 | Vendor | Native grammar (canonical mapping) | Canonical `mode` |
 |---|---|---|
-| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (the HSRP `standby` grammar is not read: an IOS-XE HSRP group is not translated, and nothing says so) |
+| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt`; HSRP: `interface X / standby 10 ip 192.168.1.254 / standby 10 priority 110 / standby 10 preempt` | `vrrp`, `hsrp` (a group is written in its own protocol; a CARP group is not written) |
 | Cisco NX-OS | `interface VlanN / hsrp 10 / ip 192.168.1.254 / priority 110 / preempt` | `hsrp` (every group is written as HSRP, whatever its source `mode`) |
 | Arista EOS | `interface VlanN / vrrp 10 ipv4 192.168.1.254 / vrrp 10 priority 110` (modern multi-line) | `vrrp` |
 | Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv4 groups only: an IPv6 virtual IP is written as `virtual-inet6-address` under the IPv4 address, not as the `vrrp-inet6-group` Juniper documents) |
@@ -3193,16 +3213,18 @@ into routinely:
   (`fabric forwarding mode anycast-gateway`); IPv6 VARP DROPS
   because `/interfaces/interface/ipv6/address/virtual-gateway-address`
   is `unsupported` on `cisco_iosxe_cli` (no fixture coverage today).
-* **NX-OS HSRP → any other target.**  The NX-OS parser reads
-  `hsrp N` as a group with `mode="hsrp"`, and only NX-OS writes
-  HSRP.  IOS-XE CLI, EOS, AOS-S, FortiOS and RouterOS do not write
-  such a group, and a review line in the output says so; Junos and
+* **HSRP → any other target.**  The NX-OS parser reads `hsrp N` and
+  the IOS-XE CLI parser `standby N` as a group with `mode="hsrp"`,
+  and those two codecs write HSRP (NX-OS writes every group as
+  HSRP).  Between them the group goes across; what neither parser
+  reads of it is said in rows, and the version is written only where
+  a group needs version 2.  EOS, AOS-S, FortiOS and RouterOS do not
+  write such a group, and a review line in the output says so; Junos and
   OPNsense do not write it, and nothing in the output says so; OS10
   writes it as VRRP.  Each of those declares the group `lossy` (OS10
   its `mode`), so the job says so; AOS-CX, IOS XR and VyOS write no group at all
   (`unsupported`, the job is `partial`).  The redundancy has to be
-  made again on the target.  (An IOS-XE `standby` group is not read
-  at all: see the table above.)
+  made again on the target.
 * **OPNsense CARP ↔ VRRP devices.**  The `mode="carp"`
   discriminator carries through.  OPNsense as target renders only
   `mode="carp"` records: a `mode="vrrp"` / `"hsrp"` record is not
