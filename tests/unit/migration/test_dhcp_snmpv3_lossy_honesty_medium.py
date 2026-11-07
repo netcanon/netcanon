@@ -49,6 +49,7 @@ def test_snmpv3_algorithm_substitution_declared_lossy(codec_name, path):
 def _pool_intent(lease_time: int) -> CanonicalIntent:
     return CanonicalIntent(
         dhcp_servers=[CanonicalDHCPPool(
+            interface="vlan10",
             network="10.0.0.0/24", start_ip="10.0.0.10", end_ip="10.0.0.99",
             gateway="10.0.0.1", dns_servers=["10.0.0.2"],
             domain_name="lab.example", lease_time=lease_time,
@@ -58,6 +59,10 @@ def _pool_intent(lease_time: int) -> CanonicalIntent:
 
 def test_dhcp_subfields_are_walked_when_populated():
     walked = set(_walk_canonical(_pool_intent(7200)))
+    # The addresses a pool hands out, and where it is served: a target
+    # that writes neither serves another set, on another interface.
+    assert "/dhcp-servers/pool/range" in walked
+    assert "/dhcp-servers/pool/interface" in walked
     assert "/dhcp-servers/pool/gateway" in walked
     assert "/dhcp-servers/pool/dns-servers" in walked
     assert "/dhcp-servers/pool/domain-name" in walked
@@ -69,6 +74,22 @@ def test_default_lease_time_is_not_walked():
     # The 86400 default round-trips implicitly, so no codec need declare it.
     walked = set(_walk_canonical(_pool_intent(86400)))
     assert "/dhcp-servers/pool/lease-time" not in walked
+
+
+def test_a_pool_with_no_range_and_no_interface_walks_neither():
+    walked = set(_walk_canonical(CanonicalIntent(
+        dhcp_servers=[CanonicalDHCPPool(network="10.0.0.0/24")],
+    )))
+    assert "/dhcp-servers/pool/range" not in walked
+    assert "/dhcp-servers/pool/interface" not in walked
+
+
+@pytest.mark.parametrize("codec_name", ["mikrotik_routeros", "arista_eos"])
+def test_where_a_pool_is_served_is_declared_lossy(codec_name):
+    # RouterOS writes no `/ip dhcp-server` on an interface, and EOS's
+    # output names the pool after its interface and says nothing more.
+    caps = get_codec(codec_name).capabilities
+    assert caps.classify("/dhcp-servers/pool/interface") == "lossy"
 
 
 def test_mikrotik_declares_lease_time_lossy():

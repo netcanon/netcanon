@@ -273,6 +273,14 @@ opens another banner is not seen (see
 [`vendors/cisco_iosxe.md`](vendors/cisco_iosxe.md) § "A banner is
 text").
 
+A DHCP pool is read as the server hands it out: every address of
+its network but those `ip dhcp excluded-address` names and the
+device's own, on the interface whose subnet is the pool's network (on
+none, for a pool that serves clients a relay forwards).  A range is
+written as the exclusions on either side of it.  What the tree has no
+place for is a row of the sections not translated (see
+[`vendors/cisco_iosxe.md`](vendors/cisco_iosxe.md) § "Lossy paths").
+
 | Path | Class | Reason summary |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward).  HSRP is read and written too: `standby [<group>]` with `ip <address> [secondary]`, `ipv6`, `priority`, `preempt`, `authentication text` or `authentication md5 key-string [0]`, and `mac-address`; every other `standby` statement (timers, track, a key chain, a type-7 key, the version) is said in a row of the job, never with its value; `standby version 2` is written only where a group needs it (a group above 255, an IPv6 address).  A CARP group is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  A virtual MAC is written for an HSRP group only (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 no `standby` line was read, and nothing said so.  ⚠️ Up to 0.7.7 the group was declared supported. |
@@ -312,7 +320,7 @@ masquerading as drift.
 | `/interfaces/interface/{config/vrf,dhcp-client,dhcp-client-v6,lag-member-of}` | Unsupported (the interface is written without them, as without its switchport fields) |
 | `/local-users/user/{name,role,privilege-level,hashed-password}` | Unsupported (no `<system><aaa>` is written) |
 | `/lags/lag/{name,mode,members}` | Unsupported |
-| `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported |
+| `/dhcp-servers/pool/{range,interface,gateway,dns-servers,domain-name,lease-time}` | Unsupported |
 | `/system/{hostname,dns-server,ntp-server}` | Unsupported |
 | `/vlans/vlan/{id,name}` | Unsupported |
 | `/routing/static-route` | Unsupported |
@@ -368,6 +376,7 @@ gotchas").
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `! review:` line in its interface says so, and the redundancy has to be made again on the target.  ⚠️ Up to 0.7.7 the group was declared supported. |
 | `/interfaces/interface/dhcp-client` | Lossy (warn) | EOS spells a DHCP client `ip address dhcp`, which the codec neither reads nor writes: the interface is written without one. |
+| `/dhcp-servers/pool/interface` | Lossy (warn) | The renderer names a pool after its interface (`ip dhcp pool <interface>`), and the parser reads the name back as the interface, but no line of the output says that the interface serves the pool. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | VARP: `ip address virtual X/M` populates the address record's `virtual_gateway_address`; secondary trailer preserved via `is_secondary` flag. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 VARP: `ipv6 address virtual` parses to the IPv6 address record. |
 | `/anycast-gateway-mac` | Supported (Wave C) | Chassis-wide `ip virtual-router mac-address <MAC>` round-trips to `CanonicalIntent.anycast_gateway_mac`. |
@@ -482,6 +491,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |
 | `/interfaces/interface/dhcp-client` | Lossy (warn) | RouterOS keeps a DHCP client in `/ip dhcp-client`, which the codec neither reads nor writes: the interface is written without one. |
+| `/dhcp-servers/pool/interface` | Lossy (warn) | RouterOS serves a pool from an `/ip dhcp-server` on an interface, which the codec does not write: the `/ip pool` and `/ip dhcp-server network` it writes name no interface, so the pool is served on none and is read back with no interface. |
 | `/interfaces/interface/config/vrf` + `/routing-instances/instance/*` | Unsupported | No VRF is written (`/routing-instances/instance` is unsupported), so no field of one is, and no interface is placed in one.  ⚠️ Up to 0.7.7 each interface's VRF and each field of a VRF were declared supported. |
 | Fields of records the codec does not write: `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
@@ -517,7 +527,7 @@ several lines").  Such a value reaches every target on one line (§ C1).
 | `/vlans/vlan/id` | Lossy | OPNsense has no VLAN apart from a VLAN device on a parent (`<vlan>` with `<if>` and `<tag>`).  A VLAN on a bridge, or on a zone's key (`<if>lan</if>`, written where the config has no port), is read back as a VLAN; one another platform carries on a port or a LAG is written as a VLAN device on it, which the parser reads back as a routed sub-interface of the port (its tag the VLAN's id), with no VLAN record. |
 | `/vlans/vlan/name` | Lossy | An OPNsense `<vlan>` has no name of its own: the parser names a VLAN after its device (`<vlanif>`), and the render writes another vendor's VLAN name as the `<descr>` where the VLAN has no description, and drops it where it has one.  The `<descr>` is the VLAN's description (`/vlans/vlan/description`, lossy). |
 | `/vlans/vlan/description` | Lossy | A `<vlan>`'s `<descr>`.  It goes with the VLAN: where the VLAN is read back as a sub-interface of its port (`/vlans/vlan/id`), the `<descr>` is the sub-interface's description. |
-| `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (a pool from IOS-XE or RouterOS, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, and a pool whose zone `<interfaces>` does not have is left out and listed. |
+| `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (a pool from RouterOS, an IOS-XE pool that serves clients a relay forwards, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, and a pool whose zone `<interfaces>` does not have is left out and listed. |
 | `/interfaces/interface/dot1q-vlan` | Supported | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is written as OPNsense's own VLAN device on its port, `<vlan>` with `<if>igb1</if>`, `<tag>200</tag>` and `<vlanif>igb1.100</vlanif>`: the tag is the sub-interface's own, not the number in its name, and its zone assigns the device (one that holds a description and nothing else is the device alone, its `<descr>` the description: a zone would assign and enable it).  The parser reads a VLAN device by its parent: on a port or a LAGG it is a sub-interface of it (read back as one, and, from an OPNsense config, sent onto another vendor where its parent goes, named by its tag); on a bridge, another VLAN device, a zone's key (`lan`, `opt3`), or a name that says it is a VLAN interface, a loopback or a tunnel, a VLAN interface and a VLAN.  Zones are not typed, so a parent that is none of those is a port whatever its name.  OPNsense's VLAN form refuses a device name with a dot in it when the VLAN is saved (a `<!-- review: -->` comment says so).  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a review comment.  OPNsense keeps one VLAN device for a tag on a parent: where the output has a tag twice on one, the second `<vlan>` holds a review comment that names the first.  A sub-interface of two tags is written with its outer tag: its inner tag (`/interfaces/interface/dot1q-inner-vlan`, unsupported) is reported as a drop and the job is `partial`. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
@@ -555,7 +565,7 @@ text").  The lossy / unsupported exceptions:
 | `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  A group's `ip <vip> [secondary]`, `priority`, `preempt` and a key typed as it is (`authentication text`, `authentication md5 key-string [0]`) are read; every other statement (timers, a preempt delay, track, a key chain, a type-7 key, an IPv6 group, a group past 4095, the interface's `hsrp version 2`) is said in a row of the job, never with its value.  `hsrp version 2` is written only where a group above 255 needs it.  The HSRP group written tracks no interface and has no virtual MAC (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 `key-string 7 <key>` was read as the key `7`. |
 | `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
 | `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy (IPv4) / Unsupported (IPv6) | The MAC of a virtual gateway is written only with the gateway the codec writes, a Distributed Anycast Gateway that is the interface's own address; the MAC of any other is dropped with it.  No IPv6 virtual gateway is written, so neither is its MAC. |
-| `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so no field of one is. |
+| `/dhcp-servers/pool/{range,interface,gateway,dns-servers,domain-name,lease-time}` | Unsupported | No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so no field of one is. |
 | `/routing-instances/instance/route-distinguisher` | Lossy | `rd auto` tells the device to derive the RD itself (`<BGP router-id>:<internal VRF ID>` for an IP-VRF) — a value that exists only at runtime and cannot be recovered from a config file. Netcanon preserves the keyword for same-vendor round-trips and, on targets whose grammar has no `auto` form (Junos, IOS-XE CLI), drops it with a review comment rather than inventing a value. An explicit `rd <asn>:<nn>` round-trips losslessly. |
 | `/routing-instances/instance/rt-imports` | Lossy | `route-target both <rt> evpn` advertises in both IPv4-unicast and L2VPN-EVPN; the `evpn` address-family scope does not round-trip cross-vendor (RT value preserved, scope reverts to IPv4 unicast).  Same-vendor round-trips. |
 | `/vxlan-vnis/vni` | Lossy | `interface nve1 / member vni N` per-VNI sub-flags (`suppress-arp`, alternate ingress-replication) do not round-trip — render always emits the modern BGP-EVPN head-end shape (`host-reachability protocol bgp`).  The VLAN↔VNI binding round-trips via `vlan N / vn-segment`. |
@@ -740,7 +750,7 @@ text").  The lossy / unsupported exceptions:
 | `/evpn-type5-routes/route` | Unsupported | No EVPN is rendered; BGP / EVPN is Tier-3 on OS10. |
 | `/anycast-gateway-mac` | Unsupported | No distributed-anycast-gateway concept (see the virtual-gateway rows above). |
 | `/system/{domain,dns-server,ntp-server,syslog-server,timezone}` | Unsupported | v1 parses no `ip domain-name` / `ip name-server` / `ntp server` / `logging server` / clock stanza.  Re-apply the management plane on the target. |
-| `/dhcp-servers/pool` + `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | v1 parses no DHCP server pool. |
+| `/dhcp-servers/pool` + `/dhcp-servers/pool/{range,interface,gateway,dns-servers,domain-name,lease-time}` | Unsupported | v1 parses no DHCP server pool. |
 | `/radius-servers/server/{host,key}` | Unsupported | v1 parses no AAA `radius-server` config. |
 | `/interfaces/interface/dot1q-vlan` | Unsupported | Per-port dot1q sub-interface VLAN tagging is not modelled. |
 | `/interfaces/interface/dot1q-inner-vlan` | Unsupported | Nor is the inner tag of a Q-in-Q sub-interface. |
@@ -2871,14 +2881,16 @@ matter; the matrix is honest about both.
   binding, an option and a setting of the server are rows too.  As a
   target, AOS-S writes no pool: source pools surface as a comment
   block, not as `dhcp-server pool` syntax.
-* **An IOS-XE CLI output's DHCP pool hands out its whole subnet.**
-  An IOS-XE pool states no range (addresses are kept out with `ip
-  dhcp excluded-address`, which the codec neither reads nor writes)
-  and names no interface (it serves the interface whose subnet is its
-  network).  A pool from AOS-S, FortiOS, Junos, OPNsense or RouterOS
-  that served part of its subnet serves all of it on IOS-XE, and the
-  job says `completed`: no path of the matrix names a pool's range.
-  Exclude by hand what the source's range left out.
+* **An IOS-XE pool is one run of addresses on one interface in the
+  tree.**  An IOS-XE pool can hand out several runs of addresses (an
+  exclusion in the middle of its network) and its subnet can be on
+  more than one interface; the tree holds one range and one
+  interface, so the larger run and the first interface are kept, and
+  a row of the sections not translated says so.  A manual binding
+  (`host`) and an option are rows too.  An exclusion for a pool in a
+  VRF is written `ip dhcp excluded-address vrf <name>`, a form
+  Cisco's community answers give for IOS XE 17.6 and later and its
+  configuration guide does not: a `review:` line above it says so.
 * **A trunk's allowed list means what it says.**  On a trunk an
   empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
   and any other list is the list.  A trunk that states no allowed

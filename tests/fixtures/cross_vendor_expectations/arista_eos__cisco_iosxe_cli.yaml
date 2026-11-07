@@ -248,12 +248,22 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Arista's IP DHCP Server / IP DHCP Relay configuration maps
-      to Cisco's ``ip dhcp pool <name>`` syntax.  The Arista codec
-      does not advertise ``/dhcp/pool`` paths in its supported set
-      (its capability matrix omits them).  Cross-vendor round-trip
-      therefore drops DHCP server config on Arista -> Cisco.
-      Deferred to subsequent audit pass.
+      The arista_eos parser reads an ``ip dhcp pool`` and takes the
+      pool's NAME for its interface.  Written as an IOS-XE ``ip dhcp
+      pool``, the pool comes back on the interface whose subnet is its
+      network, and on none where no interface of the output has an
+      address in it: the pools of the corpus come back on no interface,
+      and the render says, in a ``review:`` line and a warning of the
+      job, that the output has no interface of that name.  The range,
+      router, DNS servers and lease come back.  The IOS-XE CLI parser
+      reads a pool as the server hands it out: its network less the ``ip
+      dhcp excluded-address`` lines of its VRF, the device's own
+      addresses and the pool's default router, on the interface whose
+      subnet is the pool's network (none for a pool that serves clients
+      a relay forwards); the renderer writes a range as the exclusions
+      on either side of it.  A pool an exclusion cuts in two keeps its
+      larger run, and a manual binding or an option is a row of the
+      sections not translated.
 
   snmp:
     disposition: lossy

@@ -384,15 +384,23 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      OPNsense interface-keyed ``<dhcpd>/<lan>``-style pools (with
-      network inferred from zone interface) ↔ Cisco named
-      ``ip dhcp pool USERS / network X Y / default-router /
-      dns-server / lease`` form.  Lease time conversion (seconds
-      ↔ d/h/m).  Cisco's ``ip dhcp excluded-address`` form is not
-      modelled on either side.  OPNsense parses ``<dhcpd>`` into
-      the canonical list; Cisco codec doesn't advertise
-      ``/dhcp/pool`` in its capability matrix, so cross-pair
-      render is partial.
+      OPNsense keys a pool by its zone (``<dhcpd>/<lan>``), and the
+      opnsense parser gives the pool its interface and its range but no
+      network: the zone serves its interface's subnet, which the parser
+      does not copy onto the pool.  An IOS-XE pool with no network hands
+      out no address, so the render writes the pool with a ``review:``
+      line and the job a warning, and the IOS-XE CLI parser reads it
+      back as no pool (a row of the sections not translated says so).
+      Where a network is stated, the range is written and read back.
+      The IOS-XE CLI parser reads a pool as the server hands it out: its
+      network less the ``ip dhcp excluded-address`` lines of its VRF,
+      the device's own addresses and the pool's default router, on the
+      interface whose subnet is the pool's network (none for a pool that
+      serves clients a relay forwards); the renderer writes a range as
+      the exclusions on either side of it.  A pool an exclusion cuts in
+      two keeps its larger run, and a manual binding or an option is a
+      row of the sections not translated.  Lease time converts between
+      seconds and Cisco's d/h/m.
     references: [opnsense-dhcp]
 
   snmp:

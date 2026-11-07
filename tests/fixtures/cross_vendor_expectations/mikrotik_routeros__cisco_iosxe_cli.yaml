@@ -227,15 +227,25 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
-      server network`` + ``/ip dhcp-server``) joins on parse to a
-      single CanonicalDHCPPool per network and emits as a Cisco
-      ``ip dhcp pool`` block.  The lossy bits are: (1) RouterOS
-      pools with multiple ``ranges=`` segments collapse to a
-      single start_ip/end_ip range; (2) static reservations
-      (``/ip dhcp-server lease``) have no canonical field and
-      drop to raw_sections; (3) DHCP option codes are not modelled
-      canonically.
+      RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-server
+      network`` + ``/ip dhcp-server``) joins on parse to a single
+      CanonicalDHCPPool per network and is written as a Cisco ``ip dhcp
+      pool`` block.  The lossy bits are: (1) RouterOS pools with
+      multiple ``ranges=`` segments collapse to a single start_ip/end_ip
+      range; (2) static reservations (``/ip dhcp-server lease``) have no
+      canonical field and drop to raw_sections; (3) DHCP option codes
+      are not modelled canonically; (4) the mikrotik_routeros parser
+      gives a pool no interface, and the IOS-XE CLI parser reads it back
+      on the interface whose subnet is its network, so the round trip
+      names an interface the source tree did not.  The IOS-XE CLI parser
+      reads a pool as the server hands it out: its network less the ``ip
+      dhcp excluded-address`` lines of its VRF, the device's own
+      addresses and the pool's default router, on the interface whose
+      subnet is the pool's network (none for a pool that serves clients
+      a relay forwards); the renderer writes a range as the exclusions
+      on either side of it.  A pool an exclusion cuts in two keeps its
+      larger run, and a manual binding or an option is a row of the
+      sections not translated.
     references: [mikrotik_dhcp]
 
   snmp:

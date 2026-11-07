@@ -424,6 +424,17 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/dhcp-servers/pool/interface",
+                reason=(
+                    "RouterOS serves a pool from an `/ip dhcp-server` on an "
+                    "interface, which this codec does not write: the "
+                    "`/ip pool` and `/ip dhcp-server network` it writes name "
+                    "no interface, so the pool is served on none and "
+                    "re-parses with no interface."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/dhcp-servers/pool/lease-time",
                 reason=(
                     "RouterOS lease-time lives on the `/ip dhcp-server` "

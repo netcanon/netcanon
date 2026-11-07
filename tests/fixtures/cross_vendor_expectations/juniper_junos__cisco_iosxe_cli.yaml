@@ -533,14 +533,23 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Junos's split ``dhcp-local-server`` + ``access address-
-      assignment pool`` flattens on parse to a single
-      ``CanonicalDHCPPool``; Cisco's single ``ip dhcp pool``
-      stanza re-renders directly.  Basic pools round-trip; advanced
-      options (option 43 / 60 / 66 / 150) are not modelled
-      canonically.  Junos's ``range low/high`` form may lose the
-      excluded-block discriminator on Cisco render when multiple
-      ranges existed in the source.
+      Junos's split ``dhcp-local-server`` + ``access address-assignment
+      pool`` flattens on parse to a single ``CanonicalDHCPPool``, which
+      is written as an ``ip dhcp pool``.  A Junos pool that states no
+      range comes back with one: an IOS-XE pool hands out its whole
+      network but the device's own addresses, and the IOS-XE CLI parser
+      reads that as the range.  A pool whose network no interface of the
+      output has an address in comes back on no interface (the render
+      says so in a ``review:`` line).  Advanced options (option 43 / 60
+      / 66 / 150) are not modelled canonically.  The IOS-XE CLI parser
+      reads a pool as the server hands it out: its network less the ``ip
+      dhcp excluded-address`` lines of its VRF, the device's own
+      addresses and the pool's default router, on the interface whose
+      subnet is the pool's network (none for a pool that serves clients
+      a relay forwards); the renderer writes a range as the exclusions
+      on either side of it.  A pool an exclusion cuts in two keeps its
+      larger run, and a manual binding or an option is a row of the
+      sections not translated.
     references: [junos-dhcp-server, junos-dhcp-local-server, cisco-dhcp-cg]
 
   # ── Tier 2 — SNMP ──

@@ -65,9 +65,11 @@ __all__ = [
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
-        "no field of one is: its gateway, DNS servers, domain and lease go "
-        "with it.",
+        "no field of one is: its range, its interface, its gateway, DNS "
+        "servers, domain and lease go with it.",
         (
+            "/dhcp-servers/pool/range",
+            "/dhcp-servers/pool/interface",
             "/dhcp-servers/pool/gateway",
             "/dhcp-servers/pool/dns-servers",
             "/dhcp-servers/pool/domain-name",

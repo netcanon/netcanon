@@ -62,8 +62,9 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
+from .dhcp_pools import render_pools
 from .parse import parse_intent, without_banner_bodies
-from .render import render_intent
+from .render import _cidr_to_dest_mask, render_intent
 
 #: Every walkable path this codec writes nothing for -- a record it has
 #: no form for, or a field of a record declared unsupported -- by the
@@ -569,6 +570,18 @@ class CiscoIOSXECLICodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each DHCP pool
+        the output has a review line for: a pool not served on the
+        interface the source serves it on, or whose range is not
+        inside its network (:mod:`.dhcp_pools`)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            from ...canonical.transforms import synthesize_svis_from_vlan_l3
+            interfaces = [*tree.interfaces, *synthesize_svis_from_vlan_l3(tree)]
+            warnings += render_pools(tree.dhcp_servers, interfaces, _cidr_to_dest_mask)[1]
+        return warnings
 
     # -----------------------------------------------------------------
     # iter_xpaths — same shape as the NETCONF codec

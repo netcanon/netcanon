@@ -237,14 +237,19 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Cisco's pool-only model versus FortiGate's interface-bound
-      model requires interface synthesis on render.  Range-versus-
-      exclusion semantic divergence: Cisco's ``excluded-address``
-      inverse model translates imperfectly to FortiGate's positive
-      ``config ip-range``.  Lease-time unit conversion handled.
-      DNS server cap (FortiGate accepts dns-server1/2/3 only) drops
-      Cisco-side longer lists.  Operator review required for
-      cross-vendor DHCP migration.
+      Cisco's pool-only model versus FortiGate's interface-bound model:
+      the pool is bound to the interface the IOS-XE CLI parser reads for
+      it, and its range is written as FortiGate's positive ``config
+      ip-range``.  Lease-time unit conversion handled.  DNS server cap
+      (FortiGate accepts dns-server1/2/3 only) drops Cisco-side longer
+      lists.  The IOS-XE CLI parser reads a pool as the server hands it
+      out: its network less the ``ip dhcp excluded-address`` lines of
+      its VRF, the device's own addresses and the pool's default router,
+      on the interface whose subnet is the pool's network (none for a
+      pool that serves clients a relay forwards); the renderer writes a
+      range as the exclusions on either side of it.  A pool an exclusion
+      cuts in two keeps its larger run, and a manual binding or an
+      option is a row of the sections not translated.
     references: [dhcp]
 
   snmp:

@@ -1,5 +1,7 @@
 # DHCP server scopes: OPNsense versus Cisco IOS-XE
 
+> **Update 2026-11-06 — the IOS-XE CLI codec reads and writes a pool's range.**  This page was written when `cisco_iosxe_cli` read a pool's `network` alone and wrote no `ip dhcp excluded-address`, so a pool's range and the interface it was served on were lost both ways.  The parser now reads a pool as the server hands it out (Cisco's "Configuring the Cisco IOS XE DHCP Server": every address of the network but those `ip dhcp excluded-address` names and the device's own) and puts it on the interface whose subnet is the pool's network; the renderer writes a range as the exclusions on either side of it.  What the tree has no place for (a pool an exclusion cuts in two, a manual binding, an option) is a row of the sections not translated.  An OPNsense pool still reaches the tree with no network (the OPNsense parser does not copy its zone's subnet onto it), so its IOS-XE pool has no `network` line and hands out nothing; a `review:` line in the pool and a warning of the job say so.  See `docs/vendors/cisco_iosxe.md` § "Lossy paths".
+
 ## OPNsense
 
 Source: [OPNsense ISC DHCPv4 manual](https://docs.opnsense.org/manual/isc.html)

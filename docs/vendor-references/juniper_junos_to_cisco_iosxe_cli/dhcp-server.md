@@ -1,5 +1,7 @@
 # DHCP server pools: Juniper Junos versus Cisco IOS-XE
 
+> **Update 2026-11-06 — the IOS-XE CLI codec reads and writes a pool's range.**  This page was written when `cisco_iosxe_cli` read a pool's `network` alone and wrote no `ip dhcp excluded-address`, so a pool's range and the interface it was served on were lost both ways.  The parser now reads a pool as the server hands it out (Cisco's "Configuring the Cisco IOS XE DHCP Server": every address of the network but those `ip dhcp excluded-address` names and the device's own) and puts it on the interface whose subnet is the pool's network; the renderer writes a range as the exclusions on either side of it.  What the tree has no place for (a pool an exclusion cuts in two, a manual binding, an option) is a row of the sections not translated.  See `docs/vendors/cisco_iosxe.md` § "Lossy paths".
+
 Sources:
 - Juniper: https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-server.html (retrieved 2026-04-30)
 - Juniper: https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/concept/dhcp-local-server-overview.html (retrieved 2026-04-30)

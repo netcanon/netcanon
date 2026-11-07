@@ -220,7 +220,9 @@ def _maximal_intent() -> CanonicalIntent:
             # lease-time} — otherwise a codec's lease-time lossy declaration is
             # an un-walkable dead path the honesty guard rejects.
             gateway="10.0.0.1", dns_servers=["10.0.0.2"],
-            domain_name="lab.example", lease_time=7200)],
+            # The interface it is served on: walked as
+            # /dhcp-servers/pool/interface, beside its range.
+            domain_name="lab.example", lease_time=7200, interface="Ethernet1")],
         snmp=CanonicalSNMP(
             community="c", location="l", contact="ct", trap_hosts=["10.0.0.9"],
             v3_users=[CanonicalSNMPv3User(

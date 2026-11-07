@@ -226,17 +226,19 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: lossy
+    disposition: good
     reason: >
-      Cisco IOS-XE codec capability matrix does NOT advertise
-      ``/dhcp/pool`` paths under supported.  Cross-vendor migration
-      on FortiGate -> Cisco emits no DHCP-pool blocks regardless of
-      how many FortiGate pools the source had.  Canonical model
-      would support the round-trip if Cisco render were wired —
-      schema gap is solvable but unscheduled in v1.  Lossy with
-      ``reason: deferred`` rather than unsupported because the
-      canonical CanonicalDHCPPool record IS populated by the
-      FortiGate codec; the loss is on the Cisco render side.
+      Each FortiGate pool is written as an ``ip dhcp pool`` with its
+      network, default router, DNS servers, domain, lease and range.
+      The IOS-XE CLI parser reads a pool as the server hands it out: its
+      network less the ``ip dhcp excluded-address`` lines of its VRF,
+      the device's own addresses and the pool's default router, on the
+      interface whose subnet is the pool's network (none for a pool that
+      serves clients a relay forwards); the renderer writes a range as
+      the exclusions on either side of it.  A pool an exclusion cuts in
+      two keeps its larger run, and a manual binding or an option is a
+      row of the sections not translated.  Every pool of the corpus
+      comes back as it was.  DHCP options are not modelled canonically.
     references: [dhcp]
 
   snmp:

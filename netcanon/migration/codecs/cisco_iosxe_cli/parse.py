@@ -54,6 +54,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..._radius_secrets import IOSXE_ENVELOPE
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -100,6 +101,7 @@ from .._scanner import (
     without_text_bodies,
 )
 from ..base import ParseError
+from .dhcp_pools import Pools, pools_of, read_pool_line, read_top
 
 logger = logging.getLogger(__name__)
 
@@ -975,8 +977,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # Local users (Tier 2).
     intent.local_users = _parse_local_users(raw)
 
-    # DHCP server pools (Tier 2).
-    intent.dhcp_servers = _parse_dhcp_pools(raw)
+    # DHCP server pools (Tier 2): what each hands out, and on which
+    # interface, from the interfaces read above.
+    intent.dhcp_servers, pool_rows, pools_left_out = _parse_dhcp_pools(
+        raw, intent.interfaces,
+    )
+    intent.dropped_tier3_sections.extend(pool_rows)
+    intent.dropped_tier3_sections.extend(
+        left_out_rows(pools_left_out, rest="disabled"),
+    )
 
     # RADIUS servers (Tier 2).  Handles both modern named-server
     # syntax and legacy `radius-server host` one-liner.
@@ -2236,92 +2245,36 @@ _SNMP_V3_USER_RE = re.compile(
 _DHCP_POOL_HEADER_RE = re.compile(
     r"^ip\s+dhcp\s+pool\s+(\S+)", re.IGNORECASE,
 )
-_DHCP_NETWORK_RE = re.compile(
-    r"^\s+network\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)",
-    re.IGNORECASE,
-)
-_DHCP_DEFAULT_ROUTER_RE = re.compile(
-    r"^\s+default-router\s+(\d+\.\d+\.\d+\.\d+)",
-    re.IGNORECASE,
-)
-_DHCP_DNS_SERVER_RE = re.compile(
-    r"^\s+dns-server\s+(.+)$", re.IGNORECASE,
-)
-_DHCP_DOMAIN_NAME_RE = re.compile(
-    r"^\s+domain-name\s+(\S+)", re.IGNORECASE,
-)
-# Cisco lease syntax: `lease <days> [hours] [minutes]` or `lease infinite`
-_DHCP_LEASE_RE = re.compile(
-    r"^\s+lease\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?", re.IGNORECASE,
-)
+def _parse_dhcp_pools(
+    raw: str, interfaces: list[CanonicalInterface],
+) -> tuple[list[CanonicalDHCPPool], list[str], list[tuple[str, list[str]]]]:
+    """Read the ``ip dhcp pool`` stanzas as the server hands them out.
 
+    A pool serves every address of its ``network`` that is not excluded
+    (``ip dhcp excluded-address``) and not the device's own, on the
+    interface whose subnet it is: :mod:`.dhcp_pools`, which cites
+    Cisco's configuration guide, makes the tree's run of addresses and
+    the interface from them.
 
-def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
-    """Extract ``ip dhcp pool`` stanzas into CanonicalDHCPPool records.
-
-    Cisco pools are defined as a named stanza with indented sub-commands.
-    Each pool defines one network and its associated options.  Real
-    configs commonly have multiple pools (one per user VLAN).
-
-    Cisco DHCP doesn't use start/end IP ranges natively — instead, the
-    pool serves ALL non-excluded IPs in the ``network`` statement, and
-    ``ip dhcp excluded-address`` at the global level carves out
-    reservations.  We populate ``network`` from the pool stanza and
-    leave ``start_ip``/``end_ip`` empty; a future pass can derive them
-    from excluded-address lines if needed.
+    Returns:
+        The pools; the rows of what the tree has no place for; and the
+        statements left out because they are not in force (every pool,
+        under ``no service dhcp``).
     """
-    def _on_line(line: str, current: CanonicalDHCPPool) -> None:
-        nm = _DHCP_NETWORK_RE.match(line)
-        if nm:
-            ip_str, mask = nm.group(1), nm.group(2)
-            prefix = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
-            current.network = f"{ip_str}/{prefix}"
-            return
-        gm = _DHCP_DEFAULT_ROUTER_RE.match(line)
-        if gm:
-            current.gateway = gm.group(1)
-            return
-        dm = _DHCP_DNS_SERVER_RE.match(line)
-        if dm:
-            # Cisco allows multiple DNS servers space-separated.
-            servers = dm.group(1).split()
-            current.dns_servers.extend(servers)
-            return
-        dnm = _DHCP_DOMAIN_NAME_RE.match(line)
-        if dnm:
-            current.domain_name = dnm.group(1)
-            return
-        lm = _DHCP_LEASE_RE.match(line)
-        if lm:
-            lease_val = lm.group(1).lower()
-            if lease_val == "infinite":
-                # Max uint32 seconds is DHCP's "infinite" marker.
-                current.lease_time = 0xFFFFFFFF
-            else:
-                try:
-                    days = int(lease_val)
-                    hours = int(lm.group(2) or 0)
-                    minutes = int(lm.group(3) or 0)
-                    current.lease_time = (
-                        days * 86400 + hours * 3600 + minutes * 60
-                    )
-                except ValueError:
-                    pass  # Unparseable; leave default
-
-    # Loop skeleton (open on `ip dhcp pool`, close on `!`/dedent, flush at
-    # EOF) is the shared codecs/_scanner helper; the vendor regex cascade
-    # above stays here.  The pool name is not captured into the model
-    # (existing behaviour), so ``open_scratch`` ignores the match; the
-    # scratch IS the canonical record, so ``build`` is the identity.
-    # Terminator replicates the former rule verbatim.  Behaviour-identical.
-    return scan_stanzas(
-        raw.splitlines(),
+    lines = raw.splitlines()
+    stated = Pools()
+    # Loop skeleton (open on ``ip dhcp pool``, close on ``!`` or a line
+    # in column 0, flush at the end) is the shared codecs/_scanner
+    # helper.  A pool entered again is the same pool.
+    scan_stanzas(
+        lines,
         is_header=_DHCP_POOL_HEADER_RE.match,
-        open_scratch=lambda m: CanonicalDHCPPool(),
-        on_line=_on_line,
+        open_scratch=lambda m: stated.pool(m.group(1)),
+        on_line=read_pool_line,
         build=lambda pool: pool,
         is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
     )
+    return pools_of(stated.stated(), read_top(lines), interfaces)
 
 
 # Modern IOS-XE RADIUS: named stanza

@@ -156,6 +156,10 @@ Canonical mapping:
 - **`/interfaces/interface/dhcp-client`** — EOS spells a DHCP client
   `ip address dhcp`, which the codec neither reads nor writes: the
   interface is written without one (severity `warn`).
+- **`/dhcp-servers/pool/interface`** — the renderer names a DHCP pool
+  after its interface (`ip dhcp pool <interface>`) and the parser
+  reads the name back as the interface, but no line of the output says
+  that the interface serves the pool (severity `warn`).
 
 ## What we don't do
 
