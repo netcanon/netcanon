@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-11-06T05:34:27+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261106T052512Z.json",
-  "mesh_run_started_utc": "2026-11-06T05:24:52+00:00",
+  "started_utc": "2026-11-07T06:47:15+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261107T063837Z.json",
+  "mesh_run_started_utc": "2026-11-07T06:38:26+00:00",
   "cells_total": 1469,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -603,9 +603,9 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8770,
+    "ALIGNED": 8774,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4196,
+    "EXPECTED_LOSSY": 4192,
     "EXPECTED_UNSUPPORTED": 2704,
     "METHODOLOGY_ISSUE_under": 1980,
     "METHODOLOGY_ISSUE_over": 15,
@@ -2764,10 +2764,122 @@
           "severity": "ok"
         },
         "dhcp_servers": {
-          "actual": "preserved",
+          "actual": "drifted",
           "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "interface": "",
+                "network": "192.168.2.0/24",
+                "start_ip": "",
+                "end_ip": "",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              {
+                "interface": "",
+                "network": "192.168.3.0/24",
+                "start_ip": "",
+                "end_ip": "",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              {
+                "interface": "",
+                "network": "192.168.4.0/24",
+                "start_ip": "",
+                "end_ip": "",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              "... and 1 more"
+            ],
+            "target": [
+              {
+                "interface": "",
+                "network": "192.168.2.0/24",
+                "start_ip": "192.168.2.1",
+                "end_ip": "192.168.2.254",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              {
+                "interface": "",
+                "network": "192.168.3.0/24",
+                "start_ip": "192.168.3.1",
+                "end_ip": "192.168.3.254",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              {
+                "interface": "",
+                "network": "192.168.4.0/24",
+                "start_ip": "192.168.4.1",
+                "end_ip": "192.168.4.254",
+                "gateway": "",
+                "dns_servers": [],
+                "lease_time": 86400,
+                "domain_name": ""
+              },
+              "... and 1 more"
+            ],
+            "drift": {
+              "dhcp_servers[0] {'network': '192.168.2.0/24'}": {
+                "end_ip": {
+                  "source": "",
+                  "target": "192.168.2.254"
+                },
+                "start_ip": {
+                  "source": "",
+                  "target": "192.168.2.1"
+                }
+              },
+              "dhcp_servers[1] {'network': '192.168.3.0/24'}": {
+                "end_ip": {
+                  "source": "",
+                  "target": "192.168.3.254"
+                },
+                "start_ip": {
+                  "source": "",
+                  "target": "192.168.3.1"
+                }
+              },
+              "dhcp_servers[2] {'network': '192.168.4.0/24'}": {
+                "end_ip": {
+                  "source": "",
+                  "target": "192.168.4.254"
+                },
+                "start_ip": {
+                  "source": "",
+                  "target": "192.168.4.1"
+                }
+              },
+              "dhcp_servers[3] {'network': '192.168.5.0/24'}": {
+                "end_ip": {
+                  "source": "",
+                  "target": "192.168.5.254"
+                },
+                "start_ip": {
+                  "source": "",
+                  "target": "192.168.5.1"
+                }
+              }
+            },
+            "source_count": 4,
+            "target_count": 4
+          }
         },
         "snmp.community": {
           "actual": "trivially_preserved",
@@ -3237,9 +3349,9 @@
       "summary": {
         "ALIGNED": 5,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 3,
+        "EXPECTED_LOSSY": 4,
         "EXPECTED_UNSUPPORTED": 2,
-        "METHODOLOGY_ISSUE_under": 5,
+        "METHODOLOGY_ISSUE_under": 4,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 39,
@@ -3247,8 +3359,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 5,
-        "severity_ok": 49
+        "severity_low": 4,
+        "severity_ok": 50
       }
     },
     {

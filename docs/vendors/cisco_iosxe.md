@@ -89,9 +89,9 @@ translatable with caveats:
 - SNMP v1 / v2c / v3 USM (community, contact, location, trap-hosts;
   v3 with auth + priv per user)
 - RADIUS servers
-- DHCP server pools (per-pool network, default router, DNS servers,
-  domain name and lease; not a range or an option -- see "Lossy
-  paths")
+- DHCP server pools (network, range, the interface that serves the
+  pool, default router, DNS servers, domain name and lease; not an
+  option or a manual binding -- see "Lossy paths")
 - Local users with hashed passwords — `$5$` / `$6$` / `$8$` / `$9$`
   form-preserving cross-vendor migration
 
@@ -239,15 +239,40 @@ Canonical mapping:
   membership drops on round-trip).  `address-family ipv6` and EVPN
   sub-stanzas inside `vrf definition` are parse-and-ignore in v1.
   See the codec's `CapabilityMatrix.lossy` declarations.
-- **A DHCP pool's range** — an IOS-XE pool states no range: the
-  addresses it does not hand out are `ip dhcp excluded-address`
-  lines, which `cisco_iosxe_cli` neither reads nor writes.  A pool
-  from another vendor that served part of its subnet (AOS-S, FortiOS,
-  Junos, OPNsense, RouterOS) therefore serves ALL of it on IOS-XE,
-  and the job says `completed`, since no path of the matrix names a
-  pool's range.  Write the exclusions by hand before the pool goes
-  live.  Nor does an IOS-XE pool name its interface: it serves the
-  interface whose subnet is its network.
+- **A DHCP pool's range and interface** — an IOS-XE pool states no
+  range and names no interface: it hands out every address of its
+  network but those `ip dhcp excluded-address` names and the device's
+  own, and serves the interface whose subnet is its network (Cisco,
+  "Configuring the Cisco IOS XE DHCP Server").  The parser reads the
+  range the server hands out (the exclusions of the pool's VRF, the
+  device's addresses, its virtual routers and the pool's default
+  router kept out) and the interface, or none for a pool that serves
+  clients a relay forwards.  The renderer writes a range as the
+  exclusions on either side of it; an address of the pool's own
+  interface is left out by the server and is not written.  What the
+  tree cannot hold is a row of the sections not translated, one a
+  kind, naming a few pools and no value: a pool an exclusion cuts in
+  two (the larger run is kept), a pool whose every address is
+  excluded, a manual binding (`host`), an option, a secondary subnet,
+  a second default router, a subnet on more than one interface (the
+  first is kept), and an exclusion in a form the parser does not
+  read.  A server that is off (`no service dhcp`) serves no pool, and
+  each is a `disabled:` row.  Where the output cannot serve a pool
+  where the source did (it has no interface of that name, or that
+  interface has no address in the pool's network) or cannot write its
+  range (the pool has no network, or the range is not inside it), a
+  `review:` line in the pool and a warning of the job say so.  A pool
+  from OPNsense has no network in the tree (the OPNsense parser keeps
+  none: a zone serves its interface's subnet), and is written so: it
+  hands out no address until a `network` line is added.  An exclusion
+  of a pool in a VRF is written `ip dhcp excluded-address vrf <name>`,
+  which Cisco's community answers give for IOS XE 17.6 and later and
+  the configuration guide does not: a `review:` line above it says so.
+  ⚠️ Up to 0.7.7 a pool's DNS servers were written one `dns-server`
+  line each; Cisco's community answers say a second line replaces the
+  first, so a device kept the last.  They are written on one line
+  now, up to eight (what the command takes); a `review:` line says
+  where there are more.
 
 ## What we don't do
 

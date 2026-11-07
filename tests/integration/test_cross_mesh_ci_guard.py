@@ -519,6 +519,20 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # export prints no passwords, so its users had been written onto EOS as
 # accounts with no secret, and arrived against the declared loss; each is a
 # review comment now, no account arrives, and the YAML says unsupported.
+#
+# And one up, from 2 to 3, when the IOS-XE CLI parser began to read the
+# interface whose subnet is a DHCP pool's network: cisco_iosxe_cli__arista_eos,
+# for ``dhcp_servers``.  The EOS renderer names a pool after its interface
+# and the EOS parser reads the name back as the interface, so every cell's
+# pool now comes back whole.  The loss is real -- no line of the EOS output
+# says that the interface serves the pool, which is why
+# ``/dhcp-servers/pool/interface`` is lossy on EOS -- and below what the
+# round trip compares; the YAML's reason says so.  The same re-measure
+# lowered two entries onto IOS-XE NETCONF that already had slack on the
+# commit before it (cisco_iosxe_cli__cisco_iosxe 2 to 1,
+# fortigate_cli__cisco_iosxe 3 to 2), both left with
+# ``interfaces[].interface_type`` and the second with
+# ``interfaces[].ipv6_addresses``.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -540,9 +554,9 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
     "cisco_iosxe__juniper_junos": 1,
-    "cisco_iosxe_cli__arista_eos": 2,
+    "cisco_iosxe_cli__arista_eos": 3,
     "cisco_iosxe_cli__aruba_aoss": 2,
-    "cisco_iosxe_cli__cisco_iosxe": 2,
+    "cisco_iosxe_cli__cisco_iosxe": 1,
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
     "cisco_iosxe_cli__mikrotik_routeros": 1,
@@ -550,7 +564,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "dell_os10__opnsense": 1,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,
-    "fortigate_cli__cisco_iosxe": 3,
+    "fortigate_cli__cisco_iosxe": 2,
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 4,
     "fortigate_cli__mikrotik_routeros": 2,

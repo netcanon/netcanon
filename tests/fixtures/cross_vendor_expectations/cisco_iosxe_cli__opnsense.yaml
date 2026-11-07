@@ -501,13 +501,18 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Cisco's named ``ip dhcp pool USERS`` form maps to OPNsense's
-      INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.  Pool network
-      / mask is INFERRED from the zone interface on OPNsense, not
-      stored on the pool record.  Lease time units differ (Cisco
-      d/h/m triple ↔ OPNsense seconds).  ``ip dhcp excluded-address``
-      ranges are not in the canonical schema.  OPNsense codec does
-      not currently advertise ``/dhcp/pool`` in its capability
-      matrix; cross-pair render is partial.
+      INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.  Pool network /
+      mask is INFERRED from the zone interface on OPNsense, not stored
+      on the pool record, and the opnsense parser gives a pool none.
+      Lease time units differ (Cisco d/h/m triple and OPNsense seconds).
+      The IOS-XE CLI parser reads a pool as the server hands it out: its
+      network less the ``ip dhcp excluded-address`` lines of its VRF,
+      the device's own addresses and the pool's default router, on the
+      interface whose subnet is the pool's network (none for a pool that
+      serves clients a relay forwards); the renderer writes a range as
+      the exclusions on either side of it.  A pool an exclusion cuts in
+      two keeps its larger run, and a manual binding or an option is a
+      row of the sections not translated.
     references: [opnsense-dhcp]
 
   snmp:

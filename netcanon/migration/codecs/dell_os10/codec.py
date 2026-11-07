@@ -596,6 +596,14 @@ class DellOS10Codec(CodecBase):
             ),
             # DHCP pool sub-fields — no pool stanza is rendered.
             UnsupportedPath(
+                path="/dhcp-servers/pool/range",
+                reason="No DHCP server pool is rendered.",
+            ),
+            UnsupportedPath(
+                path="/dhcp-servers/pool/interface",
+                reason="No DHCP server pool is rendered.",
+            ),
+            UnsupportedPath(
                 path="/dhcp-servers/pool/gateway",
                 reason="No DHCP server pool is rendered.",
             ),

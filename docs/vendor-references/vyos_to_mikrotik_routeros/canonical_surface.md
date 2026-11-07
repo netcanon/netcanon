@@ -131,7 +131,8 @@ These are recorded `not_applicable`, not `unsupported`, and the distinction is o
 supported or lossy** — `/vlans/vlan/id` supported, the whole
 `/interfaces/interface/vrrp-groups/group` subtree supported,
 `/dhcp-servers/pool/lease-time` lossy (i.e. RouterOS renders pools, losing only
-the lease time). Re-authoring those on the target will stick, and a migration
+the lease time; and, since 2026-11-06, `/dhcp-servers/pool/interface`, as no
+`/ip dhcp-server` is written). Re-authoring those on the target will stick, and a migration
 report should say so rather than implying RouterOS cannot hold them.
 
 Four fields are **symmetric** gaps — *both* matrices declare the same path

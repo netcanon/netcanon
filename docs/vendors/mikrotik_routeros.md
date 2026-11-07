@@ -99,7 +99,8 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   ⚠️ Up to 0.7.7 it was read as no password, so such a user was a
   `review:` line on every target, RouterOS included
 - DHCP server pools — `/ip pool` + `/ip dhcp-server network`
-  (per-pool subnet, gateway, range, options)
+  (per-pool subnet, gateway, range, options; not the interface that
+  serves a pool -- see `/dhcp-servers/pool/interface` below)
 - **Renamed-port preservation** — RouterOS lets operators rename
   `ether2` to "Access Point" etc.; Netcanon preserves the renamed
   name + the factory `default-name` so render emits
@@ -195,6 +196,11 @@ can appear BEFORE `/interface vrrp` in the source.
 - **`/interfaces/interface/dhcp-client`** — RouterOS keeps a DHCP
   client in `/ip dhcp-client`, which the codec neither reads nor
   writes: the interface is written without one (severity `warn`).
+- **`/dhcp-servers/pool/interface`** — RouterOS serves a pool from an
+  `/ip dhcp-server` on an interface, which the codec does not write:
+  the `/ip pool` and `/ip dhcp-server network` it writes name no
+  interface, so a pool is served on none and is read back with no
+  interface (severity `warn`).
 - **No VRF is written.**  `/routing-instances/instance` is
   `unsupported`, and so is each field of a VRF and each interface's
   VRF: no interface is placed in one.

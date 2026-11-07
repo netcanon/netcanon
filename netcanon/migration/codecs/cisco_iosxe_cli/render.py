@@ -93,6 +93,7 @@ from .._helpers import (
 )
 from .._hsrp import V1_GROUP_MAX
 from ..base import RenderError
+from .dhcp_pools import render_pools
 
 #: The line that carries a port's allowed list, up to its first id
 #: (or the word that stands for the list: ``none``, ``all``).
@@ -830,46 +831,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("!")
 
     # --- DHCP server pools ---
-    for pool in tree.dhcp_servers:
-        pool_name = (pool.interface or pool.network or "POOL").replace(
-            "/", "_",
-        )
-        out.append(f"ip dhcp pool {pool_name}")
-        if pool.network:
-            net, mask = _cidr_to_dest_mask(pool.network)
-            out.append(f" network {net} {mask}")
-        if pool.gateway:
-            out.append(f" default-router {pool.gateway}")
-        for d in pool.dns_servers:
-            out.append(f" dns-server {d}")
-        if pool.domain_name:
-            out.append(f" domain-name {pool.domain_name}")
-        if pool.lease_time and pool.lease_time != 86400:
-            if pool.lease_time == 0xFFFFFFFF:
-                # DHCP infinite-lease marker (max uint32 seconds).
-                out.append(" lease infinite")
-            else:
-                # Emit the full day/hour/minute triple so multi-day
-                # and sub-hour leases round-trip losslessly (matches
-                # the parser's `lease <days> <hours> <minutes>` grammar
-                # and arista_eos render).  The old `lease 0 <hours>`
-                # form truncated days into hours and dropped minutes
-                # (audit finding ENG-03).
-                days = pool.lease_time // 86400
-                rem = pool.lease_time - days * 86400
-                hours = rem // 3600
-                rem -= hours * 3600
-                minutes = rem // 60
-                # A sub-minute (but non-zero) lease floors all three units
-                # to 0 → the wire-invalid `lease 0 0 0`, which also reparses
-                # to lease_time=0 and then drifts to the 86400 default on the
-                # next render (v0.4.0 self-audit).  IOS-XE's finest lease
-                # granularity is one minute, so floor a sub-minute lease up
-                # to 1 minute rather than emit an invalid, unstable triple.
-                if days == 0 and hours == 0 and minutes == 0:
-                    minutes = 1
-                out.append(f" lease {days} {hours} {minutes}")
-        out.append("!")
+    # A pool's range is written as the exclusions on either side of it,
+    # and where it is served is checked against the interfaces this
+    # output holds (:mod:`.dhcp_pools`, which cites Cisco's guide).
+    out.extend(render_pools(
+        tree.dhcp_servers, [*tree.interfaces, *synth_svis], _cidr_to_dest_mask,
+    )[0])
 
     # --- RADIUS servers ---
     for server in tree.radius_servers:

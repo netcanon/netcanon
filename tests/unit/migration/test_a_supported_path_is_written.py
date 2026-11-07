@@ -458,7 +458,8 @@ def route_vrf(at):
         CanonicalStaticRoute(destination="10.88.0.0/16", gateway="10.7.7.9", vrf="VRFZ")])
 
 
-@_probe("/dhcp-servers/pool", "/dhcp-servers/pool/gateway", "/dhcp-servers/pool/dns-servers",
+@_probe("/dhcp-servers/pool", "/dhcp-servers/pool/range", "/dhcp-servers/pool/interface",
+        "/dhcp-servers/pool/gateway", "/dhcp-servers/pool/dns-servers",
         "/dhcp-servers/pool/domain-name", "/dhcp-servers/pool/lease-time")
 def dhcp_pool(at):
     return _tree(at, interfaces=[_routed(at)], dhcp_servers=[CanonicalDHCPPool(

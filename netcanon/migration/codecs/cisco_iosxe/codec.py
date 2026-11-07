@@ -188,8 +188,11 @@ _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "The OpenConfig render writes no DHCP pool: every pool is "
-        "dropped, with its gateway, DNS servers, domain and lease.",
+        "dropped, with its range, its interface, its gateway, DNS "
+        "servers, domain and lease.",
         (
+            "/dhcp-servers/pool/range",
+            "/dhcp-servers/pool/interface",
             "/dhcp-servers/pool/gateway",
             "/dhcp-servers/pool/dns-servers",
             "/dhcp-servers/pool/domain-name",
