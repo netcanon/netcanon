@@ -1469,6 +1469,42 @@ timestamp if your timezone matters for an audit.
   holds each form, typed from HPE's guide; the expectations of AOS-S
   onto each codec are re-authored from the regenerated mesh, and
   CODEC_BUG stays at 4.
+- **An IOS-XE DHCP pool is read as the server hands it out, and a
+  range from another vendor is written.**  The IOS-XE CLI parser read
+  a pool's `network` and nothing of `ip dhcp excluded-address`, so a
+  pool came out of it with no range and on no interface: no target was
+  given the addresses the source kept out of it, nor where it was
+  served.  The renderer wrote no exclusion, so a pool from another
+  vendor that served part of its subnet served all of it on IOS-XE.
+  Both were in jobs that said `completed`, as no path of the matrix
+  named a pool's range or its interface.  Cisco's guide says what a
+  pool hands out: every address of its network but those `ip dhcp
+  excluded-address` names and the device's own, served on the
+  interface whose subnet is its network.  A pool is read so now
+  (`cisco_iosxe_cli/dhcp_pools.py`) -- the exclusions of its VRF, the
+  device's addresses, its virtual routers and the pool's default
+  router kept out -- and is on that interface, or on none where it
+  serves clients a relay forwards; a range is written as the
+  exclusions on either side of it.  What the tree has no place for is
+  a row of the sections not translated, one a kind, naming a few
+  pools and no value: a pool an exclusion cuts in two (the larger run
+  is kept), one whose every address is excluded, a manual binding, an
+  option, a secondary subnet, a second default router, a subnet on
+  more than one interface, and an exclusion in a form the parser does
+  not read.  A server that is off (`no service dhcp`) serves no pool,
+  and each is left out and said (`disabled:`).  Where the output
+  cannot serve a pool where the source did, or cannot write its range,
+  a `review:` line in the pool and a warning of the job say so.  A
+  pool's DNS servers are written on one line: written one line each,
+  as they were, a device keeps the last, by Cisco's community answers.
+  The walker names a pool's range and interface
+  (`/dhcp-servers/pool/range`, `/dhcp-servers/pool/interface`): the
+  codecs that write no pool declare both `unsupported`, and EOS and
+  RouterOS declare the interface `lossy` (`warn`), since neither
+  output says which interface serves a pool.
+  `tests/unit/migration/codecs/cisco_iosxe_cli/test_a_pool_as_the_server_hands_it_out.py`
+  holds each form, typed from Cisco's guide; the mesh artefacts are
+  regenerated and CODEC_BUG stays at 4.
 - **`detect-deployment` counts a sub-interface as the port it rides
   on.**  The check of a proposal against the config listed every
   sub-interface (`Ethernet1.2`, `GigabitEthernet1/0/1.100`) as a port
@@ -5663,14 +5699,17 @@ timestamp if your timezone matters for an audit.
   unsupported.  A pool's second range or router, its static bindings
   and its options are rows of the sections not translated, onto every
   target.
-- **An IOS-XE CLI output's DHCP pool hands out its whole subnet.**  An
-  IOS-XE pool states no range (addresses are kept out of it with `ip
-  dhcp excluded-address`, which the codec neither reads nor writes) and
-  names no interface, so a pool from AOS-S, FortiOS, Junos, OPNsense or
-  RouterOS that served part of its subnet serves all of it there.  No
-  path of the capability matrix names a pool's range, so the job says
-  `completed`; exclude by hand what the source's range left out.  The
-  vendor page says it.
+- **An IOS-XE pool is one run of addresses on one interface in the
+  tree.**  An IOS-XE pool can hand out several runs of addresses (an
+  exclusion in the middle of its network) and its subnet can be on more
+  than one interface; the tree holds one range and one interface, so
+  the larger run and the first interface are kept, and a row of the
+  sections not translated says so.  A manual binding (`host`) and an
+  option are rows too.  An exclusion for a pool in a VRF is written
+  `ip dhcp excluded-address vrf <name>`, a form Cisco's community
+  answers give for IOS XE 17.6 and later and its configuration guide
+  does not: a `review:` line above it says so.  The vendor page says
+  it.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

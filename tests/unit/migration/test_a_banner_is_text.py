@@ -1066,7 +1066,11 @@ BEFORE: dict[str, str] = {
     # (TestCatalystStack): was "7192fbc5fd5e".
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "3f77c6b89ade",
     # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "70caca86d542",
+    # And again, by its two DHCP pools and nothing else: each is read as
+    # the server hands it out, with a range and the interface whose
+    # subnet is its network (test_a_pool_as_the_server_hands_it_out.py):
+    # was "70caca86d542".
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "04c2854292eb",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",

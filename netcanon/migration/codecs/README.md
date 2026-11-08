@@ -67,6 +67,10 @@ netcanon/migration/codecs/<vendor>/
 │                       # netcanon/migration/deployment_detect.py
 ├── vlan_heuristics.py  # (fortigate_cli) shared parse/render helpers
 │                       # for VLAN iface-name detection
+├── dhcp_pools.py       # (cisco_iosxe_cli) one surface's reader AND its
+│                       # writer side by side, from one reading of the
+│                       # vendor's semantics (what a pool hands out), so
+│                       # parse and render cannot each assume their own
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```

@@ -74,6 +74,13 @@ _DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
         "and the redundancy has to be made again on the target.",
         ("/interfaces/interface/vrrp-groups/group",),
     ),
+    (
+        "The renderer names a DHCP pool after its interface (`ip dhcp "
+        "pool <interface>`), and the parser reads the name back as the "
+        "interface, but no line of the output says that the interface "
+        "serves the pool: where the pool is served is not written.",
+        ("/dhcp-servers/pool/interface",),
+    ),
 )
 
 

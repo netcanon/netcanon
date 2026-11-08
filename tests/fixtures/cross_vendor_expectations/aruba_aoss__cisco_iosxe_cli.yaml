@@ -228,14 +228,22 @@ per_field_expectation:
       The aruba_aoss parser reads the 3 pools of the one cell that has
       any (`hpe_community_2930f_wc1610_dhcp_server.cfg`), and each is
       written as an `ip dhcp pool` with its network, default router, DNS
-      servers and lease.  Two fields do not come back.  The range: an
-      IOS-XE pool states none (addresses are kept out of it with `ip dhcp
-      excluded-address`, which the render does not write), so on IOS-XE
-      the pool hands out its whole subnet -- exclude what the AOS-S range
-      left out by hand.  The interface: an IOS-XE pool names none, and
-      serves the interface whose subnet is its network.  ``ip
-      helper-address`` directives on Aruba VLAN stanzas are not modelled
-      (no canonical helper-address field).
+      servers, lease and range, and comes back on its VLAN interface.
+      One field does not come back as it was: the first address of the
+      range.  Each AOS-S range of that cell begins at the switch's own
+      address in the VLAN, which is the pool's default router; an IOS-XE
+      server leaves the device's own addresses out of a pool, so the
+      range is read back from the address after it.  The IOS-XE CLI
+      parser reads a pool as the server hands it out: its network less
+      the ``ip dhcp excluded-address`` lines of its VRF, the device's
+      own addresses and the pool's default router, on the interface
+      whose subnet is the pool's network (none for a pool that serves
+      clients a relay forwards); the renderer writes a range as the
+      exclusions on either side of it.  A pool an exclusion cuts in two
+      keeps its larger run, and a manual binding or an option is a row
+      of the sections not translated.  ``ip helper-address`` directives
+      on Aruba VLAN stanzas are not modelled (no canonical
+      helper-address field).
     references: [dhcp_relay]
 
   snmp:

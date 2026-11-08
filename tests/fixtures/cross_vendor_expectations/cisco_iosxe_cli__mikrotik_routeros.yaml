@@ -244,17 +244,25 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Cisco's bundled ``ip dhcp pool`` block maps to the three-
-      section RouterOS form (``/ip pool`` + ``/ip dhcp-server
-      network`` + ``/ip dhcp-server``).  The MikroTik codec joins
-      the three on parse and emits the three on render.  The
-      lossy bits are: (1) Cisco ``ip dhcp excluded-address``
-      multi-fragment exclusions compress into a single
-      start_ip/end_ip range on canonical; (2) static reservations
-      (``host`` / ``client-identifier`` / ``hardware-address`` on
-      Cisco; ``/ip dhcp-server lease`` on RouterOS) have no
-      canonical field and drop to raw_sections; (3) DHCP option
-      codes (``option 43``, etc.) are not modelled.
+      Cisco's bundled ``ip dhcp pool`` block maps to the three-section
+      RouterOS form (``/ip pool`` + ``/ip dhcp-server network`` + ``/ip
+      dhcp-server``).  The lossy bits are: (1) the range is the largest
+      run of addresses the IOS-XE pool hands out, and a pool an
+      exclusion cuts in two keeps that run alone; (2) static
+      reservations (``host`` / ``client-identifier`` /
+      ``hardware-address`` on Cisco; ``/ip dhcp-server lease`` on
+      RouterOS) have no canonical field; (3) DHCP option codes (``option
+      43``, etc.) are not modelled; (4) the RouterOS output writes no
+      ``/ip dhcp-server`` on an interface, so the pool comes back on
+      none (``/dhcp-servers/pool/interface`` is lossy on RouterOS).  The
+      IOS-XE CLI parser reads a pool as the server hands it out: its
+      network less the ``ip dhcp excluded-address`` lines of its VRF,
+      the device's own addresses and the pool's default router, on the
+      interface whose subnet is the pool's network (none for a pool that
+      serves clients a relay forwards); the renderer writes a range as
+      the exclusions on either side of it.  A pool an exclusion cuts in
+      two keeps its larger run, and a manual binding or an option is a
+      row of the sections not translated.
     references: [mikrotik_dhcp]
 
   snmp:

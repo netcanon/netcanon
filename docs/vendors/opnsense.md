@@ -327,10 +327,16 @@ Provenance in
   (`<lan>`, `<opt1>`).  A real config is not expected to have that
   — a device is assigned to one zone — which has not been checked
   against OPNsense's own validation; look for it in a `config.xml`
-  edited by hand.  On an OPNsense TARGET a pool is written under
-  the zone of its interface.  One that names no interface (a pool
-  from IOS-XE or RouterOS, a Junos pool whose server group binds no
-  interface) is written under `<lan>`, and an EOS pool, whose own
+  edited by hand.  As a source, a pool carries no network into the
+  tree: a zone serves its interface's subnet, which the parser does
+  not copy onto the pool, so a target that states a pool's network
+  writes none.  On IOS-XE CLI such a pool hands out nothing, and a
+  `review:` line in it and a warning of the job say so; add the
+  `network` line by hand.  On an OPNsense TARGET a pool is written
+  under the zone of its interface.  One that names no interface (a
+  pool from RouterOS, an IOS-XE pool that serves clients a relay
+  forwards, a Junos pool whose server group binds no interface) is
+  written under `<lan>`, and an EOS pool, whose own
   name is where its interface goes, under a zone of that name
   (`<users>`): either serves nothing unless the output has a zone
   of that name, and read back such a pool is left out.  The

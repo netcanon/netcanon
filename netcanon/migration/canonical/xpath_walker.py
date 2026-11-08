@@ -17,7 +17,36 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .intent import CanonicalIntent
+from .intent import CanonicalDHCPPool, CanonicalIntent
+
+
+def _walk_dhcp_pool(pool: CanonicalDHCPPool) -> Iterable[str]:
+    """The xpaths of one DHCP pool.
+
+    (#24) DHCP was the one Tier-2 surface with no sub-field vocabulary,
+    so a codec that drops a pool sub-field (MikroTik silently resets a
+    non-default lease_time to the 86400 default) could not declare it
+    honestly -- a ``/dhcp-servers/pool/lease-time`` declaration was
+    flagged as a dead path by the honesty guard.  The sub-fields are
+    walked where they are populated (or not the default), so that
+    ``classify()`` sees them instead of failing open to "supported".
+    A pool's range and the interface it is served on are among them: a
+    target that writes neither hands out another set of addresses, on
+    another interface or on none.
+    """
+    yield "/dhcp-servers/pool"
+    if pool.start_ip or pool.end_ip:
+        yield "/dhcp-servers/pool/range"
+    if pool.interface:
+        yield "/dhcp-servers/pool/interface"
+    if pool.gateway:
+        yield "/dhcp-servers/pool/gateway"
+    if pool.dns_servers:
+        yield "/dhcp-servers/pool/dns-servers"
+    if pool.domain_name:
+        yield "/dhcp-servers/pool/domain-name"
+    if pool.lease_time is not None and pool.lease_time != 86400:
+        yield "/dhcp-servers/pool/lease-time"
 
 
 def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
@@ -303,22 +332,7 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             if v3.engine_id:
                 yield "/snmp/v3-user/engine-id"
     for pool in intent.dhcp_servers:
-        yield "/dhcp-servers/pool"
-        # (#24) DHCP was the one Tier-2 surface with no sub-field vocabulary,
-        # so a codec that drops a pool sub-field (MikroTik silently resets a
-        # non-default lease_time to the 86400 default) could not declare it
-        # honestly — a /dhcp-servers/pool/lease-time declaration was flagged as
-        # a dead path by the honesty guard.  Walk the sub-fields (only when
-        # populated / non-default) so classify() sees them instead of
-        # fail-opening to "supported".
-        if pool.gateway:
-            yield "/dhcp-servers/pool/gateway"
-        if pool.dns_servers:
-            yield "/dhcp-servers/pool/dns-servers"
-        if pool.domain_name:
-            yield "/dhcp-servers/pool/domain-name"
-        if pool.lease_time is not None and pool.lease_time != 86400:
-            yield "/dhcp-servers/pool/lease-time"
+        yield from _walk_dhcp_pool(pool)
     for _ in intent.lags:
         yield "/lags/lag/name"
         yield "/lags/lag/members"
