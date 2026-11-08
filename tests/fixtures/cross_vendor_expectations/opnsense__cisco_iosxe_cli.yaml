@@ -385,10 +385,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       OPNsense keys a pool by its zone (``<dhcpd>/<lan>``), and the
-      opnsense parser gives the pool its interface and its range but no
-      network: the zone serves its interface's subnet, which the parser
-      does not copy onto the pool.  An IOS-XE pool with no network hands
-      out no address, so the render writes the pool with a ``review:``
+      opnsense parser gives the pool its interface, its range and, as
+      its network, the subnet of the zone's own address, which the zone
+      serves.  A zone with no static address gives its pool no network.
+      An IOS-XE pool with no network hands out no address, so the
+      render writes the pool with a ``review:``
       line and the job a warning, and the IOS-XE CLI parser reads it
       back as no pool (a row of the sections not translated says so).
       Where a network is stated, the range is written and read back.

@@ -871,7 +871,11 @@ _OPN_ORPHAN_BESIDE_LAN = _OPN_ORPHAN.replace("<lan><if>em2</if>", "<lan>")
 _ORPHAN_ROW = "<dhcpd><opt9>: no <opt9> in <interfaces>, so its DHCP pool has no interface"
 
 #: The targets whose output, read back, says which interface a pool is on.
-_SAYS_A_POOLS_INTERFACE = {"arista_eos", "fortigate_cli", "juniper_junos", "opnsense"}
+#: The IOS-XE CLI parser puts a pool on the interface whose subnet is its
+#: network, which an OPNsense pool has: the subnet of its zone's address.
+_SAYS_A_POOLS_INTERFACE = {
+    "arista_eos", "cisco_iosxe_cli", "fortigate_cli", "juniper_junos", "opnsense",
+}
 
 _OPN_CAPTURES = {
     "real/opnsense/opnsense_acl_test_config.xml": "mismatch0",
@@ -965,12 +969,16 @@ class TestAPoolIsOnTheDeviceOfItsZone:
         assert ET.fromstring(text).findtext("interfaces/lan/if") == device
         tree = get_codec("opnsense").parse(text)
         assert [pool.interface for pool in tree.dhcp_servers] == [device]
-        start = tree.dhcp_servers[0].start_ip
+        # A pool is found by the last address of its range: the IOS-XE
+        # CLI parser reads a range as the server hands it out, without
+        # the device's own address, which on the two CARP captures is
+        # the first address of the range or inside it.
+        end = tree.dhcp_servers[0].end_ip
         for target in PUBLIC:
             job = _job("opnsense", text, target)
             assert not [w for w in job.warnings if "'lan'" in w], target
             back = get_codec(target).parse(job.rendered)
-            on = [pool.interface for pool in back.dhcp_servers if pool.start_ip == start and pool.interface]
+            on = [pool.interface for pool in back.dhcp_servers if pool.end_ip == end and pool.interface]
             if target in _SAYS_A_POOLS_INTERFACE:
                 # The pool is on the port its zone's device became, or
                 # on the device's own name where the job left that.

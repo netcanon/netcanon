@@ -524,9 +524,10 @@ per_field_expectation:
            cross-pair render must invent the matching zone label
            from the FortiGate ``set interface`` value via the
            rename mesh.
-        2. The OPNsense codec's capability matrix does NOT
-           currently advertise ``/dhcp/pool`` paths under supported;
-           render is unwired pending wire-up.
+        2. An OPNsense pool states no network: the opnsense parser
+           gives it the subnet of its zone's own address, so a pool
+           whose stated network is not the subnet of its interface's
+           address comes back with that subnet.
         3. FortiOS's three-cap on dns-server1/2/3 fits OPNsense's
            unbounded ``<dnsserver>`` elements with no truncation,
            but FortiOS multi-range scopes (``config ip-range``)
@@ -534,6 +535,11 @@ per_field_expectation:
         4. FortiOS ``<exclude-range>`` carve-outs have no direct
            OPNsense equivalent (operator must split the range or
            add static-mappings).
+
+      Every cell's pool comes back whole.  The fortigate_cli parser
+      keeps the first ``ip-range`` of a pool and reads no
+      ``exclude-range``, so the losses of 3 and 4 are made before the
+      tree the round trip compares.
     references: [fgt-dhcp, opn-dhcp]
 
   snmp:

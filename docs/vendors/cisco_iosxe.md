@@ -262,8 +262,9 @@ Canonical mapping:
   interface has no address in the pool's network) or cannot write its
   range (the pool has no network, or the range is not inside it), a
   `review:` line in the pool and a warning of the job say so.  A pool
-  from OPNsense has no network in the tree (the OPNsense parser keeps
-  none: a zone serves its interface's subnet), and is written so: it
+  from OPNsense has the subnet of its zone's own address as its
+  network (up to 0.7.7 it had none, and was written with no `network`
+  line); one whose zone has no static address still has none, and
   hands out no address until a `network` line is added.  An exclusion
   of a pool in a VRF is written `ip dhcp excluded-address vrf <name>`,
   which Cisco's community answers give for IOS XE 17.6 and later and
