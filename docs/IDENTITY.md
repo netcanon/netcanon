@@ -26,6 +26,16 @@ differentiator (verifiable audit).  Honesty about the differentiator
 is what carries the matrix-honesty discipline into the marketing
 surface.
 
+That is the **catalogue** tagline, for listings that describe the
+package.  The landing page and its social card use a **display**
+tagline written for a visitor rather than a catalogue:
+
+> **netcanon — translate network configs between vendors, with every loss declared**
+
+Used in [`site/index.html`](../site/index.html) (`<title>`,
+`og:title`).  The two are kept apart on purpose; a change to either is
+made here first.
+
 ---
 
 ## GitHub repo description (extended)
@@ -39,6 +49,10 @@ families explicitly so the repo lands in vendor-specific search
 results.)
 
 **To set:** GitHub → Repo Settings → "About" → Description.
+
+**Website** (the About section's link): `https://netcanon.net`, the
+landing page.  It links the demo above the fold; the demo links back
+only in its footer, so the landing page is the better first stop.
 
 ---
 
@@ -155,6 +169,16 @@ new distribution path is added (or any of the URLs change):
 All distribution surfaces share the `netcanon` name (GHCR org,
 Docker Hub user, GitHub org, PyPI project).  Easy mnemonic for
 operators.
+
+## Front doors
+
+Where a visitor first meets the project.  Each links the others:
+
+| Surface | URL | Served from |
+|---|---|---|
+| Landing page | `https://netcanon.net` | [`site/`](../site/), published by `.github/workflows/pages.yml` on a push to `main` |
+| Live demo | `https://demo.netcanon.net` | [`frontend/`](../frontend/) and [`demo/warden/`](../demo/warden/), shipped in a demo bundle (`.github/workflows/demo-publish.yml`); a change reaches it at the next demo deploy |
+| Source | `https://github.com/netcanon/netcanon` | this repository; About text and topics as above |
 
 ## See also
 

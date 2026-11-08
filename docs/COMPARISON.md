@@ -48,7 +48,7 @@ whose first declared class is `firewall` sits in the third row above.
 
 | Tool | Scope | Direction | Multi-vendor? | Translation accuracy posture |
 |---|---|---|---|---|
-| **Netcanon** | Multi-vendor native running-config translation | Parse + Render bidirectional | ✅ Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense / VyOS | Per-field capability matrix (supported / lossy / unsupported with cited reasons); cross-mesh audit harness; explicit Tier-3 boundary; matrix-honesty discipline |
+| **Netcanon** | Multi-vendor native running-config translation | Parse + Render bidirectional | ✅ Cisco (IOS-XE / NX-OS / IOS-XR) / Juniper / Arista / Aruba (AOS-S / AOS-CX) / Dell OS10 / MikroTik / VyOS; FortiGate and OPNsense at the L2/L3 layer | Per-field capability matrix (supported / lossy / unsupported with cited reasons); cross-mesh audit harness; explicit Tier-3 boundary; matrix-honesty discipline |
 | [**Batfish**](https://github.com/batfish/batfish) | Network config analysis + routing simulation | Parse only | ✅ Many | Models behaviour; doesn't translate to other formats |
 | [**Capirca**](https://github.com/google/capirca) / [**Aerleon**](https://github.com/aerleon/aerleon) | Firewall ACL DSL → vendor-native syntax | Render only (DSL → multiple vendors) | ✅ Firewall scope | DSL is the source of truth; not a translator between native vendor formats |
 | [**NAPALM**](https://github.com/napalm-automation/napalm) | Get / set running-config; vendor-agnostic device interactions | Wraps device drivers | ✅ | Each device sees its native syntax; no translation |
@@ -63,7 +63,7 @@ whose first declared class is `firewall` sits in the third row above.
 
 Netcanon is two co-hosted tools.  Everything above is the
 **translation** engine; the other half is **backup** — pull
-running-configs from devices over SSH / NETCONF / REST, on a schedule —
+running-configs from devices over SSH, on a schedule —
 plus a built-in **config sanitiser**.  Those overlap a different set of
 tools than the translation half:
 

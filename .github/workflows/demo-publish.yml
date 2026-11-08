@@ -610,6 +610,9 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           draft: true
+          # A demo bundle is never the repository's "Latest" release: that
+          # badge belongs to the product release people install.
+          make_latest: "false"
           files: |
             bundle/demo.env
             bundle/whitepaper.html
@@ -679,16 +682,19 @@ jobs:
         # Same hardening as desktop-msi-publish.yml (v0.6.2 postmortem): gh's
         # by-tag lookup is unreliable for DRAFT releases, so fall back to the
         # draft's numeric ID and retry rather than leaving a hidden draft.
+        # Publishing a draft makes it "Latest" unless told otherwise, so both
+        # paths say otherwise: the product release keeps the badge.
         run: |
           set -uo pipefail
           for attempt in 1 2 3 4 5; do
-            if gh release edit "$TAG" --draft=false 2>/dev/null; then
+            if gh release edit "$TAG" --draft=false --latest=false 2>/dev/null; then
               echo "published $TAG by tag (attempt $attempt)"; exit 0
             fi
             rid=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
                     --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -1)
             if [ -n "$rid" ] && gh api -X PATCH \
-                 "repos/${GITHUB_REPOSITORY}/releases/$rid" -F draft=false >/dev/null; then
+                 "repos/${GITHUB_REPOSITORY}/releases/$rid" -F draft=false \
+                 -f make_latest=false >/dev/null; then
               echo "published $TAG by release id $rid (attempt $attempt)"; exit 0
             fi
             echo "attempt $attempt: draft for $TAG not publishable yet; retrying in 10s"

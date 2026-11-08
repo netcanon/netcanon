@@ -170,7 +170,7 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
   network-function layer those platforms share. It is not a firewall-policy tool.</p>
   <p class="vendor-row"><strong>Switches and routers</strong> &mdash; Cisco IOS-XE &middot; Cisco NX-OS &middot;
   Cisco IOS-XR &middot; Juniper Junos &middot; Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot;
-  Dell SmartFabric OS10 <span class="small">(best-effort &mdash; no committed real-capture corpus yet)</span> &middot;
+  Dell SmartFabric OS10 <span class="small">(best-effort &mdash; no committed capture states its OS10 release yet)</span> &middot;
   MikroTik RouterOS &middot; VyOS
   <br><strong>Firewall platforms &mdash; the L2/L3 layer only</strong> &mdash; FortiGate &middot; OPNsense
   <span class="small">(on a firewall that covers interface addressing, VLAN interfaces and local users;
@@ -360,7 +360,7 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
   <h2>What translates. What refuses. On purpose.</h2>
   <p><strong>Translates:</strong> hostnames, interfaces (names, addresses, VRF bindings, MTU),
   VLANs and L2 membership, static routes, DNS/NTP, SNMP, LAGs, local users, DHCP pools,
-  VRFs &mdash; the boring 80% of a migration. Cross-vendor interface naming included:
+  VRFs &mdash; the network-function layer every migration has to carry over first. Cross-vendor interface naming included:
   <code>GigabitEthernet1/0/1</code> becomes <code>ge-1/0/1</code>.</p>
   <p><strong>Detects and lists, deliberately does not translate:</strong> firewall rules, NAT, VPN,
   QoS, route-maps, dynamic routing stanzas. These are vendor-specific stateful policy that does
@@ -368,6 +368,9 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
   instead of pretending.</p>
   <p>Netcanon is the right tool for the <em>router</em> portion of a migration &mdash; and explicitly
   the wrong tool to claim it does the firewall portion.</p>
+  <p>Every codec but Dell OS10 and the IOS-XE NETCONF codec is certified on committed real
+  captures; the per-codec state is in
+  <a href="https://github.com/netcanon/netcanon/blob/main/tests/fixtures/real/RESULTS.md">RESULTS.md</a>.</p>
   <p>Netcanon is built and maintained by one person. The audit machinery below exists because
   you shouldn&rsquo;t have to take one person&rsquo;s word for fidelity.</p>
   <p class="small">What works for <em>your</em> vendor:
@@ -390,7 +393,7 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
   <h2>Every field has a declared fate</h2>
   <p>An excerpt from the capability matrix &mdash; the <code>cisco_iosxe_cli</code> panel of
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md">docs/CAPABILITIES.md</a>,
-  verbatim:</p>
+  its reasons quoted verbatim (classes shortened, paths abbreviated):</p>
   <div class="tbl-wrap">
   <table>
     <tr><th>Canonical path</th><th>Class</th><th>Reason</th></tr>
@@ -426,8 +429,8 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
   <h2>Because you are being asked to paste a network config into someone else&rsquo;s website</h2>
   <div class="promise">
     <ul>
-      <li>Your session is <strong>one throwaway container</strong> &mdash; destroyed when you close the tab
-          or after 15 minutes, whichever comes first.</li>
+      <li>Your session is <strong>one throwaway container</strong> &mdash; destroyed within a few minutes
+          of closing the tab, or 15 minutes after it starts, whichever comes first.</li>
       <li><strong>No network egress at all</strong> &mdash; the container holding your config cannot reach
           the internet.</li>
       <li><strong>Nothing written to disk</strong> &mdash; read-only root, tmpfs-only writes, swap off,
@@ -437,7 +440,8 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
     <a href="https://demo.netcanon.net/whitepaper">demo whitepaper</a> states each claim, and
     <a href="https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md">VERIFY</a> gives you
     the commands to check them yourself.</p>
-    <p class="small muted">Demo bundle <code>demo-v0.1.5</code> &middot; deployed 2026-08-25.</p>
+    <p class="small muted">The running bundle, its image digests and its deploy date are on the
+    <a href="https://demo.netcanon.net/whitepaper">demo whitepaper</a>.</p>
   </div>
   <p class="small muted" style="margin-top:10px">Your session is a throwaway container. Your config is
   never stored. Sensitive? Don&rsquo;t paste it &mdash; <a href="#install">run it locally instead</a>.</p>
@@ -475,6 +479,11 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
 <!-- ============================ also in the box ============================ -->
 <section class="col" id="box">
   <h2>Also in the box</h2>
+  <p><strong>Model-to-model port mapping.</strong> Declare the source and target device models and
+  netcanon pairs their ports by position; a port name it cannot settle holds the job as
+  <code>partial</code> and is listed, rather than guessed.</p>
+  <p><strong>Source auto-detection.</strong> Paste a config without saying what it is; netcanon names
+  the platform it reads as, with a confidence score.</p>
   <p><strong>Config backup over SSH.</strong> Netcanon pulls running-configs on a schedule and stores
   them verbatim &mdash; its backup half exists to feed translation. If backup and diff is your
   <em>only</em> need, <a href="https://github.com/ytti/oxidized">Oxidized</a> and

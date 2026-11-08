@@ -18,7 +18,7 @@ below.
 > date of the running bundle. The live copy at
 > `/whitepaper` describes the running system; this repo copy describes the
 > mechanism. Every procedure below is a copy-paste command in the repo's
-> [`VERIFY.md`](../deploy/VERIFY.md).
+> [`VERIFY.md`](https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md).
 
 ## Threat model
 
@@ -28,7 +28,7 @@ host, (d) log-based leakage at any layer, (e) a compromised or buggy demo
 application instance. Out of scope: a fully compromised host kernel/hypervisor
 (no hosted demo can defend that — if your config is that sensitive, run netcanon
 locally: `docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1
-ghcr.io/netcanon/netcanon` — an amd64/x86-64 image; the flag acknowledges a
+ghcr.io/netcanon/netcanon:latest` — an amd64/x86-64 image; the flag acknowledges a
 local unauthenticated bind, which the image otherwise refuses; we make that
 path one click away).
 
@@ -76,7 +76,7 @@ run netcanon locally with `docker run …` and trust nothing of ours.
 
 ## Claims, controls, proofs
 
-| # | Claim | Control | Proof (abridged; full: [`VERIFY.md`](../deploy/VERIFY.md)) | Tier |
+| # | Claim | Control | Proof (abridged; full: [`VERIFY.md`](https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md)) | Tier |
 |---|---|---|---|---|
 | 1 | Your session runs in its own isolated instance | Warden creates one container per session; routing is by the **HttpOnly `nc_route` cookie** — a bearer credential valid for the life of the session, not a single-use token; instances unreachable except via the warden | Two browser profiles: each header shows a **distinct instance-id chip** (`instance_id`, a display id — not the routing token); end session A → A's now-dead cookie 404s every request while B is unaffected | V·O |
 | 2 | The instance cannot write to disk | `read_only: true` rootfs; **both** declared VOLUME paths (`/app/data` *and* `/app/configs`) backed by tmpfs (RAM), so no anonymous host-disk volume is ever created; **zero named or anonymous volumes** | `docker inspect` shows ReadonlyRootfs=true and Mounts = tmpfs only; `docker diff` clean outside tmpfs; `docker volume ls` empty after teardown | O |
@@ -93,7 +93,7 @@ run netcanon locally with `docker run …` and trust nothing of ours.
 can confirm it from your own browser, on the live site, trusting nothing of
 ours. **O** = *operator-attested + locally reproducible*: confirming it needs
 host access, so we commit the exact command output in
-[`VERIFY.md`](../deploy/VERIFY.md) — and, because no hosted demo can remotely
+[`VERIFY.md`](https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md) — and, because no hosted demo can remotely
 prove its own runtime, you can reproduce every **O** row yourself by running the
 identical stack locally with `docker run …`. `make verify` attests the
 **published repo/artifact, not this live host**. A row marked **V·O** carries

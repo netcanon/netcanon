@@ -134,12 +134,18 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
   <div class="wrap">
     <h1 id="landing-h">netcanon &mdash; translate network configs across vendors</h1>
     <p>netcanon is an open-source tool that translates device configurations between network
-       vendors &mdash; Cisco, Juniper, Arista, and more &mdash; and backs up configs over SSH.
-       Paste a config, pick a target platform, and see exactly what carries over and what
-       doesn&rsquo;t.</p>
+       vendors and backs up configs over SSH. Paste a config, pick a target platform, and see
+       exactly what carries over and what doesn&rsquo;t.</p>
+    <p class="muted"><strong>Switches and routers</strong> &mdash; Cisco IOS-XE &middot; Cisco NX-OS &middot;
+       Cisco IOS-XR &middot; Juniper Junos &middot; Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot;
+       Dell SmartFabric OS10 (best-effort) &middot; MikroTik RouterOS &middot; VyOS.
+       <strong>Firewall platforms, the L2/L3 layer only</strong> &mdash; FortiGate &middot; OPNsense
+       (interface addressing, VLAN interfaces and local users; the policy table, NAT, VPN and
+       UTM are out of scope).</p>
 
     <div class="promise">
       <p>Your session runs in an isolated instance that <strong>self-destructs within 15 minutes</strong> &mdash; usually the moment you leave. A tab left open but untouched is reclaimed after about 10 minutes of inactivity (<strong>sooner under heavy load</strong>), so keep translating to hold your session to the full 15. Nothing you paste is stored.</p>
+      <p>The demo runs the <code>small</code> config limits, so a large real config may be refused, in a sentence that says why. The image you run yourself defaults to <code>standard</code> (<a href="https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md#h-config-size-limits-a-job-that-says-refused">the limits</a>).</p>
       <p><a href="/whitepaper">Read how we prove that &rarr;</a></p>
     </div>
 
@@ -157,13 +163,14 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
   <footer>
     <div class="wrap">
       <nav aria-label="Project links">
+        <a href="https://netcanon.net">netcanon.net</a>
         <a href="https://github.com/netcanon/netcanon">GitHub</a>
         <a href="https://pypi.org/project/netcanon/">PyPI</a>
         <a href="/whitepaper">Whitepaper</a>
       </nav>
       <p class="muted" style="margin-bottom:.5rem">Prefer to run it yourself? One line, no sign-up:</p>
       <div class="docker-line" style="justify-content:flex-start">
-        <code id="docker-cmd">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code>
+        <code id="docker-cmd">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon:latest</code>
         <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd">Copy</button>
       </div>
       <p class="muted" style="margin-top:.5rem;font-size:.85rem">&hellip;then open <code>http://localhost:8000</code>.
@@ -233,7 +240,7 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
        <a href="/whitepaper">the whitepaper</a> &mdash; and the command below runs
        the same image locally, with no wait:</p>
     <div class="docker-line" style="justify-content:flex-start">
-      <code id="docker-cmd-cap">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code>
+      <code id="docker-cmd-cap">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon:latest</code>
       <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd-cap">Copy</button>
     </div>
     <p class="muted" style="font-size:.85rem">amd64/x86-64 image.</p>
@@ -245,7 +252,8 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
 <section id="s-destroyed" hidden aria-labelledby="dead-h">
   <div class="wrap center status-card">
     <h2 id="dead-h">Instance destroyed &#128165; &mdash; everything it held is gone.</h2>
-    <p class="muted">That&rsquo;s the whole idea. Refreshing gets you a fresh instance.</p>
+    <p class="muted">That&rsquo;s the whole idea. Refreshing gets you a fresh instance, or read
+       what else netcanon does at <a href="https://netcanon.net">netcanon.net</a>.</p>
     <p><button id="btn-again" class="btn" type="button">Start again</button></p>
   </div>
 </section>
