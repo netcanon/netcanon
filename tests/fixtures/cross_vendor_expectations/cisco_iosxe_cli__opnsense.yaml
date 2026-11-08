@@ -503,7 +503,13 @@ per_field_expectation:
       Cisco's named ``ip dhcp pool USERS`` form maps to OPNsense's
       INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.  Pool network /
       mask is INFERRED from the zone interface on OPNsense, not stored
-      on the pool record, and the opnsense parser gives a pool none.
+      on the pool record: the opnsense parser gives a pool the subnet
+      of its zone's own address, so a pool whose network is not that
+      subnet comes back with the zone's.  A pool that serves clients a
+      relay forwards names no interface, and is written under
+      ``<lan>``, a zone the output has only if an interface is called
+      that, so it comes back as no pool.  No committed capture has such
+      a pool, and every cell's pool comes back whole.
       Lease time units differ (Cisco d/h/m triple and OPNsense seconds).
       The IOS-XE CLI parser reads a pool as the server hands it out: its
       network less the ``ip dhcp excluded-address`` lines of its VRF,

@@ -1349,6 +1349,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An OPNsense DHCP pool has its network.**  OPNsense keeps a pool
+  under its zone (`<dhcpd><lan>`), which serves the subnet of the
+  zone's own address, and states no network of its own.  The parser
+  gave such a pool none, so the targets that state a pool's network
+  stated none: IOS-XE CLI wrote a pool with no `network` line, which
+  hands out nothing (a `review:` line and a warning of the job said
+  so); Junos and EOS wrote no `network`, FortiOS no `netmask`, and
+  RouterOS no `/ip dhcp-server network` entry, so the pool's gateway
+  and DNS servers were not written there either.  The parser now
+  gives each pool the subnet of its zone's IPv4 address; a zone with
+  no static address (a DHCP client) gives its pool none, as before.
+  In the cross-mesh audit nine `dhcp_servers` cells move: eight, on
+  four pairs to and from OPNsense, now carry the pool whole where
+  their expectation still declares a loss, and one cell from OPNsense
+  to FortiGate now shows the loss its expectation declares, since the
+  FortiGate parser reads a pool's network back only from its default
+  gateway and netmask.  Guarded by `TestAnOPNsensePoolServesItsZonesSubnet`
+  in `tests/unit/migration/test_dhcp_wire_through.py`.
 - **A job onto the IOS-XE NETCONF codec no longer lists what it
   drops as translated.**  The codec writes interfaces only, and of
   an interface its name, description, state, type and addresses.

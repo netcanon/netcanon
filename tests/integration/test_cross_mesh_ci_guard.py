@@ -533,6 +533,19 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # fortigate_cli__cisco_iosxe 3 to 2), both left with
 # ``interfaces[].interface_type`` and the second with
 # ``interfaces[].ipv6_addresses``.
+#
+# And three up, each by one, for ``dhcp_servers``, when the OPNsense parser
+# began to give a pool the subnet of its zone's address as its network:
+# aruba_aoss__opnsense (5 to 6), cisco_iosxe_cli__opnsense (4 to 5) and
+# fortigate_cli__opnsense (3 to 4).  Every cell's pool now comes back whole.
+# The loss is real and no committed capture shows it: an AOS-S or IOS-XE
+# pool that serves clients a relay forwards names no interface, and is
+# written under ``<lan>``, a zone the output has only if an interface is
+# called that, so it comes back as no pool; and the FortiGate parser keeps
+# the first ``ip-range`` of a pool and reads no ``exclude-range``, below what
+# the round trip compares.  The YAML reasons say so.  The same re-measure
+# lowered opnsense__fortigate_cli (5 to 4): a pool with no gateway now
+# comes back from FortiOS with no network, the loss its YAML declares.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -549,7 +562,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
-    "aruba_aoss__opnsense": 5,
+    "aruba_aoss__opnsense": 6,
     "cisco_iosxe__aruba_aoss": 1,
     "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
@@ -560,7 +573,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
     "cisco_iosxe_cli__mikrotik_routeros": 1,
-    "cisco_iosxe_cli__opnsense": 4,
+    "cisco_iosxe_cli__opnsense": 5,
     "dell_os10__opnsense": 1,
     "fortigate_cli__arista_eos": 1,
     "fortigate_cli__aruba_aoss": 1,
@@ -568,7 +581,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 4,
     "fortigate_cli__mikrotik_routeros": 2,
-    "fortigate_cli__opnsense": 3,
+    "fortigate_cli__opnsense": 4,
     "juniper_junos__arista_eos": 2,
     "juniper_junos__aruba_aoss": 2,
     "juniper_junos__cisco_iosxe": 2,
@@ -587,7 +600,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "opnsense__cisco_iosxe": 3,
     "opnsense__aruba_aoss": 1,
     "opnsense__cisco_iosxe_cli": 1,
-    "opnsense__fortigate_cli": 5,
+    "opnsense__fortigate_cli": 4,
     "opnsense__juniper_junos": 4,
     "opnsense__mikrotik_routeros": 3,
 }

@@ -512,6 +512,10 @@ per_field_expectation:
            modelled in canonical v1; drop on parse.
         6. Static-mappings (per-MAC reservations) are not modelled
            in canonical v1; drop on parse.
+        7. A pool's network is the subnet of its zone's own address;
+           the fortigate_cli parser reads a network back only from
+           ``default-gateway`` and ``netmask``, so a pool with no
+           gateway comes back with none.
     references: [opn-dhcp, fgt-dhcp]
 
   snmp:

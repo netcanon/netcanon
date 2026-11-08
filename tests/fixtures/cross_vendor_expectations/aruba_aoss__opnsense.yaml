@@ -20,7 +20,7 @@
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     model is two-stage, codec doesn't currently render either)
 #   * DHCP server scopes — lossy (read from an AOS-S `dhcp-server
-#     pool`; an OPNsense pool states no network)
+#     pool`; a pool of relayed clients has no zone on OPNsense)
 #   * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in plugin's
 #     snmpd.conf, not config.xml)
 #   * Local users — lossy (Aruba sha1 / sha256 / plaintext vs
@@ -499,10 +499,15 @@ per_field_expectation:
       The aruba_aoss parser reads the 3 pools of the one cell that has
       any (`hpe_community_2930f_wc1610_dhcp_server.cfg`), each on its
       `Vlan<N>`, and each is written under the zone of that VLAN's
-      interface with its range, gateway, DNS servers and lease.  The
-      network does not come back: an OPNsense pool states none (the
-      zone's address gives it), and the parser does not infer it.
-      Aruba's per-VLAN ``ip helper-address`` directives also drop
+      interface with its range, gateway, DNS servers and lease.  An
+      OPNsense pool states no network (the zone's address gives it);
+      the opnsense parser gives each pool the subnet of its zone's own
+      address, so the network comes back.  A pool of relayed clients
+      names no interface, and is written under ``<lan>``, a zone the
+      output has only if an interface is called that, so it comes back
+      as no pool.  No committed capture has such a pool, and every
+      cell's pool comes back whole.  Aruba's per-VLAN
+      ``ip helper-address`` directives also drop
       because the canonical schema has no helper-address field.
     references: [aruba-dhcp-relay]
 

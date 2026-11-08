@@ -207,6 +207,85 @@ class TestOPNsenseDHCPParseRender:
         assert first.dhcp_servers[0].end_ip == second.dhcp_servers[0].end_ip
 
 
+class TestAnOPNsensePoolServesItsZonesSubnet:
+    """A zone states no network of its own: its DHCP server hands out
+    addresses of the subnet its interface is on.  The pool carries
+    that subnet, so a target that writes a pool's network writes it.
+    Before, the pool had none, and an IOS-XE pool with no `network`
+    line hands out nothing."""
+
+    _RAW = """\
+<opnsense>
+<interfaces>
+<wan><if>em0</if><ipaddr>dhcp</ipaddr></wan>
+<lan><if>em1</if><enable/><ipaddr>192.168.1.1</ipaddr><subnet>24</subnet></lan>
+<opt1><if>em2</if><enable/><ipaddr>10.20.30.1</ipaddr><subnet>26</subnet></opt1>
+</interfaces>
+<dhcpd>
+<lan>
+<enable/>
+<range><from>192.168.1.100</from><to>192.168.1.199</to></range>
+<gateway>192.168.1.1</gateway>
+</lan>
+<opt1>
+<enable/>
+<range><from>10.20.30.10</from><to>10.20.30.20</to></range>
+</opt1>
+<wan>
+<enable/>
+<domain>wan.example</domain>
+</wan>
+</dhcpd>
+</opnsense>
+"""
+
+    def _pools(self, intent):
+        return {pool.interface: pool for pool in intent.dhcp_servers}
+
+    def test_each_pool_has_the_subnet_of_its_zones_address(self):
+        pools = self._pools(OPNsenseCodec().parse(self._RAW))
+        assert pools["em1"].network == "192.168.1.0/24"
+        assert pools["em2"].network == "10.20.30.0/26"
+
+    def test_a_zone_with_no_static_address_gives_no_network(self):
+        pools = self._pools(OPNsenseCodec().parse(self._RAW))
+        assert pools["em0"].network == ""
+
+    def test_the_network_survives_a_round_trip(self):
+        codec = OPNsenseCodec()
+        first = codec.parse(self._RAW)
+        second = codec.parse(codec.render(first))
+        assert [(p.interface, p.network) for p in first.dhcp_servers] == [
+            (p.interface, p.network) for p in second.dhcp_servers
+        ]
+
+    def test_an_ios_xe_output_serves_the_range(self):
+        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+        from netcanon.services.migration_pipeline import run_plan
+
+        target = CiscoIOSXECLICodec()
+        result = run_plan(OPNsenseCodec(), target, self._RAW, force=True)
+        out = result.rendered or ""
+        assert " network 192.168.1.0 255.255.255.0" in out
+        assert " network 10.20.30.0 255.255.255.192" in out
+        assert "has no network" not in out
+        back = {
+            pool.network: (pool.start_ip, pool.end_ip)
+            for pool in target.parse(out).dhcp_servers
+        }
+        assert back["192.168.1.0/24"] == ("192.168.1.100", "192.168.1.199")
+        assert back["10.20.30.0/26"] == ("10.20.30.10", "10.20.30.20")
+
+    def test_a_junos_output_states_the_network(self):
+        from netcanon.migration.codecs.juniper_junos import JunosCodec
+        from netcanon.services.migration_pipeline import run_plan
+
+        result = run_plan(OPNsenseCodec(), JunosCodec(), self._RAW, force=True)
+        lines = (result.rendered or "").splitlines()
+        assert any(line.endswith(" network 192.168.1.0/24") for line in lines)
+        assert any(line.endswith(" network 10.20.30.0/26") for line in lines)
+
+
 # ---------------------------------------------------------------------------
 # FortiGate
 # ---------------------------------------------------------------------------

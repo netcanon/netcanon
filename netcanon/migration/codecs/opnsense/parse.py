@@ -51,7 +51,8 @@ Internal element-level helpers:
   for the dict-tree round-trip path used by older tests.
 * :func:`_parse_opnsense_dhcp_zone` — one ``<dhcpd>/<zone>`` element
   to :class:`CanonicalDHCPPool`, on the device the zone is assigned
-  to.
+  to, serving the subnet of the zone's own address
+  (:func:`_zone_network`).
 
 The constant ``_OPNSENSE_PROTO_TO_CANONICAL`` (LAG proto strings to
 canonical mode) lives here; the inverse ``_CANONICAL_MODE_TO_OPNSENSE_PROTO``
@@ -379,6 +380,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # through this map.  See docs/v0.2.0-planning/01-vrrp-canonical/
     # 02-per-vendor-grammar.md § 8 "OPNsense" edge cases.
     iface_alias_to_canonical: dict[str, str] = {}
+    # The subnet of each zone's own address (<ipaddr>/<subnet>), which
+    # is the subnet the zone's DHCP server hands addresses out of.
+    zone_networks: dict[str, str] = {}
     if iface_parent is not None:
         for zone_el in iface_parent:
             iface = _parse_interface_zone_canonical(zone_el)
@@ -390,6 +394,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 # text if present, else the zone tag — same rule as
                 # _parse_interface_zone_canonical).
                 iface_alias_to_canonical[zone_el.tag] = iface.name
+                network = _zone_network(iface)
+                if network:
+                    zone_networks[zone_el.tag] = network
 
     # ----- <virtualip> block — CARP / VRRP redundancy groups -----
     # OPNsense stores CARP VIPs (and pure-VRRP VIPs on supported
@@ -443,7 +450,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     dhcpd_el = root.find("dhcpd")
     if dhcpd_el is not None:
         for zone_el in dhcpd_el:
-            pool = _parse_opnsense_dhcp_zone(zone_el, iface_alias_to_canonical)
+            pool = _parse_opnsense_dhcp_zone(
+                zone_el, iface_alias_to_canonical, zone_networks,
+            )
             if pool is None:
                 continue
             if pool.interface in left_out_devices:
@@ -1109,9 +1118,28 @@ def _read_the_device(
         )
 
 
+def _zone_network(iface: CanonicalInterface) -> str:
+    """The subnet of a zone's own address, in CIDR form, or ``""``.
+
+    The address is the zone's ``<ipaddr>``/``<subnet>``, the first
+    IPv4 address of its record when the record is made.  A zone with
+    no static address (``dhcp``, or none) has no subnet.
+    """
+    if not iface.ipv4_addresses:
+        return ""
+    first = iface.ipv4_addresses[0]
+    try:
+        return str(ipaddress.IPv4Network(
+            f"{first.ip}/{first.prefix_length}", strict=False,
+        ))
+    except ValueError:
+        return ""
+
+
 def _parse_opnsense_dhcp_zone(
     zone_el: ET.Element,
     iface_alias_to_canonical: dict[str, str],
+    zone_networks: dict[str, str],
 ) -> CanonicalDHCPPool | None:
     """Parse a single ``<dhcpd>/<zone>`` element into a CanonicalDHCPPool.
 
@@ -1129,10 +1157,19 @@ def _parse_opnsense_dhcp_zone(
     element; we treat a zone block as present-but-disabled as a valid
     pool, since the intent (serve this network) is preserved.
 
+    The pool's ``network`` is the subnet of the zone's own address:
+    a zone states no network of its own, and its DHCP server hands
+    out addresses of the subnet its interface is on.  Left empty, a
+    target that writes a pool's network wrote none, and an IOS-XE
+    pool with no ``network`` line hands out nothing.  A zone with no
+    static address gives the pool no network.
+
     Args:
         zone_el: One child of ``<dhcpd>``; its tag is the zone.
         iface_alias_to_canonical: Zone tag to the name of the
             interface record made for it, from ``<interfaces>``.
+        zone_networks: Zone tag to the subnet of the zone's own
+            address, in CIDR form, for each zone that has one.
 
     Returns:
         The pool, or ``None`` for a zone block that states nothing.
@@ -1170,6 +1207,7 @@ def _parse_opnsense_dhcp_zone(
 
     return CanonicalDHCPPool(
         interface=iface_alias_to_canonical.get(zone_el.tag, ""),
+        network=zone_networks.get(zone_el.tag, ""),
         start_ip=start_ip,
         end_ip=end_ip,
         gateway=gateway,
