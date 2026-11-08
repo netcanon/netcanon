@@ -20,7 +20,7 @@ Netcanon handles two independent (but co-hosted) concerns:
 
 1. **Backup** — `netcanon/collectors/` + `netcanon/api/routes/backups.py`.
    Pulls raw `running-config` (or vendor equivalent) from devices over
-   SSH / NETCONF / REST and stores in `configs/<host>.<ext>`.  Mocked in
+   SSH (Netmiko or Paramiko) and stores in `configs/<host>.<ext>`.  Mocked in
    tests at a single entry point: `get_collector`.
 2. **Migration** — `netcanon/migration/`.  Translates a stored backup
    from one vendor's native config to another through a shared

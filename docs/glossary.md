@@ -130,7 +130,7 @@ by concern and listed alphabetically within each section.
 
 - **Backup vs. migration** — the two co-hosted concerns of the
   FastAPI app. Backup pulls raw configs from devices over
-  SSH / NETCONF / REST; migration translates a stored backup between
+  SSH; migration translates a stored backup between
   vendors via the canonical IR.
 - **Definitions** — vendor YAML files at `netcanon/definitions/library/` describing
   how to log into a given device class.

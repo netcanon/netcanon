@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Container: GHCR](https://img.shields.io/badge/ghcr.io-netcanon%2Fnetcanon-2496ED?logo=docker&logoColor=white)](https://github.com/netcanon/netcanon/pkgs/container/netcanon)
 [![Live demo](https://img.shields.io/badge/live_demo-demo.netcanon.net-2ea44f)](https://demo.netcanon.net)
+[![Website](https://img.shields.io/badge/website-netcanon.net-2ea44f)](https://netcanon.net)
 
 **Multi-vendor network config translator with a verifiable cross-vendor audit.**
 
@@ -34,7 +35,14 @@ drops or transforms a field — before they ship.
   <img src="docs/assets/migrate.png" width="860" alt="Netcanon migrate page: a Cisco IOS-XE config translated to Junos, showing auto-detection, a green “Validation OK” banner, an amber “Tier-3 sections detected” banner listing the ACL and NAT lines that don’t translate, and the rendered Junos `set` output.">
 </p>
 
-<p align="center"><sub>The browser UI translating Cisco IOS-XE → Junos — interface names and L2 membership mapped across vendors, every field declared supported/lossy/unsupported, and Tier-3 sections (ACLs, NAT, …) surfaced rather than silently dropped.</sub></p>
+<p align="center"><sub>The browser UI translating Cisco IOS-XE → Junos — interface names and L2 membership mapped across vendors, every field declared supported/lossy/unsupported, and Tier-3 sections (ACLs, NAT, …) surfaced rather than silently dropped.  Screenshot from v0.4.0; the counts on it have moved since.</sub></p>
+
+Also in the app: **source auto-detection** (paste a config without naming
+its vendor and Netcanon names the platform, with a confidence score) and
+**model-to-model port mapping** (declare the source and target device
+models and ports are paired by position; a name it cannot settle holds
+the job as `partial` instead of being guessed).  More at
+[netcanon.net](https://netcanon.net).
 
 ---
 
@@ -48,8 +56,9 @@ application, not a video or a sandbox with the interesting parts removed.
 Because you are being asked to paste a network config into someone else's
 website, here is exactly what happens to it:
 
-- Every visitor gets their **own throwaway container**, destroyed when you close
-  the tab or after 15 minutes, whichever comes first.
+- Every visitor gets their **own throwaway container**, destroyed within a few
+  minutes of closing the tab, or 15 minutes after it starts, whichever comes
+  first.
 - Instances run with a **read-only root filesystem, tmpfs-only writes, and no
   network egress at all** — the container that holds your config cannot reach
   the internet.
@@ -122,19 +131,19 @@ FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
 
 ## The trust signal — and the invitation
 
-Every ordered vendor pair — all 156 of them across 13 codecs — now ships
-a cross-vendor expectation, so the cross-mesh audit tracks `CODEC_BUG`
-drift cell by cell with no uncovered pairs
-(`cells_without_expectation_yaml: 0`).  Twelve of the thirteen codecs
-also ship real-capture fixtures; `dell_os10` is the exception and ships
-`best_effort` for exactly that reason — its validation captures carry
-live password hashes and are held out-of-tree, so it has full
-cross-vendor expectations but no committed corpus.  The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md`
+Every ordered pair of the shipped codecs now ships a cross-vendor
+expectation, so the cross-mesh audit tracks `CODEC_BUG` drift cell by
+cell with no uncovered pairs (`cells_without_expectation_yaml: 0`).
+Every codec but the `cisco_iosxe` NETCONF codec also ships real-capture
+fixtures.  Two codecs stay `best_effort`: `dell_os10`, because none of
+its committed captures states its OS10 release, and the `cisco_iosxe`
+NETCONF codec, whose renderer is a stub (`cisco_iosxe_cli` is the
+certified Cisco IOS-XE codec).  The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md`
 for the roll-up, `tests/fixtures/real/phase4_findings_residuals.md` for
-the per-cell triage) currently reports a small number of residual
-high-severity cells (5 at last run) — each triaged as a benign
-modelling/structural artifact (4 on real fixtures, 1 synthetic) rather
-than a translation error, and every one is enumerated.  That's not "we
+the per-cell triage) currently reports a handful of residual
+high-severity cells — each triaged as a benign modelling/structural
+artifact rather than a translation error, and every one is enumerated
+in `phase4_findings_residuals.md`.  That's not "we
 think it works"; that's every covered cell, checked by automated test
 against vendor-doc-grounded expectations, with nothing swept under the rug.
 
@@ -163,7 +172,7 @@ formats**, with a per-field capability matrix and a cross-mesh audit.
 
 | Tool | What it does | Translates native config? |
 |---|---|---|
-| **Netcanon** | Multi-vendor config translation (parse + render) | ✅ bidirectional, 12 codecs |
+| **Netcanon** | Multi-vendor config translation (parse + render) | ✅ bidirectional, every shipped codec |
 | [Batfish](https://github.com/batfish/batfish) | Config analysis + routing simulation | ❌ parse-only — *complements* Netcanon |
 | [Capirca](https://github.com/google/capirca) / [Aerleon](https://github.com/aerleon/aerleon) | Firewall ACL DSL → vendor syntax | ❌ render-only from a DSL — *competes* (firewall scope) |
 | [NAPALM](https://github.com/napalm-automation/napalm) / [Netmiko](https://github.com/ktbyers/netmiko) | Device get/set + SSH transport | ❌ no translation — *complements* (deploy side) |
@@ -352,8 +361,8 @@ across vendors.  Full per-codec matrix is in
   parses + renders these — the per-codec §A tables in
   [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) are authoritative for
   the exceptions (OPNsense renders no static routes, VyOS has no
-  top-level VLAN database, per-interface VRF binding is wired on 6 of
-  the 12 codecs, and the experimental `cisco_iosxe` NETCONF stub
+  top-level VLAN database, per-interface VRF binding is wired on a
+  subset of codecs, and the experimental `cisco_iosxe` NETCONF stub
   renders interfaces only).  DNS / NTP servers translate
   on most codecs; `syslog` servers translate on `juniper_junos`,
   `cisco_iosxe_cli`, `arista_eos` (`logging host <ip>` /

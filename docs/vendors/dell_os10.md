@@ -27,15 +27,12 @@ mis-parse it into a plausible-looking wrong answer.
 > if you migrated an OS9 config before this, re-check what source codec
 > was used.
 
-> **Why `best_effort` and not `certified`?**  Every other codec's
-> `certified` rests on an **in-tree real capture corpus**.  The OS10
-> development corpus — 40 real configs spanning five OS10 releases —
-> is held out-of-tree: some captures carry live password hashes, and
-> the best-structured material of all carries no redistribution
-> licence.  The codec is validated against those 40 captures plus a
-> committed synthetic kitchen-sink fixture and full cross-vendor mesh
-> coverage, but the honest label for "no committed real corpus" is
-> `best_effort`.  See
+> **Why `best_effort` and not `certified`?**  Real captures are
+> committed for this codec, and every one parses and round-trips
+> canonical-stable, which meets the codified bar.  But none of them
+> states its OS10 release, while every other certified codec names the
+> releases behind its claim, so the tier is held until a licence-clean
+> capture with its `! Version` banner intact lands.  See
 > [Real-world fixtures](#real-world-fixtures-weve-validated-against).
 
 ## What translates well

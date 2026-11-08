@@ -899,7 +899,9 @@ re-parsing with **zero errors**.
 | **cisco_iosxr** | **10** real | **2 sources** (batfish/lab-validation + ios-xr/xrd-tools) | 0 | **certified** ✅ | — (nice-to-have: flex-algo / L2VPN bridge-groups / QoS) |
 | **aruba_aoscx** | **4** real | **2** (AOS-CX 10.04 + 10.13) | 0 | **certified** ✅ | — (nice-to-have: non-Aruba-published source; L3VNI / VSX / VRRP) |
 | **vyos** | **10** real | **3** (VyOS 1.3 + 1.4 + 1.5) | 0 | **certified** ✅ | — (VRF round-trip remains synthetic-validated; real `vrf name` capture wanted) |
-| **TOTAL** | **77** | — | **17** | — | — |
+| **dell_os10** | **9** real | none stated (no committed capture keeps its `! Version` banner) | — | **best_effort** ⚠️ | a licence-clean capture that states its OS10 release |
+| **cisco_iosxe** (NETCONF) | 0 real (1 synthetic) | — | — | **best_effort** ⚠️ | render is a Phase 0.5 stub; no real `<rpc-reply>` capture (`cisco_iosxe_cli` is the certified IOS-XE codec) |
+| **TOTAL** | **86** | — | **17** | — | — |
 
 > **Note (2026-05-21 docs-audit):** the per-codec **Coverage matrix
 > tables above** in this file are pending a row-level refresh for 5
@@ -915,8 +917,8 @@ re-parsing with **zero errors**.
 > vlans, users etc.) need a parse pass to fill accurately rather
 > than estimation.  Tracked under docs-audit cluster F finding F3.
 
-17 total bugs surfaced by the real-capture harness across seven of
-the twelve codecs (the four batfish/xrd-corpus codecs — cisco_nxos,
+The bugs counted in the table were surfaced by the real-capture
+harness (the four batfish/xrd-corpus codecs — cisco_nxos,
 cisco_iosxr, aruba_aoscx, vyos — surfaced none on first contact).
 Every one would have survived arbitrarily long against our
 synthetic fixtures — exactly the regression class the harness was
@@ -955,9 +957,12 @@ would distort the canonical tree if parsed verbatim.
 Round-trip preservation guarded by
 `tests/unit/migration/test_real_captures.py::test_ipv6_addresses_survive_real_capture_parse`.
 
-### Certification state (April 2026)
+### Certification state (history, April 2026)
 
-**All five codecs are now `certified`.**  The cert bar (≥3 real-ish
+The current state of every codec is the Summary table above; this
+section records the first promotion wave.
+
+**All five codecs of the time were promoted to `certified`.**  The cert bar (≥3 real-ish
 fixtures from ≥2 OS versions with round-trip stability for
 bidirectional codecs) was met decisively by each codec in the
 promotion commits recorded in `CHANGELOG.md`.  The earlier

@@ -28,7 +28,7 @@ Netcanon is a FastAPI application that co-hosts two independent jobs:
 
 **Backup** (`netcanon/collectors/`, `netcanon/api/routes/backups.py`):
 fetches the current running configuration from devices over a
-pluggable transport (SSH via Netmiko / NETCONF / REST), validates
+pluggable transport (SSH, via Netmiko or Paramiko), validates
 against a device-class schema, stores in `configs/<host>.<ext>`.
 Scheduled or on-demand.  Mocked in tests at a single factory
 (`get_collector`).
@@ -266,8 +266,9 @@ regardless of which vendor originated it.
 
 **Where:** `netcanon/collectors/` (currently only the backup side
 exercises transport layer; migration is file-input for now)
-**What:** How bytes get in and out of a device.  SSH via Netmiko,
-NETCONF, REST APIs — pluggable per vendor.
+**What:** How bytes get in and out of a device: SSH, via Netmiko or
+Paramiko.  The transport is pluggable per vendor; SSH is the only one
+shipped.
 
 Migration's Phase 2+ deploy story will push rendered configs back to
 devices via this layer; for now the flow is file → codec → file.

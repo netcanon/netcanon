@@ -1201,6 +1201,31 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **A demo bundle no longer becomes the repository's "Latest"
+  release.**  `demo-publish.yml` published each bundle's draft with
+  GitHub's default, which marks it Latest, so the next demo publish
+  would take the badge from the product release people install.  The
+  draft and both publish paths now say `make_latest=false`.
+- **The front pages say what is true today.**  The landing page no
+  longer names a demo bundle that has since been replaced (it points
+  at the demo whitepaper, which states the running bundle); says a
+  session ends within a few minutes of closing the tab rather than
+  the moment it closes; drops an unmeasured "80%"; says which codecs
+  are certified; and names model-to-model port mapping and source
+  auto-detection.  Dell OS10 is described as having committed real
+  captures that state no OS10 release (it had been described as
+  having none), on the landing page, the README, `CAPABILITIES.md`
+  and its vendor page.  The demo page names every vendor and the
+  firewall scope, says it runs the `small` config limits, and links
+  netcanon.net; its `docker run` lines carry `:latest` like every
+  other surface's.  The demo whitepaper's links to `deploy/VERIFY.md`
+  are absolute, so they open on the demo host.  The README loses
+  counts no test keeps true.  The backup half is described as SSH
+  only (Netmiko or Paramiko), which is all that ships, in
+  `CAPABILITIES.md`, `COMPARISON.md`, the glossary, `ARCHITECTURE.md`
+  and `AGENTS.md`.  `RESULTS.md` lists every codec in its Summary
+  table.  `docs/IDENTITY.md` records the website, the display
+  tagline and the project's front doors.
 - **AOS-S output has no `interface` stanza that says `enable` and
   nothing else** for a port that a VLAN's `untagged` / `tagged` list
   or a `trunk` line of the same output names.  The device prints a

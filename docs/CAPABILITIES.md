@@ -4,7 +4,7 @@ Netcanon is a multi-vendor network device configuration translator
 with two co-hosted concerns:
 
 1. **Backup** — pull `running-config` (or vendor equivalent) from
-   devices over SSH / NETCONF / REST and store in
+   devices over SSH and store in
    `configs/<host>.<ext>`.
 2. **Migration** — translate a stored backup from one vendor's native
    config grammar into another, via a shared canonical intent tree.
@@ -55,7 +55,7 @@ the L2/L3 layer only.  The two-clause test for setting it lives in
 | `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
 | `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`, and `bondN.<vid>` under a bond) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
-| `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP; validated against 14 real OS10 captures that all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because those captures carry live password hashes and are held out-of-tree, so no REAL corpus is committed; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
+| `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP; validated against the real captures committed under `tests/fixtures/real/dell_os10/`, which all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because no committed capture states its OS10 release; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
 
 Backup-side device-definition YAMLs ship for every codec family above
 (plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
@@ -2755,7 +2755,7 @@ counts (static routes, addresses) — is in
 ## Backup-side limitations
 
 The backup concern is architecturally simpler — connection happens
-via SSH (Netmiko) / NETCONF / REST with vendor-specific paging
+via SSH (Netmiko or Paramiko) with vendor-specific paging
 controls.  Operator-visible failure modes:
 
 * **`422 Unknown type_key(s)`** — `POST /api/v1/backups` validates
