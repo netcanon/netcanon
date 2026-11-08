@@ -526,21 +526,24 @@ per_field_expectation:
   # ── Tier 2 — DHCP server ──
 
   dhcp_servers:
-    disposition: lossy
+    disposition: good
     reason: >
       FortiOS's interface-bound model (``config system dhcp server /
-      edit N / set interface "port4" / config ip-range / edit 1 /
-      set start-ip / set end-ip``) flattens on parse to a single
-      CanonicalDHCPPool record per server.  Junos's split
-      ``dhcp-local-server`` + ``access address-assignment pool``
-      model re-renders directly.  Basic pools round-trip; advanced
-      options (FortiGate ``set ipsec-lease-hold``, ``set
-      conflicted-ip-timeout``, ``set lease-time`` differences) are
-      not modelled canonically.  FortiGate's multi-range support
-      (``config ip-range`` with multiple edit IDs) collapses to a
-      single canonical start/end pair — only the first range
-      survives in v1.  DNS server cap (FortiGate dns-server1/2/3
-      drops to canonical list of three; Junos accepts more).
+      edit N / set interface "port4" / config ip-range``) is read on
+      parse as the server hands addresses out: every ``ip-range``
+      less every ``exclude-range``, of which the tree keeps the
+      largest run; the DNS servers the pool's ``dns-service`` gives
+      (the interface's own address, the FortiGate's own, or
+      ``dns-server1`` to ``dns-server4``, ``0.0.0.0`` being none);
+      and the lease, 604800 seconds where none is stated.  Junos's
+      split ``dhcp-local-server`` + ``access address-assignment
+      pool`` model re-renders each pool, and every pool of the
+      corpus comes back as it was.  What the tree has no place for
+      (another run of addresses, reserved addresses, DHCP options,
+      an NTP server, a vendor-class match) is a row of the sections
+      not translated, made by the FortiGate parser; ``set
+      ipsec-lease-hold`` and ``set conflicted-ip-timeout`` change
+      nothing a client is given.
     references: [fortios-dhcp, junos-dhcp-server]
 
   # ── Tier 2 — SNMP ──

@@ -556,7 +556,8 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             or ``"untagged"`` (an IOS XR or EOS sub-interface that
             states no tag, which passes no traffic there), or
             ``"disabled"`` (an AOS-S ``dhcp-server`` statement of a
-            server that is not enabled) or ``"incomplete"`` (an AOS-S
+            server that is not enabled, or a FortiOS DHCP server of
+            ``status disable``) or ``"incomplete"`` (an AOS-S
             DHCP pool the server discards).
         path: The words of the statement's path, outermost first.
 

@@ -54,7 +54,6 @@ both modules.
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 import shlex
@@ -62,8 +61,8 @@ from collections.abc import Iterator
 from typing import ClassVar
 
 from ..._radius_secrets import FORTIOS_ENVELOPE
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
-    CanonicalDHCPPool,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -82,6 +81,7 @@ from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
 from .._scanner import Body, without_text_bodies
 from ..base import ParseError
+from .dhcp_pools import pools_of
 from .port_names import classify_port_name
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
 
@@ -440,8 +440,8 @@ def _apply_system_dns(block: _ConfigBlock, intent: CanonicalIntent) -> None:
     # renderer-emitted line was silently dropped on parse, breaking
     # round-trip ``parse(render(tree))`` for ``CanonicalIntent.domain``
     # (Phase 4b finding flagged by 3 agents — arista_eos, opnsense,
-    # cisco_iosxe_cli source-side).  The DHCP-pool ``set domain``
-    # handler (~line 707) targets a different field
+    # cisco_iosxe_cli source-side).  A DHCP pool's ``set domain``
+    # (read in ``dhcp_pools.py``) targets a different field
     # (``CanonicalDHCPPool.domain_name``, the per-pool search domain)
     # and remains unchanged.
     domain = block.settings.get("domain")
@@ -676,7 +676,7 @@ def _apply_system_interface(  # noqa: C901
         # The block model parses this as ``_EditBlock.sub_blocks`` on the
         # interface's edit entry (path == ``vrrp``).  Mirrors the nested-
         # subtable handling already in use for DHCP ``config ip-range``
-        # in :func:`_apply_system_dhcp_server`.
+        # in ``dhcp_pools.py``.
         #
         # Mandatory key: ``set vrip <X>`` (the virtual IP).  Without it
         # the edit is malformed and we silently skip — real exports
@@ -1268,78 +1268,6 @@ def _apply_user_radius(
         ))
 
 
-def _apply_system_dhcp_server(
-    block: _ConfigBlock, intent: CanonicalIntent,
-) -> None:
-    """Parse ``config system dhcp server`` into CanonicalDHCPPool records.
-
-    Each ``edit <id>`` is a DHCP pool.  Relevant fields:
-        set lease-time <seconds>
-        set default-gateway <ip>
-        set netmask <dotted-decimal>
-        set interface "<iface>"
-        set dns-service default|specify
-        set dns-server1 <ip>
-        set dns-server2 <ip>
-        set domain "<domain>"
-        config ip-range                         (nested)
-            edit 1
-                set start-ip <ip>
-                set end-ip <ip>
-            next
-        end
-    """
-    for edit in ticked(block.edits):
-        pool = CanonicalDHCPPool()
-        iface_tokens = edit.settings.get("interface")
-        if iface_tokens:
-            pool.interface = iface_tokens[0]
-        gw_tokens = edit.settings.get("default-gateway")
-        if gw_tokens:
-            pool.gateway = gw_tokens[0]
-        netmask_tokens = edit.settings.get("netmask")
-        if netmask_tokens and gw_tokens:
-            # Derive network CIDR from gateway + netmask.  Gateway
-            # typically sits on the pool's network; masking gives the
-            # network address.
-            try:
-                gw = ipaddress.IPv4Interface(
-                    f"{gw_tokens[0]}/{_mask_to_prefix(netmask_tokens[0], vendor='fortigate_cli')}"
-                )
-                pool.network = str(gw.network)
-            except (ipaddress.AddressValueError, ValueError):
-                pass
-        # DNS servers come in as dns-server1 / dns-server2 / dns-server3
-        for i in range(1, 4):
-            key = f"dns-server{i}"
-            dns_tokens = edit.settings.get(key)
-            if dns_tokens:
-                pool.dns_servers.append(dns_tokens[0])
-        domain_tokens = edit.settings.get("domain")
-        if domain_tokens:
-            pool.domain_name = domain_tokens[0]
-        lease_tokens = edit.settings.get("lease-time")
-        if lease_tokens:
-            try:
-                pool.lease_time = int(lease_tokens[0])
-            except ValueError:
-                pass
-
-        # Nested `config ip-range` block carves out the allocation range.
-        for sub in edit.sub_blocks:
-            if sub.config_path != "ip-range":
-                continue
-            for range_edit in sub.edits:
-                start_tokens = range_edit.settings.get("start-ip")
-                end_tokens = range_edit.settings.get("end-ip")
-                if start_tokens and not pool.start_ip:
-                    pool.start_ip = start_tokens[0]
-                if end_tokens and not pool.end_ip:
-                    pool.end_ip = end_tokens[0]
-
-        intent.dhcp_servers.append(pool)
-
-
 # ---------------------------------------------------------------------------
 # Public parse entry point
 # ---------------------------------------------------------------------------
@@ -1361,7 +1289,6 @@ _DISPATCH: ClassVar[dict[str, object]] = {
     "system snmp community": _apply_snmp_community,
     "system snmp user": _apply_snmp_user,
     "system admin": _apply_system_admin,
-    "system dhcp server": _apply_system_dhcp_server,
     "user radius": _apply_user_radius,
 }
 
@@ -1412,6 +1339,14 @@ def parse_intent(raw: str) -> CanonicalIntent:
             ignored_paths.append(block.config_path)
     _link_lag_members(intent)
     _a_vlan_on_a_port_is_a_sub_interface(blocks, intent)
+    # Read after every block: a pool of ``dns-service local`` or
+    # ``default`` gives its clients an interface's address or the
+    # FortiGate's own DNS servers, which may be stated after it.
+    pools, pool_rows, pools_left_out = pools_of(blocks, intent.interfaces)
+    intent.dhcp_servers.extend(pools)
+    intent.dropped_tier3_sections.extend([
+        *pool_rows, *left_out_rows(pools_left_out, rest="disabled"),
+    ])
     intent.dropped_tier3_sections.extend(_tags_with_no_form(blocks, intent))
 
     logger.debug(

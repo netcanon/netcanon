@@ -541,11 +541,23 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # The loss is real and no committed capture shows it: an AOS-S or IOS-XE
 # pool that serves clients a relay forwards names no interface, and is
 # written under ``<lan>``, a zone the output has only if an interface is
-# called that, so it comes back as no pool; and the FortiGate parser keeps
-# the first ``ip-range`` of a pool and reads no ``exclude-range``, below what
+# called that, so it comes back as no pool; and the FortiGate parser kept
+# the first ``ip-range`` of a pool and read no ``exclude-range``, below what
 # the round trip compares.  The YAML reasons say so.  The same re-measure
 # lowered opnsense__fortigate_cli (5 to 4): a pool with no gateway now
 # comes back from FortiOS with no network, the loss its YAML declares.
+#
+# And that one back up, from 4 to 5, when the FortiGate parser began to read
+# a pool as its server hands addresses out: opnsense__fortigate_cli, for
+# ``dhcp_servers``.  It reads a pool's network as the subnet its netmask
+# makes around its range, so the pool with no gateway comes back whole.  The
+# loss is real and no committed capture shows it: a pool with no range is
+# written with no ``config ip-range``, which hands out nothing, and comes
+# back as no pool; and a fifth DNS server is a ``# review:`` line.  The
+# YAML's reason says so.  fortigate_cli__opnsense stays at 4: the parser
+# now reads every range less every exclusion and keeps the largest run,
+# with a row for the others, which is still below what the round trip
+# compares.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -600,7 +612,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "opnsense__cisco_iosxe": 3,
     "opnsense__aruba_aoss": 1,
     "opnsense__cisco_iosxe_cli": 1,
-    "opnsense__fortigate_cli": 4,
+    "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 4,
     "opnsense__mikrotik_routeros": 3,
 }

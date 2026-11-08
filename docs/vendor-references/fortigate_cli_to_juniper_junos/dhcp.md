@@ -1,5 +1,7 @@
 # DHCP server: FortiGate FortiOS versus Juniper Junos
 
+> **Update 2026-11-07 — the FortiGate parser reads a pool as its server hands addresses out.**  This page was written when `fortigate_cli` kept a pool's first `config ip-range` and read no `config exclude-range` and no `dns-service`, so a second range and every exclusion were lost, and nothing said so.  The parser now reads every range less every excluded range (Fortinet's CLI reference, `config system dhcp server`) and keeps the largest run, with a row of the sections not translated for any other; gives a pool the DNS servers its `dns-service` names (the interface's own address for `local`, the FortiGate's own for `default`, `dns-server1` to `dns-server4` for `specify`, `0.0.0.0` being none); reads a lease the pool does not state as FortiOS's 604800 seconds and `0` as one that does not end; and leaves out, and says, a pool of `status disable`.  Reserved addresses, DHCP options, NTP servers and the like are a row each.  See `docs/vendors/fortigate.md` § "What translates well".
+
 ## FortiGate FortiOS
 
 Source: [FortiGate / FortiOS Administration Guide — Networking / DHCP server (`config system dhcp server`)](https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/).
@@ -37,9 +39,10 @@ Notable FortiOS specifics:
 - **Numeric edit IDs** on each pool.
 - **Nested `config ip-range`** for the start/end allocation range.
   Multiple ranges supported; canonical model carries one start/end
-  pair (only first range survives in v1).
-- **DNS server cap**: `dns-server1` / `dns-server2` / `dns-server3`
-  (max three).
+  pair (the largest run of the ranges less the excluded ranges, with
+  a row of the sections not translated for any other).
+- **DNS server cap**: `dns-server1` to `dns-server4` (max four,
+  FortiOS 7.0 and later; 6.2 takes three).
 - **Static reservations**: `config reserved-address` (host-MAC
   bindings).  Not modelled canonically.
 
@@ -96,9 +99,10 @@ class CanonicalDHCPPool(BaseModel):
   Junos render emits CIDR directly.
 - **start_ip / end_ip** — `lossy`.  FortiOS multi-range collapses to
   single canonical pair; Junos can emit multiple named ranges from
-  the same pool but canonical only carries the first.
+  the same pool but canonical only carries the largest run (any
+  other is a row of the sections not translated).
 - **gateway** — `good`.  Direct map.
-- **dns_servers** — `good` in this direction (FortiGate cap of 3
+- **dns_servers** — `good` in this direction (FortiGate cap of four
   fits Junos's unbounded list).
 - **lease_time** — `good`.  Both seconds.
 - **domain_name** — `good`.  Direct map.
@@ -115,6 +119,7 @@ Reverse direction (see also `../juniper_junos_to_fortigate_cli/dhcp.md`):
   owning each pool's network.
 - **start_ip / end_ip** — `lossy`.  Junos multi-range drops to first
   on canonical-side.
-- **dns_servers** — `lossy` because FortiOS caps at 3.
+- **dns_servers** — `lossy` because FortiOS caps at four (a fifth
+  is a `# review:` line).
 
 Disposition for DHCP pools overall: **lossy** in both directions.

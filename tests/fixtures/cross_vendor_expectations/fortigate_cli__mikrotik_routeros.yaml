@@ -253,16 +253,23 @@ per_field_expectation:
       FortiOS interface-bound model versus RouterOS three-section
       form (``/ip pool`` + ``/ip dhcp-server`` + ``/ip dhcp-server
       network``).  The MikroTik codec joins the three on parse and
-      emits the three on render.  Per-field: interface (good after
-      rename mesh), network (good — FortiOS gateway+netmask compose
-      to CIDR), start_ip / end_ip (good — first range only when
-      multiple ranges are present), gateway (good), dns_servers
-      (lossy — FortiOS three-server cap fits inside RouterOS
-      unbounded list, no truncation in this direction), lease_time
-      (good — seconds round-trip), domain_name (good).  Static
-      reservations (FortiOS ``config reserved-address``; RouterOS
-      ``/ip dhcp-server lease``) and DHCP option codes (43, 82) are
-      not modelled canonically and drop.
+      emits two of them on render.  Per-field: interface (lossy —
+      the renderer writes no ``/ip dhcp-server``, which is where a
+      pool's interface lives, so the pool is served on none and
+      comes back with none), network (good — the subnet of the
+      FortiOS netmask around the pool's range), start_ip / end_ip
+      (good — the largest run of the pool's ranges less its excluded
+      ranges; any other run is a row of the sections not
+      translated), gateway (good), dns_servers
+      (good — FortiOS's four fit inside RouterOS's unbounded list),
+      lease_time (lossy — a lease is a setting of the same
+      ``/ip dhcp-server``, so it is not written and comes back as the
+      parser's 86400; FortiOS's own default, where a pool states
+      none, is 604800), domain_name (good).
+      Static reservations (FortiOS ``config reserved-address``;
+      RouterOS ``/ip dhcp-server lease``) and DHCP option codes (43,
+      82) are not modelled canonically: the FortiGate parser makes a
+      row of the sections not translated for each.
     references: [dhcp]
 
   snmp:

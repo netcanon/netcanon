@@ -283,7 +283,9 @@ per_field_expectation:
       lease_time / domain_name all preserved).  FortiGate-only
       advanced pool options (vci-match, ntp-service) never enter
       CanonicalDHCPPool, so they are pre-canonical loss the
-      comparator cannot observe rather than a cross-vendor drop.
+      comparator cannot observe rather than a cross-vendor drop;
+      the FortiGate parser makes a row of the sections not
+      translated for each.
     references: [system_services]
 
   snmp:

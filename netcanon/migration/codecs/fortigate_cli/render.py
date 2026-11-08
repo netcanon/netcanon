@@ -86,6 +86,7 @@ from ...canonical.intent import (
 from ...canonical.transforms import is_every_vlan
 from .._helpers import one_mtu_written, vlan_carriers
 from ..base import RenderError
+from .dhcp_pools import INFINITE_LEASE
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
     _prefix_to_mask,
@@ -1383,7 +1384,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("config system dhcp server")
         for idx, pool in enumerate(tree.dhcp_servers, start=1):
             out.append(f"    edit {idx}")
-            if pool.lease_time:
+            # FortiOS writes a lease that does not end as 0 ("0 means
+            # unlimited"), never as the tree's 0xFFFFFFFF, which is
+            # past its largest lease.
+            if pool.lease_time == INFINITE_LEASE:
+                out.append("        set lease-time 0")
+            elif pool.lease_time:
                 out.append(f"        set lease-time {pool.lease_time}")
             if pool.gateway:
                 out.append(f"        set default-gateway {pool.gateway}")
@@ -1397,8 +1403,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f'        set interface "{_esc(pool.interface)}"'
                 )
-            for i, dns in enumerate(pool.dns_servers[:3], start=1):
+            # The 7.0 and 7.4 CLI references list dns-server1 to 4 (the
+            # 6.2 reference three); none lists a fifth.  The codec
+            # writes FortiOS 7.x.
+            for i, dns in enumerate(pool.dns_servers[:4], start=1):
                 out.append(f"        set dns-server{i} {dns}")
+            if len(pool.dns_servers) > 4:
+                out.append(
+                    "        # review: DNS servers not written: "
+                    + ", ".join(pool.dns_servers[4:])
+                    + " (a FortiOS DHCP server takes four)"
+                )
             if pool.dns_servers:
                 out.append("        set dns-service specify")
             if pool.domain_name:

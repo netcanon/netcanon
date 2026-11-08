@@ -58,7 +58,7 @@ config system dhcp server
 end
 ```
 
-FortiGate DHCP is **interface-bound** (one pool per interface).  `set default-gateway` + `set netmask` define the subnet implicitly (FortiOS derives the network).  DNS caps at three (`dns-server1` / `dns-server2` / `dns-server3`).  Lease time is in seconds.
+FortiGate DHCP is **interface-bound** (one pool per interface).  `set default-gateway` + `set netmask` define the subnet implicitly (FortiOS derives the network).  DNS caps at four (`dns-server1` to `dns-server4`; FortiOS 6.2 takes three), and a fifth and beyond is a `# review:` line.  Lease time is in seconds.
 
 ## Cross-vendor mapping (RouterOS → FortiGate)
 

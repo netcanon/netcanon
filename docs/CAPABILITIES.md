@@ -459,6 +459,21 @@ that ends in a form feed or the like, is refused (see
 [`vendors/fortigate.md`](vendors/fortigate.md) § "A quoted value of
 several lines").  Such a value reaches every target on one line (§ C1).
 
+A DHCP server is read as it hands addresses out: every `config
+ip-range` less every `config exclude-range`, of which the tree keeps
+the largest run (any other is a row of the sections not translated);
+the DNS servers its `dns-service` names (`local`, `default` or
+`specify`; `0.0.0.0` is none); a lease of 604800 seconds where none
+is stated, and `0` as a lease that does not end, which the renderer
+writes back as `0`.  A server of `status disable` is left out and
+said, and one that hands out no address is said and not translated.
+Reserved addresses, DHCP options, NTP, WINS and boot servers and the
+like are a row each, never a value.  The renderer writes four DNS
+servers (`dns-server1` to `dns-server4`, FortiOS 7.0 and later) and a
+fifth and beyond in a `# review:` line (see
+[`vendors/fortigate.md`](vendors/fortigate.md) § "What translates
+well").
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in its `config vrrp` says so, and the redundancy has to be made again on the target.  ⚠️ Up to 0.7.7 the group was declared supported. |
@@ -794,7 +809,9 @@ the output.  An AOS-S DHCP pool or server setting of a switch whose
 DHCP server is not enabled is listed as `disabled: dhcp-server pool
 <name>`, and a pool the server discards, with neither a network and
 a range nor a static binding, as `incomplete: dhcp-server pool
-<name>`: neither served anything.  The banner counts only the sections,
+<name>`: neither served anything.  A FortiGate DHCP server of `status
+disable` is listed as `disabled: config system dhcp server edit <id>`,
+and is not translated.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement

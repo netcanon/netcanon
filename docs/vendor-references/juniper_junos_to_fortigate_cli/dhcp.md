@@ -62,7 +62,8 @@ end
 ```
 
 - **Interface-bound**.
-- **DNS cap at 3** (`dns-server1` / `dns-server2` / `dns-server3`).
+- **DNS cap at 4** (`dns-server1` to `dns-server4`, FortiOS 7.0 and
+  later; 6.2 takes three); a fifth and beyond is a `# review:` line.
 - **Multiple ranges** allowed (multiple `config ip-range / edit N`).
 - **Lease in seconds**.
 
@@ -77,8 +78,8 @@ Canonical surface (`CanonicalDHCPPool`).
 - **start_ip / end_ip** — `lossy`.  Junos multi-range drops to first
   on canonical-side (canonical model has single start/end pair).
 - **gateway** — `good`.
-- **dns_servers** — `lossy`.  FortiOS caps at 3; Junos source with
-  more drops the tail.
+- **dns_servers** — `lossy`.  FortiOS 7.x caps at four; a Junos
+  source with more has the rest written in a `# review:` line.
 - **lease_time** — `good`.  Both seconds.
 - **domain_name** — `good`.
 
@@ -88,6 +89,6 @@ Reverse direction (see also `../fortigate_cli_to_juniper_junos/dhcp.md`):
 
 - **interface** — `good` after rename mesh (FortiGate `port4` ->
   Junos `ge-0/0/4.0`).
-- **dns_servers** — `good` (FortiGate cap of 3 fits Junos).
+- **dns_servers** — `good` (FortiGate cap of four fits Junos).
 
 Disposition for DHCP pools overall: **lossy** in both directions.

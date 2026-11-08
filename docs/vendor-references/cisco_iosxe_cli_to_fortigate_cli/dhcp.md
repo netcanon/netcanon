@@ -97,8 +97,10 @@ class CanonicalDHCPPool(BaseModel):
   spanning `gateway+1` to the broadcast minus 1; operators should
   confirm post-migration.
 - **gateway** — `good`.  Direct map.
-- **dns_servers** — `lossy`.  FortiOS caps at three DNS servers
-  (`dns-server1` through `dns-server3`); Cisco can carry more.
+- **dns_servers** — `lossy`.  FortiOS caps at four DNS servers
+  (`dns-server1` through `dns-server4`, 7.0 and later; 6.2 takes
+  three); Cisco can carry more, and a fifth and beyond is a
+  `# review:` line of the pool.
 - **lease_time** — `good` (with unit-conversion caveat — Cisco
   days versus FortiOS seconds; both codecs handle the unit at
   parse-time).

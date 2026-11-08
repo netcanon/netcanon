@@ -257,8 +257,9 @@ per_field_expectation:
       derives ``set netmask`` from), start_ip / end_ip (good — first
       range only when multiple ranges on RouterOS), gateway (good),
       dns_servers (lossy — RouterOS unbounded list versus FortiOS
-      three-server cap; rare loss in practice), lease_time (good —
-      RouterOS ``1h`` parses to seconds), domain_name (good).  Static
+      7.x's four; a server past the fourth is written in a
+      ``# review:`` line of the pool; rare in practice), lease_time
+      (good — RouterOS ``1h`` parses to seconds), domain_name (good).  Static
       reservations (RouterOS ``/ip dhcp-server lease``) and DHCP
       option codes (43, 82) are not modelled canonically and drop.
       RouterOS ``authoritative=yes/no`` flag has no canonical field;
