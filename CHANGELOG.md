@@ -1349,6 +1349,46 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiGate DHCP server is read as it hands addresses out.**
+  FortiOS states the addresses a server hands out as its `config
+  ip-range` entries less its `config exclude-range` entries
+  (Fortinet's CLI reference, `config system dhcp server`).  The parser
+  took the start and the end of a server's first range and read no
+  exclusion, so a second range was lost and an excluded address was
+  handed out on the target.  It read no `dns-service`, so a server
+  that gives its clients the interface's own address (`local`) or the
+  FortiGate's own DNS servers (`default`) gave them none on the
+  target, an unset `dns-server` (`0.0.0.0`) came out as a DNS server,
+  and a fourth (`dns-server4`, FortiOS 7.0 and later) was not read.  A
+  server that states no lease was given one day, where FortiOS's is
+  604800 seconds, and `lease-time 0` ("0 means unlimited") a lease of
+  no seconds.  A server of `status disable` was translated as one in
+  force, and a server's reserved addresses, DHCP options, NTP, WINS
+  and boot servers were lost with nothing to say so.  The parser now
+  reads every range less every exclusion and keeps the largest run (of
+  two as large, the lower), with a row of the sections not translated
+  for any other; gives a pool the DNS servers its `dns-service` names,
+  with a row where `default` rests on a `config system dns` that does
+  not state both servers (a FortiGate does not print one it has by
+  default); reads an unstated lease as 604800 seconds and `0` as a
+  lease that does not end; reads a pool's network as the subnet its
+  netmask makes around its range, where it read one only from a
+  stated gateway; leaves out a server of `status disable` and says so
+  (`disabled: config system dhcp server edit <id>`); says a server
+  that hands out no address (no range, every address excluded, or
+  `ip-mode usrgrp`) and does not translate it, since a target given a
+  pool with no range hands out its whole network; and makes a row of
+  each setting and table it does not read, by name and never by
+  value.  The renderer writes a lease that does not end as `set
+  lease-time 0`, where it wrote 4294967295, past FortiOS's largest
+  lease, and writes a fourth DNS server as `dns-server4`, where it
+  wrote three; a fifth and beyond is a `# review:` line of the pool.
+  In the cross-mesh audit five `dhcp_servers` cells move: four from
+  FortiGate to Junos are aligned with an expectation that is now
+  `good`, one of which lost part of the pool before, and one from
+  OPNsense to FortiGate now carries the pool whole where its
+  expectation still declares a loss.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_dhcp_pools.py`.
 - **An OPNsense DHCP pool has its network.**  OPNsense keeps a pool
   under its zone (`<dhcpd><lan>`), which serves the subnet of the
   zone's own address, and states no network of its own.  The parser
@@ -5736,6 +5776,15 @@ timestamp if your timezone matters for an audit.
   `operator` group may not exist on the newest Cisco 8000 releases.
   IOS-XE NETCONF writes no local users, and a job onto it with local
   users is `partial` and lists them (see "Fixed").
+- **A DHCP lease that does not end is not established onto Junos or
+  OPNsense.**  The tree holds such a lease as 4294967295 seconds.
+  IOS-XE and EOS write `lease infinite` and FortiOS `set lease-time
+  0`, but Junos writes `maximum-lease-time 4294967295` and OPNsense
+  `<defaultleasetime>4294967295</defaultleasetime>`, numbers neither
+  has been shown to take.  An IOS-XE, EOS or AOS-S `lease infinite`
+  reached them so before, and a FortiOS `lease-time 0` reaches them
+  so now (see "Fixed"), where it was written as no lease and the
+  target's default applied.  RouterOS writes no lease.
 - **AOS-S writes no DHCP pool.**  A pool is read from an AOS-S config
   (see "Fixed"), but an output for AOS-S has a comment for each pool,
   not a `dhcp-server pool` stanza, and the job lists the pool as

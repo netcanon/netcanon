@@ -62,8 +62,9 @@ Notable FortiOS specifics:
 - **`set interface`** binds the pool to a specific FortiGate
   interface; the pool inherits the interface's subnet.
 - **Lease-time in seconds** under `set lease-time`.
-- **DNS server cap** at three (`dns-server1` / `dns-server2` /
-  `dns-server3`).
+- **DNS server cap** at four (`dns-server1` to `dns-server4`, FortiOS
+  7.0 and later; 6.2 takes three).  A fifth and beyond is a
+  `# review:` line of the pool.
 - **Nested `config ip-range`** for the start/end allocation range.
   FortiGate uses positive ranges (no inverse `excluded-address`
   form).

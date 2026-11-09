@@ -11,8 +11,8 @@ so ``CanonicalIntent.domain`` round-tripped to ``""`` after
 ``parse(render(tree))`` -- causing every ``domain -> ''`` drift cell in
 the comparator matrix.
 
-The DHCP-pool ``set domain`` handler at ``parse.py`` ~line 707 targets a
-different field (``CanonicalDHCPPool.domain_name``, the per-pool
+A DHCP pool's ``set domain`` (read in ``fortigate_cli/dhcp_pools.py``)
+targets a different field (``CanonicalDHCPPool.domain_name``, the per-pool
 search-domain) and is unaffected.  Regression guard included below.
 """
 
@@ -105,9 +105,9 @@ class TestRoundTripDomainPreserved:
 
 
 class TestDhcpPoolSetDomainUnchanged:
-    """Regression guard: the pre-existing DHCP-pool ``set domain``
-    handler in ``_apply_system_dhcp_server`` (~``parse.py`` line 707)
-    targets ``CanonicalDHCPPool.domain_name`` -- a different field in
+    """Regression guard: a DHCP pool's ``set domain`` (read in
+    ``fortigate_cli/dhcp_pools.py``) targets
+    ``CanonicalDHCPPool.domain_name`` -- a different field in
     a different scope.  Adding the system-DNS domain read must not
     perturb it."""
 

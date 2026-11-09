@@ -504,18 +504,27 @@ per_field_expectation:
         2. Interface name needs the rename mesh conversion (OPNsense
            ``lan`` -> FortiGate ``internal``).
         3. DNS server cap differs: OPNsense unbounded ↔ FortiOS
-           three-cap (dns-server1/2/3); truncation if OPNsense
-           source has 4+ DNS servers per scope (rare).
+           7.x's four (dns-server1 to dns-server4; 6.2 takes
+           three); a server past the fourth is written in a
+           ``# review:`` line of the pool, not as a setting (rare).
         4. OPNsense ``<maxleasetime>`` has no FortiOS equivalent;
            drops on canonical.
         5. IPv6 DHCP scopes from OPNsense ``<dhcpdv6>`` are not
            modelled in canonical v1; drop on parse.
         6. Static-mappings (per-MAC reservations) are not modelled
            in canonical v1; drop on parse.
-        7. A pool's network is the subnet of its zone's own address;
-           the fortigate_cli parser reads a network back only from
-           ``default-gateway`` and ``netmask``, so a pool with no
-           gateway comes back with none.
+
+      A pool's network is the subnet of its zone's own address, and
+      the fortigate_cli parser reads it back as the subnet of the
+      pool's ``netmask`` around its range, so a pool that states no
+      gateway keeps its network (it came back with none while the
+      parser read the network from ``default-gateway``).  Every
+      cell's pool now comes back whole, and the loss is real all the
+      same: a pool with no range is written with no ``config
+      ip-range``, which hands out no address, and the fortigate_cli
+      parser reads such a server back as no pool and a row of the
+      sections not translated; and a fifth DNS server is the review
+      line of 3.  No committed capture has either.
     references: [opn-dhcp, fgt-dhcp]
 
   snmp:

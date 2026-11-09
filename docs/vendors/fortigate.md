@@ -155,8 +155,24 @@ firewall translation is your primary need, see
   `config system snmp user` with `auth-proto` / `priv-proto` /
   `auth-pwd ENC ...` for v3
 - RADIUS servers — `config user radius` with shared secret
-- DHCP servers — `config system dhcp server` with per-pool subnet,
-  range, gateway, dns-server, options
+- DHCP servers — `config system dhcp server`, read as the server
+  hands addresses out: every `config ip-range` less every `config
+  exclude-range`, of which the tree keeps the largest run (any other
+  is a row of the sections not translated); the DNS servers of
+  `dns-service local` (the interface's own address), `default` (the
+  FortiGate's own, from `config system dns`, with a row where it does
+  not state both — a FortiGate does not print one it has by default)
+  or `specify` (`dns-server1` to `dns-server4`; `0.0.0.0` is none);
+  the lease (604800 seconds where none is stated, and `0` a lease that
+  does not end); subnet, gateway and domain.  A server of `status
+  disable` is left out and said; one that hands out no address from a
+  range (none stated, every one excluded, or `ip-mode usrgrp`) is said
+  and not translated, since a target given a pool with no range hands
+  out its whole network.  Reserved addresses, DHCP options, NTP, WINS
+  and boot servers, a vendor- or user-class match and the like are a
+  row each, never a value.  Written to FortiOS, a pool takes four DNS
+  servers (`dns-server1` to `dns-server4`, as FortiOS 7.0 and later
+  do; 6.2 takes three), and a fifth and beyond is a `review:` line
 - Local admin / user accounts — `config system admin` with
   `set password ENC ...` form-preserving migration.  An admin with no
   password of its own (one that authenticates through a remote

@@ -54,7 +54,8 @@ shape.  Key points:
 - Each `edit` is identified by a numeric ID; references parent via
   `set interface`.
 - `set lease-time` is in seconds.
-- `dns-server1` / `dns-server2` / `dns-server3` — three-cap.
+- `dns-server1` to `dns-server4` — four-cap (FortiOS 7.0 and later;
+  6.2 takes three); a fifth and beyond is a `# review:` line.
 - `<exclude-range>` carves holes out of `<ip-range>`.
 
 ## Cross-vendor mapping (OPNsense -> FortiGate)

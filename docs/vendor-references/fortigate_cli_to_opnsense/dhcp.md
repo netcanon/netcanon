@@ -1,5 +1,7 @@
 # DHCP server: FortiGate FortiOS versus OPNsense
 
+> **Update 2026-11-07 — the FortiGate parser reads a pool as its server hands addresses out.**  This page was written when `fortigate_cli` kept a pool's first `config ip-range` and read no `config exclude-range` and no `dns-service`, so a second range and every exclusion were lost, and nothing said so.  The parser now reads every range less every excluded range (Fortinet's CLI reference, `config system dhcp server`) and keeps the largest run, with a row of the sections not translated for any other; gives a pool the DNS servers its `dns-service` names (the interface's own address for `local`, the FortiGate's own for `default`, `dns-server1` to `dns-server4` for `specify`, `0.0.0.0` being none); reads a lease the pool does not state as FortiOS's 604800 seconds and `0` as one that does not end; and leaves out, and says, a pool of `status disable`.  Reserved addresses, DHCP options, NTP servers and the like are a row each.  See `docs/vendors/fortigate.md` § "What translates well".
+
 Both vendors are DHCP servers (not relay-only) on their primary edge
 roles.  The model shapes diverge in interesting ways.
 
@@ -43,7 +45,8 @@ Notes:
 - Address space derives from the parent interface's IP/netmask;
   the scope itself just declares ranges.
 - `set lease-time` is in seconds.
-- `set dns-server1` / `dns-server2` / `dns-server3` — three-cap.
+- `set dns-server1` to `dns-server4` — four-cap (FortiOS 7.0 and
+  later; 6.2 takes three).
 - Multiple `<ip-range>` edits supported (uncommon but legal).
 - `<exclude-range>` carves holes out of the assigned ranges.
 
@@ -106,9 +109,9 @@ FortiGate -> OPNsense:
   2. The OPNsense codec's capability matrix does NOT currently
      advertise `/dhcp/pool` paths under supported; render is
      unwired pending wire-up.
-- DNS server cap differs: FortiOS three (dns-server1/2/3) ↔
-  OPNsense unbounded.  No truncation in this direction (3 fits in
-  unbounded).
+- DNS server cap differs: FortiOS four (dns-server1 to dns-server4,
+  7.0 and later; 6.2 takes three) ↔ OPNsense unbounded.  No
+  truncation in this direction (four fits in unbounded).
 - Default-gateway preserves cleanly.
 - Lease-time preserves cleanly (both in seconds).
 - FortiGate `<exclude-range>` has no direct OPNsense equivalent
