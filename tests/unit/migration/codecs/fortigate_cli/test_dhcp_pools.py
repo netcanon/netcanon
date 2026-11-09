@@ -16,7 +16,12 @@ import textwrap
 import pytest
 
 from netcanon.migration._tier3_detection import is_left_out_row
-from netcanon.migration.canonical.intent import CanonicalDHCPPool, CanonicalIntent
+from netcanon.migration.canonical.intent import (
+    CanonicalDHCPPool,
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
+)
 from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 from netcanon.migration.codecs.fortigate_cli.dhcp_pools import DEFAULT_LEASE, INFINITE_LEASE
 
@@ -379,3 +384,158 @@ class TestWhatTheRendererWrites:
             end_ip="192.0.2.20", gateway="192.0.2.1", dns_servers=["198.51.100.53"],
             lease_time=3600, domain_name="pool.example",
         ).model_dump()
+
+
+def _tree(*pools: CanonicalDHCPPool, own: str = "192.0.2.1") -> CanonicalIntent:
+    """A tree whose one interface has the address *own* in a /24."""
+    port = CanonicalInterface(
+        name="port2", ipv4_addresses=[CanonicalIPv4Address(ip=own, prefix_length=24)],
+    )
+    return CanonicalIntent(
+        source_vendor="test", source_format="test", hostname="fg",
+        interfaces=[port], dhcp_servers=list(pools),
+    )
+
+
+def _dhcp_block(text: str) -> list[str]:
+    lines = text.splitlines()
+    start = lines.index("config system dhcp server")
+    return lines[start:lines.index("end", start) + 1]
+
+
+def _reviews(text: str) -> list[str]:
+    return [line for line in _dhcp_block(text) if "# review:" in line]
+
+
+class TestWhatFortiOSIsToldOtherwise:
+    """A pool the renderer cannot write as it stands is written as
+    FortiOS takes it, or not at all, and every such pool has a review
+    line in the output and a warning on the job."""
+
+    def test_a_pool_with_no_range_is_given_its_networks_addresses(self) -> None:
+        tree = _tree(CanonicalDHCPPool(
+            interface="port2", network="192.0.2.0/24", gateway="192.0.2.1",
+        ))
+        codec = FortiGateCLICodec()
+        text = codec.render(tree)
+        block = "\n".join(_dhcp_block(text))
+        assert (
+            "        config ip-range\n            edit 1\n"
+            "                set start-ip 192.0.2.1\n                set end-ip 192.0.2.254\n"
+        ) in block
+        assert (
+            "        config exclude-range\n            edit 1\n"
+            "                set start-ip 192.0.2.1\n                set end-ip 192.0.2.1\n"
+        ) in block
+        (review,) = _reviews(text)
+        assert "states no range" in review
+        (warning,) = codec.render_warnings(tree)
+        assert warning.startswith("FortiOS DHCP pool port2: the source states no whole range")
+        (pool,) = codec.parse(text).dhcp_servers
+        assert (pool.start_ip, pool.end_ip, pool.network) == (
+            "192.0.2.2", "192.0.2.254", "192.0.2.0/24",
+        )
+
+    def test_one_end_of_a_range_is_given_the_other(self) -> None:
+        tree = _tree(CanonicalDHCPPool(
+            interface="port2", network="192.0.2.0/24", start_ip="192.0.2.100",
+        ), own="192.0.2.1")
+        text = FortiGateCLICodec().render(tree)
+        (pool,) = FortiGateCLICodec().parse(text).dhcp_servers
+        assert (pool.start_ip, pool.end_ip) == ("192.0.2.100", "192.0.2.254")
+        assert "config exclude-range" not in text
+        (review,) = _reviews(text)
+        assert "one end of its range" in review
+
+    @pytest.mark.parametrize(
+        ("pool", "why"),
+        [
+            (CanonicalDHCPPool(interface="port2"), "it states no range and no network"),
+            (
+                CanonicalDHCPPool(interface="port2", end_ip="192.0.2.9"),
+                "it states one end of its range and no network",
+            ),
+            (
+                CanonicalDHCPPool(interface="port2", network="192.0.2.1/32"),
+                "every address of its range is this output's own",
+            ),
+        ],
+    )
+    def test_a_pool_given_no_range_is_not_written(self, pool: CanonicalDHCPPool, why: str) -> None:
+        kept = CanonicalDHCPPool(
+            interface="port3", network="198.51.100.0/24", start_ip="198.51.100.10",
+            end_ip="198.51.100.20", gateway="198.51.100.1",
+        )
+        tree = _tree(pool, kept)
+        codec = FortiGateCLICodec()
+        text = codec.render(tree)
+        block = _dhcp_block(text)
+        # A server with no range hands out nothing, and (before 7.4.5)
+        # one ahead of another on its interface ends the search there.
+        edits = [n for n, line in enumerate(block) if line.startswith("    edit ")]
+        assert [block[n] for n in edits] == ["    edit 1"]
+        assert "        config ip-range" in block[edits[0]:]
+        (review,) = _reviews(text)
+        assert review.startswith("    # review: a DHCP pool of the source (port2) is not written: ")
+        assert why in review
+        (warning,) = codec.render_warnings(tree)
+        assert why in warning
+        back = codec.parse(text)
+        assert [p.interface for p in back.dhcp_servers] == ["port3"]
+        assert not _pool_rows(back)
+
+    @pytest.mark.parametrize(
+        ("lease", "written"), [(60, 300), (299, 300), (8640001, 8640000), (31536000, 8640000)],
+    )
+    def test_a_lease_fortios_does_not_take_is_the_nearest_one_it_does(
+        self, lease: int, written: int,
+    ) -> None:
+        tree = _tree(CanonicalDHCPPool(
+            interface="port2", network="192.0.2.0/24", start_ip="192.0.2.10",
+            end_ip="192.0.2.20", lease_time=lease,
+        ))
+        codec = FortiGateCLICodec()
+        text = codec.render(tree)
+        assert f"        set lease-time {written}\n" in text
+        assert f"set lease-time {lease}\n" not in text
+        (review,) = _reviews(text)
+        assert f"the source's lease is {lease} seconds" in review
+        (warning,) = codec.render_warnings(tree)
+        assert f"its lease of {lease} seconds is written as {written}" in warning
+        assert codec.parse(text).dhcp_servers[0].lease_time == written
+
+    @pytest.mark.parametrize("lease", [300, 8640000])
+    def test_a_lease_at_a_bound_is_written_as_it_is(self, lease: int) -> None:
+        tree = _tree(CanonicalDHCPPool(
+            interface="port2", network="192.0.2.0/24", start_ip="192.0.2.10",
+            end_ip="192.0.2.20", lease_time=lease,
+        ))
+        text = FortiGateCLICodec().render(tree)
+        assert f"        set lease-time {lease}\n" in text
+        assert not _reviews(text)
+        assert FortiGateCLICodec().render_warnings(tree) == []
+
+    def test_a_pool_with_no_interface_is_said(self) -> None:
+        tree = _tree(CanonicalDHCPPool(
+            network="198.51.100.0/24", start_ip="198.51.100.10", end_ip="198.51.100.20",
+        ))
+        codec = FortiGateCLICodec()
+        text = codec.render(tree)
+        assert "set interface" not in "\n".join(_dhcp_block(text))
+        (review,) = _reviews(text)
+        assert "names no interface for this pool" in review
+        (warning,) = codec.render_warnings(tree)
+        assert warning.startswith("FortiOS DHCP pool 198.51.100.0/24: the source names no interface")
+
+    def test_each_review_line_has_its_warning(self) -> None:
+        tree = _tree(
+            CanonicalDHCPPool(network="203.0.113.0/24", lease_time=60),
+            CanonicalDHCPPool(interface="port2"),
+            CanonicalDHCPPool(
+                interface="port2", network="192.0.2.0/24", start_ip="192.0.2.10",
+                end_ip="192.0.2.20", dns_servers=[f"198.51.100.{n}" for n in range(1, 7)],
+            ),
+        )
+        codec = FortiGateCLICodec()
+        text = codec.render(tree)
+        assert len(_reviews(text)) == len(codec.render_warnings(tree)) == 5

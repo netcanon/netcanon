@@ -599,9 +599,17 @@ per_field_expectation:
       assignment pool`` model flattens on parse to a single
       CanonicalDHCPPool record per pool.  FortiGate's interface-
       bound model (``config system dhcp server / edit N / set
-      interface "X"``) re-renders directly — but the FortiGate
-      render must look up the interface owning each pool's network
-      because Junos pools are not directly interface-scoped.
+      interface "X"``) re-renders directly — but Junos pools are
+      not directly interface-scoped, and a pool the source names no
+      interface for is written with no ``set interface`` and a
+      ``# review:`` line.  A pool with no range (an address-
+      assignment pool states its network and may state no range) is
+      written its network's hosts less the output's own addresses,
+      since a FortiOS server with no ``config ip-range`` hands out
+      no address, and is read back as a range the source did not
+      state; a lease outside FortiOS's 300 to 8640000 seconds is
+      written as the nearest it takes.  Each is a ``# review:``
+      line and a warning of the job.
       Basic pools round-trip; advanced options (option 43 / 60 /
       66 / 150) are not modelled canonically.  Junos's multi-range
       ``range low/high`` form drops to the first range only on

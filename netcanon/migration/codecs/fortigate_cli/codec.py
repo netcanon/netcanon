@@ -40,6 +40,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
+from .dhcp_pools import render_pools
 from .parse import (
     _mask_to_prefix,
     _parse_blocks,
@@ -47,7 +48,7 @@ from .parse import (
     parse_intent,
     without_quoted_values,
 )
-from .render import render_intent
+from .render import _esc, render_intent
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -717,6 +718,16 @@ class FortiGateCLICodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each review line
+        the output has for a DHCP pool: one FortiOS can be given no range
+        for, a lease it does not take, a pool with no interface, DNS
+        servers past the fourth (:func:`.dhcp_pools.render_pools`)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            warnings += render_pools(tree.dhcp_servers, tree.interfaces, _esc)[1]
+        return warnings
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

@@ -72,15 +72,24 @@ end
 Canonical surface (`CanonicalDHCPPool`).
 
 - **interface** — `lossy`.  Junos pools are not directly interface-
-  scoped; FortiGate render must look up interface owning the pool's
-  network.
+  scoped; a pool the source names no interface for is written with
+  no `set interface` and a `# review:` line (a FortiOS DHCP server
+  serves the interface it names).
 - **network** — `good`.  CIDR -> FortiGate netmask + gateway derive.
 - **start_ip / end_ip** — `lossy`.  Junos multi-range drops to first
-  on canonical-side (canonical model has single start/end pair).
+  on canonical-side (canonical model has single start/end pair).  A
+  pool that states no range is written its network's hosts as its
+  `config ip-range`, less the addresses the output gives its own
+  interfaces (`config exclude-range`), with a `# review:` line: a
+  FortiOS server with no range hands out no address.  One with no
+  network, or no address left, is a `# review:` comment in place of
+  its `edit`.
 - **gateway** — `good`.
 - **dns_servers** — `lossy`.  FortiOS 7.x caps at four; a Junos
   source with more has the rest written in a `# review:` line.
-- **lease_time** — `good`.  Both seconds.
+- **lease_time** — `good` within FortiOS's 300 to 8640000 seconds
+  (both seconds); one outside them is written as the nearest FortiOS
+  takes, with a `# review:` line.
 - **domain_name** — `good`.
 
 ## Cross-vendor mapping (FortiGate -> Junos)

@@ -172,7 +172,17 @@ firewall translation is your primary need, see
   and boot servers, a vendor- or user-class match and the like are a
   row each, never a value.  Written to FortiOS, a pool takes four DNS
   servers (`dns-server1` to `dns-server4`, as FortiOS 7.0 and later
-  do; 6.2 takes three), and a fifth and beyond is a `review:` line
+  do; 6.2 takes three), and a fifth and beyond is a `review:` line.
+  A pool the source states no range for, or one end of it (a Junos
+  address-assignment pool, an OPNsense zone with no range), is written
+  its network's hosts as its `config ip-range`, less the addresses the
+  output gives its own interfaces (`config exclude-range`), since a
+  FortiOS server with no range hands out no address; one with no
+  network to take a range from, a range outside its network, or no
+  address left is a `review:` comment in place of its `edit`.  A lease
+  FortiOS does not take (it takes 300 to 8640000 seconds) is written as
+  the nearest it does, and a pool with no interface is written without
+  one.  Each is a `review:` line in the output and a warning of the job
 - Local admin / user accounts — `config system admin` with
   `set password ENC ...` form-preserving migration.  An admin with no
   password of its own (one that authenticates through a remote
