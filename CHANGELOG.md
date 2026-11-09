@@ -1349,6 +1349,76 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An EOS DHCP pool is read and written in EOS's own grammar, and
+  served on its interface.**  Arista documents the DHCP server of EOS
+  as `dhcp server [vrf <name>]`, with a `subnet <prefix>` for each
+  pool and `dhcp server ipv4` under each interface that takes part
+  (Arista's EOS User Manual, "DHCP Server"; the `dhcp-servers`
+  template of Arista's config generator, AVD, prints a server the same
+  way).  The codec read and wrote `ip dhcp pool <name>`, a form Arista
+  documents for no part of the server, with the pool's name where the
+  tree keeps the interface a pool is served on.  So a config in EOS's
+  own grammar had no pool at all, and an EOS pool was served on an
+  interface no output had: onto RouterOS a server whose `interface=`
+  is no interface of the output (it was in the known limitations),
+  onto OPNsense a zone of that name.  The parser now reads the server:
+  a subnet's range, DNS servers, lease and default gateway, and the
+  server's DNS servers, lease and domain where the subnet states
+  none.  It takes a subnet to be served on the interface with `dhcp
+  server ipv4`, in the server's VRF, that holds an address of it --
+  an inference, since Arista does not say which subnet an interface
+  serves.  Where two interfaces qualify the pool is put on the first,
+  with a row; where none does it is served to relayed clients and
+  names no interface.  A `disabled` server, and a subnet EOS disables
+  (a range outside it -- "otherwise the subnet becomes disabled" --
+  ranges that overlap, an address reserved twice, subnets that
+  overlap), are statements not in force: left out and said.  Of
+  several ranges the largest is kept; reservations, TFTP settings,
+  vendor options, client classes and DHCPv6 are rows of the sections
+  not translated; a subnet whose server states no lease either is
+  given one day, with a row that says EOS's own default is not
+  established.  `ip dhcp pool` is not read as a pool, and a row says
+  so.  The renderer writes one `dhcp server` for each VRF of the
+  pools' interfaces, a `subnet` for each pool, and `dhcp server ipv4`
+  under the interface where it holds an address of the pool's
+  network (where a translation puts two source interfaces under one
+  EOS name, a job that is then `partial` for it, under the one that
+  holds it); a domain is written for the server where every subnet
+  of it has that one, and a pool with no whole range is written as what
+  it hands out (`codecs/_dhcp_pools.py`).  What EOS cannot be given as
+  the tree has it -- a domain that differs between subnets, DNS
+  servers past two, a lease that does not end or is longer than 2000
+  days, a range outside the network, a pool with no network or one
+  that overlaps a pool written before it, an interface that holds no
+  address of the pool's network -- is a `! review:` line and a warning
+  of the job.  A flat EOS text whose `dhcp server` stanza is at the
+  margin is refused in words, as the other stanzas are.  The
+  capability matrix loses its lossy `/dhcp-servers/pool/interface`.
+  Eight phase-4 cells of `dhcp_servers` move, on five pairs.  On the
+  synthetic kitchen sinks, EOS to IOS-XE goes from `EXPECTED_LOSSY` to
+  `METHODOLOGY_ISSUE_under` (its pools now come back whole; that a
+  range beginning at the gateway comes back one address shorter is
+  shown on a synthetic config), and EOS to RouterOS, IOS-XE to EOS and
+  RouterOS to EOS go from `METHODOLOGY_ISSUE_under` to
+  `EXPECTED_LOSSY` (a subnet served to relayed clients only comes back
+  as no pool, and pools of differing domains without theirs).
+  FortiGate to EOS, whose expectation YAML said `good`, says `lossy`
+  for the domain now: its kitchen sink goes from `ALIGNED` to
+  `EXPECTED_LOSSY`, and its three captures, which come back as they
+  were, to `METHODOLOGY_ISSUE_under`.  The unevidenced pin of EOS to
+  IOS-XE is raised by one and those of the three others lowered by one
+  each, with the reasons beside them.  The synthetic EOS kitchen sink
+  is in the new grammar.  A subnet EOS disables is listed as
+  `disabled:`, with a reason of its own, and the migrate page's
+  sentence for that word now says it is a server that is not enabled
+  or a subnet EOS disables (it said "a switch", which a FortiGate and
+  a RouterOS device are not).  The ReDoS pin of the `dns-server`
+  pattern goes with the pattern: EOS's `dns server` is read by its
+  words, and a test says so.  Guarded by
+  `tests/unit/migration/codecs/arista_eos/test_dhcp_pool_round_trip.py`,
+  and by `tests/unit/migration/test_a_pool_with_no_range.py`, which
+  counts EOS among the targets told what a pool hands out.
+
 - **A DHCP pool written for RouterOS is served on its interface, and
   a RouterOS pool is read from the server that serves it.**  RouterOS
   spreads a DHCP server over three sections (MikroTik's manual,
@@ -4495,8 +4565,7 @@ timestamp if your timezone matters for an audit.
   port-channel 1` as `port-channel`; an IOS XR `router static` line
   and an AOS-CX `ip route` line still read a spaced interface a word
   at a time (AOS-CX writes `loopback 77` itself, and reads its own
-  line back as distance 77); an EOS DHCP pool's NAME is still where
-  the pool's interface goes; and a Junos output never has the line
+  line back as distance 77); and a Junos output never has the line
   `set interfaces st0 unit 0 family inet` itself — for an empty
   `st0` it has a bare `set interfaces st0` where the config has a
   unit of it too or a routing instance names it, and no line where
@@ -5895,9 +5964,7 @@ timestamp if your timezone matters for an audit.
   `use-radius`, `lease-script`, `add-arp` and the like) are left out
   of every output with no row.  Where a RouterOS 6 server states no
   lease time it is read as 30 minutes, RouterOS 7's default, and a row
-  says the release's own is not established.  An EOS pool's NAME is
-  where the tree keeps its interface, so onto RouterOS it is the
-  server's `interface=`, which no interface of the output is.  An
+  says the release's own is not established.  An
   OPNsense zone whose DHCP is present but not enabled is read as a
   pool, and RouterOS writes its server `disabled=no`.
 - **AOS-S writes no DHCP pool.**  A pool is read from an AOS-S config
@@ -5917,18 +5984,16 @@ timestamp if your timezone matters for an audit.
   answers give for IOS XE 17.6 and later and its configuration guide
   does not: a `review:` line above it says so.  The vendor page says
   it.
-- **A DHCP pool with no whole range is not given one on EOS or
-  Junos.**  FortiOS, RouterOS and OPNsense are written what such a
-  pool hands out (see "Fixed"), and IOS-XE and Junos hand out a pool's
-  network where it states no range.  EOS is written the pool's network
-  and no range, and what an EOS pool with no range hands out is not
-  established.  A pool that states one end of its range is written as
-  its network alone on EOS, the end left out, and on Junos as a
+- **A DHCP pool that states one end of its range is not given a
+  whole one on Junos.**  FortiOS, RouterOS, OPNsense and EOS are
+  written what a pool with no whole range hands out (see "Fixed"), and
+  IOS-XE and Junos hand out a pool's network where it states no range.
+  A pool that states one end of its range is written on Junos as a
   `range` with that end alone (a `low` and no `high`, or the other
-  way), which Junos has not been shown to take.  A pool with
-  neither a range nor a network is written with its options alone on
-  EOS, IOS-XE and Junos, and nothing is said.  Each is pinned in
-  `tests/unit/migration/test_a_pool_with_no_range.py`.
+  way), which Junos has not been shown to take.  A pool with neither a
+  range nor a network is written with its options alone on IOS-XE and
+  Junos, and nothing is said (EOS writes no such pool, and says so).
+  Each is pinned in `tests/unit/migration/test_a_pool_with_no_range.py`.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

@@ -23,9 +23,7 @@ import time
 
 import pytest
 
-from netcanon.migration.codecs.arista_eos.parse import (
-    _DHCP_DNS_SERVER_RE,
-)
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 from netcanon.migration.codecs.arista_eos.parse import (
     _VRF_DESC_RE as _ARISTA_VRF_DESC_RE,
 )
@@ -83,8 +81,15 @@ def _timed_match(rx, text):
 
 
 def test_dns_server_still_captures():
-    m = _DHCP_DNS_SERVER_RE.match("   dns-server   8.8.8.8   1.1.1.1  ")
-    assert m and m.group(1).split() == ["8.8.8.8", "1.1.1.1"]
+    """#124's pattern went with the ``ip dhcp pool`` reader, which EOS
+    does not print: a ``dns server`` line of a ``dhcp server`` subnet
+    is read by its words, and no pattern reads it."""
+    raw = (
+        "interface Vlan10\n   ip address 10.0.0.1/24\n   dhcp server ipv4\n!\n"
+        "dhcp server\n   subnet 10.0.0.0/24\n      range 10.0.0.10 10.0.0.20\n"
+        "      dns server   8.8.8.8   1.1.1.1  \n!\n"
+    )
+    assert AristaEOSCodec().parse(raw).dhcp_servers[0].dns_servers == ["8.8.8.8", "1.1.1.1"]
 
 
 def test_vlan_trunk_allowed_still_captures():
@@ -170,7 +175,6 @@ def test_dell_os10_value_patterns_still_capture():
 @pytest.mark.parametrize(
     ("rx", "attack"),
     [
-        (_DHCP_DNS_SERVER_RE, "   dns-server " + "  " * _REPS),          # #124
         (_VLAN_TRUNK_ALLOWED_RE, "   vlan trunk allowed " + "  " * _REPS),  # #125
         (_NXOS_VRF_DESCRIPTION_RE, "   description " + "  " * _REPS),     # #126
         (_IOSXE_VRF_DESCRIPTION_RE, "   description " + "  " * _REPS),    # #127
@@ -194,7 +198,7 @@ def test_dell_os10_value_patterns_still_capture():
         # value class can overlap its own delimiter.
         (_OS10_IPV6_CIDR_RE, " ipv6 address " + "a" * _REPS + "!"),
     ],
-    ids=["dns-server", "vlan-trunk", "nxos-desc", "iosxe-desc", "static-route",
+    ids=["vlan-trunk", "nxos-desc", "iosxe-desc", "static-route",
          "arista-desc", "fg-config-header", "fg-edit-header", "arista-vrrp-desc",
          "iosxe-vrrp-desc", "aoss-plaintext-auth",
          "os10-desc", "os10-trunk-allowed", "os10-vrrp-vaddr", "os10-ipv6-cidr"],

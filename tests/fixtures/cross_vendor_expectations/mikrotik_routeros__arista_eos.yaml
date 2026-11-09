@@ -310,20 +310,24 @@ per_field_expectation:
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
       server network`` + ``/ip dhcp-server``) joins on parse to one
       CanonicalDHCPPool per enabled ``/ip dhcp-server`` (on its
-      interface, with its lease time) and emits as an Arista
-      ``ip dhcp pool <name>`` block.  Lossy bits: (1) of a RouterOS
-      pool of several ``ranges=`` the tree keeps the largest run, and
-      a row of the sections not translated says so; (2) static reservations
-      (``/ip dhcp-server lease``) have no canonical field and drop
-      to raw_sections; (3) DHCP option codes (option 43, 82) are
-      not modelled canonically; (4) Arista DC leafs typically
-      delegate DHCP to an external service rather than running an
-      on-device pool, so this lift may produce config the operator
-      doesn't want — review banner is appropriate; (5) the EOS
-      ``lease <days> <hours> <minutes>`` holds whole minutes, so a
-      RouterOS lease of seconds (``1m30s``) comes back as the minutes
-      it holds (60 seconds).  Every pool of the corpus comes back as
-      it was; no committed capture shows (5).
+      interface, with its lease time) and emits as a ``subnet`` of
+      Arista's ``dhcp server``, with ``dhcp server ipv4`` under the
+      interface.  Lossy bits: (1) of a RouterOS pool of several
+      ``ranges=`` the tree keeps the largest run, and a row of the
+      sections not translated says so; (2) static reservations
+      (``/ip dhcp-server lease``) have no canonical field and are not
+      translated; (3) DHCP option codes (option 43, 82) are not
+      modelled canonically; (4) Arista DC leafs typically delegate
+      DHCP to an external service rather than running an on-device
+      pool, so this lift may produce config the operator doesn't
+      want; (5) the EOS ``lease time <d> days <h> hours <m> minutes``
+      holds whole minutes, so a RouterOS lease of seconds (``1m30s``)
+      comes back as the minutes it holds (60 seconds); (6) EOS states a
+      domain for its whole server, so where the pools of a server have
+      different domains none is written (a ``! review:`` line and a
+      warning of the job say so), as the synthetic kitchen sink's two
+      pools show.  The pools of the committed captures come back as
+      they were; no committed capture shows (5).
     references: [mikrotik_dhcp]
 
   snmp:

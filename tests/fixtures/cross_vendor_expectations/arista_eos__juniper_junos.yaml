@@ -220,7 +220,7 @@ per_field_expectation:
 
   dhcp_servers:
     disposition: lossy
-    reason: "Arista's 'ip dhcp pool' grammar (host-side scopes, options) doesn't map cleanly to Junos's 'set system services dhcp-local-server' / 'set access address-assignment pool' two-stage model. Basic pools (network + range + gateway + DNS) round-trip; advanced options drift."
+    reason: "Arista's 'dhcp server' grammar (a 'subnet' a pool, served on each interface with 'dhcp server ipv4', the domain a setting of the server, reservations and options) doesn't map cleanly to Junos's 'set system services dhcp-local-server' / 'set access address-assignment pool' two-stage model. Basic pools (network + range + gateway + DNS) round-trip; reservations, TFTP settings and vendor options are rows of the sections not translated."
 
   # ── Tier 2 — SNMP ──
 

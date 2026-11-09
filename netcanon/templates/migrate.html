@@ -1952,8 +1952,9 @@
     // load file marks for deletion; the IOS XR parser: a stanza held
     // for an interface the router does not have; the IOS XR and EOS
     // parsers: a sub-interface that states no tag, which the device
-    // does not bring up; the AOS-S parser: a DHCP pool its switch does
-    // not serve; _tier3_detection.left_out_row makes the row).
+    // does not bring up; the AOS-S, FortiOS, RouterOS and EOS
+    // parsers: a DHCP server or pool the source does not serve;
+    // _tier3_detection.left_out_row makes the row).
     // It is not a section to apply by hand, so it is not counted as
     // one, and the banner says what it is.  Each kind has a sentence
     // of its own: a deactivated statement is not for the target, a
@@ -1971,8 +1972,9 @@
       label = String(label);
       return label.indexOf('untagged: ') === 0;
     }).length;
-    // The AOS-S parser: a DHCP server statement of a switch whose
-    // server is not enabled, and a pool the server discards.
+    // A DHCP statement of a source whose server is not enabled, a
+    // subnet an EOS server disables, and a pool the AOS-S server
+    // discards.
     var unserved = sections.filter(function(label) {
       label = String(label);
       return label.indexOf('disabled: ') === 0 || label.indexOf('incomplete: ') === 0;
@@ -2005,11 +2007,12 @@
     }
     if (unserved) {
       leftOutNotes.push('A line that begins <code>disabled:</code> is a '
-        + 'DHCP pool or setting of a switch whose DHCP server is not '
-        + 'enabled, and one that begins <code>incomplete:</code> is a '
-        + 'DHCP pool the server discards: neither served anything '
-        + 'there, and each is left out here for that reason.  Write it '
-        + 'on the target by hand only if the target is to serve it.');
+        + 'DHCP server, pool or setting the source did not serve: its '
+        + 'server is not enabled, or EOS disables the subnet.  One that '
+        + 'begins <code>incomplete:</code> is a DHCP pool the server '
+        + 'discards.  Neither served anything there, and each is left '
+        + 'out here for that reason.  Write it on the target by hand '
+        + 'only if the target is to serve it.');
     }
     var tier3 = sections.length - leftOut;
     var rows = sections.map(function(label, idx) {

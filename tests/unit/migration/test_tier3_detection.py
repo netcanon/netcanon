@@ -1097,19 +1097,33 @@ class TestArubaAOSSStack:
 
 class TestRowsForStatementsLeftOut:
     """Each kind of statement a device holds and does not run has a
-    row that begins with its own word.  Two readers tell such a row
-    from a section by that word: ``is_left_out_row`` and the migrate
-    page."""
+    row that begins with a word of its own.  Two readers tell such a
+    row from a section by that word: ``is_left_out_row`` and the
+    migrate page."""
 
     _KINDS = sorted(_tier3_detection._LEFT_OUT)
 
+    #: The word a kind's row begins with where it is not the kind's
+    #: name: a subnet an EOS server disables serves nothing, as a
+    #: server that is not enabled does, and is said with the same
+    #: word and a reason of its own.
+    _WORD = {"disabled-subnet": "disabled"}
+
     def test_the_kinds(self) -> None:
-        assert self._KINDS == ["delete", "disabled", "inactive", "incomplete", "preconfigure", "untagged"]
+        assert self._KINDS == [
+            "delete", "disabled", "disabled-subnet", "inactive", "incomplete", "preconfigure",
+            "untagged",
+        ]
+
+    def test_each_kind_gives_its_own_reason(self) -> None:
+        reasons = {_tier3_detection._LEFT_OUT[kind][1] for kind in self._KINDS}
+        assert len(reasons) == len(self._KINDS)
 
     @pytest.mark.parametrize("kind", _KINDS)
     def test_a_row_of_each_kind_is_told_apart(self, kind: str) -> None:
         row = left_out_row(kind, ("interface", "TenGigE0/0/0/12"))
-        assert row.startswith(f"{kind}: interface TenGigE0/0/0/12 (")
+        word = self._WORD.get(kind, kind)
+        assert row.startswith(f"{word}: interface TenGigE0/0/0/12 (")
         assert row.endswith("; not translated)")
         assert is_left_out_row(row)
 

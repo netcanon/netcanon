@@ -243,8 +243,10 @@ per_field_expectation:
     disposition: good
     note: >
       The aruba_aoss parser reads a `dhcp-server pool` where the
-      switch's DHCP server is enabled, and arista_eos writes and reads
-      back `ip dhcp pool`: the 3 pools of the one cell that has any
+      switch's DHCP server is enabled, and arista_eos writes each as a
+      `subnet` of its `dhcp server`, with `dhcp server ipv4` under the
+      interface that serves it, and reads it back: the 3 pools of the
+      one cell that has any
       (`hpe_community_2930f_wc1610_dhcp_server.cfg`) round-trip with
       interface, network, range, gateway, DNS servers and lease intact.
       What the canonical pool has no place for (a second range or

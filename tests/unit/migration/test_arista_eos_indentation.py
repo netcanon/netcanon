@@ -124,6 +124,7 @@ def test_the_captures_are_found() -> None:
 _HEADERS_BY_HAND = (
     (("interface",), 2, False), (("vlan",), 2, True), (("vrf", "instance"), 3, False),
     (("vrf", "definition"), 3, False), (("ip", "dhcp", "pool"), 4, False), (("router", "bgp"), None, False),
+    (("dhcp", "server"), 2, False), (("dhcp", "server", "vrf"), 4, False),
 )
 
 
@@ -411,6 +412,8 @@ FLAT_PAIRS = {
     "vrf instance": ("_VRF_INSTANCE_RE", "vrf instance RED\ndescription red\n"),
     "vrf definition": ("_VRF_INSTANCE_RE", "vrf definition RED\nrd 65000:1\n"),
     "ip dhcp pool": ("_DHCP_POOL_HEADER_RE", "ip dhcp pool USERS\nnetwork 192.0.2.0 255.255.255.0\n"),
+    "dhcp server": ("_DHCP_SERVER_HEADER_RE", "dhcp server\nsubnet 192.0.2.0/24\n"),
+    "dhcp server vrf": ("_DHCP_SERVER_HEADER_RE", "dhcp server vrf RED\nsubnet 192.0.2.0/24\n"),
     "router bgp": ("_ROUTER_BGP_RE", "router bgp 65000\nrouter-id 192.0.2.1\n"),
 }
 

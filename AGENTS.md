@@ -1581,8 +1581,7 @@ tests use these exclusively — never CSS classes or element structure.  See
   Still open, each a change of its own: IOS-XE `ip route ... dhcp`,
   which keeps the keyword in the route's interface so that the line
   is written back to IOS-XE as it was (a canonical route cannot say
-  "from DHCP"); an EOS DHCP pool's NAME where the pool's interface
-  goes; a VTEP's source ADDRESS in `vxlan_vnis[].source_interface`
+  "from DHCP"); a VTEP's source ADDRESS in `vxlan_vnis[].source_interface`
   on AOS-CX and VyOS; and the parsers that still read a spaced name
   a word at a time (NX-OS headers, IOS XR and AOS-CX route lines).
   Guarded by

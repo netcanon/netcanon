@@ -1,4 +1,4 @@
-# DHCP: OPNsense `<dhcpd>` server versus Arista EOS `ip dhcp pool`
+# DHCP: OPNsense `<dhcpd>` server versus Arista EOS `dhcp server`
 
 ## OPNsense
 
@@ -35,38 +35,48 @@ with INTERFACE-KEYED pool blocks:
 
 ## Arista EOS
 
-Source: [Arista EOS User Manual — DHCP and DHCP Relay](https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay)
-Retrieved: 2026-05-01
+Sources: [Arista EOS User Manual — DHCP Server](https://www.arista.com/en/um-eos/eos-dhcp-overview),
+and the `dhcp-servers` template of Arista's config generator, AVD
+(`eos_cli_config_gen`).
+Retrieved: 2026-11-09
 
 ```
-ip dhcp pool USERS
-   network 10.10.10.0 255.255.255.0
-   range 10.10.10.100 10.10.10.200
-   default-router 10.10.10.1
-   domain-name example.net
-   dns-server 10.10.10.1
-   lease 0 12 0
+dhcp server
+   !
+   subnet 10.10.10.0/24
+      !
+      range 10.10.10.100 10.10.10.200
+      dns server 10.10.10.1
+      lease time 0 days 2 hours 0 minutes
+      default-gateway 10.10.10.1
+!
+interface Ethernet2
+   no switchport
+   ip address 10.10.10.1/24
+   dhcp server ipv4
 ```
 
-- Named-pool form (`ip dhcp pool <name>`).
-- `network` accepts dotted-mask or CIDR forms.
-- `range` is the allocatable window.
-- `lease <days> <hours> <minutes>` triple; canonical converts
-  to seconds.
+- One server a VRF (`dhcp server [vrf <name>]`), a `subnet <prefix>`
+  for each pool, and `dhcp server ipv4` under each interface that
+  serves one.  A domain is a setting of the whole server.
+- Up to two DNS servers a subnet; a lease is days, hours and
+  minutes, of at most 2000 days (AVD's schema).
+- See [`../arista_eos_to_opnsense/dhcp.md`](../arista_eos_to_opnsense/dhcp.md)
+  for the grammar in full.
 
 ## Cross-vendor mapping (OPNsense -> Arista EOS)
 
 Canonical fields covered (`CanonicalDHCPPool`).
 
-- `dhcp_servers`: **lossy** — OPNsense source populates
-  `CanonicalIntent.dhcp_servers` with one record per zone
-  interface carrying a `<dhcpd>` block (interface, range,
-  gateway, dns_servers, lease_time, domain_name).  Arista
-  target accepts `ip dhcp pool` blocks via the standard
-  Cisco-style grammar but the network / mask must be SYNTHESISED
-  from the canonical `network` field (which OPNsense parse
-  populates by computing it from the zone interface's IP +
-  subnet).  Lease-time conversion (seconds ↔ d/h/m) is
-  mechanical.  OPNsense codec does not currently advertise
-  `/dhcp/pool` on its capability matrix; cross-pair render is
-  partial pending wire-up.
+- `dhcp_servers`: **supported** — an OPNsense pool is on the device
+  its zone is assigned to, with the subnet of the zone's address as
+  its network.  The EOS output writes it as a `subnet` of the server
+  of that interface's VRF, with `dhcp server ipv4` under the
+  interface, and reads the pool's interface back from it.  What EOS
+  cannot be given as the tree has it is a `! review:` line in the
+  server and a warning of the job: a domain that not every subnet of
+  the server has, DNS servers past two, a lease that does not end or
+  is longer than 2000 days, a range outside the network, an interface
+  that holds no address of the pool's network.  Lease-time conversion
+  (seconds ↔ days / hours / minutes) is mechanical, a minute at the
+  finest.

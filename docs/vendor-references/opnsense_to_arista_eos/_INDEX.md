@@ -31,7 +31,7 @@ The asymmetry from the forward direction:
 | `interfaces.md` | OPNsense zone-label `<wan>` / `<lan>` / `<optN>` mapped to BSD `<if>` versus Arista flat `Ethernet<N>` / `Vlan<N>` / `Loopback<N>` / `Port-Channel<N>`. |
 | `vlans.md` | OPNsense VLAN-as-tagged-sub-interface versus Arista per-port `switchport` (transposed onto `CanonicalVlan` lists). |
 | `static_routes.md` | OPNsense two-block `<gateways>` + `<staticroutes>` model versus Arista flat `ip route`. |
-| `dhcp.md` | OPNsense `<dhcpd>` interface-keyed pool versus Arista named `ip dhcp pool`. |
+| `dhcp.md` | OPNsense `<dhcpd>` interface-keyed pool versus Arista `dhcp server` (a `subnet` a pool, served on each interface with `dhcp server ipv4`). |
 | `snmp.md` | OPNsense `<snmpd>` round-trips v1/v2c; SNMPv3 USM lives in plugin's snmpd.conf and is not_applicable here. |
 | `local_users.md` | OPNsense bcrypt versus Arista `$1$` / `$6$` crypt forms; cross-vendor hash incompatibility. |
 | `radius.md` | OPNsense `<authserver>` versus Arista flat `radius-server host` form. |

@@ -9,7 +9,8 @@ SNMP (community / location / contact / trap-host / v3 user), local
 users, RADIUS servers, VRF instances, VLANs, interfaces (with
 IPv4/IPv6 incl. link-local scope + ``secondary`` trailer, VRF
 binding, switchport mode, LAG membership, MTU, shutdown), LAG stub
-stanzas, DHCP server pools (``ip dhcp pool`` family — Cluster E.1-A),
+stanzas, the DHCP server (``dhcp server [vrf <name>]`` and an
+interface's ``dhcp server ipv4``: :mod:`.dhcp_pools`),
 ``interface Vxlan1`` (with ``vxlan source-interface`` + ``vxlan
 udp-port`` + per-VNI mappings + L3-VNI mappings for VRF Type-5),
 ``router bgp <asn>`` blocks (for L3 VRF RD/RT and EVPN MAC-VRF per-
@@ -28,7 +29,6 @@ one-line delegator to :func:`render_intent`.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from typing import Any
 
@@ -66,6 +66,7 @@ from .._helpers import (
     wants_no_untagged_vlan,
 )
 from ..base import RenderError
+from .dhcp_pools import render_pools
 
 # Arista-local emit-form vocabulary: maps the algorithm tokens
 # emitted by :func:`classify_hash` to the matching ``secret <N>``
@@ -115,26 +116,6 @@ _IS_ARISTA_PHYSICAL_PORT_RE = re.compile(
     r"|Vxlan\d+"                      # Vxlan1 (always emitted with body)
     r")$"
 )
-
-
-def _cidr_to_dotted_mask(cidr: str) -> tuple[str, str]:
-    """Split a CIDR string into ``(network, dotted_mask)`` for EOS emit.
-
-    Used by the DHCP-pool render to produce the dotted-mask form of
-    ``network <ip> <netmask>``.  EOS also accepts the CIDR form, but
-    the dotted-mask spelling is the older + universally accepted
-    surface (cisco_iosxe_cli render uses the same convention via
-    its own ``_cidr_to_dest_mask`` helper).
-
-    Returns ``("", "")`` for malformed input — caller skips emit.
-    """
-    if "/" not in cidr:
-        return "", ""
-    try:
-        net = ipaddress.IPv4Network(cidr, strict=False)
-    except (ipaddress.AddressValueError, ValueError):
-        return "", ""
-    return str(net.network_address), str(net.netmask)
 
 
 def _radius_key_text(key: str) -> str:
@@ -513,71 +494,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
         out.append("!")
 
-    # --- DHCP server pools (Cluster E.1-A, Tier 2) ---
-    # Reference: Arista EOS User Manual, "DHCP and DHCP Relay"
-    # (https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay).
-    # Pool stanza form:
-    #
-    #   ip dhcp pool <name>
-    #      network <ip> <netmask>
-    #      range <start_ip> <end_ip>
-    #      default-router <ip>
-    #      dns-server <ip> [<ip> ...]
-    #      domain-name <name>
-    #      lease <days> [<hours>] [<minutes>]
-    #
-    # Pool-name resolution mirrors the cisco_iosxe_cli render policy:
-    # prefer the canonical ``interface`` field (which carries the
-    # operator-chosen pool name on Cisco-derived sources), fall back
-    # to a network-derived placeholder.  Slashes in the network
-    # CIDR are sanitised to underscores so the bare name parses
-    # cleanly through EOS's tokenizer.
-    if tree.dhcp_servers:
-        for pool in tree.dhcp_servers:
-            pool_name = (
-                pool.interface or pool.network or "POOL"
-            ).replace("/", "_")
-            out.append(f"ip dhcp pool {pool_name}")
-            if pool.network:
-                net, mask = _cidr_to_dotted_mask(pool.network)
-                if net and mask:
-                    out.append(f"   network {net} {mask}")
-            if pool.start_ip and pool.end_ip:
-                out.append(f"   range {pool.start_ip} {pool.end_ip}")
-            if pool.gateway:
-                out.append(f"   default-router {pool.gateway}")
-            if pool.dns_servers:
-                # EOS accepts space-separated DNS servers on one line
-                # (Cisco-derived grammar); emit as a single line.
-                out.append(
-                    "   dns-server " + " ".join(pool.dns_servers)
-                )
-            if pool.domain_name:
-                out.append(f"   domain-name {pool.domain_name}")
-            if pool.lease_time and pool.lease_time != 86400:
-                if pool.lease_time == 0xFFFFFFFF:
-                    out.append("   lease infinite")
-                else:
-                    days = pool.lease_time // 86400
-                    rem = pool.lease_time - days * 86400
-                    hours = rem // 3600
-                    rem -= hours * 3600
-                    minutes = rem // 60
-                    # EOS accepts and round-trips the d/h/m triple
-                    # even when one or two components are zero
-                    # (sample doc: ``lease 0 12 0`` for 12-hour
-                    # leases).  Always emit the full triple so a
-                    # 12-hour lease doesn't render as bare ``lease 0``.
-                    # But a sub-minute (non-zero) lease floors to
-                    # ``lease 0 0 0`` — invalid + reparses to 0 then
-                    # drifts to the 86400 default; floor it to 1 minute
-                    # (v0.4.0 self-audit, same fix as cisco_iosxe_cli).
-                    if days == 0 and hours == 0 and minutes == 0:
-                        minutes = 1
-                    out.append(
-                        f"   lease {days} {hours} {minutes}"
-                    )
-            out.append("!")
+    # --- DHCP server (Tier 2): a ``dhcp server [vrf <name>]`` for each
+    #     VRF of the pools, a ``subnet`` for each pool, and the
+    #     interfaces that take ``dhcp server ipv4`` below
+    #     (:mod:`.dhcp_pools`, which cites Arista's manual and AVD).
+    dhcp = render_pools(tree.dhcp_servers, [*tree.interfaces, *synth_svis])
+    out.extend(dhcp.lines)
 
     # --- VRF instances (GAP 6) — declare every canonical L3 VRF
     #     via ``vrf instance <name>``.  RD + RTs emit later
@@ -838,6 +760,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 if addr.is_secondary:
                     plain_line += " secondary"
                 out.append(plain_line)
+        # The interface serves the DHCP subnet it holds an address of.
+        if iface.name.lower() in dhcp.serving:
+            out.append("   dhcp server ipv4")
         # GAP-EVPN-3: IPv6 addresses.  Link-local form re-emits
         # the explicit ``link-local`` keyword; global form emits
         # plain ``ipv6 address X/Y``.  Wave C IPv6 VARP (EOS 4.30+)

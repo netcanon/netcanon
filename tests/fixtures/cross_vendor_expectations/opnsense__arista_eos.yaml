@@ -110,8 +110,8 @@ meta:
       retrieved: "2026-05-01"
     - id: arista-dhcp-cg
       path: docs/vendor-references/opnsense_to_arista_eos/dhcp.md
-      title: "Arista EOS User Manual — DHCP and DHCP Relay"
-      source_url: "https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay"
+      title: "Arista EOS User Manual — DHCP Server"
+      source_url: "https://www.arista.com/en/um-eos/eos-dhcp-overview"
       retrieved: "2026-05-01"
     - id: arista-snmp-cg
       path: docs/vendor-references/opnsense_to_arista_eos/snmp.md
@@ -448,15 +448,17 @@ per_field_expectation:
       OPNsense source populates ``CanonicalIntent.dhcp_servers``
       with one record per zone interface carrying a ``<dhcpd>``
       block (interface, range, gateway, dns_servers, lease_time,
-      domain_name).  Arista target accepts ``ip dhcp pool <name>``
-      blocks via the standard Cisco-style grammar — Arista
-      capability matrix does not currently advertise
-      ``/dhcp/pool``, so cross-pair render is partial.  Pool
-      network / mask must be SYNTHESISED from the canonical
-      ``network`` field (which OPNsense parse populates by
-      computing it from the zone interface's IP + subnet).
-      Lease-time conversion (seconds ↔ Arista d/h/m triple) is
-      mechanical.
+      domain_name).  Arista writes each as a ``subnet`` of its ``dhcp
+      server``, with ``dhcp server ipv4`` under the interface the
+      zone's device becomes, and reads it back there.  Pool network /
+      mask is SYNTHESISED from the canonical ``network`` field (which
+      OPNsense parse populates by computing it from the zone
+      interface's IP + subnet).  EOS states a domain for its whole
+      server, so where the pools of a server have different domains
+      none is written, and DNS servers past two are not written; each
+      is a ``! review:`` line and a warning of the job.  Lease-time
+      conversion (seconds ↔ Arista days / hours / minutes) is
+      mechanical, a minute at the finest.
     references: [opnsense-dhcp, arista-dhcp-cg]
 
   snmp:

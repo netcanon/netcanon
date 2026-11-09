@@ -84,11 +84,13 @@ def test_a_pool_with_no_range_and_no_interface_walks_neither():
     assert "/dhcp-servers/pool/interface" not in walked
 
 
-def test_where_a_pool_is_served_is_declared_lossy():
-    # EOS's output names the pool after its interface and says nothing
-    # more.
+def test_eos_writes_where_a_pool_is_served():
+    # EOS writes `dhcp server ipv4` under the interface that serves a
+    # pool's subnet, and its parser reads the pool's interface from it
+    # (tests/unit/migration/codecs/arista_eos/test_dhcp_pool_round_trip.py):
+    # where a pool is served is no longer declared lossy.
     caps = get_codec("arista_eos").capabilities
-    assert caps.classify("/dhcp-servers/pool/interface") == "lossy"
+    assert caps.classify("/dhcp-servers/pool/interface") == "supported"
 
 
 @pytest.mark.parametrize(

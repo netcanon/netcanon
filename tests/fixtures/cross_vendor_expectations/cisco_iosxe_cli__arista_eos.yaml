@@ -195,19 +195,22 @@ per_field_expectation:
     reason: >
       Cisco's ``ip dhcp pool <name>`` syntax with ``network``,
       ``default-router``, ``dns-server``, ``lease`` lines is written by
-      the arista_eos renderer as an ``ip dhcp pool`` named after the
-      pool's interface, which the arista_eos parser reads back as the
-      interface: no line of the output says that the interface serves
-      the pool (``/dhcp-servers/pool/interface`` is lossy on EOS).  The
-      network, range, router, DNS servers and lease round-trip.  The
-      IOS-XE CLI parser reads a pool as the server hands it out: its
-      network less the ``ip dhcp excluded-address`` lines of its VRF,
-      the device's own addresses and the pool's default router, on the
-      interface whose subnet is the pool's network (none for a pool that
-      serves clients a relay forwards); the renderer writes a range as
-      the exclusions on either side of it.  A pool an exclusion cuts in
-      two keeps its larger run, and a manual binding or an option is a
-      row of the sections not translated.
+      the arista_eos renderer as a ``subnet`` of the ``dhcp server`` of
+      its interface's VRF, with ``dhcp server ipv4`` under the
+      interface, and read back on it.  EOS states a domain for its
+      whole server, so where the pools of a server do not all have one
+      domain none is written (a ``! review:`` line and a warning of the
+      job say so): the synthetic kitchen sink's pool comes back without
+      its domain.  The network, range, router, DNS servers (up to two)
+      and lease round-trip.  The IOS-XE CLI parser reads a pool as the
+      server hands it out: its network less the ``ip dhcp
+      excluded-address`` lines of its VRF, the device's own addresses
+      and the pool's default router, on the interface whose subnet is
+      the pool's network (none for a pool that serves clients a relay
+      forwards); the renderer writes a range as the exclusions on
+      either side of it.  A pool an exclusion cuts in two keeps its
+      larger run, and a manual binding or an option is a row of the
+      sections not translated.
 
   snmp:
     disposition: lossy

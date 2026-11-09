@@ -2031,6 +2031,7 @@ RUNS_OF_ENTRIES: dict[tuple[str, str, str], str] = {
     ("_helpers.py", "merge_trunk_allowed", "vlan_id_run(1, 4094)"): "charged",
     ("_helpers.py", "merge_trunk_allowed", "VLAN_IDS[1:]"): "charged",
     ("arista_eos/parse.py", "_expand_vlan_list", "VLAN_IDS[a_i:b_i + 1]"): "charged",
+    ("arista_eos/dhcp_pools.py", "<module>", "range(33)"): "the 33 IPv4 masks, made once",
     ("aruba_aoscx/parse.py", "_on_line", "vlan_id_run(1, 4094)"): "charged",
     ("aruba_aoss/parse.py", "_expand_port_range", "range(num_lo, num_hi + 1)"): "charged",
     ("juniper_junos/parse.py", "_resolve_vlan_member_to_vids", "vlan_id_run(lo, hi)"): "charged",

@@ -385,11 +385,11 @@ per_field_expectation:
   dhcp_servers:
     disposition: not_applicable
     note: >
-      Arista has DHCP-server support but the arista_eos codec doesn't
-      currently parse `ip dhcp pool` blocks; intent.dhcp_servers is
-      always empty on this direction — nothing to render.  cisco_iosxe
-      also has no first-class OpenConfig DHCP-server model, so the
-      field stays not_applicable bidirectionally.
+      The arista_eos parser reads EOS's DHCP server (``dhcp server``
+      and its ``subnet`` blocks; of the committed inputs only the
+      synthetic kitchen sink has one), but cisco_iosxe has no
+      first-class OpenConfig DHCP-server model and writes no pool, so
+      the field stays not_applicable bidirectionally.
 
   snmp:
     disposition: unsupported

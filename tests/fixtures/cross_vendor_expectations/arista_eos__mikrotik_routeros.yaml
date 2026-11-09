@@ -315,25 +315,23 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Arista's per-VLAN ``ip dhcp pool <name>`` block (when
-      configured — DC leafs typically delegate DHCP to a separate
-      service) maps to RouterOS's three-section form (``/ip pool``
-      + ``/ip dhcp-server network`` + ``/ip dhcp-server``).  The
-      MikroTik codec joins on parse and emits the three on render.
-      Lossy bits: (1) Arista's ``ip helper-address`` relay form
-      (more common than server pools on DC leafs) is not modelled
-      canonically and drops on parse; (2) Cisco/Arista ``ip dhcp
-      excluded-address`` multi-fragment exclusions compress to a
-      single start_ip/end_ip range on canonical; (3) static
-      reservations and DHCP option codes (option 43 / 82) are not
-      modelled; (4) the arista_eos parser puts a pool's NAME where its
-      interface goes (arista_eos declares ``/dhcp-servers/pool/
-      interface`` lossy), so the pool's ``/ip dhcp-server`` is written
-      on an interface of that name (``ip dhcp pool users`` ->
-      ``interface=users``), which the output defines only where an
-      interface is called that.  The round trip reads the name back,
-      so no committed capture shows (4).  Most Arista DC leaf
-      deployments use external DHCP servers anyway; this field is
+      A ``subnet`` of Arista's ``dhcp server`` (when configured -- DC
+      leafs typically delegate DHCP to a separate service) maps to
+      RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-server
+      network`` + ``/ip dhcp-server``).  The MikroTik codec joins on
+      parse and emits the three on render.  Lossy bits: (1) Arista's
+      ``ip helper-address`` relay form (more common than server pools
+      on DC leafs) is not modelled canonically and drops on parse; (2)
+      of an EOS subnet of several ``range`` lines the tree keeps the
+      largest, and a row of the sections not translated says so; (3)
+      reservations and vendor options are not modelled; (4) the
+      arista_eos parser takes a subnet to be served on the interface
+      with ``dhcp server ipv4`` that holds an address of it, so a
+      subnet served to relayed clients only names no interface, and
+      RouterOS writes such a pool with no ``/ip dhcp-server``, under a
+      ``# review:`` line: it comes back as no pool, as the synthetic
+      kitchen sink's subnet ``10.100.20.0/24`` does.  Most Arista DC
+      leaf deployments use external DHCP servers anyway; this field is
       typically empty on ``CanonicalIntent`` after Arista parse.
 
   snmp:

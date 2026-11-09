@@ -123,8 +123,8 @@ meta:
       retrieved: "2026-05-01"
     - id: arista-dhcp-cg
       path: docs/vendor-references/arista_eos_to_opnsense/dhcp.md
-      title: "Arista EOS User Manual — DHCP and DHCP Relay"
-      source_url: "https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay"
+      title: "Arista EOS User Manual — DHCP Server"
+      source_url: "https://www.arista.com/en/um-eos/eos-dhcp-overview"
       retrieved: "2026-05-01"
     - id: arista-snmp-cg
       path: docs/vendor-references/arista_eos_to_opnsense/snmp.md
@@ -518,19 +518,18 @@ per_field_expectation:
   dhcp_servers:
     disposition: lossy
     reason: >
-      Arista's named ``ip dhcp pool USERS`` form maps to
-      OPNsense's INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.
-      Pool network / mask is INFERRED from the zone interface on
-      OPNsense, not stored on the pool record.  Lease time units
-      differ (Arista d/h/m triple ↔ OPNsense seconds).  The
-      ``CanonicalDHCPPool.interface`` field carries the operator-
-      chosen pool name on Arista but the device of the pool's zone
-      on OPNsense, so an Arista pool is written under a zone the
-      OPNsense output has no interface for, and is left out when
-      that output is read back: bind the pool by hand.
-      OPNsense codec does not currently advertise ``/dhcp/pool``
-      in its capability matrix; cross-pair render is partial
-      pending wire-up.
+      A ``subnet`` of Arista's ``dhcp server`` maps to OPNsense's
+      INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.  Pool network /
+      mask is INFERRED from the zone interface on OPNsense, not stored
+      on the pool record.  Lease time units differ (Arista days /
+      hours / minutes ↔ OPNsense seconds).  The arista_eos parser takes
+      a subnet to be served on the interface with ``dhcp server ipv4``
+      that holds an address of it, and OPNsense writes the pool under
+      that interface's zone; a subnet served to relayed clients only
+      names no interface, and is written under ``<lan>``, a zone the
+      output has only if an interface is called that, so it is left
+      out when the output is read back, as the synthetic kitchen
+      sink's subnet ``10.100.20.0/24`` is: bind the pool by hand.
     references: [opnsense-dhcp, arista-dhcp-cg]
 
   snmp:
