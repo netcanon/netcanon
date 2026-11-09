@@ -69,9 +69,10 @@ central-server topology instead.
 
 ### Specific lossy points
 
-- **RouterOS pools with multiple `ranges=` segments** — the codec
-  collapses to a single start_ip/end_ip range on canonical; the
-  gap surfaces in `raw_sections` for operator review.
+- **RouterOS pools with multiple `ranges=` segments** — the tree
+  holds one run of a pool: the parser keeps the largest (the lower
+  of two as large), and the others are a row of the sections not
+  translated.  Up to 0.7.7 it kept the first, and nothing said so.
 - **Static reservations** (`/ip dhcp-server lease`) — not
   modelled; drop to `raw_sections`.
 - **DHCP options** (`option-set`, `dhcp-option-set`) — not

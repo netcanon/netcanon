@@ -77,6 +77,16 @@ Junos -> OPNsense:
   Vendor-option / DHCP-attributes-hierarchy fidelity is unsupported
   — canonical model carries only `network / start_ip / end_ip /
   gateway / dns_servers / lease_time / domain_name`.
+- A Junos pool that states no range hands out every host of its
+  network.  OPNsense's ISC DHCP plugin writes a `range` line for
+  each zone it serves (`opnsense/plugins`,
+  `net/isc-dhcp/src/etc/inc/plugins.inc.d/dhcpd.inc`), and a zone
+  takes one range, so such a pool, or one that states one end, is
+  written a `<range>` of its network's hosts less the addresses the
+  output gives its own interfaces (the largest run, where they split
+  it), with a review comment; one with no network, or no address
+  left, is a review comment in place of its zone where OPNsense
+  would serve the zone.
 - The juniper_junos codec does not currently advertise
   `/dhcp/pool` in its `supported` capability matrix; cross-pair
   parse path may be empty (no canonical pool entries derived).

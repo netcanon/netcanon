@@ -63,7 +63,13 @@ emits the three on render.  Static reservations live under
   RouterOS `/ip dhcp-server network add address=X/N`.
 * `dhcp_servers[].start_ip` / `end_ip`: Junos `range R1 low / high` ->
   RouterOS `/ip pool add ranges=X-Y`.  Direct mapping for single-
-  range pools.
+  range pools.  A pool that states no range hands out every host of
+  its network (Junos), and RouterOS takes no `/ip pool` without its
+  `ranges` (mandatory, MikroTik's `/ip pool` reference), so such a
+  pool, or one that states one end, is written `ranges=` its
+  network's hosts less the addresses the output gives its own
+  interfaces, with a `# review:` line; one with no network, or no
+  address left, is a `# review:` line in place of its `add`.
 * `dhcp_servers[].gateway`: Junos `dhcp-attributes router` ->
   RouterOS `/ip dhcp-server network add gateway=`.
 * `dhcp_servers[].dns_servers`: Junos's per-line `name-server` ->

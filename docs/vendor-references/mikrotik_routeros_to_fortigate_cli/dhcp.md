@@ -77,7 +77,7 @@ CanonicalDHCPPool.domain_name: str
 
 - **interface** — `good`.  RouterOS `interface=bridge1` -> FortiOS `set interface "port4"` after the rename mesh.
 - **network** — `good`.  RouterOS `address=10.0.0.0/24` populates the canonical CIDR; FortiOS render derives `set netmask` from the prefix length and infers the network from `set default-gateway`.
-- **start_ip / end_ip** — `good`.  RouterOS `ranges=10.0.0.100-10.0.0.200` parses to canonical start/end; FortiOS render emits `config ip-range / edit 1 / set start-ip / set end-ip`.  RouterOS multi-range pools (`ranges=A-B,C-D,...`) are uncommon and the MikroTik codec collapses them to the first range; multi-range FortiOS sub-table renders the first range only.
+- **start_ip / end_ip** — `good`.  RouterOS `ranges=10.0.0.100-10.0.0.200` parses to canonical start/end; FortiOS render emits `config ip-range / edit 1 / set start-ip / set end-ip`.  RouterOS multi-range pools (`ranges=A-B,C-D,...`) are uncommon; the tree holds one run of a pool, so the MikroTik parser keeps the largest and lists the others in a row of the sections not translated (up to 0.7.7 it kept the first, and nothing said so), and FortiOS render writes that one run.
 - **gateway** — `good`.  RouterOS `gateway=10.0.0.1` -> FortiOS `set default-gateway 10.0.0.1`.
 - **dns_servers** — `lossy`.  RouterOS `dns-server=10.0.0.1,1.1.1.1,8.8.8.8` (unbounded) versus FortiOS three-server cap.  RouterOS-source lists with four+ entries lose the tail on FortiGate render — typical RouterOS deployments carry only two DNS servers, so the loss is uncommon in practice.
 - **lease_time** — `good`.  RouterOS `lease-time=1h` parses to canonical seconds (`3600`); FortiOS render emits `set lease-time 3600`.

@@ -509,6 +509,18 @@ warning of the job (see [`vendors/fortigate.md`](vendors/fortigate.md)
 
 #### `mikrotik_routeros` (bidirectional)
 
+A DHCP pool the source states no range for, or one end of it, is
+written `ranges=` its network's hosts, less the addresses the output
+gives its own interfaces (a run each side of one that falls inside),
+since RouterOS takes no `/ip pool` without its `ranges` (MikroTik's
+manual marks it mandatory); one RouterOS can be given no range for (no
+network, a range outside it, no address left) is a `# review:` line in
+place of its `add`.  Each is a `# review:` line and a warning of the
+job.  As a source, a pool whose `ranges=` states more than one run
+keeps the largest, and the others are a row of the sections not
+translated; so is a piece of it in a form the parser does not read
+(see [`vendors/mikrotik_routeros.md`](vendors/mikrotik_routeros.md)).
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |
@@ -533,6 +545,18 @@ warning of the job (see [`vendors/fortigate.md`](vendors/fortigate.md)
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  RouterOS writes `group=full` at privilege 15, `group=write` from 10 to 14 and `group=read` below 10, chosen from the privilege level from any source, a RouterOS one included: a custom group is read as privilege 1 and written `read`. |
 
 #### `opnsense` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
+
+A DHCP pool the source states no range for, or one end of it, is
+written a `<range>` of its network's hosts, less the addresses the
+output gives its own interfaces, and of the runs that leaves the
+largest, since a zone takes one range and OPNsense writes a `range`
+line for every zone it serves; one OPNsense can be given no range for
+(no network, a range outside it, no address left) is a `<!-- review:
+-->` comment in place of its zone, where its zone's interface has an
+IPv4 address in the output (OPNsense serves no zone whose interface
+has none, and such a zone is written as it stands).  Each is a review
+comment and a warning of the job (see
+[`vendors/opnsense.md`](vendors/opnsense.md)).
 
 | Path | Class | Reason |
 |---|---|---|

@@ -77,8 +77,9 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
+from .dhcp_pools import render_pools
 from .parse import parse_intent
-from .render import render_intent
+from .render import _quote_if_needed, render_intent
 
 __all__ = ["MikroTikRouterOSCodec"]
 
@@ -697,6 +698,18 @@ class MikroTikRouterOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each review line
+        the output has for a DHCP pool: one that states no whole range,
+        or one RouterOS can be given no range for
+        (:func:`.dhcp_pools.render_pools`)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            warnings += render_pools(
+                tree.dhcp_servers, tree.interfaces, _quote_if_needed,
+            )[1]
+        return warnings
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

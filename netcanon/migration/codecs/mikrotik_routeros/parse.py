@@ -54,6 +54,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from ...limits import ticked
+from .._dhcp_pools import as_int, as_text
 from .._helpers import Uniques, a_few_named, a_tag
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -208,7 +209,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # Other sections silently ignored — not in scope yet.
 
     for pool_lines in deferred_ip_pool:
-        _parse_ip_pool(pool_lines, intent)
+        intent.dropped_tier3_sections.extend(_parse_ip_pool(pool_lines, intent))
 
     # VRRP post-pass — materialise scratch records into
     # CanonicalVRRPGroup entries on the parent interface.  Iterate in
@@ -1484,7 +1485,26 @@ def _parse_dhcp_server_network(
         intent.dhcp_servers.append(pool)
 
 
-def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
+def _runs_of(ranges: str) -> tuple[list[tuple[int, int]], bool]:
+    """The runs of a ``ranges=`` value -- "IP address list of
+    non-overlapping IP address ranges in the form of:
+    ``from1-to1,from2-to2,...,fromN-toN``" (the RouterOS manual) -- as
+    integers, and whether a piece of it is in a form this parser does
+    not read (an address alone, a prefix)."""
+    runs: list[tuple[int, int]] = []
+    unread = False
+    for piece in ticked(ranges.split(",")):
+        start, dash, end = piece.strip().partition("-")
+        low = as_int(start.strip()) if dash else None
+        high = as_int(end.strip()) if dash else None
+        if low is None or high is None or low > high:
+            unread = unread or bool(piece.strip())
+            continue
+        runs.append((low, high))
+    return runs, unread
+
+
+def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> list[str]:
     """Merge ``/ip pool add ranges=START-END`` data into existing
     CanonicalDHCPPool records.
 
@@ -1492,12 +1512,24 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
     start IP.  If none matches (orphan pool) we create a new
     CanonicalDHCPPool with just the range populated.
 
+    The tree holds a pool as ONE run of addresses, so a ``ranges=`` of
+    several is kept as its largest run, the lower of two as large (as
+    the FortiOS parser keeps a server's), and the others are said in a
+    row of the sections not translated; so is a piece of it in a form
+    this parser does not read.
+
     The pool is found by the network, not by trying every pool for
     every range (and parsing each pool's network again each time): by
     prefix length, a network's address to the first pool, in the order
     the config has them, that serves it.  A range asks once for each
     prefix length there is.
+
+    Returns:
+        The rows of ``dropped_tier3_sections``, one a reason, naming a
+        few pools by their ``name=``.
     """
+    several: list[str] = []
+    unread_pools: list[str] = []
     served: dict[int, dict[int, tuple[int, CanonicalDHCPPool]]] = {}
     for position, pool in enumerate(intent.dhcp_servers):
         try:
@@ -1511,36 +1543,47 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
-        ranges = kv.get("ranges", "")
-        if not ranges or "-" not in ranges:
+        runs, unread = _runs_of(kv.get("ranges", ""))
+        label = kv.get("name", "") or "with no name"
+        if unread:
+            unread_pools.append(label)
+        if len(runs) > 1:
+            several.append(label)
+        if not runs:
             continue
-        # ranges= can be comma-separated multiple; take the first.
-        first_range = ranges.split(",")[0].strip()
-        start_str, _, end_str = first_range.partition("-")
-        if not (start_str and end_str):
-            continue
-        try:
-            start_ip = ipaddress.IPv4Address(start_str.strip())
-        except ipaddress.AddressValueError:
-            continue
-        # Find the first existing pool whose network contains start_ip.
-        # (A pool this loop appends has no network and serves none.)
+        address, high = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
+        start_str, end_str = as_text(address), as_text(high)
+        # Find the first existing pool whose network contains the run's
+        # start.  (A pool this loop appends has no network and serves
+        # none.)
         merged = False
-        address = int(start_ip)
         first: tuple[int, CanonicalDHCPPool] | None = None
         for prefixlen, by_address in served.items():
             hit = by_address.get(address >> (32 - prefixlen) << (32 - prefixlen))
             if hit is not None and (first is None or hit[0] < first[0]):
                 first = hit
         if first is not None:
-            first[1].start_ip = start_str.strip()
-            first[1].end_ip = end_str.strip()
+            first[1].start_ip = start_str
+            first[1].end_ip = end_str
             merged = True
         if not merged:
             intent.dhcp_servers.append(CanonicalDHCPPool(
-                start_ip=start_str.strip(),
-                end_ip=end_str.strip(),
+                start_ip=start_str,
+                end_ip=end_str,
             ))
+    rows = []
+    if several:
+        rows.append(
+            f"/ip pool {a_few_named(several)}: ranges= more than one range -- "
+            "the tree holds one run of a pool, so the largest is kept and "
+            "the others are not translated",
+        )
+    if unread_pools:
+        rows.append(
+            f"/ip pool {a_few_named(unread_pools)}: ranges= a range in a form "
+            "this parser does not read (it reads <from>-<to>); not translated",
+        )
+    return rows
 
 
 def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:

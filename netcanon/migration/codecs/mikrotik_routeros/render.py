@@ -63,6 +63,7 @@ from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ...canonical.transforms import is_every_vlan
 from .._helpers import one_mtu_written, same_vendor_version
 from ..base import RenderError
+from .dhcp_pools import render_pools
 from .parse import (
     _is_vlan_name,
     _looks_like_bridge_iface,
@@ -936,37 +937,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("")
 
     # ----- /ip pool + /ip dhcp-server network (Tier 2 DHCP) -----
-    # RouterOS splits DHCP across /ip pool (the address range)
-    # and /ip dhcp-server network (network-scoped options).  We
-    # emit both so the result is deployable without hand-editing.
-    # Pool names are synthesised deterministically.
-    if tree.dhcp_servers:
-        # /ip pool first — depends on nothing else.
-        lines.append("/ip pool")
-        for idx, pool in enumerate(tree.dhcp_servers, start=1):
-            if not (pool.start_ip and pool.end_ip):
-                continue
-            name = f"dhcp_pool{idx}"
-            ranges = f"{pool.start_ip}-{pool.end_ip}"
-            lines.append(
-                f"add name={name} ranges={_quote_if_needed(ranges)}"
-            )
-        lines.append("")
-        lines.append("/ip dhcp-server network")
-        for pool in tree.dhcp_servers:
-            if not pool.network:
-                continue
-            parts = ["add", f"address={_quote_if_needed(pool.network)}"]
-            if pool.gateway:
-                parts.append(f"gateway={_quote_if_needed(pool.gateway)}")
-            if pool.dns_servers:
-                parts.append(
-                    f"dns-server={_quote_if_needed(','.join(pool.dns_servers))}"
-                )
-            if pool.domain_name:
-                parts.append(f"domain={_quote_if_needed(pool.domain_name)}")
-            lines.append(" ".join(parts))
-        lines.append("")
+    # RouterOS splits DHCP across /ip pool (the address range) and
+    # /ip dhcp-server network (network-scoped options); a pool that
+    # states no whole range is written with what it hands out
+    # (:mod:`.dhcp_pools`).
+    lines.extend(render_pools(tree.dhcp_servers, tree.interfaces, _quote_if_needed)[0])
 
     # ----- /user (Tier 2 local users) -----
     if tree.local_users:

@@ -626,7 +626,13 @@ per_field_expectation:
       option fidelity (Junos ``dhcp-attributes`` hierarchy beyond
       router/name-server/lease/domain) is unsupported.  juniper_junos
       codec does not currently advertise ``/dhcp/pool`` in its
-      capability matrix; cross-pair render is partial.
+      capability matrix; cross-pair render is partial.  A pool with
+      no range is written a ``<range>`` of its network's hosts less
+      the output's own addresses (the largest run, a zone taking
+      one), since OPNsense writes a ``range`` line for every zone it
+      serves, and is read back as the range written; one with no
+      network is not written where OPNsense would serve its zone.
+      Each is a review comment and a warning of the job.
     references: [junos-dhcp-server, junos-dhcp-local-server, opnsense-dhcp]
 
   # ── Tier 2 — SNMP ──

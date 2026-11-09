@@ -350,6 +350,24 @@ Provenance in
   output bound its DHCP server to `interface lan`, FortiOS wrote
   `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
   beside an `<interfaces>` with no `<lan>` in it.
+- **A pool with no range, onto OPNsense.**  OPNsense's ISC DHCP
+  plugin (`opnsense/plugins`,
+  `net/isc-dhcp/src/etc/inc/plugins.inc.d/dhcpd.inc`) serves an
+  enabled zone whose interface has an IPv4 address and writes a
+  `range` line for each such zone's pool, and its GUI saves no zone
+  without a range ("A valid range must be specified.").  So a pool
+  the source states no range for -- a Junos or IOS-XE pool with no
+  range hands out every host of its network -- or one end of one is
+  written a `<range>` of its network's hosts, less the addresses the
+  output gives its own interfaces.  A zone takes one range: where
+  those addresses split the span, the largest run is written and the
+  review comment says the others are not handed out.  A pool that
+  can be given no range (no network, a range outside its network, no
+  address left) is a `<!-- review: -->` comment under `<dhcpd>` in
+  place of its zone, where the zone's interface has an IPv4 address
+  in the output; on a zone OPNsense does not serve, it is written as
+  it stands.  Each is also a warning of the job.  ⚠️ Up to 0.7.7 such
+  a pool was an enabled zone with no `<range>`, and nothing said so.
 - **A lagg's members** — OPNsense adds only an unassigned interface
   to a lagg ("Only unassigned interfaces can be added to LAGG",
   docs.opnsense.org, Other Types), so a member is named in `<laggs>`
