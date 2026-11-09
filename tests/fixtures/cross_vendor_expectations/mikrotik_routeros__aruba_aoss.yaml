@@ -244,9 +244,10 @@ per_field_expectation:
       config with a comment for each pool; the operator configures
       each pool on the switch by hand, or a relay to a central
       server.  RouterOS-only static reservations
-      (``/ip dhcp-server lease``), DHCP option codes, and
-      multi-range pools are not modelled canonically and drop to
-      raw_sections.
+      (``/ip dhcp-server lease``) and DHCP option codes are not
+      modelled canonically and drop to raw_sections; of a
+      multi-range pool the tree keeps the largest run, and the
+      others are a row of the sections not translated.
     references: [dhcp]
 
   snmp:

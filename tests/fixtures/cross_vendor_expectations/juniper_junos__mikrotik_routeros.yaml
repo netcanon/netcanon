@@ -576,7 +576,13 @@ per_field_expectation:
       one server per interface).  Static reservations (Junos `pool
       X family inet host` / RouterOS `/ip dhcp-server lease`) and
       DHCP option codes (43 / 60 / 66 / 150) are not modelled
-      canonically and drop to raw_sections.
+      canonically and drop to raw_sections.  A pool with no range
+      (an address-assignment pool states its network and may state
+      no range) is written ``ranges=`` its network's hosts less the
+      output's own addresses, since RouterOS takes no ``/ip pool``
+      without its ``ranges``, and is read back as the range written;
+      one with no network is not written.  Each is a ``# review:``
+      line and a warning of the job.
     references: [junos-dhcp-server, junos-dhcp-local-server, mikrotik-dhcp]
 
   # ── Tier 2 — SNMP ──

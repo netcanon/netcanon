@@ -76,7 +76,10 @@ netcanon/migration/codecs/<vendor>/
 │                       # dns-service names, and a row for what the tree
 │                       # cannot hold; the writer gives a pool with no
 │                       # range its network's hosts, and returns its
-│                       # review lines as the job's warnings too
+│                       # review lines as the job's warnings too;
+│                       # (mikrotik_routeros, opnsense) a writer only,
+│                       # the same way; all three read what a pool hands
+│                       # out from codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```
@@ -1227,6 +1230,22 @@ the policy locally:
   device printed encrypted (`key-string 7`) is not read, and the
   version is not kept (a renderer writes version 2 where a group above
   `V1_GROUP_MAX`, or an IPv6 address, needs it).
+
+* **`netcanon/migration/codecs/_dhcp_pools.py`** -- what a DHCP pool
+  of the tree hands out, for a target whose pool has to state its
+  range.  A pool that states no range hands out every host of its
+  network (Junos and Cisco IOS say so; a /31 or /32 is all of it), and
+  one that states one end hands out from that end to the network's
+  edge; a target that takes no pool without a range (FortiOS, RouterOS,
+  OPNsense) is written that span, less the addresses the output gives
+  its own interfaces (`OwnAddresses`).  `what_it_hands_out(pool, own)`
+  returns `None` for a pool that states its whole range, a `Handed`
+  (the span, the runs left free, `largest()`) for one the writer has to
+  give a range, and a reason in words for one it cannot (no network,
+  an end outside it, nothing left), which the writer puts in a review
+  line and a warning of the job, read from the same function as the
+  output (`render_warnings`).  The gateway is not taken out: the
+  tree does not say it is the output's own.
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

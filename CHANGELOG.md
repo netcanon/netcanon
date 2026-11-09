@@ -1349,6 +1349,39 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A DHCP pool with no whole range is written as RouterOS and
+  OPNsense take it, and said; RouterOS reads every run of a pool.**
+  RouterOS takes no `/ip pool` without its `ranges` (MikroTik's
+  manual, `/ip pool`: "( mandatory )"), and OPNsense's ISC DHCP plugin
+  writes a `range` line for every zone it serves, a zone taking one
+  range (`opnsense/plugins`,
+  `net/isc-dhcp/src/etc/inc/plugins.inc.d/dhcpd.inc`; its GUI saves
+  none without one).  The RouterOS renderer left out the `/ip pool` of
+  a pool that states no range -- a Junos address-assignment pool, an
+  OPNsense zone with no range -- or one end of one, and the OPNsense
+  renderer wrote such a pool as an enabled zone with no `<range>`, and
+  neither said so.  Each now gives such a pool what it hands out, as
+  the tree reads a pool with no range: its network's hosts, less the
+  addresses the output gives its own interfaces -- on RouterOS a run
+  each side of one that falls inside, on OPNsense the largest run.  A
+  pool neither can be given a range for (no network, a range outside
+  its network, no address left) is a review line in place of its
+  `add`, or of its zone where OPNsense would serve the zone.  Each is
+  a review line in the output and a warning of the job.  The RouterOS
+  parser kept the first run of a `ranges=` that states several and
+  dropped a piece in another form, silently; it keeps the largest run
+  (the lower of two as large) and says the others in a row of the
+  sections not translated.  What a pool hands out is read in one place
+  (`codecs/_dhcp_pools.py`), which the FortiOS writer now uses too.
+  VyOS writes no DHCP pool; EOS and Junos are in the known
+  limitations.  One phase-4 cell moved, Junos to RouterOS
+  `dhcp_servers`, from `METHODOLOGY_ISSUE_under` to `EXPECTED_LOSSY`:
+  a Junos pool with no range is read back from RouterOS as the range
+  written, where before the output had no `/ip pool` for it and was
+  read back as the pool with no range it stood for.  Guarded by
+  `tests/unit/migration/test_a_pool_with_no_range.py`, which renders
+  each case onto every public codec, and by the RouterOS and OPNsense
+  `test_dhcp_pools.py`.
 - **A DHCP pool FortiOS cannot take as it stands is written as it
   takes it, and said.**  A FortiOS DHCP server with no `config
   ip-range` hands out no address (Fortinet's CLI reference, `config
@@ -5824,6 +5857,18 @@ timestamp if your timezone matters for an audit.
   answers give for IOS XE 17.6 and later and its configuration guide
   does not: a `review:` line above it says so.  The vendor page says
   it.
+- **A DHCP pool with no whole range is not given one on EOS or
+  Junos.**  FortiOS, RouterOS and OPNsense are written what such a
+  pool hands out (see "Fixed"), and IOS-XE and Junos hand out a pool's
+  network where it states no range.  EOS is written the pool's network
+  and no range, and what an EOS pool with no range hands out is not
+  established.  A pool that states one end of its range is written as
+  its network alone on EOS, the end left out, and on Junos as a
+  `range` with that end alone (a `low` and no `high`, or the other
+  way), which Junos has not been shown to take.  A pool with
+  neither a range nor a network is written with its options alone on
+  EOS, IOS-XE and Junos, and nothing is said.  Each is pinned in
+  `tests/unit/migration/test_a_pool_with_no_range.py`.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

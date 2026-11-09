@@ -57,6 +57,7 @@ from ..._user_secrets import (
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from .._helpers import one_mtu_written, vlan_carriers
 from ..base import RenderError
+from .dhcp_pools import render_pools
 from .port_names import classify_port_name
 
 # ---------------------------------------------------------------------------
@@ -421,31 +422,9 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     # not the zone -- so the tag is made of it by the same
     # _zone_tag_for helper that makes an interface's, and the pool
     # is under its interface's zone.  A pool that names no
-    # interface is written under ``lan``.
-    if intent.dhcp_servers:
-        dhcpd_el = ET.SubElement(root, "dhcpd")
-        for pool in intent.dhcp_servers:
-            zone_tag = _zone_tag_for(pool.interface) if pool.interface else "lan"
-            zone_el = ET.SubElement(dhcpd_el, zone_tag)
-            ET.SubElement(zone_el, "enable")
-            if pool.start_ip or pool.end_ip:
-                range_el = ET.SubElement(zone_el, "range")
-                if pool.start_ip:
-                    ET.SubElement(range_el, "from").text = pool.start_ip
-                if pool.end_ip:
-                    ET.SubElement(range_el, "to").text = pool.end_ip
-            if pool.gateway:
-                ET.SubElement(zone_el, "gateway").text = pool.gateway
-            if pool.dns_servers:
-                ET.SubElement(zone_el, "dnsserver").text = (
-                    ",".join(pool.dns_servers)
-                )
-            if pool.domain_name:
-                ET.SubElement(zone_el, "domain").text = pool.domain_name
-            if pool.lease_time:
-                ET.SubElement(zone_el, "defaultleasetime").text = (
-                    str(pool.lease_time)
-                )
+    # interface is written under ``lan``.  A pool that states no whole
+    # range is written with what it hands out (:mod:`.dhcp_pools`).
+    render_pools(root, intent.dhcp_servers, intent.interfaces, _zone_tag_for)
 
     # LAGs (Tier 2) — <laggs> element with one <lagg> per LAG.
     if intent.lags:

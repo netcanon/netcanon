@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import Any, ClassVar
+from xml.etree import ElementTree as ET
 
 from ....models.migration import (
     CapabilityMatrix,
@@ -54,12 +55,13 @@ from ...canonical.intent import CanonicalIntent
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
+from .dhcp_pools import render_pools
 from .parse import (
     _trim_xml_envelope,
     _trim_xml_prologue,
     parse_intent,
 )
-from .render import render_intent
+from .render import _zone_tag_for, render_intent
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -784,6 +786,20 @@ class OPNsenseCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each review
+        comment the output has for a DHCP pool: one that states no whole
+        range, or one OPNsense can be given no range for
+        (:func:`.dhcp_pools.render_pools`, written into an element that
+        is then let go)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            warnings += render_pools(
+                ET.Element("opnsense"), tree.dhcp_servers, tree.interfaces,
+                _zone_tag_for,
+            )
+        return warnings
 
     # -----------------------------------------------------------------
     # iter_xpaths

@@ -35,7 +35,10 @@ import netcanon.migration.codecs  # noqa: F401  (registers the codecs)
 from netcanon.migration import _comments
 from netcanon.migration._comments import comment, comment_text
 from netcanon.migration.canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalSNMPv3User,
@@ -107,7 +110,40 @@ def _an_snmpv3_user_named(name: str) -> CanonicalIntent:
     )
 
 
-_PLACES = {"local user": _a_user_named, "snmpv3 user": _an_snmpv3_user_named}
+def _a_pool_on(name: str) -> CanonicalIntent:
+    """A DHCP pool with no range and no network on an interface that has
+    an address: OPNsense writes a review comment that names the
+    interface in place of the zone."""
+    return CanonicalIntent(
+        hostname="r1",
+        source_vendor="cisco_iosxe_cli",
+        interfaces=[
+            CanonicalInterface(
+                name=name,
+                ipv4_addresses=[CanonicalIPv4Address(ip="192.0.2.1", prefix_length=24)],
+            ),
+        ],
+        dhcp_servers=[CanonicalDHCPPool(interface=name, gateway="192.0.2.1")],
+    )
+
+
+_PLACES = {
+    "local user": _a_user_named,
+    "snmpv3 user": _an_snmpv3_user_named,
+    "dhcp pool": _a_pool_on,
+}
+
+#: A place that only some block targets write a comment for, and which.
+#: VyOS writes no DHCP pool (its matrix declares them unsupported), so
+#: there the name is an interface's, which no comment holds.
+_ONLY_ON: dict[str, frozenset[str]] = {"dhcp pool": frozenset({"opnsense"})}
+
+_CELLS = [
+    (target, place)
+    for place in sorted(_PLACES)
+    for target in _BLOCK_TARGETS
+    if target in _ONLY_ON.get(place, frozenset(_BLOCK_TARGETS))
+]
 
 #: A place still open on this branch, mended by another change.  Whichever
 #: of the two merges second takes the pin out: the test fails with "take
@@ -194,8 +230,7 @@ def test_a_comment_that_ends_with_its_line_is_left_as_it_is(syntax: str) -> None
         assert comment_text(text, syntax) == text
 
 
-@pytest.mark.parametrize("place", sorted(_PLACES))
-@pytest.mark.parametrize("target", _BLOCK_TARGETS)
+@pytest.mark.parametrize(("target", "place"), _CELLS)
 @pytest.mark.parametrize("name", _HOSTILE)
 def test_a_name_stays_in_its_comment(target: str, place: str, name: str) -> None:
     found = _findings(target, place, name)
@@ -217,6 +252,16 @@ def test_the_check_sees_the_old_comment(monkeypatch) -> None:
     assert _findings("vyos", "local user", "a*/system{host-name{netcanon-injected}}/*")
 
 
+def test_the_check_sees_a_pools_old_comment(monkeypatch) -> None:
+    """The DHCP pool place reaches a comment on OPNsense: with its text
+    written as it stands, the check fails there."""
+    from netcanon.migration.codecs.opnsense import dhcp_pools
+
+    monkeypatch.setattr(dhcp_pools, "comment_text", lambda text, syntax: text)
+    assert _findings("opnsense", "dhcp pool", "x--><netcanon-injected/><!--") == ["<netcanon-injected>"]
+    assert _findings("opnsense", "dhcp pool", "svc--backup")[0].startswith("render raised")
+
+
 # ---------------------------------------------------------------------------
 # The source: where a comment is built around a value
 # ---------------------------------------------------------------------------
@@ -234,6 +279,10 @@ _BUILT_ELSEWHERE: dict[tuple[str, str], str] = {
     ("netcanon/migration/codecs/opnsense/render.py", "write_device"): (
         "an ET.Comment of a VLAN device whose text is _comment_text(...), "
         "which is comment_text(..., 'xml') from _comments"
+    ),
+    ("netcanon/migration/codecs/opnsense/dhcp_pools.py", "_comment"): (
+        "an ET.Comment of a DHCP pool whose text is comment_text(..., 'xml') "
+        "from _comments"
     ),
 }
 

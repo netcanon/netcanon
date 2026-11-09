@@ -100,7 +100,22 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   `review:` line on every target, RouterOS included
 - DHCP server pools — `/ip pool` + `/ip dhcp-server network`
   (per-pool subnet, gateway, range, options; not the interface that
-  serves a pool -- see `/dhcp-servers/pool/interface` below)
+  serves a pool -- see `/dhcp-servers/pool/interface` below).  The
+  tree holds one run of a pool: of a `ranges=` that states several
+  (`10.0.0.10-10.0.0.20,10.0.0.100-10.0.0.200`) the largest is kept
+  (the lower of two as large), and the others are a row of the
+  sections not translated; so is a piece in a form the parser does
+  not read (it reads `<from>-<to>`).  ⚠️ Up to 0.7.7 the first run
+  was kept and the others dropped, silently.  Onto RouterOS,
+  `ranges` is mandatory (MikroTik's manual, `/ip pool`), so a pool
+  the source states no range for -- a Junos or IOS-XE pool with no
+  range hands out every host of its network -- or one end of one is
+  written `ranges=` its network's hosts, less the addresses the
+  output gives its own interfaces, a run each side of one that falls
+  inside; one that can be given no range (no network, a range
+  outside its network, no address left) is a `# review:` line in
+  place of its `add`.  Each is also a warning of the job.  ⚠️ Up to
+  0.7.7 such a pool was left out of `/ip pool`, and nothing said so
 - **Renamed-port preservation** — RouterOS lets operators rename
   `ether2` to "Access Point" etc.; Netcanon preserves the renamed
   name + the factory `default-name` so render emits
