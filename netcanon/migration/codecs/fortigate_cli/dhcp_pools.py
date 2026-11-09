@@ -35,12 +35,27 @@ force is left out and said (``disabled``).  A pool that hands out no
 address from a range -- none is stated, every one is excluded, or it
 assigns addresses by user group -- is not translated, since a target
 given a pool with no range hands out its whole network.
+
+The writer (:func:`render_pools`) reads the tree the same way, so a
+pool that states no range, or one end of it, is its network's hosts,
+less the addresses this output gives its own interfaces (written as
+``config exclude-range``): a FortiOS server with no ``ip-range`` hands
+out no address.  A pool FortiOS can be given no range for -- no
+network, a range outside it, nothing left once the output's own
+addresses are taken out -- is a ``review:`` comment in place of its
+``edit``.  A lease FortiOS does not take (it takes 300 to 8640000
+seconds, and 0 for one that does not end) is written as the nearest it
+does.  Each of these, a pool with no interface and DNS servers past
+the fourth, is a ``review:`` line in the output and a warning of the
+job (``FortiGateCLICodec.render_warnings``).
 """
 
 from __future__ import annotations
 
+import bisect
 import ipaddress
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ...canonical.intent import CanonicalDHCPPool, CanonicalInterface
@@ -554,3 +569,286 @@ def pools_of(
             "does not read; not translated",
         )
     return pools, rows, left_out
+
+
+# ---------------------------------------------------------------------------
+# Render
+# ---------------------------------------------------------------------------
+
+#: The shortest and the longest lease FortiOS takes, in seconds (the CLI
+#: reference, ``lease-time``: "Minimum value: 300 Maximum value:
+#: 8640000", in 7.0, 7.2 and 7.4 alike).
+SHORTEST_LEASE = 300
+LONGEST_LEASE = 8640000
+#: The DNS servers a pool takes: the 7.0 and 7.4 CLI references list
+#: ``dns-server1`` to ``dns-server4`` (6.2 three), none a fifth.
+_DNS_SERVERS_TAKEN = 4
+
+
+@dataclass
+class _Written:
+    lines: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def review(self, line: str, label: str, warning: str) -> None:
+        """A review line of the output, and the job's warning for it."""
+        self.lines.append(line)
+        self.warnings.append(
+            f"FortiOS DHCP pool {label}: {warning}; a review line in the output says so.",
+        )
+
+
+class _OwnAddresses:
+    """The IPv4 addresses of the output's interfaces, sorted, so that
+    the ones in a network are found without reading the others."""
+
+    def __init__(self, interfaces: Sequence[CanonicalInterface]) -> None:
+        found: set[int] = set()
+        for iface in ticked(interfaces):
+            for address in iface.ipv4_addresses:
+                value = _int(address.ip)
+                if value is not None:
+                    found.add(value)
+        self._sorted = sorted(found)
+
+    def spans_within(self, low: int, high: int) -> list[tuple[int, int]]:
+        """The own addresses from *low* to *high*, as merged spans."""
+        at = bisect.bisect_left(self._sorted, low)
+        spans: list[tuple[int, int]] = []
+        while at < len(self._sorted) and self._sorted[at] <= high:
+            tick()
+            value = self._sorted[at]
+            if spans and spans[-1][1] + 1 == value:
+                spans[-1] = (spans[-1][0], value)
+            else:
+                spans.append((value, value))
+            at += 1
+        return spans
+
+
+def _int(address: str) -> int | None:
+    try:
+        return int(ipaddress.IPv4Address(address))
+    except ValueError:
+        return None
+
+
+def _hosts(network: ipaddress.IPv4Network) -> tuple[int, int]:
+    """The first and the last address of *network* a client can be
+    given: all of it for a /31 or a /32."""
+    first, last = int(network.network_address), int(network.broadcast_address)
+    return (first, last) if network.prefixlen >= 31 else (first + 1, last - 1)
+
+
+def _network_of(pool: CanonicalDHCPPool) -> ipaddress.IPv4Network | None:
+    if not pool.network:
+        return None
+    try:
+        return ipaddress.IPv4Network(pool.network, strict=False)
+    except ValueError:
+        return None
+
+
+def _text(value: int) -> str:
+    return str(ipaddress.IPv4Address(value))
+
+
+def _lease_lines(pool: CanonicalDHCPPool, label: str, written: _Written) -> None:
+    """The pool's ``lease-time``: ``0`` for one that does not end
+    ("0 means unlimited"), never the tree's 0xFFFFFFFF; and a lease
+    FortiOS does not take as the nearest one it does, said."""
+    lease = pool.lease_time
+    if lease == INFINITE_LEASE:
+        written.lines.append("        set lease-time 0")
+        return
+    if not lease:
+        return
+    if SHORTEST_LEASE <= lease <= LONGEST_LEASE:
+        written.lines.append(f"        set lease-time {lease}")
+        return
+    nearest = SHORTEST_LEASE if lease < SHORTEST_LEASE else LONGEST_LEASE
+    written.review(
+        f"        # review: the source's lease is {lease} seconds; FortiOS takes "
+        f"{SHORTEST_LEASE} to {LONGEST_LEASE}, and {nearest} is written",
+        label,
+        f"its lease of {lease} seconds is written as {nearest}, since FortiOS takes "
+        f"{SHORTEST_LEASE} to {LONGEST_LEASE}",
+    )
+    written.lines.append(f"        set lease-time {nearest}")
+
+
+def _range_lines(
+    pool: CanonicalDHCPPool, network: ipaddress.IPv4Network, own: _OwnAddresses,
+    label: str, written: _Written,
+) -> None:
+    """The ``ip-range`` of a pool that states no range, or states one
+    end of it: the network's addresses a client can be given, which
+    is what such a pool hands out, less the output's own addresses."""
+    first, last = _hosts(network)
+    low = _int(pool.start_ip) if pool.start_ip else first
+    high = _int(pool.end_ip) if pool.end_ip else last
+    if low is None or high is None or low > high:
+        return
+    excluded = own.spans_within(low, high)
+    stated = "one end of its range" if pool.start_ip or pool.end_ip else "no range"
+    written.review(
+        f"        # review: the source states {stated} for this pool, which hands out "
+        f"its network's addresses; written as {_text(low)}-{_text(high)}, less this "
+        "output's own addresses",
+        label,
+        "the source states no whole range for it, and a FortiOS DHCP server "
+        f"with no range hands out no address; it is written as {_text(low)}-{_text(high)}, "
+        "less this output's own addresses",
+    )
+    written.lines += [
+        "        config ip-range",
+        "            edit 1",
+        f"                set start-ip {_text(low)}",
+        f"                set end-ip {_text(high)}",
+        "            next",
+        "        end",
+    ]
+    if excluded:
+        written.lines.append("        config exclude-range")
+        for index, (span_low, span_high) in enumerate(ticked(excluded), start=1):
+            written.lines += [
+                f"            edit {index}",
+                f"                set start-ip {_text(span_low)}",
+                f"                set end-ip {_text(span_high)}",
+                "            next",
+            ]
+        written.lines.append("        end")
+
+
+def _hands_out(
+    pool: CanonicalDHCPPool, network: ipaddress.IPv4Network | None, own: _OwnAddresses,
+) -> str | None:
+    """Why FortiOS can be given no range for *pool*, or ``None``."""
+    if pool.start_ip and pool.end_ip:
+        return None
+    if network is None:
+        return (
+            "it states no range and no network" if not (pool.start_ip or pool.end_ip)
+            else "it states one end of its range and no network"
+        )
+    first, last = _hosts(network)
+    low = _int(pool.start_ip) if pool.start_ip else first
+    high = _int(pool.end_ip) if pool.end_ip else last
+    if low is None or high is None or low > high:
+        return "its range is not in its network"
+    free = _runs([(low, high)], own.spans_within(low, high))
+    if not free:
+        return "every address of its range is this output's own"
+    return None
+
+
+def _write_pool(
+    pool: CanonicalDHCPPool, index: int, own: _OwnAddresses,
+    esc: Callable[[str], str], written: _Written,
+) -> bool:
+    """The ``edit`` of *pool*, or a review line in its place; ``True``
+    where the ``edit`` is written."""
+    label = pool.interface or pool.network or "with no interface and no network"
+    network = _network_of(pool)
+    why = _hands_out(pool, network, own)
+    if why is not None:
+        # A server with no range hands out no address, and until
+        # 7.4.5 and 7.6.1 one ahead of another on its interface ends
+        # the search for a scope there (Fortinet's community article on
+        # a server entry with no IP range): no ``edit`` is written.
+        written.review(
+            f"    # review: a DHCP pool of the source ({label}) is not written: {why}, "
+            "and a FortiOS DHCP server with no range hands out no address",
+            label,
+            f"it is not written: {why}, and a FortiOS DHCP server with no range "
+            "hands out no address",
+        )
+        return False
+    written.lines.append(f"    edit {index}")
+    _lease_lines(pool, label, written)
+    if pool.gateway:
+        written.lines.append(f"        set default-gateway {pool.gateway}")
+    if network is not None:
+        written.lines.append(f"        set netmask {network.netmask}")
+    if pool.interface:
+        written.lines.append(f'        set interface "{esc(pool.interface)}"')
+    else:
+        # The CLI reference: "DHCP server can assign IP configurations
+        # to clients connected to this interface."
+        written.review(
+            "        # review: the source names no interface for this pool; a FortiOS "
+            "DHCP server serves the interface it names",
+            label,
+            "the source names no interface for it, and a FortiOS DHCP server serves "
+            "the interface it names",
+        )
+    for number, dns in enumerate(pool.dns_servers[:_DNS_SERVERS_TAKEN], start=1):
+        written.lines.append(f"        set dns-server{number} {dns}")
+    if len(pool.dns_servers) > _DNS_SERVERS_TAKEN:
+        rest = pool.dns_servers[_DNS_SERVERS_TAKEN:]
+        written.review(
+            f"        # review: DNS servers not written: {', '.join(rest)} "
+            "(a FortiOS DHCP server takes four)",
+            label,
+            f"{len(rest)} of its DNS servers are not written, since a FortiOS DHCP "
+            "server takes four",
+        )
+    if pool.dns_servers:
+        written.lines.append("        set dns-service specify")
+    if pool.domain_name:
+        written.lines.append(f'        set domain "{esc(pool.domain_name)}"')
+    if pool.start_ip and pool.end_ip:
+        written.lines += [
+            "        config ip-range",
+            "            edit 1",
+            f"                set start-ip {pool.start_ip}",
+            f"                set end-ip {pool.end_ip}",
+            "            next",
+            "        end",
+        ]
+    elif network is not None:
+        _range_lines(pool, network, own, label, written)
+    written.lines.append("    next")
+    return True
+
+
+def render_pools(
+    pools: Sequence[CanonicalDHCPPool], interfaces: Sequence[CanonicalInterface],
+    esc: Callable[[str], str],
+) -> tuple[list[str], list[str]]:
+    """The ``config system dhcp server`` block for *pools*, and the
+    job's warnings.
+
+    A pool that states a range is written with it.  One that states no
+    range, or one end of one, hands out its network's addresses (a
+    Junos pool with no range "will use all available addresses within
+    the subnet specified", and the IOS-XE renderer writes no
+    exclusion for one), and FortiOS has to be told them: the network's
+    addresses a client can be given, less the output's own, which an
+    ``exclude-range`` keeps out.  A pool that FortiOS can be given no
+    range for -- no network to take it from, or no address of it that
+    is not the output's own -- is a review line in place of its
+    ``edit``.  A lease FortiOS does not take is written as the nearest
+    one it does, and a pool with no interface, or with DNS servers past
+    the fourth, has a review line; each review line has a warning.
+
+    Args:
+        pools: The tree's pools.
+        interfaces: The interfaces the output holds: their addresses are
+            the output's own.
+        esc: How the renderer writes a quoted value.
+
+    Returns:
+        The lines (none for no pool), and one warning for each review
+        line among them.
+    """
+    if not pools:
+        return [], []
+    own = _OwnAddresses(interfaces)
+    written = _Written(lines=["config system dhcp server"])
+    index = 1
+    for pool in ticked(pools):
+        if _write_pool(pool, index, own, esc, written):
+            index += 1
+    written.lines.append("end")
+    return written.lines, written.warnings

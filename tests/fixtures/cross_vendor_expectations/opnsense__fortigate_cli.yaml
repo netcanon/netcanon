@@ -520,11 +520,12 @@ per_field_expectation:
       gateway keeps its network (it came back with none while the
       parser read the network from ``default-gateway``).  Every
       cell's pool now comes back whole, and the loss is real all the
-      same: a pool with no range is written with no ``config
-      ip-range``, which hands out no address, and the fortigate_cli
-      parser reads such a server back as no pool and a row of the
-      sections not translated; and a fifth DNS server is the review
-      line of 3.  No committed capture has either.
+      same: a pool with no range is written its network's hosts less
+      the output's own addresses (``config exclude-range``), since a
+      FortiOS server with no ``config ip-range`` hands out no address,
+      and the fortigate_cli parser reads it back as the largest run of
+      that, a range the source did not state; and a fifth DNS server
+      is the review line of 3.  No committed capture has either.
     references: [opn-dhcp, fgt-dhcp]
 
   snmp:

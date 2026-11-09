@@ -71,9 +71,12 @@ netcanon/migration/codecs/<vendor>/
 │                       # writer side by side, from one reading of the
 │                       # vendor's semantics (what a pool hands out), so
 │                       # parse and render cannot each assume their own;
-│                       # (fortigate_cli) the reader alone: every range
-│                       # less its excluded ranges, what dns-service
-│                       # names, and a row for what the tree cannot hold
+│                       # (fortigate_cli) the same: the reader takes
+│                       # every range less its excluded ranges, what
+│                       # dns-service names, and a row for what the tree
+│                       # cannot hold; the writer gives a pool with no
+│                       # range its network's hosts, and returns its
+│                       # review lines as the job's warnings too
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```

@@ -558,6 +558,13 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # now reads every range less every exclusion and keeps the largest run,
 # with a row for the others, which is still below what the round trip
 # compares.
+#
+# The FortiGate renderer then gave a pool with no range its network's
+# hosts, less the output's own addresses: such a pool now comes back as a
+# range the source did not state, not as no pool.  No class moved: the
+# Junos pools with no range were drift onto FortiGate before and are drift
+# now, with a range read back, and no OPNsense capture has such a pool.
+# opnsense__fortigate_cli stays at 5.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {

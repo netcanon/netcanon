@@ -37,6 +37,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalVlan,
 )
 from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli import dhcp_pools as dhcp_pools_module
 from netcanon.migration.codecs.fortigate_cli import parse as parse_module
 from netcanon.migration.codecs.fortigate_cli import render as render_module
 
@@ -217,10 +218,11 @@ def _between_quotes(source: str) -> list[tuple[str, bool]]:
             if not (opens and closes):
                 continue
             value = part.value
+            # ``esc`` is the name the DHCP pool writer takes ``_esc`` by.
             escaped = (
                 isinstance(value, ast.Call)
                 and isinstance(value.func, ast.Name)
-                and value.func.id == "_esc"
+                and value.func.id in ("_esc", "esc")
             )
             found.append(
                 (f"line {node.lineno}: {ast.unparse(value)}", escaped),
@@ -233,7 +235,11 @@ def _unescaped(source: str) -> list[str]:
     return [where for where, escaped in _between_quotes(source) if not escaped]
 
 
-_RENDER_SOURCE = Path(render_module.__file__).read_text(encoding="utf-8")
+#: The renderer, and the module that writes its DHCP pools.
+_RENDER_SOURCES = [
+    Path(module.__file__).read_text(encoding="utf-8")
+    for module in (render_module, dhcp_pools_module)
+]
 
 
 class TestEveryQuotedValueIsEscaped:
@@ -245,13 +251,16 @@ class TestEveryQuotedValueIsEscaped:
         output = FortiGateCLICodec().render(_tree())
         assert _misparsed(output) == []
 
-    def test_no_value_between_quotes_skips_the_escape(self) -> None:
-        assert _unescaped(_RENDER_SOURCE) == []
+    @pytest.mark.parametrize("source", _RENDER_SOURCES, ids=["render", "dhcp_pools"])
+    def test_no_value_between_quotes_skips_the_escape(self, source: str) -> None:
+        assert _unescaped(source) == []
 
     def test_the_source_check_reads_the_renderer(self) -> None:
         # A walk that finds no place between quotes passes every source:
         # it has to find the places this module's tree goes through.
-        places = " ".join(where for where, _ in _between_quotes(_RENDER_SOURCE))
+        places = " ".join(
+            where for source in _RENDER_SOURCES for where, _ in _between_quotes(source)
+        )
         for expr in (
             "iface.name", "m)", "parent)", "route.interface",
             "pool.interface", "pool.domain_name", "server.host",

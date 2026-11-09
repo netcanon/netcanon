@@ -86,7 +86,7 @@ from ...canonical.intent import (
 from ...canonical.transforms import is_every_vlan
 from .._helpers import one_mtu_written, vlan_carriers
 from ..base import RenderError
-from .dhcp_pools import INFINITE_LEASE
+from .dhcp_pools import render_pools
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
     _prefix_to_mask,
@@ -1380,57 +1380,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("end")
 
     # --- system dhcp server (Tier 2 DHCP pools) ---
-    if tree.dhcp_servers:
-        out.append("config system dhcp server")
-        for idx, pool in enumerate(tree.dhcp_servers, start=1):
-            out.append(f"    edit {idx}")
-            # FortiOS writes a lease that does not end as 0 ("0 means
-            # unlimited"), never as the tree's 0xFFFFFFFF, which is
-            # past its largest lease.
-            if pool.lease_time == INFINITE_LEASE:
-                out.append("        set lease-time 0")
-            elif pool.lease_time:
-                out.append(f"        set lease-time {pool.lease_time}")
-            if pool.gateway:
-                out.append(f"        set default-gateway {pool.gateway}")
-            if pool.network:
-                try:
-                    net = ipaddress.IPv4Network(pool.network, strict=False)
-                    out.append(f"        set netmask {net.netmask}")
-                except (ValueError, ipaddress.AddressValueError):
-                    pass
-            if pool.interface:
-                out.append(
-                    f'        set interface "{_esc(pool.interface)}"'
-                )
-            # The 7.0 and 7.4 CLI references list dns-server1 to 4 (the
-            # 6.2 reference three); none lists a fifth.  The codec
-            # writes FortiOS 7.x.
-            for i, dns in enumerate(pool.dns_servers[:4], start=1):
-                out.append(f"        set dns-server{i} {dns}")
-            if len(pool.dns_servers) > 4:
-                out.append(
-                    "        # review: DNS servers not written: "
-                    + ", ".join(pool.dns_servers[4:])
-                    + " (a FortiOS DHCP server takes four)"
-                )
-            if pool.dns_servers:
-                out.append("        set dns-service specify")
-            if pool.domain_name:
-                out.append(
-                    f'        set domain "{_esc(pool.domain_name)}"'
-                )
-            if pool.start_ip or pool.end_ip:
-                out.append("        config ip-range")
-                out.append("            edit 1")
-                if pool.start_ip:
-                    out.append(f"                set start-ip {pool.start_ip}")
-                if pool.end_ip:
-                    out.append(f"                set end-ip {pool.end_ip}")
-                out.append("            next")
-                out.append("        end")
-            out.append("    next")
-        out.append("end")
+    # Written by the module that reads them, which gives the job a
+    # warning for each review line (``FortiGateCLICodec.render_warnings``).
+    out.extend(render_pools(tree.dhcp_servers, tree.interfaces, _esc)[0])
 
     # --- router static (IPv4) / router static6 (IPv6) ---
     # FortiOS keeps IPv4 and IPv6 static routes in SEPARATE stanzas:

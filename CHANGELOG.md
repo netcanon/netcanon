@@ -1349,6 +1349,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A DHCP pool FortiOS cannot take as it stands is written as it
+  takes it, and said.**  A FortiOS DHCP server with no `config
+  ip-range` hands out no address (Fortinet's CLI reference, `config
+  system dhcp server`), and the renderer wrote a pool that states no
+  range -- a Junos address-assignment pool, an OPNsense zone with no
+  range, one end of a range -- with none and nothing to say so.  It
+  wrote a lease as it stood, where FortiOS takes 300 to 8640000 seconds
+  (and 0 for one that does not end), and a pool with no interface
+  without one, which no interface serves.  The renderer now gives a
+  pool with no range, or one end of it, its network's hosts as its
+  `config ip-range`, less the addresses the output gives its own
+  interfaces (`config exclude-range`), as the tree reads a pool with no
+  range; writes a pool FortiOS can be given no range for (no network, a
+  range outside its network, no address left) as a `# review:` comment
+  in place of its `edit`; writes a lease FortiOS does not take as the
+  nearest it does; and says a pool with no interface.  Each of these,
+  and DNS servers past the fourth, is a `# review:` line in the output
+  and a warning of the job.  The writer moved beside the reader
+  (`fortigate_cli/dhcp_pools.py`), and the check that every value
+  between quotes is escaped reads it too.  No phase-4 class moved; one
+  drill-down row of Junos to FortiGate now carries the range.  Guarded
+  by `tests/unit/migration/codecs/fortigate_cli/test_dhcp_pools.py`.
 - **A FortiGate DHCP server is read as it hands addresses out.**
   FortiOS states the addresses a server hands out as its `config
   ip-range` entries less its `config exclude-range` entries

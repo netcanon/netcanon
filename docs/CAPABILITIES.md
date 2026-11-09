@@ -470,9 +470,16 @@ said, and one that hands out no address is said and not translated.
 Reserved addresses, DHCP options, NTP, WINS and boot servers and the
 like are a row each, never a value.  The renderer writes four DNS
 servers (`dns-server1` to `dns-server4`, FortiOS 7.0 and later) and a
-fifth and beyond in a `# review:` line (see
-[`vendors/fortigate.md`](vendors/fortigate.md) § "What translates
-well").
+fifth and beyond in a `# review:` line.  A pool the source states no
+range for, or one end of it, is written its network's hosts, less the
+addresses the output gives its own interfaces (`config
+exclude-range`), since a FortiOS server with no range hands out no
+address; one FortiOS can be given no range for (no network, a range
+outside it, no address left) is a `# review:` comment in place of its
+`edit`.  A lease outside the 300 to 8640000 seconds FortiOS takes is
+written as the nearest it does.  Each is a `# review:` line and a
+warning of the job (see [`vendors/fortigate.md`](vendors/fortigate.md)
+§ "What translates well").
 
 | Path | Class | Reason |
 |---|---|---|
