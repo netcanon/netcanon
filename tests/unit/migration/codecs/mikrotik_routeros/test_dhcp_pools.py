@@ -117,7 +117,13 @@ class TestAPoolWithNoWholeRange:
         ]
 
 
-_NETWORK = "/ip dhcp-server network\nadd address=192.0.2.0/24 gateway=192.0.2.1\n"
+#: A server on ether2 that takes its addresses from the pool ``lan``,
+#: and the network that holds them.
+_NETWORK = (
+    "# 2026-01-01 00:00:00 by RouterOS 7.14\n"
+    "/ip dhcp-server\nadd address-pool=lan interface=ether2 name=dhcp1\n"
+    "/ip dhcp-server network\nadd address=192.0.2.0/24 gateway=192.0.2.1\n"
+)
 
 
 class TestTheParserReadsEveryRange:

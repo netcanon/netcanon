@@ -78,8 +78,13 @@ netcanon/migration/codecs/<vendor>/
 │                       # range its network's hosts, and returns its
 │                       # review lines as the job's warnings too;
 │                       # (mikrotik_routeros, opnsense) a writer only,
-│                       # the same way; all three read what a pool hands
-│                       # out from codecs/_dhcp_pools.py
+│                       # the same way -- on RouterOS of the three
+│                       # sections a pool is (the /ip pool, the
+│                       # /ip dhcp-server on its interface with its
+│                       # lease, the network with its options), a
+│                       # review line for each it cannot write; all
+│                       # three read what a pool hands out from
+│                       # codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```

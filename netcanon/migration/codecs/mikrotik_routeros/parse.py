@@ -39,6 +39,7 @@ from collections.abc import Iterable
 from itertools import groupby
 from typing import Any
 
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -125,13 +126,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # whatever its name.
     ethernet_names: set[str] = set()
 
-    # Some sections must run AFTER others regardless of file order.
-    # /ip pool carries DHCP-range data that needs to merge into pool
-    # records created by /ip dhcp-server network; running them in
-    # file order would split a single logical pool into two
-    # canonical records when the file happens to list /ip pool
-    # first.  Defer /ip pool to a post-pass.
-    deferred_ip_pool: list[list[str]] = []
+    # A DHCP server names its /ip pool, and its options are those of
+    # the /ip dhcp-server network entry that holds its addresses,
+    # wherever in the file either is: the three sections are read
+    # once the whole file has been (:class:`_DHCPServers`).
+    dhcp = _DHCPServers(intent.source_version)
 
     # VRRP scratch — keyed by the VRRP pseudo-interface name (the
     # ``name=`` attribute on the ``/interface vrrp add`` line, e.g.
@@ -200,16 +199,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _parse_snmp_community(lines, intent)
         elif section == "/user":
             _parse_user(lines, intent)
+        elif section == "/ip dhcp-server":
+            dhcp.servers.extend(lines)
         elif section == "/ip dhcp-server network":
-            _parse_dhcp_server_network(lines, intent)
+            dhcp.networks.extend(lines)
         elif section == "/ip pool":
-            deferred_ip_pool.append(lines)
+            dhcp.pools.extend(lines)
         elif section == "/radius":
             _parse_radius(lines, intent)
         # Other sections silently ignored — not in scope yet.
 
-    for pool_lines in deferred_ip_pool:
-        intent.dropped_tier3_sections.extend(_parse_ip_pool(pool_lines, intent))
+    intent.dhcp_servers, dhcp_rows, dhcp_left_out = dhcp.read()
+    intent.dropped_tier3_sections.extend(dhcp_rows)
+    intent.dropped_tier3_sections.extend(left_out_rows(dhcp_left_out, rest="disabled"))
 
     # VRRP post-pass — materialise scratch records into
     # CanonicalVRRPGroup entries on the parent interface.  Iterate in
@@ -264,8 +266,10 @@ def _extract_version(raw: str) -> str:
     Stored as :attr:`CanonicalIntent.source_version` (metadata).  The
     render path emits no version header (MikroTik is outside #297's
     same-vendor echo), but it DOES consume this value: ``_ros_major``
-    gates the RouterOS-6 NTP render dialect on it (#299).  Returns ``""``
-    when the header comment is absent.
+    gates the RouterOS-6 NTP render dialect on it (#299); and the parser
+    says a DHCP server's default lease time is not established for a
+    release other than RouterOS 7 (:class:`_DHCPServers`).  Returns
+    ``""`` when the header comment is absent.
     """
     m = _VERSION_RE.search(raw)
     return m.group(1) if m else ""
@@ -1448,23 +1452,36 @@ def _parse_radius(
         ))
 
 
-def _parse_dhcp_server_network(
-    lines: list[str], intent: CanonicalIntent,
-) -> None:
-    """Parse ``/ip dhcp-server network`` section into CanonicalDHCPPool.
+#: RouterOS's lease time for a server that states none: "lease-time
+#: ... Default: 30m" (MikroTik, RouterOS manual, ``/ip dhcp-server``).
+DEFAULT_LEASE = 1800
 
-    RouterOS DHCP is genuinely spread across THREE sections:
-        /ip dhcp-server          - the server instance (binds to iface)
-        /ip dhcp-server network  - network-scoped options (gateway, DNS)
-        /ip pool                 - the allocation range
+#: A RouterOS time in units, as an export writes one (``30m``, ``3d``,
+#: ``1d12h``), and as a clock after any weeks and days, as RouterOS
+#: prints one (``3d00:00:00``).
+_TIME_IN_UNITS = re.compile(
+    r"(?:(\d{1,7})w)?(?:(\d{1,7})d)?(?:(\d{1,7})h)?(?:(\d{1,7})m)?(?:(\d{1,7})s)?",
+)
+_TIME_AS_A_CLOCK = re.compile(r"(?:(\d{1,7})w)?(?:(\d{1,7})d)?(\d{1,7}):(\d\d):(\d\d)")
 
-    For canonical translation, the `network` section is the richest
-    per-pool record — it carries gateway, DNS, domain, and the address
-    CIDR.  We use it as the pool's primary record and merge address-
-    range data from /ip pool in a separate pass.  Real configs keep
-    the sections structurally parallel so match-by-position works in
-    simple cases; more complex cases need a future refinement pass.
-    """
+
+def seconds_of(text: str) -> int | None:
+    """The seconds of a RouterOS time, or ``None`` for a form this
+    parser does not read."""
+    found = (_TIME_IN_UNITS.fullmatch(text) if text else None) or _TIME_AS_A_CLOCK.fullmatch(text)
+    if found is None:
+        return None
+    weeks, days, hours, minutes, seconds = (int(part or 0) for part in found.groups())
+    return (((weeks * 7 + days) * 24 + hours) * 60 + minutes) * 60 + seconds
+
+
+def _dhcp_networks(lines: list[str]) -> list[CanonicalDHCPPool]:
+    """Each ``/ip dhcp-server network`` entry, in the order of the
+    config, as a pool of its options: its network, gateway, DNS servers
+    and domain.  The ``address`` of an entry is "the network DHCP
+    server(s) will lease addresses from" (the RouterOS manual), and a
+    server gives an address the options of the entry that holds it."""
+    networks: list[CanonicalDHCPPool] = []
     for line in ticked(lines):
         if not line.startswith("add"):
             continue
@@ -1482,7 +1499,8 @@ def _parse_dhcp_server_network(
             pool.dns_servers.extend(
                 s.strip() for s in dns_raw.split(",") if s.strip()
             )
-        intent.dhcp_servers.append(pool)
+        networks.append(pool)
+    return networks
 
 
 def _runs_of(ranges: str) -> tuple[list[tuple[int, int]], bool]:
@@ -1504,86 +1522,238 @@ def _runs_of(ranges: str) -> tuple[list[tuple[int, int]], bool]:
     return runs, unread
 
 
-def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> list[str]:
-    """Merge ``/ip pool add ranges=START-END`` data into existing
-    CanonicalDHCPPool records.
+class _IPPool:
+    """One ``/ip pool``: its runs, whether a piece of its ``ranges=``
+    is in a form this parser does not read, and its ``next-pool=``."""
 
-    Matching strategy: find the pool whose network contains the range's
-    start IP.  If none matches (orphan pool) we create a new
-    CanonicalDHCPPool with just the range populated.
+    __slots__ = ("next_pool", "runs", "unread")
 
-    The tree holds a pool as ONE run of addresses, so a ``ranges=`` of
-    several is kept as its largest run, the lower of two as large (as
-    the FortiOS parser keeps a server's), and the others are said in a
-    row of the sections not translated; so is a piece of it in a form
-    this parser does not read.
+    def __init__(self, kv: dict[str, str]) -> None:
+        self.runs, self.unread = _runs_of(kv.get("ranges", ""))
+        self.next_pool = kv.get("next-pool", "")
 
-    The pool is found by the network, not by trying every pool for
-    every range (and parsing each pool's network again each time): by
-    prefix length, a network's address to the first pool, in the order
-    the config has them, that serves it.  A range asks once for each
-    prefix length there is.
 
-    Returns:
-        The rows of ``dropped_tier3_sections``, one a reason, naming a
-        few pools by their ``name=``.
-    """
-    several: list[str] = []
-    unread_pools: list[str] = []
-    served: dict[int, dict[int, tuple[int, CanonicalDHCPPool]]] = {}
-    for position, pool in enumerate(intent.dhcp_servers):
-        try:
-            network = ipaddress.IPv4Network(pool.network, strict=False)
-        except (ValueError, ipaddress.AddressValueError):
-            continue
-        served.setdefault(network.prefixlen, {}).setdefault(
-            int(network.network_address), (position, pool),
-        )
+def _ip_pools(lines: list[str]) -> dict[str, _IPPool]:
+    """Each ``/ip pool`` by its ``name=``; of two of one name the first
+    is kept."""
+    pools: dict[str, _IPPool] = {}
     for line in ticked(lines):
-        if not line.startswith("add"):
-            continue
-        kv = _parse_kv(line)
-        runs, unread = _runs_of(kv.get("ranges", ""))
-        label = kv.get("name", "") or "with no name"
-        if unread:
-            unread_pools.append(label)
-        if len(runs) > 1:
-            several.append(label)
-        if not runs:
-            continue
-        address, high = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
-        start_str, end_str = as_text(address), as_text(high)
-        # Find the first existing pool whose network contains the run's
-        # start.  (A pool this loop appends has no network and serves
-        # none.)
-        merged = False
-        first: tuple[int, CanonicalDHCPPool] | None = None
-        for prefixlen, by_address in served.items():
+        if line.startswith("add"):
+            kv = _parse_kv(line)
+            pools.setdefault(kv.get("name", ""), _IPPool(kv))
+    return pools
+
+
+class _NetworkIndex:
+    """The ``/ip dhcp-server network`` entries by what they hold: by
+    prefix length, a network's address to the first entry, in the order
+    of the config, that states it.  An address asks once for each
+    prefix length there is, not once for each entry."""
+
+    def __init__(self, networks: list[CanonicalDHCPPool]) -> None:
+        self._served: dict[int, dict[int, int]] = {}
+        for position, pool in enumerate(ticked(networks)):
+            try:
+                network = ipaddress.IPv4Network(pool.network, strict=False)
+            except (ValueError, ipaddress.AddressValueError):
+                continue
+            self._served.setdefault(network.prefixlen, {}).setdefault(
+                int(network.network_address), position,
+            )
+
+    def first_holding(self, address: int) -> int | None:
+        """The first entry, in the order of the config, whose network
+        holds *address*."""
+        found: int | None = None
+        for prefixlen, by_address in self._served.items():
             hit = by_address.get(address >> (32 - prefixlen) << (32 - prefixlen))
-            if hit is not None and (first is None or hit[0] < first[0]):
-                first = hit
-        if first is not None:
-            first[1].start_ip = start_str
-            first[1].end_ip = end_str
-            merged = True
-        if not merged:
-            intent.dhcp_servers.append(CanonicalDHCPPool(
-                start_ip=start_str,
-                end_ip=end_str,
-            ))
-    rows = []
-    if several:
-        rows.append(
-            f"/ip pool {a_few_named(several)}: ranges= more than one range -- "
-            "the tree holds one run of a pool, so the largest is kept and "
-            "the others are not translated",
+            if hit is not None and (found is None or hit < found):
+                found = hit
+        return found
+
+
+#: Why a ``/ip dhcp-server`` in force is not translated, by its own
+#: words: each a row that names a few servers.
+_SERVER_NOT_TRANSLATED = {
+    "static-only": (
+        "address-pool=static-only -- the server leases only the addresses "
+        "of its static leases, which the tree does not hold; not translated"
+    ),
+    "relayed": (
+        "relay= a server of the requests a relay sends, for a network that "
+        "is not its interface's; not translated"
+    ),
+    "no pool": "address-pool= names no /ip pool of the config; not translated",
+    "no range": (
+        "address-pool= names an /ip pool that states no range this parser "
+        "reads; not translated"
+    ),
+}
+
+#: The most characters of a name a DHCP row shows.
+_SHOWN = 40
+
+
+def _shown(name: str) -> str:
+    """*name* as a DHCP row shows it: its first characters, on one
+    line."""
+    name = " ".join(name.split()) or "with no name"
+    return name if len(name) <= _SHOWN else name[: _SHOWN - 1] + "…"
+
+
+def _not_translated(kv: dict[str, str], pools: dict[str, _IPPool]) -> str:
+    """Why the server of *kv* is not translated (a key of
+    :data:`_SERVER_NOT_TRANSLATED`), or ``""``.  The manual's defaults:
+    ``address-pool`` "static-only", ``relay`` "0.0.0.0 (default) - Only
+    requests from directly connected clients"."""
+    if kv.get("relay", "0.0.0.0") != "0.0.0.0":
+        return "relayed"
+    pool = kv.get("address-pool", "static-only")
+    if pool == "static-only":
+        return "static-only"
+    return "" if pool in pools else "no pool"
+
+
+class _DHCPServers:
+    """The tree's DHCP pools of a RouterOS config, read once the whole
+    config has been: a server names its ``/ip pool``, and its options
+    are those of the ``/ip dhcp-server network`` entry that holds its
+    addresses, wherever in the config either is.
+
+    RouterOS spreads a DHCP server over three sections:
+    ``/ip dhcp-server`` (the server: the interface it runs on, the pool
+    it takes addresses from, its lease time), ``/ip pool`` (the ranges)
+    and ``/ip dhcp-server network`` (the options given with an address
+    of that network).  So a pool of the tree is a server in force that
+    takes its addresses from a pool, and nothing else is: a network
+    entry or an ``/ip pool`` that no such server takes serves nothing
+    (a pool can be PPP's, a hotspot's or IPsec's), and each is said in a
+    row, as is each server that is not translated and why.  A server
+    whose ``disabled=yes`` is left out and said.  The tree holds a pool
+    as ONE run of addresses, so of a ``ranges=`` of several the largest
+    is kept, the lower of two as large (as the FortiOS parser keeps a
+    server's), and the others are said.
+    """
+
+    def __init__(self, version: str) -> None:
+        self.servers: list[str] = []
+        self.networks: list[str] = []
+        self.pools: list[str] = []
+        self._version = version
+        self._why: dict[str, list[str]] = {reason: [] for reason in _SERVER_NOT_TRANSLATED}
+        self._no_lease: list[str] = []
+        self._unread_lease: list[str] = []
+        self._no_network: list[str] = []
+
+    def _lease_of(self, kv: dict[str, str], label: str) -> int:
+        """The lease time of the server of *kv*: RouterOS's default
+        where it states none (said, unless the release is RouterOS 7,
+        whose manual gives the default) or one this parser does not
+        read (said)."""
+        text = kv.get("lease-time")
+        if text is None:
+            if not self._version.startswith("7."):
+                self._no_lease.append(label)
+            return DEFAULT_LEASE
+        seconds = seconds_of(text)
+        if seconds is None:
+            self._unread_lease.append(label)
+            return DEFAULT_LEASE
+        return seconds
+
+    def read(self) -> tuple[list[CanonicalDHCPPool], list[str], list[tuple[str, list[str]]]]:
+        """The pools, the rows of ``dropped_tier3_sections`` (each a
+        reason, naming a few), and the servers left out because they
+        are not in force, for
+        :func:`netcanon.migration._tier3_detection.left_out_rows`."""
+        options = _dhcp_networks(self.networks)
+        index = _NetworkIndex(options)
+        pools = _ip_pools(self.pools)
+        found: list[CanonicalDHCPPool] = []
+        left_out: list[tuple[str, list[str]]] = []
+        taken: dict[str, None] = {}
+        used: set[int] = set()
+        for line in ticked(self.servers):
+            if not line.startswith("add"):
+                continue
+            kv = _parse_kv(line)
+            label = _shown(kv.get("name", ""))
+            if kv.get("disabled") in ("yes", "true"):
+                left_out.append(("disabled", ["ip", "dhcp-server", label]))
+                continue
+            reason = _not_translated(kv, pools)
+            if reason:
+                self._why[reason].append(label)
+                continue
+            taken[kv["address-pool"]] = None
+            runs = pools[kv["address-pool"]].runs
+            if not runs:
+                self._why["no range"].append(label)
+                continue
+            low, high = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
+            position = index.first_holding(low)
+            if position is None:
+                pool = CanonicalDHCPPool()
+                self._no_network.append(label)
+            else:
+                pool = options[position].model_copy(deep=True)
+                used.add(position)
+            pool.interface = kv.get("interface", "")
+            pool.start_ip, pool.end_ip = as_text(low), as_text(high)
+            pool.lease_time = self._lease_of(kv, label)
+            found.append(pool)
+        rows = self._rows(pools, taken)
+        idle = [_shown(pool.network) for position, pool in enumerate(options) if position not in used]
+        if idle:
+            rows.append(
+                f"/ip dhcp-server network {a_few_named(idle)}: no DHCP server "
+                "translated here hands out an address of it; not translated",
+            )
+        return found, rows, left_out
+
+    def _rows(self, pools: dict[str, _IPPool], taken: dict[str, None]) -> list[str]:
+        """The rows of the servers and the pools."""
+        rows = [
+            f"/ip dhcp-server {a_few_named(labels)}: {_SERVER_NOT_TRANSLATED[reason]}"
+            for reason, labels in self._why.items() if labels
+        ]
+        said = (
+            (self._no_lease, "no lease-time, which is read as 30m, RouterOS 7's "
+             "default; the default of the source's release is not established"),
+            (self._unread_lease, "lease-time= a time in a form this parser does "
+             "not read; read as 30m, RouterOS's default"),
+            (self._no_network, "no /ip dhcp-server network holds its addresses; "
+             "its pool is translated with no network and no options"),
         )
-    if unread_pools:
-        rows.append(
-            f"/ip pool {a_few_named(unread_pools)}: ranges= a range in a form "
-            "this parser does not read (it reads <from>-<to>); not translated",
-        )
-    return rows
+        rows += [f"/ip dhcp-server {a_few_named(labels)}: {why}" for labels, why in said if labels]
+        several = [_shown(name) for name in taken if len(pools[name].runs) > 1]
+        if several:
+            rows.append(
+                f"/ip pool {a_few_named(several)}: ranges= more than one range -- "
+                "the tree holds one run of a pool, so the largest is kept and "
+                "the others are not translated",
+            )
+        unread = [_shown(name) for name in taken if pools[name].unread]
+        if unread:
+            rows.append(
+                f"/ip pool {a_few_named(unread)}: ranges= a range in a form "
+                "this parser does not read (it reads <from>-<to>); not translated",
+            )
+        chained = [_shown(name) for name in taken if pools[name].next_pool]
+        if chained:
+            rows.append(
+                f"/ip pool {a_few_named(chained)}: next-pool= the pool its "
+                "server takes addresses from once this one's are taken; not "
+                "translated",
+            )
+        idle = [_shown(name) for name in pools if name not in taken]
+        if idle:
+            rows.append(
+                f"/ip pool {a_few_named(idle)}: no DHCP server translated here "
+                "takes addresses from it (a pool can be PPP's, a hotspot's or "
+                "IPsec's); not translated",
+            )
+        return rows
 
 
 def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:

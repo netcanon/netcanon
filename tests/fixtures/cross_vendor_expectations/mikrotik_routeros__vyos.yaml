@@ -439,8 +439,8 @@ per_field_expectation:
       become 0 after parse -> render -> re-parse, and the rendered
       `config.boot` contains no DHCP-server stanza at all.
       This is asymmetric, not a shared blind spot: `mikrotik_routeros`
-      declares `/dhcp-servers/pool/lease-time` lossy — i.e. it genuinely
-      parses pools — while vyos declares `/dhcp-servers/pool` unsupported
+      parses pools whole, with their interface and lease time, while vyos
+      declares `/dhcp-servers/pool` unsupported
       and states that its "render emits no DHCP server pool;
       intent.dhcp_servers are dropped on migration".
       Recorded `unsupported` rather than `lossy` because a vanished record

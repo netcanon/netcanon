@@ -1313,6 +1313,8 @@ def _routeros_pools(count: int) -> str:
         *(f"add address={_net(number)}.0/24 gateway={_net(number)}.1" for number in range(count)),
         "/ip pool",
         *(f"add name=p{number} ranges={_net(number)}.10-{_net(number)}.20" for number in range(count)),
+        "/ip dhcp-server",
+        *(f"add address-pool=p{number} interface=ether{number} name=s{number}" for number in range(count)),
     )
 
 

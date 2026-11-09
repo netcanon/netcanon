@@ -5,8 +5,10 @@ Vendor coverage:
     * cisco_iosxe_cli  - parse only (`ip dhcp pool` stanza)
     * opnsense          - parse + render (`<dhcpd>/<zone>` blocks)
     * fortigate_cli     - parse + render (`config system dhcp server`)
-    * mikrotik_routeros - parse + render (`/ip dhcp-server network` +
-                          `/ip pool` section-pair, deferred merge)
+    * mikrotik_routeros - parse + render (`/ip dhcp-server`, the `/ip
+                          pool` it names and the `/ip dhcp-server
+                          network` that holds its range, read once the
+                          whole config has been)
     * aruba_aoss        - render-only (emits a comment block; AOS-S
                           doesn't implement DHCP server)
 """
@@ -381,16 +383,17 @@ end
 
 class TestMikroTikDHCPParseRender:
     def test_pool_and_network_merge_regardless_of_file_order(self):
-        """/ip pool listed BEFORE /ip dhcp-server network — tests that
-        the deferred-merge logic handles either section order.
-        Without deferral, this input split one logical pool into two
-        canonical records."""
+        """/ip pool listed BEFORE /ip dhcp-server network, and the
+        server after both: one pool of the tree, whatever the order."""
         raw = """\
 /ip pool
 add name=dhcp_pool1 ranges=192.168.1.100-192.168.1.199
 
 /ip dhcp-server network
 add address=192.168.1.0/24 gateway=192.168.1.1 dns-server=1.1.1.1 domain=corp.local
+
+/ip dhcp-server
+add address-pool=dhcp_pool1 interface=bridge1 lease-time=12h name=dhcp1
 """
         intent = MikroTikRouterOSCodec().parse(raw)
         assert len(intent.dhcp_servers) == 1
@@ -399,9 +402,14 @@ add address=192.168.1.0/24 gateway=192.168.1.1 dns-server=1.1.1.1 domain=corp.lo
         assert p.start_ip == "192.168.1.100"
         assert p.end_ip == "192.168.1.199"
         assert p.gateway == "192.168.1.1"
+        assert p.interface == "bridge1"
+        assert p.lease_time == 12 * 3600
 
     def test_network_first_then_pool_also_merges(self):
         raw = """\
+/ip dhcp-server
+add address-pool=dhcp_pool1 interface=ether2 name=dhcp1
+
 /ip dhcp-server network
 add address=10.0.0.0/24 gateway=10.0.0.1
 
@@ -411,6 +419,22 @@ add name=dhcp_pool1 ranges=10.0.0.100-10.0.0.199
         intent = MikroTikRouterOSCodec().parse(raw)
         assert len(intent.dhcp_servers) == 1
         assert intent.dhcp_servers[0].start_ip == "10.0.0.100"
+
+    def test_a_pool_and_a_network_no_server_takes_are_no_pool(self):
+        """A network entry and an ``/ip pool`` serve nothing alone: a
+        pool can be PPP's, a hotspot's or IPsec's.  Each is said."""
+        raw = """\
+/ip dhcp-server network
+add address=10.0.0.0/24 gateway=10.0.0.1
+
+/ip pool
+add name=dhcp_pool1 ranges=10.0.0.100-10.0.0.199
+"""
+        intent = MikroTikRouterOSCodec().parse(raw)
+        assert intent.dhcp_servers == []
+        assert [row.split(":")[0] for row in intent.dropped_tier3_sections] == [
+            "/ip pool dhcp_pool1", "/ip dhcp-server network 10.0.0.0/24",
+        ]
 
     def test_render_emits_both_sections(self):
         intent = CanonicalIntent(
@@ -435,17 +459,21 @@ add name=dhcp_pool1 ranges=10.0.0.100-10.0.0.199
         intent = CanonicalIntent(
             source_vendor="test", source_format="test",
             dhcp_servers=[CanonicalDHCPPool(
+                interface="ether2",
                 network="10.0.0.0/24",
                 start_ip="10.0.0.100",
                 end_ip="10.0.0.199",
                 gateway="10.0.0.1",
+                lease_time=7200,
             )],
         )
         c = MikroTikRouterOSCodec()
         re_parsed = c.parse(c.render(intent))
+        assert re_parsed.dhcp_servers[0].interface == "ether2"
         assert re_parsed.dhcp_servers[0].network == "10.0.0.0/24"
         assert re_parsed.dhcp_servers[0].start_ip == "10.0.0.100"
         assert re_parsed.dhcp_servers[0].gateway == "10.0.0.1"
+        assert re_parsed.dhcp_servers[0].lease_time == 7200
 
 
 # ---------------------------------------------------------------------------

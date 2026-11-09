@@ -651,14 +651,27 @@ class TestOpnsenseLaggMembers:
 # ---------------------------------------------------------------------------
 
 
-def _ros(networks: list[str], ranges: list[str], pools_first: bool = False) -> CanonicalIntent:
-    nets = ["/ip dhcp-server network", *(f"add address={network} gateway=192.0.2.1" for network in networks)]
-    pools = ["/ip pool", *(f"add name=p{n} ranges={value}" for n, value in enumerate(ranges))]
-    body = [*pools, *nets] if pools_first else [*nets, *pools]
+def _ros(networks: list[str], ranges: list[str], order: str = "snp") -> CanonicalIntent:
+    """A RouterOS config of a server on ``ether<n>`` for each pool
+    ``p<n>`` of *ranges*, and a network entry of gateway
+    ``192.0.2.<n+1>`` for each of *networks*: the sections in *order*
+    (``s`` the servers, ``n`` the networks, ``p`` the pools)."""
+    sections = {
+        "s": ["/ip dhcp-server", *(f"add address-pool=p{n} interface=ether{n} name=s{n}" for n in range(len(ranges)))],
+        "n": ["/ip dhcp-server network", *(
+            f"add address={network} gateway=192.0.2.{n + 1}" for n, network in enumerate(networks)
+        )],
+        "p": ["/ip pool", *(f"add name=p{n} ranges={value}" for n, value in enumerate(ranges))],
+    }
+    body = [line for key in order for line in sections[key]]
     return ROS.parse("\n".join(("# 2026-01-01 00:00:00 by RouterOS 7.14", *body)) + "\n")
 
 
 class TestRouterOsPools:
+    """A server's pool is given the options of the first network entry
+    that holds its range's start, found by the network's address for
+    each prefix length, not by a pass over the entries."""
+
     @staticmethod
     def _pools(tree: CanonicalIntent) -> list[tuple[str, str, str]]:
         return [(pool.network, pool.start_ip, pool.end_ip) for pool in tree.dhcp_servers]
@@ -666,42 +679,51 @@ class TestRouterOsPools:
     def test_a_range_goes_to_the_network_that_holds_its_start(self) -> None:
         tree = _ros(["10.0.0.0/24", "10.0.1.0/24"], ["10.0.1.10-10.0.1.20", "10.0.0.5-10.0.0.9"])
         assert self._pools(tree) == [
-            ("10.0.0.0/24", "10.0.0.5", "10.0.0.9"), ("10.0.1.0/24", "10.0.1.10", "10.0.1.20"),
+            ("10.0.1.0/24", "10.0.1.10", "10.0.1.20"), ("10.0.0.0/24", "10.0.0.5", "10.0.0.9"),
         ]
+        assert [pool.interface for pool in tree.dhcp_servers] == ["ether0", "ether1"]
 
     def test_of_two_networks_that_hold_it_the_first_in_the_config_has_it(self) -> None:
         wide_first = _ros(["10.0.0.0/16", "10.0.1.0/24"], ["10.0.1.10-10.0.1.20"])
-        assert self._pools(wide_first) == [("10.0.0.0/16", "10.0.1.10", "10.0.1.20"), ("10.0.1.0/24", "", "")]
+        assert self._pools(wide_first) == [("10.0.0.0/16", "10.0.1.10", "10.0.1.20")]
         narrow_first = _ros(["10.0.1.0/24", "10.0.0.0/16"], ["10.0.1.10-10.0.1.20"])
-        assert self._pools(narrow_first) == [("10.0.1.0/24", "10.0.1.10", "10.0.1.20"), ("10.0.0.0/16", "", "")]
+        assert self._pools(narrow_first) == [("10.0.1.0/24", "10.0.1.10", "10.0.1.20")]
+        # The other serves no server, and is said.
+        assert any(row.startswith("/ip dhcp-server network 10.0.0.0/16:")
+                   for row in narrow_first.dropped_tier3_sections)
 
     def test_of_two_statements_of_one_network_the_first_has_it(self) -> None:
         tree = _ros(["10.0.0.0/24", "10.0.0.0/24"], ["10.0.0.5-10.0.0.9"])
-        assert self._pools(tree) == [("10.0.0.0/24", "10.0.0.5", "10.0.0.9"), ("10.0.0.0/24", "", "")]
+        assert [(pool.network, pool.gateway) for pool in tree.dhcp_servers] == [("10.0.0.0/24", "192.0.2.1")]
 
-    def test_a_later_range_for_a_network_replaces_the_earlier(self) -> None:
+    def test_two_servers_in_one_network_are_two_pools(self) -> None:
         tree = _ros(["10.0.0.0/24"], ["10.0.0.5-10.0.0.9", "10.0.0.50-10.0.0.90"])
-        assert self._pools(tree) == [("10.0.0.0/24", "10.0.0.50", "10.0.0.90")]
-
-    def test_a_range_no_network_holds_is_a_pool_of_its_own(self) -> None:
-        tree = _ros(["10.0.0.0/24"], ["198.51.100.7-198.51.100.9", "198.51.100.7-198.51.100.8"])
         assert self._pools(tree) == [
-            ("10.0.0.0/24", "", ""), ("", "198.51.100.7", "198.51.100.9"), ("", "198.51.100.7", "198.51.100.8"),
+            ("10.0.0.0/24", "10.0.0.5", "10.0.0.9"), ("10.0.0.0/24", "10.0.0.50", "10.0.0.90"),
+        ]
+
+    def test_a_range_no_network_holds_is_a_pool_with_no_network(self) -> None:
+        tree = _ros(["10.0.0.0/24"], ["198.51.100.7-198.51.100.9", "198.51.100.7-198.51.100.8"])
+        assert self._pools(tree) == [("", "198.51.100.7", "198.51.100.9"), ("", "198.51.100.7", "198.51.100.8")]
+        assert [row.split(":")[0] for row in tree.dropped_tier3_sections] == [
+            "/ip dhcp-server s0, s1", "/ip dhcp-server network 10.0.0.0/24",
         ]
 
     def test_a_default_network_holds_everything(self) -> None:
         tree = _ros(["10.0.0.0/24", "0.0.0.0/0"], ["198.51.100.7-198.51.100.9", "10.0.0.5-10.0.0.9"])
         assert self._pools(tree) == [
-            ("10.0.0.0/24", "10.0.0.5", "10.0.0.9"), ("0.0.0.0/0", "198.51.100.7", "198.51.100.9"),
+            ("0.0.0.0/0", "198.51.100.7", "198.51.100.9"), ("10.0.0.0/24", "10.0.0.5", "10.0.0.9"),
         ]
 
     def test_a_network_that_is_no_ipv4_network_holds_nothing(self) -> None:
         tree = _ros(["2001:db8::/64", "not-a-network"], ["10.0.0.5-10.0.0.9"])
-        assert self._pools(tree)[-1] == ("", "10.0.0.5", "10.0.0.9")
+        assert self._pools(tree) == [("", "10.0.0.5", "10.0.0.9")]
 
-    def test_the_sections_may_come_in_either_order(self) -> None:
-        tree = _ros(["10.0.0.0/24"], ["10.0.0.5-10.0.0.9"], pools_first=True)
+    @pytest.mark.parametrize("order", ["snp", "spn", "nsp", "nps", "psn", "pns"])
+    def test_the_sections_may_come_in_any_order(self, order: str) -> None:
+        tree = _ros(["10.0.0.0/24"], ["10.0.0.5-10.0.0.9"], order=order)
         assert self._pools(tree) == [("10.0.0.0/24", "10.0.0.5", "10.0.0.9")]
+        assert tree.dropped_tier3_sections == []
 
 
 # ---------------------------------------------------------------------------

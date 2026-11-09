@@ -447,7 +447,7 @@ per_field_expectation:
       unsupported — "Render emits no DHCP server pool; intent.dhcp_servers
       are dropped on migration".  RouterOS is very commonly the DHCP server
       for the subnets it routes (`/ip pool` + `/ip dhcp-server network` +
-      `/ip dhcp-server` join to one canonical pool per network), so this is a
+      `/ip dhcp-server` join to one canonical pool per server), so this is a
       service outage on cutover, not a cosmetic loss: every scope, its range,
       its gateway/DNS options and its lease time must be re-homed onto an
       external DHCP server (or an `ip dhcp relay address` pointed at one)

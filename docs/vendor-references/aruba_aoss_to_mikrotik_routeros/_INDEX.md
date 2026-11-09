@@ -24,7 +24,7 @@ L3-by-default).
 | `vlans.md` | Aruba VLAN-centric -> RouterOS two-plane model (`/interface vlan` for L3 + bridge-VLAN filtering for L2).  Plane-2 wire-up partial in v1. |
 | `switching_model.md` | Philosophy mismatch — Aruba L2-by-default vs RouterOS L3-by-default.  L2 features (DHCP-snooping, ARP-protect, BPDU-guard) drop on cross-pair. |
 | `static_routes.md` | Aruba CIDR / dotted-mask -> RouterOS CIDR.  `ip default-gateway` legacy form normalises.  Per-VRF routes deferred (RouterOS codec does not parse the per-VRF form; Aruba has no VRF concept). |
-| `dhcp.md` | An AOS-S `dhcp-server pool` is read and written as `/ip pool` + `/ip dhcp-server network`, with no `/ip dhcp-server` binding it to an interface (lossy).  RouterOS three-section DHCP form joins on parse and lossy on Aruba target. |
+| `dhcp.md` | An AOS-S `dhcp-server pool` is read and written as `/ip pool` + `/ip dhcp-server` on its VLAN interface + `/ip dhcp-server network`; a pool of relayed clients names no interface and is written with no server (lossy).  RouterOS three-section DHCP form joins on parse and lossy on Aruba target. |
 | `snmp.md` | Aruba `Operator/Manager` access keywords vs RouterOS `read-access=` / `write-access=` flags.  v3 USM auth/priv overlap (MD5/SHA1 + AES/DES); passphrases re-key required. |
 | `local_users.md` | Aruba two-role (manager/operator) <-> RouterOS named groups (full/write/read).  Hash format incompatibility — re-key required. |
 | `lags.md` | Aruba `Trk<N>` (`lacp` / `trunk` / `fec` / `dt-lacp`) <-> RouterOS `bond<N>` (`802.3ad` / `balance-xor` / etc.).  RouterOS-only modes lossy. |

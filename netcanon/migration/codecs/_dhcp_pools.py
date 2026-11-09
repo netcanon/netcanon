@@ -21,7 +21,8 @@ interfaces.  A pool that can be given none -- no network to take it
 from, an end outside its network, nothing left once the output's own
 addresses are taken out -- has a reason instead, which the target says.
 The words of each target's review line and warning are the target's:
-this module holds what the addresses ARE.
+this module holds what the addresses ARE.  It also names the tree's
+lease that does not end (:data:`INFINITE_LEASE`).
 
 Nothing here reads config text; a loop over what the tree holds is
 ticked all the same, since a pasted config can give an output many
@@ -37,6 +38,11 @@ from dataclasses import dataclass
 
 from ..canonical.intent import CanonicalDHCPPool, CanonicalInterface
 from ..limits import tick, ticked
+
+#: The tree's lease for one that does not end: DHCP's "infinity"
+#: (RFC 2131, 0xffffffff), as the FortiOS and IOS-XE CLI parsers read
+#: one.
+INFINITE_LEASE = 0xFFFFFFFF
 
 
 class OwnAddresses:

@@ -383,11 +383,9 @@ per_field_expectation:
     note: >
       Source-side gap: cisco_iosxr declares `/dhcp-servers/pool` unsupported and
       no committed cell populates it — an SP edge router relays DHCP rather than
-      serving it.  RouterOS DOES render pools, so re-authoring on the target
-      will stick, with one caveat it declares itself: `/dhcp-servers/pool/
-      lease-time` is lossy, because RouterOS keeps lease-time on the
-      `/ip dhcp-server` instance rather than the `/ip dhcp-server network` row
-      the codec renders.
+      serving it.  RouterOS DOES render pools -- an `/ip pool`, an
+      `/ip dhcp-server` on the pool's interface with its lease time, and an
+      `/ip dhcp-server network` -- so re-authoring on the target will stick.
     references: [iosxr-routeros-surface]
 
   # -- SNMP -- a whole-subsystem source-side gap ----------------------------

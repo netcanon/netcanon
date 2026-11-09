@@ -252,10 +252,13 @@ per_field_expectation:
       reservations (``host`` / ``client-identifier`` /
       ``hardware-address`` on Cisco; ``/ip dhcp-server lease`` on
       RouterOS) have no canonical field; (3) DHCP option codes (``option
-      43``, etc.) are not modelled; (4) the RouterOS output writes no
-      ``/ip dhcp-server`` on an interface, so the pool comes back on
-      none (``/dhcp-servers/pool/interface`` is lossy on RouterOS).  The
-      IOS-XE CLI parser reads a pool as the server hands it out: its
+      43``, etc.) are not modelled.  Each pool is served by an ``/ip
+      dhcp-server`` on its interface, with its lease time, and every
+      pool of the corpus comes back as it was.  The loss is real and no
+      committed capture shows it: a pool on no interface (one that
+      serves clients a relay forwards) is written with no server, which
+      a ``# review:`` line and a warning of the job say, and comes back
+      as no pool.  The IOS-XE CLI parser reads a pool as the server hands it out: its
       network less the ``ip dhcp excluded-address`` lines of its VRF,
       the device's own addresses and the pool's default router, on the
       interface whose subnet is the pool's network (none for a pool that

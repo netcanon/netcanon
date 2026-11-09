@@ -573,7 +573,12 @@ per_field_expectation:
       network`` form.  Basic pool fields (network, range, gateway,
       DNS, lease, domain) round-trip; binding semantics differ
       (Junos pool-group can serve many interfaces; RouterOS binds
-      one server per interface).  Static reservations (Junos `pool
+      one server per interface).  A pool is served by an ``/ip
+      dhcp-server`` on the interface the Junos parser reads for it; a
+      pool it reads on no interface (a pool no ``dhcp-local-server``
+      group binds) is written with no server, which a ``# review:``
+      line and a warning of the job say, and comes back as no pool --
+      as every pool of one committed capture does.  Static reservations (Junos `pool
       X family inet host` / RouterOS `/ip dhcp-server lease`) and
       DHCP option codes (43 / 60 / 66 / 150) are not modelled
       canonically and drop to raw_sections.  A pool with no range

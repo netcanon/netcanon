@@ -456,9 +456,17 @@ per_field_expectation:
       canonical list (per kitchen-sink coverage); RouterOS target
       advertises ``/dhcp/pool`` in its capability matrix supported[],
       so the RouterOS render path emits the three-section form from
-      the canonical record.  Static reservations (OPNsense
-      ``<staticmap>`` / RouterOS ``/ip dhcp-server lease``) and DHCP
-      option codes are not modelled canonically on either side.
+      the canonical record: an ``/ip dhcp-server`` on the zone's
+      device, with its lease time.  Every pool of the corpus comes back
+      as it was.  The loss is real and no committed capture shows it:
+      a zone with no static address gives its pool no network, and
+      RouterOS gives a client its gateway, DNS servers and domain from
+      an ``/ip dhcp-server network``, which needs one, so they are not
+      written -- a ``# review:`` line and a warning of the job say so --
+      and the pool comes back without them.  Static reservations
+      (OPNsense ``<staticmap>`` / RouterOS ``/ip dhcp-server lease``)
+      and DHCP option codes are not modelled canonically on either
+      side.
     references: [opnsense-dhcp, mikrotik_dhcp]
 
   snmp:

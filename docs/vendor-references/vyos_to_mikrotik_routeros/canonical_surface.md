@@ -130,9 +130,10 @@ never emits them and there is nothing for RouterOS to lose:
 These are recorded `not_applicable`, not `unsupported`, and the distinction is operational: for several of them **mikrotik_routeros declares the field
 supported or lossy** — `/vlans/vlan/id` supported, the whole
 `/interfaces/interface/vrrp-groups/group` subtree supported,
-`/dhcp-servers/pool/lease-time` lossy (i.e. RouterOS renders pools, losing only
-the lease time; and, since 2026-11-06, `/dhcp-servers/pool/interface`, as no
-`/ip dhcp-server` is written). Re-authoring those on the target will stick, and a migration
+`/dhcp-servers/pool` with no lossy path under it (since 2026-11-09 RouterOS
+renders a pool as an `/ip pool`, an `/ip dhcp-server` on its interface with
+its lease time, and an `/ip dhcp-server network`; up to then it wrote no
+`/ip dhcp-server` and lost the lease time). Re-authoring those on the target will stick, and a migration
 report should say so rather than implying RouterOS cannot hold them.
 
 Four fields are **symmetric** gaps — *both* matrices declare the same path

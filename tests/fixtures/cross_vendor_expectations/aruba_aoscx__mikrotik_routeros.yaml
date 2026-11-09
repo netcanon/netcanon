@@ -385,9 +385,9 @@ per_field_expectation:
       Source-side gap: aruba_aoscx declares `/dhcp-servers/pool` unsupported
       and no committed cell populates a pool — an AOS-CX aggregation switch
       relays DHCP rather than serving it.  The target does model DHCP scopes
-      (it declares only `/dhcp-servers/pool/lease-time` lossy), so re-authoring
-      `/ip dhcp-server` on RouterOS is worthwhile and will largely stick;
-      expect a non-default lease time not to round-trip.
+      (each pool is written as an `/ip pool`, an `/ip dhcp-server` on its
+      interface with its lease time, and an `/ip dhcp-server network`), so
+      re-authoring `/ip dhcp-server` on RouterOS is worthwhile and will stick.
     references: [aoscx-routeros-surface]
 
   "snmp.community":

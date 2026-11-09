@@ -28,10 +28,10 @@ RouterOS splits DHCP server config across **three sections**:
   options for clients on a given subnet
 
 The MikroTik codec joins these on parse into a single
-`CanonicalDHCPPool` per network.  Static reservations
-(`/ip dhcp-server lease`) and per-subnet option sets
-(`/ip dhcp-server option`) are NOT modelled canonically and drop
-to `raw_sections`.
+`CanonicalDHCPPool` per enabled `/ip dhcp-server`.  Static
+reservations (`/ip dhcp-server lease`) and per-subnet option sets
+(`/ip dhcp-server option`) are NOT modelled canonically and are not
+translated; nothing in the job says so yet.
 
 DHCP relay uses `/ip dhcp-relay add` — a separate configuration
 block.

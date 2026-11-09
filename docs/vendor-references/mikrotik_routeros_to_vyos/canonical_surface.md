@@ -234,10 +234,10 @@ mechanism — none is cited as evidence for another.
 | `radius_servers` | 2 | **0** | 1 | `/radius-servers/server/{host,key}` **unsupported** |
 | `snmp.trap_hosts` | 1 | **0** | 1 | **nothing declared** |
 
-The DHCP one is the operationally sharpest: `mikrotik_routeros` declares
-`/dhcp-servers/pool/lease-time` lossy — i.e. it genuinely parses pools — and a
-small MikroTik edge router is very often the DHCP server for the site it sits
-in. Five pools across three of five fixtures is not an edge case on this corpus.
+The DHCP one is the operationally sharpest: `mikrotik_routeros` genuinely
+parses pools (since 2026-11-09, one for each enabled `/ip dhcp-server`; the
+counts above were measured before that), and a small MikroTik edge router is
+very often the DHCP server for the site it sits in.
 
 RADIUS carries the usual second loss: the vyos declaration is explicit that
 "the RADIUS shared secret is dropped on migration", so even a target that grew

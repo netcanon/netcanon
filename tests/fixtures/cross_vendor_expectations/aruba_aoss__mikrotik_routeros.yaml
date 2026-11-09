@@ -256,14 +256,17 @@ per_field_expectation:
     reason: >
       The aruba_aoss parser reads the 3 pools of the one cell that has
       any (`hpe_community_2930f_wc1610_dhcp_server.cfg`), and each is
-      written as an ``/ip pool`` range and an ``/ip dhcp-server network``
-      with its gateway and DNS servers.  The interface does not come
-      back: the render writes no ``/ip dhcp-server`` entry, which is
-      what binds a pool to an interface on RouterOS, so no server
-      serves the pool until one is added by hand.  Aruba ``ip
-      helper-address`` (relay) directives on VLAN stanzas are not
-      modelled canonically (no helper-address field) and drop on
-      parse.
+      written as an ``/ip pool`` range, an ``/ip dhcp-server`` on the
+      interface of its VLAN with its lease time, and an ``/ip dhcp-server
+      network`` with its gateway and DNS servers; every one comes back
+      as it was.  The loss is real and no committed capture shows it:
+      a pool that serves clients a relay forwards is on no interface
+      (its VLAN states no ``dhcp-server``), and a RouterOS server runs
+      on one, so it is written with no ``/ip dhcp-server`` -- a
+      ``# review:`` line and a warning of the job say so -- and comes
+      back as no pool.  Aruba ``ip helper-address`` (relay) directives
+      on VLAN stanzas are not modelled canonically (no helper-address
+      field) and drop on parse.
     references: [dhcp]
 
   snmp:

@@ -390,8 +390,8 @@ per_field_expectation:
       it will not be.  Plan a separate DHCP service, or re-author
       `dhcp ipv4` pools on the target by hand knowing the codec will not
       round-trip them.  Recorded `unsupported` rather than `lossy` because the
-      records vanish (#436); the source-side `/dhcp-servers/pool/lease-time`
-      lossy declaration is subsumed by the whole-record drop.
+      records vanish (#436); the source reads each pool whole, with its
+      interface and lease time, so the loss is entirely target-side.
     references: [mikrotik-iosxr-surface]
 
   "snmp.community":

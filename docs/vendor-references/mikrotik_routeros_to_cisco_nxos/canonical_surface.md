@@ -87,7 +87,7 @@ them and what makes a `good` disposition on one of these a manufactured
 * **`dhcp_servers`.** The NX-OS matrix declares `/dhcp-servers/pool`
   unsupported — "Render emits no DHCP server pool". RouterOS is very often the
   DHCP server for the subnets it routes (`/ip pool` + `/ip dhcp-server network`
-  + `/ip dhcp-server` join to one `CanonicalDHCPPool` per network); none of it
+  + `/ip dhcp-server` join to one `CanonicalDHCPPool` per enabled server); none of it
   reaches the Nexus.
 * **`hostname`.** `cisco_nxos/render.py` uses `tree.hostname or "switch"`, so a
   capture with no `/system identity` comes back named `switch` rather than

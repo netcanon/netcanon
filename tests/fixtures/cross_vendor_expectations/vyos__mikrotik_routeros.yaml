@@ -404,11 +404,9 @@ per_field_expectation:
       Source-side gap: `vyos` declares `/dhcp-servers/pool` unsupported,
       so the canonical pool is never populated from this source and
       nothing reaches the target.  Measured empty on all 13 cells.
-      `mikrotik_routeros` renders `/ip pool` + `/ip dhcp-server network`
-      and declares only `/dhcp-servers/pool/lease-time` LOSSY, so DHCP
-      re-authored on the target will stick — minus a non-default lease
-      time, which RouterOS keeps on the `/ip dhcp-server` instance this
-      codec does not render.
+      `mikrotik_routeros` renders `/ip pool` + `/ip dhcp-server` (on the
+      pool's interface, with its lease time) + `/ip dhcp-server network`,
+      so DHCP re-authored on the target will stick.
     references: [vyos-mikrotik-surface]
 
   # -- SNMP -- v1/v2c crosses clean; the USM user degrades -------------------

@@ -330,6 +330,9 @@ add address=192.168.20.1/24 interface=ether2
 /ip pool
 add name=dhcp_pool1 ranges=192.168.10.100-192.168.10.200
 
+/ip dhcp-server
+add address-pool=dhcp_pool1 disabled=no interface=ether1 lease-time=7d name=dhcp1
+
 /ip dhcp-server network
 add address=192.168.10.0/24 gateway=192.168.10.1
 

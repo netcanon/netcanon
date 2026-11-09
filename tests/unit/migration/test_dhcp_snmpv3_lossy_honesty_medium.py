@@ -84,17 +84,20 @@ def test_a_pool_with_no_range_and_no_interface_walks_neither():
     assert "/dhcp-servers/pool/interface" not in walked
 
 
-@pytest.mark.parametrize("codec_name", ["mikrotik_routeros", "arista_eos"])
-def test_where_a_pool_is_served_is_declared_lossy(codec_name):
-    # RouterOS writes no `/ip dhcp-server` on an interface, and EOS's
-    # output names the pool after its interface and says nothing more.
-    caps = get_codec(codec_name).capabilities
+def test_where_a_pool_is_served_is_declared_lossy():
+    # EOS's output names the pool after its interface and says nothing
+    # more.
+    caps = get_codec("arista_eos").capabilities
     assert caps.classify("/dhcp-servers/pool/interface") == "lossy"
 
 
-def test_mikrotik_declares_lease_time_lossy():
+@pytest.mark.parametrize(
+    "path", ["/dhcp-servers/pool/interface", "/dhcp-servers/pool/lease-time"],
+)
+def test_mikrotik_writes_where_a_pool_is_served_and_its_lease(path):
+    # RouterOS writes each pool's `/ip dhcp-server` on its interface,
+    # with its lease-time, and reads both back
+    # (tests/unit/migration/codecs/mikrotik_routeros/test_dhcp_server.py):
+    # the two are no longer declared lossy.
     caps = get_codec("mikrotik_routeros").capabilities
-    assert caps.classify("/dhcp-servers/pool/lease-time") == "lossy", (
-        "MikroTik silently resets a non-default lease_time to 86400 — must "
-        "declare /dhcp-servers/pool/lease-time lossy (#24)"
-    )
+    assert caps.classify(path) == "supported"

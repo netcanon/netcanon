@@ -355,6 +355,7 @@ def _round_trip_tree() -> CanonicalIntent:
         ),
         radius_servers=[CanonicalRADIUSServer(host="192.0.2.10", key="s e;c$[r]et")],
         dhcp_servers=[CanonicalDHCPPool(
+            interface="my port",
             network="10.1.0.0/24", start_ip="10.1.0.10", end_ip="10.1.0.99",
             gateway="10.1.0.1", domain_name="corp;$[x].example",
         )],
@@ -389,7 +390,9 @@ class TestTheValueComesBack:
             "pub lic;$x", _HOSTILE, _HOSTILE,
         )
         assert [s.key for s in back.radius_servers] == ["s e;c$[r]et"]
-        assert [p.domain_name for p in back.dhcp_servers] == ["corp;$[x].example"]
+        assert [(p.interface, p.domain_name) for p in back.dhcp_servers] == [
+            ("my port", "corp;$[x].example"),
+        ]
 
     @pytest.mark.parametrize("name", ['a "b"', "a\\b", "a $b", "a;b"])
     def test_a_find_by_a_quoted_name(self, name: str) -> None:
