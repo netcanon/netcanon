@@ -357,9 +357,9 @@ per_field_expectation:
       important planning item on the pair: a MikroTik branch router is usually
       the site's DHCP server and an AOS-CX access switch is not, so every pool
       needs a new home — a relay pointing at a central server — before the
-      MikroTik is switched off.  Note the SOURCE declares only
-      `/dhcp-servers/pool/lease-time` lossy, i.e. it models pools fully; the
-      loss is entirely target-side.
+      MikroTik is switched off.  Note the SOURCE reads each pool with its
+      interface and lease time, i.e. it models pools fully; the loss is
+      entirely target-side.
     references: [mikrotik-aoscx-surface]
 
   "snmp.community":

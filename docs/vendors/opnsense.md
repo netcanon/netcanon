@@ -336,8 +336,8 @@ Provenance in
   nothing, and a `review:` line in it and a warning of the job say
   so; add the `network` line by hand.  On an OPNsense TARGET a pool
   is written
-  under the zone of its interface.  One that names no interface (a
-  pool from RouterOS, an IOS-XE pool that serves clients a relay
+  under the zone of its interface.  One that names no interface (an
+  IOS-XE pool that serves clients a relay
   forwards, a Junos pool whose server group binds no interface) is
   written under `<lan>`, and an EOS pool, whose own
   name is where its interface goes, under a zone of that name

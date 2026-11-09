@@ -425,28 +425,6 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/dhcp-servers/pool/interface",
-                reason=(
-                    "RouterOS serves a pool from an `/ip dhcp-server` on an "
-                    "interface, which this codec does not write: the "
-                    "`/ip pool` and `/ip dhcp-server network` it writes name "
-                    "no interface, so the pool is served on none and "
-                    "re-parses with no interface."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/dhcp-servers/pool/lease-time",
-                reason=(
-                    "RouterOS lease-time lives on the `/ip dhcp-server` "
-                    "instance, not the `/ip dhcp-server network` this codec "
-                    "renders, so a non-default lease_time is not emitted and "
-                    "re-parses as the 86400 default — a 2h lease policy "
-                    "silently becomes 1 day.  Declared lossy (#24)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "RouterOS does not expose IANA ifType; the codec "
@@ -702,7 +680,8 @@ class MikroTikRouterOSCodec(CodecBase):
     def render_warnings(self, tree: Any) -> list[str]:
         """The warnings every target gives, and one for each review line
         the output has for a DHCP pool: one that states no whole range,
-        or one RouterOS can be given no range for
+        one RouterOS can be given no range for, one that names no
+        interface for its server, or one whose lease does not end
         (:func:`.dhcp_pools.render_pools`)."""
         warnings = super().render_warnings(tree)
         if isinstance(tree, CanonicalIntent):

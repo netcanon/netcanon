@@ -326,9 +326,15 @@ per_field_expectation:
       excluded-address`` multi-fragment exclusions compress to a
       single start_ip/end_ip range on canonical; (3) static
       reservations and DHCP option codes (option 43 / 82) are not
-      modelled.  Most Arista DC leaf deployments use external DHCP
-      servers anyway; this field is typically empty on
-      ``CanonicalIntent`` after Arista parse.
+      modelled; (4) the arista_eos parser puts a pool's NAME where its
+      interface goes (arista_eos declares ``/dhcp-servers/pool/
+      interface`` lossy), so the pool's ``/ip dhcp-server`` is written
+      on an interface of that name (``ip dhcp pool users`` ->
+      ``interface=users``), which the output defines only where an
+      interface is called that.  The round trip reads the name back,
+      so no committed capture shows (4).  Most Arista DC leaf
+      deployments use external DHCP servers anyway; this field is
+      typically empty on ``CanonicalIntent`` after Arista parse.
 
   snmp:
     disposition: lossy

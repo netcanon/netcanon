@@ -250,6 +250,11 @@ def test_populates_every_expected_canonical_field(
     # range merged from /ip pool
     assert lan.start_ip == "10.0.0.100"
     assert lan.end_ip == "10.0.0.200"
+    # where it is served, and its lease, from /ip dhcp-server
+    assert lan.interface == "bridge1"
+    assert lan.lease_time == 3600
+    assert dhcp_by_network["10.100.0.0/24"].interface == "vlan100"
+    assert dhcp_by_network["10.100.0.0/24"].lease_time == 8 * 3600
 
 
 # ---------------------------------------------------------------------------

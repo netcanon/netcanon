@@ -873,8 +873,11 @@ _ORPHAN_ROW = "<dhcpd><opt9>: no <opt9> in <interfaces>, so its DHCP pool has no
 #: The targets whose output, read back, says which interface a pool is on.
 #: The IOS-XE CLI parser puts a pool on the interface whose subnet is its
 #: network, which an OPNsense pool has: the subnet of its zone's address.
+#: RouterOS writes the ``/ip dhcp-server`` that runs on the pool's
+#: interface, and its parser reads the pool from that server.
 _SAYS_A_POOLS_INTERFACE = {
-    "arista_eos", "cisco_iosxe_cli", "fortigate_cli", "juniper_junos", "opnsense",
+    "arista_eos", "cisco_iosxe_cli", "fortigate_cli", "juniper_junos",
+    "mikrotik_routeros", "opnsense",
 }
 
 _OPN_CAPTURES = {

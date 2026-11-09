@@ -1349,6 +1349,52 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A DHCP pool written for RouterOS is served on its interface, and
+  a RouterOS pool is read from the server that serves it.**  RouterOS
+  spreads a DHCP server over three sections (MikroTik's manual,
+  "DHCP"): an `/ip pool` with the range, an `/ip dhcp-server` -- "The
+  interface on which the DHCP server will be running.", the pool it
+  takes addresses from and the lease time -- and an `/ip dhcp-server
+  network`, "the network DHCP server(s) will lease addresses from",
+  with the gateway, DNS servers and domain a client is given.  The
+  renderer wrote no `/ip dhcp-server`, so every pool it wrote was bound
+  to no interface and served nobody, in jobs that said `completed`;
+  the landing page's FortiGate-to-RouterOS pane showed such a pool.
+  The parser made a pool of every network entry and every `/ip pool`,
+  whether a server took it or not (a pool can be PPP's, a hotspot's or
+  IPsec's), on no interface and with a lease of one day.  The renderer
+  now writes, for each pool, an `/ip dhcp-server` on the pool's
+  interface with its pool and its lease time.  A pool that names no
+  interface (one that serves clients a relay forwards, a Junos pool
+  whose server group binds no interface) is written with no server, a
+  lease that does not end with no `lease-time=`, and a pool that
+  states a gateway, DNS servers or a domain but no network without
+  them -- RouterOS gives a client those from the network that holds
+  its address -- each under a `# review:` line and with a warning of
+  the job.  The parser makes one pool for each enabled `/ip
+  dhcp-server` that is not a relay and takes its addresses from an
+  `/ip pool` it reads: on the server's interface, with its lease time
+  (where the line states none, 30 minutes, RouterOS 7's default, and
+  a row where the export is not of RouterOS 7, whose default is not
+  established) and the options of the network entry that holds its
+  range.  A server it does not translate (a relay, no pool, a
+  static-only server, a pool with no range), a lease it does not read,
+  a server whose range no network holds, a pool of several ranges or
+  with a `next-pool`, and a pool or a network entry no translated
+  server uses are rows of the sections not translated; a disabled
+  server is a statement not in force, left out and said.  Static
+  leases, `/ip dhcp-server option` and the keys the tree has no place
+  for are in the known limitations.  The capability matrix loses its
+  two lossy paths under `/dhcp-servers/pool`.  Twenty-one phase-4
+  cells of `dhcp_servers`, on nine pairs onto or from RouterOS, move
+  from `EXPECTED_LOSSY` to `METHODOLOGY_ISSUE_under`: the pools come
+  back as they were written.  Each pair stays `lossy` in its
+  expectation YAML for a loss shown on a synthetic config, and the
+  unevidenced pin of each pair but Junos to RouterOS (which keeps an
+  evidenced loss) is raised by one, with the reason beside it.  The
+  FortiGate-to-RouterOS demo gains its server line, and the landing
+  page's pane and the walkthrough with it.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_dhcp_server.py`.
 - **A DHCP pool with no whole range is written as RouterOS and
   OPNsense take it, and said; RouterOS reads every run of a pool.**
   RouterOS takes no `/ip pool` without its `ranges` (MikroTik's
@@ -5839,7 +5885,21 @@ timestamp if your timezone matters for an audit.
   has been shown to take.  An IOS-XE, EOS or AOS-S `lease infinite`
   reached them so before, and a FortiOS `lease-time 0` reaches them
   so now (see "Fixed"), where it was written as no lease and the
-  target's default applied.  RouterOS writes no lease.
+  target's default applied.  RouterOS writes its server with no
+  `lease-time=`, under a `review:` line.
+- **What a RouterOS DHCP server has beyond its pool is not
+  translated, and nothing says so.**  Static leases (`/ip dhcp-server
+  lease`), `/ip dhcp-server option` and option sets, and the keys of a
+  server or a network entry the tree has no place for (an NTP or WINS
+  server, `next-server`, `boot-file-name`, `dhcp-option`, `netmask`,
+  `use-radius`, `lease-script`, `add-arp` and the like) are left out
+  of every output with no row.  Where a RouterOS 6 server states no
+  lease time it is read as 30 minutes, RouterOS 7's default, and a row
+  says the release's own is not established.  An EOS pool's NAME is
+  where the tree keeps its interface, so onto RouterOS it is the
+  server's `interface=`, which no interface of the output is.  An
+  OPNsense zone whose DHCP is present but not enabled is read as a
+  pool, and RouterOS writes its server `disabled=no`.
 - **AOS-S writes no DHCP pool.**  A pool is read from an AOS-S config
   (see "Fixed"), but an output for AOS-S has a comment for each pool,
   not a `dhcp-server pool` stanza, and the job lists the pool as

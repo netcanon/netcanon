@@ -308,17 +308,22 @@ per_field_expectation:
     disposition: lossy
     reason: >
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
-      server network`` + ``/ip dhcp-server``) joins on parse to a
-      single CanonicalDHCPPool per network and emits as an Arista
-      ``ip dhcp pool <name>`` block.  Lossy bits: (1) RouterOS pools
-      with multiple ``ranges=`` segments collapse to a single
-      start_ip/end_ip range; (2) static reservations
+      server network`` + ``/ip dhcp-server``) joins on parse to one
+      CanonicalDHCPPool per enabled ``/ip dhcp-server`` (on its
+      interface, with its lease time) and emits as an Arista
+      ``ip dhcp pool <name>`` block.  Lossy bits: (1) of a RouterOS
+      pool of several ``ranges=`` the tree keeps the largest run, and
+      a row of the sections not translated says so; (2) static reservations
       (``/ip dhcp-server lease``) have no canonical field and drop
       to raw_sections; (3) DHCP option codes (option 43, 82) are
       not modelled canonically; (4) Arista DC leafs typically
       delegate DHCP to an external service rather than running an
       on-device pool, so this lift may produce config the operator
-      doesn't want — review banner is appropriate.
+      doesn't want — review banner is appropriate; (5) the EOS
+      ``lease <days> <hours> <minutes>`` holds whole minutes, so a
+      RouterOS lease of seconds (``1m30s``) comes back as the minutes
+      it holds (60 seconds).  Every pool of the corpus comes back as
+      it was; no committed capture shows (5).
     references: [mikrotik_dhcp]
 
   snmp:

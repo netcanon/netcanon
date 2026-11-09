@@ -509,6 +509,22 @@ warning of the job (see [`vendors/fortigate.md`](vendors/fortigate.md)
 
 #### `mikrotik_routeros` (bidirectional)
 
+A DHCP pool is written as an `/ip pool`, an `/ip dhcp-server` on the
+pool's interface with its lease time, and an `/ip dhcp-server network`
+with its options.  A pool on no interface (one an AOS-S or IOS-XE
+server keeps for clients a relay forwards, a Junos pool no
+`dhcp-local-server` group binds) is written with no server, since a
+RouterOS server runs on an interface, and serves nothing until one is
+added; a lease that does not end is written with no `lease-time=`; a
+pool that states options and no network is written without them.
+Each is a `# review:` line and a warning of the job.  As a source, a
+pool is an enabled `/ip dhcp-server` that serves clients of its own,
+with the range of its pool and the options of the network that holds
+it; a server, pool or network that is not translated is a row of the
+sections not translated, and a server of `disabled=yes` is left out
+and said.  ⚠️ Up to 0.7.7 no server was written, and a pool was read
+from every network and pool whether a server served it or not.
+
 A DHCP pool the source states no range for, or one end of it, is
 written `ranges=` its network's hosts, less the addresses the output
 gives its own interfaces (a run each side of one that falls inside),
@@ -525,7 +541,6 @@ translated; so is a piece of it in a form the parser does not read
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |
 | `/interfaces/interface/dhcp-client` | Lossy (warn) | RouterOS keeps a DHCP client in `/ip dhcp-client`, which the codec neither reads nor writes: the interface is written without one. |
-| `/dhcp-servers/pool/interface` | Lossy (warn) | RouterOS serves a pool from an `/ip dhcp-server` on an interface, which the codec does not write: the `/ip pool` and `/ip dhcp-server network` it writes name no interface, so the pool is served on none and is read back with no interface. |
 | `/interfaces/interface/config/vrf` + `/routing-instances/instance/*` | Unsupported | No VRF is written (`/routing-instances/instance` is unsupported), so no field of one is, and no interface is placed in one.  ⚠️ Up to 0.7.7 each interface's VRF and each field of a VRF were declared supported. |
 | Fields of records the codec does not write: `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
@@ -573,7 +588,7 @@ comment and a warning of the job (see
 | `/vlans/vlan/id` | Lossy | OPNsense has no VLAN apart from a VLAN device on a parent (`<vlan>` with `<if>` and `<tag>`).  A VLAN on a bridge, or on a zone's key (`<if>lan</if>`, written where the config has no port), is read back as a VLAN; one another platform carries on a port or a LAG is written as a VLAN device on it, which the parser reads back as a routed sub-interface of the port (its tag the VLAN's id), with no VLAN record. |
 | `/vlans/vlan/name` | Lossy | An OPNsense `<vlan>` has no name of its own: the parser names a VLAN after its device (`<vlanif>`), and the render writes another vendor's VLAN name as the `<descr>` where the VLAN has no description, and drops it where it has one.  The `<descr>` is the VLAN's description (`/vlans/vlan/description`, lossy). |
 | `/vlans/vlan/description` | Lossy | A `<vlan>`'s `<descr>`.  It goes with the VLAN: where the VLAN is read back as a sub-interface of its port (`/vlans/vlan/id`), the `<descr>` is the sub-interface's description. |
-| `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (a pool from RouterOS, an IOS-XE pool that serves clients a relay forwards, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, with the subnet of the zone's own address as its network (none where the zone has no static address), and a pool whose zone `<interfaces>` does not have is left out and listed. |
+| `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (an IOS-XE pool that serves clients a relay forwards, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, with the subnet of the zone's own address as its network (none where the zone has no static address), and a pool whose zone `<interfaces>` does not have is left out and listed. |
 | `/interfaces/interface/dot1q-vlan` | Supported | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is written as OPNsense's own VLAN device on its port, `<vlan>` with `<if>igb1</if>`, `<tag>200</tag>` and `<vlanif>igb1.100</vlanif>`: the tag is the sub-interface's own, not the number in its name, and its zone assigns the device (one that holds a description and nothing else is the device alone, its `<descr>` the description: a zone would assign and enable it).  The parser reads a VLAN device by its parent: on a port or a LAGG it is a sub-interface of it (read back as one, and, from an OPNsense config, sent onto another vendor where its parent goes, named by its tag); on a bridge, another VLAN device, a zone's key (`lan`, `opt3`), or a name that says it is a VLAN interface, a loopback or a tunnel, a VLAN interface and a VLAN.  Zones are not typed, so a parent that is none of those is a port whatever its name.  OPNsense's VLAN form refuses a device name with a dot in it when the VLAN is saved (a `<!-- review: -->` comment says so).  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a review comment.  OPNsense keeps one VLAN device for a tag on a parent: where the output has a tag twice on one, the second `<vlan>` holds a review comment that names the first.  A sub-interface of two tags is written with its outer tag: its inner tag (`/interfaces/interface/dot1q-inner-vlan`, unsupported) is reported as a drop and the job is `partial`. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |

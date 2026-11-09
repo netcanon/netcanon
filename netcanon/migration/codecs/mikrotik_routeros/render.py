@@ -19,7 +19,8 @@ password=...`` when set), ``/ip address`` (including the VIP rows
 back to their group's pseudo-interface), ``/ipv6 address`` (GAP-EVPN-3,
 same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
 ``/snmp`` (+ ``/snmp community`` for v1/v2c + SNMPv3 USM),
-``/radius``, ``/ip pool`` + ``/ip dhcp-server network``, ``/user``,
+``/radius``, ``/ip pool`` + ``/ip dhcp-server`` + ``/ip dhcp-server
+network``, ``/user``,
 ``/system dns``, ``/system ntp client``.  Non-``vrrp`` modes (HSRP /
 CARP / anycast) surface as ``# review:`` comments and skip.
 
@@ -936,9 +937,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
         lines.append("")
 
-    # ----- /ip pool + /ip dhcp-server network (Tier 2 DHCP) -----
-    # RouterOS splits DHCP across /ip pool (the address range) and
-    # /ip dhcp-server network (network-scoped options); a pool that
+    # ----- /ip pool + /ip dhcp-server + /ip dhcp-server network -----
+    # RouterOS splits DHCP across /ip pool (the address range),
+    # /ip dhcp-server (the server on its interface, with its lease)
+    # and /ip dhcp-server network (network-scoped options); a pool that
     # states no whole range is written with what it hands out
     # (:mod:`.dhcp_pools`).
     lines.extend(render_pools(tree.dhcp_servers, tree.interfaces, _quote_if_needed)[0])

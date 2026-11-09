@@ -540,15 +540,20 @@ per_field_expectation:
     disposition: lossy
     reason: >
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
-      server`` + ``/ip dhcp-server network``) joins on parse to a
-      single CanonicalDHCPPool per (interface, network) pair.
+      server`` + ``/ip dhcp-server network``) joins on parse to one
+      CanonicalDHCPPool per enabled ``/ip dhcp-server``, on its
+      interface.
       OPNsense uses an INTERFACE-KEYED layout (``<dhcpd>/<lan>``
       pools) where the network / mask is INFERRED from the zone
       interface.  Lease-time units are seconds on both sides
       (RouterOS suffix-text ``1h`` / ``8h`` parses to seconds).
-      OPNsense codec does not currently advertise ``/dhcp/pool``
-      in its capability matrix supported[]; render is partial
-      pending wire-up.  Static reservations (RouterOS ``/ip dhcp-
+      The opnsense codec declares ``/dhcp-servers/pool`` lossy: a pool
+      is written under the zone of its interface, and a pool whose
+      interface is no interface of the output (a RouterOS server on a
+      port the config states nothing else of, no address and no line
+      of its own) serves nothing there and comes back as no pool.
+      Every pool of the corpus comes back as it was; no committed
+      capture shows the loss.  Static reservations (RouterOS ``/ip dhcp-
       server lease`` / OPNsense ``<staticmap>``) and DHCP option
       codes are not modelled canonically on either side.
     references: [mikrotik_dhcp, opnsense-dhcp]

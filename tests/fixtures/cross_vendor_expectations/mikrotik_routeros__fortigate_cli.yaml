@@ -254,8 +254,9 @@ per_field_expectation:
       (good after rename mesh — RouterOS ``interface=bridge1`` ->
       FortiOS ``set interface "port4"``), network (good — RouterOS
       ``address=<CIDR>`` populates the canonical CIDR which FortiOS
-      derives ``set netmask`` from), start_ip / end_ip (good — first
-      range only when multiple ranges on RouterOS), gateway (good),
+      derives ``set netmask`` from), start_ip / end_ip (good — the
+      largest run of a RouterOS pool of several ranges, the others a
+      row of the sections not translated), gateway (good),
       dns_servers (lossy — RouterOS unbounded list versus FortiOS
       7.x's four; a server past the fourth is written in a
       ``# review:`` line of the pool; rare in practice), lease_time

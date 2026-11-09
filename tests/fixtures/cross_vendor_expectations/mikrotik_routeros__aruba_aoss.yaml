@@ -236,8 +236,8 @@ per_field_expectation:
     reason: >
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
       server network`` + ``/ip dhcp-server``) joins on parse to
-      a single CanonicalDHCPPool per network and emits in
-      canonical scope.  The aruba_aoss render writes no pool
+      one CanonicalDHCPPool per enabled ``/ip dhcp-server`` and
+      emits in canonical scope.  The aruba_aoss render writes no pool
       (``/dhcp-servers/pool`` is unsupported): AOS-S has a DHCP
       server of its own (``dhcp-server pool``, which the aruba_aoss
       parser reads), but cross-vendor render to Aruba drops the pool

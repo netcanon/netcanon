@@ -70,7 +70,8 @@ CanonicalDHCPPool(interface, network, start_ip, end_ip,
 
 The Cisco codec's capability matrix lists `/dhcp/pool` paths under
 its supported set; the MikroTik codec parses the three RouterOS
-sections into a single `CanonicalDHCPPool` per network.  Cross-
+sections into a single `CanonicalDHCPPool` per enabled
+`/ip dhcp-server`.  Cross-
 vendor render reconstructs the three-section RouterOS form from
 the canonical record.
 

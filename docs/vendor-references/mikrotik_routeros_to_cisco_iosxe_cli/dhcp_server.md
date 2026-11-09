@@ -63,8 +63,9 @@ CanonicalDHCPPool(interface, network, start_ip, end_ip,
 ```
 
 The MikroTik codec parses the three RouterOS sections into a
-single `CanonicalDHCPPool` per network (joining via
-`address-pool` <-> `/ip pool name`).  Cross-vendor render to
+single `CanonicalDHCPPool` per enabled `/ip dhcp-server` (joining
+via `address-pool` <-> `/ip pool name`, and the network that holds
+the pool's range).  Cross-vendor render to
 Cisco emits a single `ip dhcp pool` block.
 
 ### MikroTik -> Cisco round-trip

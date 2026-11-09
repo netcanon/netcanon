@@ -385,8 +385,8 @@ per_field_expectation:
       Source-side absence, not a target gap: the cisco_nxos codec never
       populates `intent.dhcp_servers` (0 of 13 cells; its matrix declares
       `/dhcp-servers/pool` unsupported), so there is nothing for the RouterOS
-      target to lose.  RouterOS *does* render pools — its matrix declares only
-      `/dhcp-servers/pool/lease-time` lossy — so closing the NX-OS parse side
+      target to lose.  RouterOS *does* render pools — on their interface, with
+      their lease time — so closing the NX-OS parse side
       would move this row to `good` or `lossy`, not leave it here.
     references: [nxos-routeros-surface]
 

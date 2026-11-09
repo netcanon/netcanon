@@ -1,6 +1,6 @@
 # DHCP: Aruba AOS-S versus MikroTik RouterOS
 
-> **Update 2026-11-05 — an AOS-S switch's own DHCP server is now read.**  This page was written when the aruba_aoss parser read no `dhcp-server pool` and took AOS-S for a relay platform with no pool to translate.  AOS-S runs a DHCP server of its own (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the parser now reads each pool of a server that is enabled: onto the `Vlan<N>` whose subnet is its network (no interface for a pool of relayed clients), with its network, range, default router, DNS servers, domain name and lease.  A server that is not enabled, a pool that is incomplete, and what the canonical pool has no place for (a second range or router, a static binding, an option) are rows of the sections not translated.  Of the committed inputs, `hpe_community_2930f_wc1610_dhcp_server.cfg` holds 3 pools and the others none.  On RouterOS each pool is written as an `/ip pool` range and an `/ip dhcp-server network` with its gateway and DNS servers, but with no `/ip dhcp-server` entry, which is what binds a pool to an interface: `dhcp_servers` is `lossy` on this pair, and the server is added by hand.
+> **Update 2026-11-05 — an AOS-S switch's own DHCP server is now read.**  This page was written when the aruba_aoss parser read no `dhcp-server pool` and took AOS-S for a relay platform with no pool to translate.  AOS-S runs a DHCP server of its own (HPE's AOS-S 16.11 Management and Configuration Guide: a `dhcp-server pool`, served on a VLAN that states `dhcp-server`, once `dhcp-server enable` is set), and the parser now reads each pool of a server that is enabled: onto the `Vlan<N>` whose subnet is its network (no interface for a pool of relayed clients), with its network, range, default router, DNS servers, domain name and lease.  A server that is not enabled, a pool that is incomplete, and what the canonical pool has no place for (a second range or router, a static binding, an option) are rows of the sections not translated.  Of the committed inputs, `hpe_community_2930f_wc1610_dhcp_server.cfg` holds 3 pools and the others none.  On RouterOS each pool is written as an `/ip pool` range, an `/ip dhcp-server network` with its gateway and DNS servers, and (since 2026-11-09) an `/ip dhcp-server` on the pool's VLAN interface with its lease, which is what binds a pool to an interface.  A pool of relayed clients names no interface and is written with no server, under a `# review:` line: `dhcp_servers` stays `lossy` on this pair for that pool.
 
 ## Aruba AOS-S
 
@@ -47,7 +47,8 @@ RouterOS splits DHCP server config across **three sections**:
   options for clients on a given subnet
 
 The MikroTik codec joins these on parse into a single
-`CanonicalDHCPPool` per network and emits all three on render.
+`CanonicalDHCPPool` per enabled `/ip dhcp-server` and emits all
+three on render (the server since 2026-11-09).
 
 Static reservations live on `/ip dhcp-server lease`; DHCP options
 (`option-set` / per-class options) live on `/ip dhcp-server option`

@@ -17,7 +17,8 @@ scope and you'll handle those separately.
 - `config system dns / set primary` → `/ip dns`
 - `config system interface / edit <port> / set ip <addr> <mask>`
   → `/interface ethernet` + `/ip address`
-- `config system dhcp server` → `/ip pool` + `/ip dhcp-server` +
+- `config system dhcp server` → `/ip pool` + `/ip dhcp-server` on
+  the pool's interface, with its lease time +
   `/ip dhcp-server network`
 - VLAN sub-interfaces (`config system interface / edit "VL_10" /
   set type vlan / set vlanid 10 / set interface "internal1"`) →
@@ -86,6 +87,13 @@ device, verify:
       `config ip-range / edit 1 / set start-ip / set end-ip` form
       translates to RouterOS's `/ip pool` ranges; verify the
       start/end IPs align with your existing DHCP plan.
+- [ ] **DHCP server**: each pool is served by an `/ip dhcp-server`
+      on the interface the FortiGate server was on, with its lease
+      time (the demo's pool: `interface=ether1 lease-time=7d`, the
+      FortiGate default of a week).  ⚠️ Up to 0.7.7 no
+      `/ip dhcp-server` line was written, so the pool was bound to no
+      interface and served nobody: a device migrated with an earlier
+      version needs that line added by hand.
 - [ ] **VLAN sub-interface naming**: FortiGate `VL_10` →
       `/interface vlan` (default-named); rename if you have a
       naming convention.

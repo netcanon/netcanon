@@ -98,9 +98,45 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   take only a hash, and leave the account out under a `review:` line.
   ⚠️ Up to 0.7.7 it was read as no password, so such a user was a
   `review:` line on every target, RouterOS included
-- DHCP server pools — `/ip pool` + `/ip dhcp-server network`
-  (per-pool subnet, gateway, range, options; not the interface that
-  serves a pool -- see `/dhcp-servers/pool/interface` below).  The
+- DHCP server pools — `/ip dhcp-server` + `/ip pool` + `/ip
+  dhcp-server network`.  A pool of the tree is an enabled server that
+  serves clients of its own (no `relay=`, or `relay=0.0.0.0`): its
+  interface, its lease time, the range of its `address-pool=`, and
+  the gateway, DNS servers and domain of the first `/ip dhcp-server
+  network` that holds the start of that range.  Two servers of one
+  pool are two pools.  A server that states no `lease-time=` has
+  RouterOS's default, 30m (MikroTik's CLI reference of `/ip
+  dhcp-server`); from an export that does not say it is of RouterOS
+  7 that is also a row of the sections not translated, since the
+  default of the source's release is not established.  What is not
+  translated is a row of those sections, which names the server, the
+  pool or the network: a server of static leases only
+  (`address-pool=static-only`, or none), one of the requests a relay
+  sends, one whose `address-pool=` names no pool or a pool with no
+  range the parser reads, a `lease-time=` in a form it does not read
+  (read as 30m), a pool's `next-pool=`, a pool no server takes (a pool
+  can be PPP's, a hotspot's or IPsec's), and a network no server
+  uses.  A server of `disabled=yes` is not in force: it is left out
+  and said.  Static leases (`/ip dhcp-server lease`), `/ip dhcp-server
+  option` and the keys the tree has no place for (`ntp-server=`,
+  `next-server=`, `dhcp-option=` and the like) are not translated,
+  and nothing says so yet.  ⚠️ Up to 0.7.7 a pool was made of each
+  network and each pool whether or not a server served it, with no
+  interface and a lease of one day.  Onto RouterOS each pool is an
+  `/ip pool` (`dhcp_pool<N>`), an `/ip dhcp-server` (`dhcp<N>`,
+  `disabled=no`, on the pool's interface, with its lease time) and an
+  `/ip dhcp-server network`.  A server runs on an interface
+  ("(mandatory)", in that reference), so a pool on no interface -- an
+  AOS-S or IOS-XE pool kept for clients a relay forwards, a Junos pool
+  no `dhcp-local-server` group binds -- has a `# review:` line in
+  place of its server, and serves nothing until one is added; read
+  back, it is no pool.  A lease that does not end is written with no
+  `lease-time=` (RouterOS states no such lease), and a pool that
+  states a gateway, DNS servers or a domain and no network is written
+  without them (they are given from an `/ip dhcp-server network`,
+  whose `address` is the network): each under a `# review:` line.
+  ⚠️ Up to 0.7.7 no `/ip dhcp-server` was written, so no pool was
+  served on the target.  The
   tree holds one run of a pool: of a `ranges=` that states several
   (`10.0.0.10-10.0.0.20,10.0.0.100-10.0.0.200`) the largest is kept
   (the lower of two as large), and the others are a row of the
@@ -211,11 +247,6 @@ can appear BEFORE `/interface vrrp` in the source.
 - **`/interfaces/interface/dhcp-client`** — RouterOS keeps a DHCP
   client in `/ip dhcp-client`, which the codec neither reads nor
   writes: the interface is written without one (severity `warn`).
-- **`/dhcp-servers/pool/interface`** — RouterOS serves a pool from an
-  `/ip dhcp-server` on an interface, which the codec does not write:
-  the `/ip pool` and `/ip dhcp-server network` it writes name no
-  interface, so a pool is served on none and is read back with no
-  interface (severity `warn`).
 - **No VRF is written.**  `/routing-instances/instance` is
   `unsupported`, and so is each field of a VRF and each interface's
   VRF: no interface is placed in one.

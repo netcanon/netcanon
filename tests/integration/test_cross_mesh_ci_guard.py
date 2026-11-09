@@ -565,6 +565,28 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # Junos pools with no range were drift onto FortiGate before and are drift
 # now, with a range read back, and no OPNsense capture has such a pool.
 # opnsense__fortigate_cli stays at 5.
+#
+# Raised by one each, for ``dhcp_servers``, when the RouterOS renderer began
+# to write each pool's ``/ip dhcp-server`` (on its interface, with its lease
+# time) and the parser to read a pool only where an enabled server takes it:
+# arista_eos__mikrotik_routeros (1 to 2), aruba_aoss__mikrotik_routeros (4 to
+# 5), cisco_iosxe_cli__mikrotik_routeros (1 to 2),
+# fortigate_cli__mikrotik_routeros (2 to 3), mikrotik_routeros__arista_eos
+# (1 to 2), mikrotik_routeros__cisco_iosxe_cli (1 to 2),
+# mikrotik_routeros__opnsense (5 to 6) and opnsense__mikrotik_routeros (3 to
+# 4).  Every pool of the corpus on those pairs now comes back whole; before,
+# each came back with no interface.  Each loss is real and no committed
+# capture shows it: an AOS-S or IOS-XE pool that serves clients a relay
+# forwards names no interface, is written with no server and comes back as
+# no pool; an EOS pool's name is where its interface goes, and is written
+# as the server's interface; a FortiOS lease that does not end comes back as
+# RouterOS's 30m; an EOS or IOS-XE lease holds whole minutes; an OPNsense
+# pool on a zone with no static address has no network, so RouterOS is
+# given none of its options; and a RouterOS server on a port the config
+# states nothing else of is no zone of an OPNsense output.  Each YAML's
+# reason says which.  juniper_junos__mikrotik_routeros is not raised: every
+# pool of one Junos capture names no interface and now comes back as no
+# pool, the loss its YAML declares.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -573,14 +595,14 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__cisco_iosxe_cli": 1,
     "arista_eos__fortigate_cli": 3,
     "arista_eos__juniper_junos": 4,
-    "arista_eos__mikrotik_routeros": 1,
+    "arista_eos__mikrotik_routeros": 2,
     "arista_eos__opnsense": 4,
     "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
     "aruba_aoss__cisco_iosxe_cli": 3,
     "aruba_aoss__fortigate_cli": 3,
     "aruba_aoss__juniper_junos": 3,
-    "aruba_aoss__mikrotik_routeros": 4,
+    "aruba_aoss__mikrotik_routeros": 5,
     "aruba_aoss__opnsense": 6,
     "cisco_iosxe__aruba_aoss": 1,
     "cisco_iosxe__cisco_iosxe_cli": 1,
@@ -591,7 +613,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__cisco_iosxe": 1,
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
-    "cisco_iosxe_cli__mikrotik_routeros": 1,
+    "cisco_iosxe_cli__mikrotik_routeros": 2,
     "cisco_iosxe_cli__opnsense": 5,
     "dell_os10__opnsense": 1,
     "fortigate_cli__arista_eos": 1,
@@ -599,7 +621,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__cisco_iosxe": 2,
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 4,
-    "fortigate_cli__mikrotik_routeros": 2,
+    "fortigate_cli__mikrotik_routeros": 3,
     "fortigate_cli__opnsense": 4,
     "juniper_junos__arista_eos": 2,
     "juniper_junos__aruba_aoss": 2,
@@ -608,20 +630,20 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "juniper_junos__fortigate_cli": 4,
     "juniper_junos__mikrotik_routeros": 3,
     "juniper_junos__opnsense": 4,
-    "mikrotik_routeros__arista_eos": 1,
+    "mikrotik_routeros__arista_eos": 2,
     "mikrotik_routeros__aruba_aoss": 1,
     "mikrotik_routeros__cisco_iosxe": 1,
-    "mikrotik_routeros__cisco_iosxe_cli": 1,
+    "mikrotik_routeros__cisco_iosxe_cli": 2,
     "mikrotik_routeros__fortigate_cli": 3,
     "mikrotik_routeros__juniper_junos": 1,
-    "mikrotik_routeros__opnsense": 5,
+    "mikrotik_routeros__opnsense": 6,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,
     "opnsense__aruba_aoss": 1,
     "opnsense__cisco_iosxe_cli": 1,
     "opnsense__fortigate_cli": 5,
     "opnsense__juniper_junos": 4,
-    "opnsense__mikrotik_routeros": 3,
+    "opnsense__mikrotik_routeros": 4,
 }
 
 _EVIDENCED = {"EXPECTED_LOSSY", "EXPECTED_UNSUPPORTED"}
