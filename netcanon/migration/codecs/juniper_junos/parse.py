@@ -112,7 +112,7 @@ from .._helpers import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .dhcp_pools import one_range, pool_rows
+from .dhcp_pools import exclusion_rows, own_addresses_of, pool_reading, pool_rows
 from .port_names import (
     TAGGING_STATEMENT_TAGS,
     classify_port_name,
@@ -1189,14 +1189,31 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     )
     several_ranges: list[str] = []
     no_addresses: list[str] = []
+    # Each pool by whether it is of the older form, and its name.
+    split: list[tuple[bool, str]] = []
+    none_left: list[tuple[bool, str]] = []
+    unread_exclusions: list[tuple[bool, str]] = []
+    own = own_addresses_of(intent)
     for pool_key, entry in ticked(dhcp_pool_state.items()):
         # A pool's ranges are read by name; the tree holds one run of
-        # them (``dhcp_pools.one_range``), and a row says the others.
-        start_ip, end_ip, several = one_range(entry.get("ranges", {}), entry.get("network", ""))
+        # them, less what the pool excludes
+        # (``dhcp_pools.pool_reading``), and rows say the others.
+        reading = pool_reading(
+            entry.get("ranges", {}), entry.get("network", ""),
+            entry.get("excluded_addresses", {}), entry.get("excluded_ranges", {}), own,
+        )
+        start_ip, end_ip = reading.start_ip, reading.end_ip
         legacy = pool_key.startswith("_legacy:")
         name = pool_key[len("_legacy:"):] if legacy else pool_key
-        if several:
+        if reading.several:
             several_ranges.append(name)
+        if reading.split:
+            split.append((legacy, name))
+        if reading.unread:
+            unread_exclusions.append((legacy, name))
+        if reading.none_left:
+            none_left.append((legacy, name))
+            continue
         # A pool that states neither a network nor a range (only its
         # options) hands out no address the tree can hold.
         if not (entry.get("network") or start_ip or end_ip):
@@ -1266,6 +1283,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         *_no_native_unit_row(no_native_unit),
         *_older_native_rows(older_native),
         *pool_rows(several_ranges, no_addresses),
+        *exclusion_rows(split, none_left, unread_exclusions),
     ]
     if not cut_lines:
         return intent, raw
@@ -3502,6 +3520,10 @@ def _apply_access(
       device).  The tree holds one run of a pool: the finished parse
       keeps the largest run of its ranges and a row says the rest
       (``dhcp_pools.one_range``).
+    * ``excluded-address <ip>`` and ``excluded-range <RNAME> low|high
+      <ip>`` - what the pool does not hand out, read as ``range`` is;
+      the finished parse takes them out of the pool's range
+      (``dhcp_pools.pool_reading``).
     * ``dhcp-attributes router <ip>`` - default gateway.
     * ``dhcp-attributes name-server <ip>`` - DNS server (additive).
     * ``dhcp-attributes maximum-lease-time <sec>`` - lease seconds.
@@ -3542,6 +3564,16 @@ def _apply_access(
         if ends:
             entry.setdefault("ranges", {}).setdefault(sub[1], {}).update(ends)
         return
+    # What the pool does not hand out (Junos 18.1R1 on): an address a
+    # line, and ranges by name, read as ``range`` is.
+    if head == "excluded-address" and len(sub) >= 2:
+        entry.setdefault("excluded_addresses", {})[sub[1]] = None
+        return
+    if head == "excluded-range" and len(sub) >= 4:
+        ends = {b: v for b, v in zip(sub[2::2], sub[3::2], strict=False) if b in ("low", "high")}
+        if ends:
+            entry.setdefault("excluded_ranges", {}).setdefault(sub[1], {}).update(ends)
+        return
     if head == "dhcp-attributes" and len(sub) >= 3:
         attr = sub[1]
         val = sub[2]
@@ -3561,8 +3593,8 @@ def _apply_access(
         if attr == "domain-name":
             entry["domain_name"] = val
             return
-    # Other sub-paths (boot-server, propagate-settings, exclude-
-    # range, etc.) parse-and-ignore -- Tier 3.
+    # Other sub-paths (boot-server, propagate-settings, etc.)
+    # parse-and-ignore -- Tier 3.
 
 
 def _apply_system_services_dhcp(
@@ -3617,6 +3649,10 @@ def _apply_system_services_dhcp(
             ends = {b: v for b, v in zip(sub[1::2], sub[2::2], strict=False) if b in ("low", "high")}
             if ends:
                 entry.setdefault("ranges", {}).setdefault("", {}).update(ends)
+            return
+        # An address the pool does not hand out, one a line.
+        if head == "exclude-address" and len(sub) >= 2:
+            entry.setdefault("excluded_addresses", {})[sub[1]] = None
             return
         if head == "router" and len(sub) >= 2:
             entry["gateway"] = sub[1]

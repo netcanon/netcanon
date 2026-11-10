@@ -1349,6 +1349,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **What a Junos DHCP pool excludes is taken out of the range the
+  tree holds, and said.**  A Junos address-assignment pool can
+  exclude addresses from what it hands out (`excluded-address <ip>`
+  and `excluded-range <name> low|high <ip>` under `family inet`,
+  from Junos 18.1R1), and so can the older `system services dhcp
+  pool` (`exclude-address <ip>`).  The parser read none of them and
+  said nothing, so every target that writes a pool was given a range
+  that holds the addresses the source keeps back.  The tree has no
+  place for an exclusion.  The parser now takes the excluded
+  addresses, and the device's own interface addresses (which Junos
+  does not hand out either), out of what the pool hands out -- its
+  ranges, or its network's hosts where it states none -- and keeps
+  the largest run left (the lower of two as large), with both its
+  ends stated.  A pool whose exclusions take out nothing it hands out
+  (the router's own address, an address outside its range) is read as
+  it was.  Rows of the sections not translated name a pool whose
+  exclusions leave more than one run, a pool left with no address
+  (not translated), and a pool with an exclusion that cannot be read
+  (an address that is not one, a range without both ends or with its
+  low above its high), which is not taken out.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_pool_that_excludes.py`.
 - **A Junos DHCP pool of several ranges is read as the largest run
   they make, and the others are said.**  A Junos address-assignment
   pool can state several ranges (`range <name> low|high`), and
@@ -6037,6 +6058,11 @@ timestamp if your timezone matters for an audit.
   answers give for IOS XE 17.6 and later and its configuration guide
   does not: a `review:` line above it says so.  The vendor page says
   it.
+- **A Junos pool is one run of addresses in the tree.**  A Junos pool
+  can hand out several runs (several ranges, or an exclusion in the
+  middle of what it hands out); the tree holds one range, so the
+  largest run is kept, and a row of the sections not translated says
+  so.
 - **A DHCP pool with both ends of a range and no network is written
   on Junos with no `network`.**  Junos has not been shown to take a
   pool with no network.
