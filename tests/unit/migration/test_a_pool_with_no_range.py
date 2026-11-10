@@ -6,13 +6,16 @@ reading of such a pool).  A target that takes a pool only with its
 range has to be told them, and three renderers were not: FortiOS wrote
 a server with no ``ip-range`` (it hands out no address), RouterOS left
 the ``/ip pool`` out, and OPNsense wrote an enabled zone with no range,
-each with nothing said.
+each with nothing said.  Junos wrote a pool that states one end of its
+range as a range with that end alone, and Junos and IOS-XE a pool with
+neither a range nor a network as its options alone, a pool that hands
+out nothing.
 
-This module renders such a pool onto every public codec and reads the
-output back with that codec's own parser, and its text.  Each codec is
-in one table, and each table is compared for EQUALITY with what is
-measured, so that a codec which changes what it does fails until it is
-moved:
+This module renders such pools onto every public codec and reads the
+output back with that codec's own parser, and its text.  Each codec
+and case is in one table, and each table is compared for EQUALITY with
+what is measured, so that a codec which changes what it does fails
+until it is moved:
 
 * :data:`TOLD` -- the target is written the addresses: the pool reads
   back with a run of its network's hosts, from the end it states, that
@@ -66,12 +69,20 @@ CASES: dict[str, dict[str, str]] = {
     "no network": {},
 }
 
-#: Written the addresses the pool hands out (each module's docstring
-#: cites the vendor: FortiOS hands out none from a server with no
-#: ``ip-range``; RouterOS's ``ranges`` is "( mandatory )"; OPNsense
-#: will not save a zone with no range; Arista states nothing a subnet
-#: with no ``range`` hands out).
-TOLD = {"arista_eos", "fortigate_cli", "mikrotik_routeros", "opnsense"}
+#: Written the addresses the pool hands out, by target and case (each
+#: module's docstring cites the vendor: FortiOS hands out none from a
+#: server with no ``ip-range``; RouterOS's ``ranges`` is "( mandatory
+#: )"; OPNsense will not save a zone with no range; Arista states
+#: nothing a subnet with no ``range`` hands out; Junos's reference of
+#: ``range`` does not say what a range with one end is).  A pool with
+#: neither a range nor a network is not written on IOS-XE and Junos,
+#: where a pool hands out the addresses of its network.
+TOLD = {
+    *((name, case) for name in ("arista_eos", "fortigate_cli", "mikrotik_routeros", "opnsense")
+      for case in ("no range", "one end", "no network")),
+    ("juniper_junos", "one end"), ("juniper_junos", "no network"),
+    ("cisco_iosxe_cli", "no network"),
+}
 
 #: The platform hands out the network of a pool with no range: Junos
 #: "will use all available addresses within the subnet specified";
@@ -89,19 +100,9 @@ NO_POOLS = {
 #: Not established, or not mended, with the shape each is measured as
 #: (``"network only"``: the pool reads back with its network and no
 #: whole range; ``"other"``: no table fits), and in the CHANGELOG's
-#: known limitations.
-_NEITHER = (
-    "a pool with neither a range nor a network is written with its "
-    "options alone, and nothing is said"
-)
-OPEN: dict[tuple[str, str], tuple[str, str]] = {
-    ("juniper_junos", "one end"): ("network only", (
-        "the output writes a range with a low and no high; what Junos "
-        "does with one is not established"
-    )),
-    ("cisco_iosxe_cli", "no network"): ("other", _NEITHER),
-    ("juniper_junos", "no network"): ("other", _NEITHER),
-}
+#: known limitations.  None is open now; a cell that becomes so is
+#: pinned here with its reason.
+OPEN: dict[tuple[str, str], tuple[str, str]] = {}
 
 #: How a comment line of each target's grammar begins.
 _COMMENT_STARTS = (";", "!", "#", "//", "/*", "<!--", "*")
@@ -236,7 +237,7 @@ class TestEveryTarget:
 
     def test_every_cell_is_in_one_table(self) -> None:
         tables = [
-            {(name, case) for name in TOLD for case in CASES},
+            TOLD,
             NATIVE,
             {(name, case) for name in NO_POOLS for case in CASES},
             set(OPEN),
@@ -246,7 +247,7 @@ class TestEveryTarget:
         assert sum(len(table) for table in tables) == len(every)
 
     def test_the_told_are_told(self, measured_shapes: dict[str, set]) -> None:
-        assert measured_shapes["told"] == {(name, case) for name in TOLD for case in CASES}
+        assert measured_shapes["told"] == TOLD | _open("told")
 
     def test_the_native_read_back_as_their_network(
         self, measured_shapes: dict[str, set],

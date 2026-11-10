@@ -12,7 +12,9 @@ FortiOS server with no ``config ip-range`` hands out none, RouterOS
 takes no ``/ip pool`` without its ``ranges`` (the manual: "mandatory"),
 and OPNsense will not save a zone with no range ("A valid range must be
 specified.") and writes a ``range`` line for each pool of a zone it
-serves.
+serves.  Junos hands out a pool with no range itself, and is told a
+pool that states one end of one: its reference of ``range`` does not
+say what a range with one end is.
 
 So a pool that states no range, or one end of one, is given its
 network's hosts (all of a /31 or a /32), from the end it states to the

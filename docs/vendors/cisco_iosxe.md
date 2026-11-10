@@ -260,12 +260,14 @@ Canonical mapping:
   each is a `disabled:` row.  Where the output cannot serve a pool
   where the source did (it has no interface of that name, or that
   interface has no address in the pool's network) or cannot write its
-  range (the pool has no network, or the range is not inside it), a
-  `review:` line in the pool and a warning of the job say so.  A pool
+  range (the range is not inside its network), a `review:` line in
+  the pool and a warning of the job say so.  A pool that states no
+  network is not written: it would hand out no address, and a
+  `review:` line in its place and a warning say so.  A pool
   from OPNsense has the subnet of its zone's own address as its
   network (up to 0.7.7 it had none, and was written with no `network`
-  line); one whose zone has no static address still has none, and
-  hands out no address until a `network` line is added.  An exclusion
+  line); one whose zone has no static address still has none, and is
+  not written (above).  An exclusion
   of a pool in a VRF is written `ip dhcp excluded-address vrf <name>`,
   which Cisco's community answers give for IOS XE 17.6 and later and
   the configuration guide does not: a `review:` line above it says so.

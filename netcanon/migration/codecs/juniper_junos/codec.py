@@ -69,7 +69,7 @@ from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
 from .parse import _looks_like_blockform, drop_session_lines, read_intent
-from .render import render_intent
+from .render import dhcp_pool_warnings, render_intent
 
 #: Every walkable path this codec writes only in some cases, or a record
 #: it writes without the field, by the reason.  Spread into
@@ -527,6 +527,16 @@ class JunosCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each DHCP pool
+        the output has a review line for: a pool that states one end
+        of its range, or that can be given no address
+        (:mod:`.dhcp_pools`)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            warnings += dhcp_pool_warnings(tree)
+        return warnings
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

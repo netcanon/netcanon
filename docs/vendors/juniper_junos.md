@@ -40,7 +40,25 @@ welcome.
   authentication-key + privacy-key forms; VACM mappings via
   `security-to-group`
 - RADIUS — `set system radius-server`
-- DHCP server pools (where present)
+- DHCP server pools — `access address-assignment pool` and a
+  `dhcp-local-server` group that binds the pool's interface; the
+  legacy `system services dhcp pool` form is read and never written.
+  A pool the source states no range for is written as its network,
+  which Junos hands out itself ("If no range is specified, the pool
+  will use all available addresses within the subnet specified",
+  Junos DHCP User Guide).  Juniper's reference of `range` names its
+  `low` and its `high` and does not say what a range with one of
+  them is, so a pool that states one end is written from that end to
+  the other end of its network's hosts, less the addresses the output
+  gives its own interfaces (the largest run where those leave
+  several), under a `# review:` line.  A pool there is no address of
+  to write (no network and not both ends of a range, a range outside
+  its network, no address left) is a `# review:` line in place of its
+  lines, with no group.  Each review line is a warning of the job
+  too.  As a source, a pool with several ranges is read as the first
+  `low` and the first `high` it states, and nothing is said of the
+  others; a pool with both ends of a range and no network is written
+  with no `network`, which Junos has not been shown to take
 - Local users with hashed passwords — `$1$` / `$5$` / `$6$` / `$9$`
   form-preserving migration.  A user with no `authentication` (a
   `remote` template for RADIUS or TACACS+ login) is a `review:` line

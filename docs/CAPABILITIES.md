@@ -277,7 +277,9 @@ A DHCP pool is read as the server hands it out: every address of
 its network but those `ip dhcp excluded-address` names and the
 device's own, on the interface whose subnet is the pool's network (on
 none, for a pool that serves clients a relay forwards).  A range is
-written as the exclusions on either side of it.  What the tree has no
+written as the exclusions on either side of it; a pool that states no
+network is not written, and a `! review:` line and a warning of the
+job say so.  What the tree has no
 place for is a row of the sections not translated (see
 [`vendors/cisco_iosxe.md`](vendors/cisco_iosxe.md) § "Lossy paths").
 
@@ -426,6 +428,19 @@ text").
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  AOS-S has two accounts, `manager` and `operator`, and chooses between them by the privilege level (15 is `manager`) from any source; a role the source names is not carried. |
 
 #### `juniper_junos` (bidirectional)
+
+A DHCP pool is written as an `access address-assignment pool` and a
+`dhcp-local-server` group that binds its interface.  A pool the
+source states no range for is written as its network, which Junos
+hands out itself.  One that states one end of its range is written
+from that end to the other end of its network's hosts, less the
+addresses the output gives its own interfaces, under a `# review:`
+line, since Juniper's reference of `range` does not say what a range
+with one end is.  One that can be given no address (no network and
+not both ends of a range, a range outside its network, no address
+left) is a `# review:` line in place of its lines.  Each review line
+is a warning of the job too.  A pool with several ranges is read as
+one (see [`vendors/juniper_junos.md`](vendors/juniper_junos.md)).
 
 | Path | Class | Reason |
 |---|---|---|

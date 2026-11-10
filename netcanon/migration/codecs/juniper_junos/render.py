@@ -98,6 +98,7 @@ from ...canonical.transforms import (
 from ...limits import charge
 from .._helpers import mtu_written
 from ..base import RenderError
+from .dhcp_pools import pool_interfaces, render_pools
 from .port_names import (
     TAGGING_STATEMENT_TAGS,
     media_mtu_counts_a_header,
@@ -1290,90 +1291,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- DHCP server pools (Cluster E.1-B) ---
     #
-    # Junos has two DHCP server grammars:
-    #
-    #  * Modern stack-based form (used here):
-    #     ``set access address-assignment pool <P> family inet
-    #     network <CIDR>``
-    #     ``set access address-assignment pool <P> family inet
-    #     range <R> low <ip> / high <ip>``
-    #     ``set access address-assignment pool <P> family inet
-    #     dhcp-attributes router|name-server|maximum-lease-time
-    #     |domain-name <val>``
-    #     ``set system services dhcp-local-server group <G>
-    #     interface <iface>``
-    #     Supported on every current LTS Junos 22.x train.
-    #
-    #  * Legacy form: ``set system services dhcp pool <network>
-    #    ...`` (deprecated on M / MX / SRX from ~2010; still works
-    #    on EX 4.x trains).  Parser accepts it for fixture
-    #    compatibility, render never emits it.
-    #
-    # Doc reference: Junos OS Network Management -- "Configuring
-    # Address-Assignment Pools" / dhcp-local-server hierarchy.
-    # https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-address-assignment-pool.html
-    #
-    # Pool / group naming: derive a stable, deterministic name from
-    # ``CanonicalDHCPPool.interface`` when populated -- the iface
-    # name minus illegal Junos identifier chars (``/`` and ``.``)
-    # gives a unique-by-iface name that round-trips through parser.
-    # When ``interface`` is empty, fall back to ``pool0``, ``pool1``,
-    # ... by list position.  Both the address-assignment pool AND the
-    # dhcp-local-server group use the same name so parse can re-link
-    # them via the equal-name rule.
-    #
-    # ``CanonicalDHCPPool.start_ip`` / ``end_ip`` is a single range;
-    # Junos supports multiple ``range <R>`` entries per pool but the
-    # canonical model carries only one, so we emit exactly one
-    # ``range r1 low / high`` pair.  Operators with multi-range
-    # source pools see one collapsed range on cross-vendor render
-    # (Cluster E DHCP-only scope; multi-range DHCP defers to Tier 3).
+    # The stack-based grammar (``access address-assignment pool`` and
+    # a ``dhcp-local-server`` group), from :mod:`.dhcp_pools`, which
+    # also says what a pool with no whole range is written as.  The
+    # legacy ``system services dhcp pool`` form (deprecated on M / MX /
+    # SRX from ~2010) is read by the parser and never written.
     if tree.dhcp_servers:
-        for idx, pool in enumerate(tree.dhcp_servers):
-            pool_name = _dhcp_pool_name(pool, idx)
-            pool_path = (
-                f"set access address-assignment pool "
-                f"{_quote_if_needed(pool_name)} family inet"
-            )
-            if pool.network:
-                out.append(f"{pool_path} network {pool.network}")
-            if pool.start_ip:
-                out.append(f"{pool_path} range r1 low {pool.start_ip}")
-            if pool.end_ip:
-                out.append(f"{pool_path} range r1 high {pool.end_ip}")
-            if pool.gateway:
-                out.append(
-                    f"{pool_path} dhcp-attributes router {pool.gateway}"
-                )
-            for dns in pool.dns_servers:
-                out.append(
-                    f"{pool_path} dhcp-attributes name-server {dns}"
-                )
-            # Junos defaults to 86400s if not declared; we still emit
-            # the explicit value so a same-vendor round-trip from
-            # canonical (which always carries lease_time=86400 by
-            # default) re-parses to the same value.  Keeps parse and
-            # render symmetric without special-casing the default.
-            if pool.lease_time:
-                out.append(
-                    f"{pool_path} dhcp-attributes maximum-lease-time "
-                    f"{pool.lease_time}"
-                )
-            if pool.domain_name:
-                out.append(
-                    f"{pool_path} dhcp-attributes domain-name "
-                    f"{_quote_always(pool.domain_name)}"
-                )
-            # dhcp-local-server group binding: only emit when the
-            # canonical pool carries an explicit interface.  Emitting
-            # a group with no interface is a commit-time error on
-            # Junos (the group MUST bind at least one iface).
-            if pool.interface:
-                out.append(
-                    f"set system services dhcp-local-server group "
-                    f"{_quote_if_needed(pool_name)} interface "
-                    f"{pool.interface}"
-                )
+        out.extend(_dhcp_pools(tree)[0])
 
     # --- apply-groups / group-content (GAP 9b) ---
     # Emit the full `set groups <G> <body...>` blocks for
@@ -1999,6 +1923,22 @@ def _quote_if_needed(s: str) -> str:
 
 
 _DHCP_NAME_SAFE_RE = re.compile(r"[^A-Za-z0-9_]")
+
+
+def _dhcp_pools(tree: CanonicalIntent) -> tuple[list[str], list[str]]:
+    """The lines of the tree's DHCP pools, and the job's warnings for
+    them (:func:`.dhcp_pools.render_pools`)."""
+    return render_pools(
+        tree.dhcp_servers, pool_interfaces(tree), _dhcp_pool_name,
+        _quote_if_needed, _quote_always,
+    )
+
+
+def dhcp_pool_warnings(tree: CanonicalIntent) -> list[str]:
+    """One warning for each review line the output has for a DHCP
+    pool: one that states one end of its range, or that can be given
+    no address."""
+    return _dhcp_pools(tree)[1]
 
 
 def _dhcp_pool_name(pool: Any, idx: int) -> str:
