@@ -55,10 +55,13 @@ welcome.
   to write (no network and not both ends of a range, a range outside
   its network, no address left) is a `# review:` line in place of its
   lines, with no group.  Each review line is a warning of the job
-  too.  As a source, a pool with several ranges is read as the first
-  `low` and the first `high` it states, and nothing is said of the
-  others; a pool with both ends of a range and no network is written
-  with no `network`, which Junos has not been shown to take
+  too.  As a source, a pool with several ranges is read as the
+  largest run they make (ranges that meet or overlap are one run; of
+  two as large, the lower), and a row of the sections not translated
+  names the pool where some of its ranges are not in that run; a pool
+  that states neither a network nor a range is such a row too.  A
+  pool with both ends of a range and no network is written with no
+  `network`, which Junos has not been shown to take
 - Local users with hashed passwords — `$1$` / `$5$` / `$6$` / `$9$`
   form-preserving migration.  A user with no `authentication` (a
   `remote` template for RADIUS or TACACS+ login) is a `review:` line

@@ -1,4 +1,5 @@
-"""The Junos lines of a tree's DHCP pools, and the job's warnings.
+"""The Junos lines of a tree's DHCP pools, and the job's warnings; and
+the one range the parser reads a pool as.
 
 A pool is an address-assignment pool and, where it names its
 interface, a ``dhcp-local-server`` group of the same name that binds
@@ -30,7 +31,15 @@ can be given no address (one that states no network and not both ends
 of a range, an end outside its network, nothing left once the output's
 own addresses are taken out) is a ``# review:`` line in place of its
 lines, and has no group.  Each review line is also a warning of the job
-(``JuniperJunosCodec.render_warnings``), read from the same function.
+(``JunosCodec.render_warnings``), read from the same function.
+
+A pool can state several ranges (``range <R> low|high``), and Juniper's
+subscriber-management pages say every range of a pool is searched for
+an address to hand out; the tree holds one run of a pool.  The parser
+reads a pool's ranges by name and keeps the largest run their addresses
+make (:func:`one_range`), and a row of the sections not translated
+says the rest (:func:`pool_rows`), as it does a pool that states
+neither a network nor a range, which the tree has no addresses of.
 
 Nothing here reads config text; a loop over what the tree holds is
 ticked all the same, since a pasted config can give an output many
@@ -39,12 +48,104 @@ pools and interfaces.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import ipaddress
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from ...canonical.intent import CanonicalDHCPPool, CanonicalIntent, CanonicalInterface
 from ...canonical.transforms import synthesize_svis_from_vlan_l3
 from ...limits import ticked
-from .._dhcp_pools import Handed, OwnAddresses, as_text, what_it_hands_out
+from .._dhcp_pools import Handed, OwnAddresses, as_int, as_text, hosts, what_it_hands_out
+from .._helpers import a_few_named
+
+#: How many characters of a pool's name a row shows.
+_NAME_SHOWN = 40
+
+
+def one_range(ranges: Mapping[str, Mapping[str, str]], network: str) -> tuple[str, str, bool]:
+    """The range the tree holds of a pool whose ranges are *ranges* (by
+    name, each its ``low`` and its ``high`` where it states them), and
+    whether the pool hands out addresses outside it.
+
+    A pool of one range is that range as it stands: an end it does not
+    state is left unstated, which the tree reads as the edge of the
+    network's hosts (:mod:`.._dhcp_pools`).  Of several, the ranges are
+    read as the tree reads one -- an end a range does not state is the
+    edge of the hosts of *network* -- those that meet or overlap are one
+    run, and the largest run is kept (the lower of two as large).  An
+    end of the kept run that no range states is left unstated, so that
+    a renderer reads it as the tree reads such an end (less the output's
+    own addresses), and not as an address the source wrote.  A range
+    that cannot be read (an end that is not an address, a low above its
+    high, one end and no network) hands out nothing the tree can count.
+
+    Returns:
+        The low and the high the tree holds (``""`` for one not
+        stated), and ``True`` where some of the pool's ranges are not
+        among them, which a row says (:func:`pool_rows`).
+    """
+    if len(ranges) <= 1:
+        bounds = next(iter(ranges.values()), {})
+        return bounds.get("low", ""), bounds.get("high", ""), False
+    try:
+        edge = hosts(ipaddress.IPv4Network(network, strict=False)) if network else None
+    except ValueError:
+        edge = None
+    # Each span: its low and its high, and whether the source states each.
+    spans: list[tuple[int, int, bool, bool]] = []
+    for bounds in ticked(ranges.values()):
+        low = as_int(bounds["low"]) if "low" in bounds else (edge[0] if edge else None)
+        high = as_int(bounds["high"]) if "high" in bounds else (edge[1] if edge else None)
+        if low is not None and high is not None and low <= high:
+            spans.append((low, high, "low" in bounds, "high" in bounds))
+    runs: list[list[Any]] = []
+    for low, high, low_stated, high_stated in ticked(sorted(spans)):
+        if runs and low <= runs[-1][1] + 1:
+            run = runs[-1]
+            if low == run[0]:
+                run[2] = run[2] or low_stated
+            if high > run[1]:
+                run[1], run[3] = high, high_stated
+            elif high == run[1]:
+                run[3] = run[3] or high_stated
+        else:
+            runs.append([low, high, low_stated, high_stated])
+    if not runs:
+        bounds = next(iter(ranges.values()))
+        return bounds.get("low", ""), bounds.get("high", ""), True
+    low, high, low_stated, high_stated = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
+    return (
+        as_text(low) if low_stated else "",
+        as_text(high) if high_stated else "",
+        len(runs) > 1 or len(spans) < len(ranges),
+    )
+
+
+def _shown(name: str) -> str:
+    """*name* as a row shows it: its first characters, on one line."""
+    name = " ".join(name.split()) or "with no name"
+    return name if len(name) <= _NAME_SHOWN else name[: _NAME_SHOWN - 1] + "…"
+
+
+def pool_rows(several: Sequence[str], no_addresses: Sequence[str]) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the pools *several*,
+    some of whose ranges the tree does not hold (:func:`one_range`), and
+    *no_addresses*, which state neither a network nor a range: a few
+    named and the rest counted."""
+    rows: list[str] = []
+    if several:
+        rows.append(
+            f"access address-assignment pool {a_few_named([_shown(n) for n in several])}: "
+            "family inet range -- more than one range; the tree holds one run of a pool, "
+            "so the largest is kept and the others are not translated",
+        )
+    if no_addresses:
+        rows.append(
+            f"access address-assignment pool {a_few_named([_shown(n) for n in no_addresses])}: "
+            "family inet with no network and no range -- no address of it the tree can "
+            "hold; not translated",
+        )
+    return rows
 
 
 def pool_interfaces(tree: CanonicalIntent) -> list[CanonicalInterface]:

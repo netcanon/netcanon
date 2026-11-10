@@ -112,6 +112,7 @@ from .._helpers import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .dhcp_pools import one_range, pool_rows
 from .port_names import (
     TAGGING_STATEMENT_TAGS,
     classify_port_name,
@@ -1186,11 +1187,20 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if (len(_modern_pool_keys) == 1 and _single_group_iface)
         else ""
     )
-    for pool_key, entry in dhcp_pool_state.items():
-        # Skip empty entries (unusual but defensive against stray
-        # ``set access address-assignment pool <P>`` lines without
-        # any inet body).
-        if not (entry.get("network") or entry.get("start_ip")):
+    several_ranges: list[str] = []
+    no_addresses: list[str] = []
+    for pool_key, entry in ticked(dhcp_pool_state.items()):
+        # A pool's ranges are read by name; the tree holds one run of
+        # them (``dhcp_pools.one_range``), and a row says the others.
+        start_ip, end_ip, several = one_range(entry.get("ranges", {}), entry.get("network", ""))
+        legacy = pool_key.startswith("_legacy:")
+        name = pool_key[len("_legacy:"):] if legacy else pool_key
+        if several:
+            several_ranges.append(name)
+        # A pool that states neither a network nor a range (only its
+        # options) hands out no address the tree can hold.
+        if not (entry.get("network") or start_ip or end_ip):
+            no_addresses.append(name)
             continue
         iface_val = ""
         if not pool_key.startswith("_legacy:"):
@@ -1205,8 +1215,8 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 iface_val = _single_pool_fallback
         pool = CanonicalDHCPPool(
             network=entry.get("network", ""),
-            start_ip=entry.get("start_ip", ""),
-            end_ip=entry.get("end_ip", ""),
+            start_ip=start_ip,
+            end_ip=end_ip,
             gateway=entry.get("gateway", ""),
             dns_servers=list(entry.get("dns_servers", [])),
             domain_name=entry.get("domain_name", ""),
@@ -1255,6 +1265,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         *_in_several_vlans_row(in_several),
         *_no_native_unit_row(no_native_unit),
         *_older_native_rows(older_native),
+        *pool_rows(several_ranges, no_addresses),
     ]
     if not cut_lines:
         return intent, raw
@@ -3485,9 +3496,12 @@ def _apply_access(
 
     * ``network <CIDR>`` - pool network.
     * ``range <RNAME> low <ip>`` / ``range <RNAME> high <ip>`` -
-      start / end IPs (only one range is materialised into the
-      single ``CanonicalDHCPPool.start_ip`` / ``end_ip`` slot;
-      additional ranges parse-and-ignore — see Cluster E scope note).
+      the ends of a range, kept by the range's name (a line that sets
+      both, ``range <RNAME> low <ip> high <ip>``, as typed, is read
+      whole; an end set again replaces the one before, as on the
+      device).  The tree holds one run of a pool: the finished parse
+      keeps the largest run of its ranges and a row says the rest
+      (``dhcp_pools.one_range``).
     * ``dhcp-attributes router <ip>`` - default gateway.
     * ``dhcp-attributes name-server <ip>`` - DNS server (additive).
     * ``dhcp-attributes maximum-lease-time <sec>`` - lease seconds.
@@ -3524,13 +3538,9 @@ def _apply_access(
         entry["network"] = sub[1]
         return
     if head == "range" and len(sub) >= 4:
-        bound = sub[2]
-        ip_val = sub[3]
-        if bound == "low":
-            # First range wins for canonical start_ip.
-            entry.setdefault("start_ip", ip_val)
-        elif bound == "high":
-            entry.setdefault("end_ip", ip_val)
+        ends = {b: v for b, v in zip(sub[2::2], sub[3::2], strict=False) if b in ("low", "high")}
+        if ends:
+            entry.setdefault("ranges", {}).setdefault(sub[1], {}).update(ends)
         return
     if head == "dhcp-attributes" and len(sub) >= 3:
         attr = sub[1]
@@ -3601,12 +3611,12 @@ def _apply_system_services_dhcp(
         entry.setdefault("network", network)
         head = sub[0]
         if head == "address-range" and len(sub) >= 3:
-            bound = sub[1]
-            ip_val = sub[2]
-            if bound == "low":
-                entry.setdefault("start_ip", ip_val)
-            elif bound == "high":
-                entry.setdefault("end_ip", ip_val)
+            # One range, with no name.  Juniper's own example types
+            # it on one line (``address-range low <ip> high <ip>``),
+            # and an end set again replaces the one before.
+            ends = {b: v for b, v in zip(sub[1::2], sub[2::2], strict=False) if b in ("low", "high")}
+            if ends:
+                entry.setdefault("ranges", {}).setdefault("", {}).update(ends)
             return
         if head == "router" and len(sub) >= 2:
             entry["gateway"] = sub[1]
