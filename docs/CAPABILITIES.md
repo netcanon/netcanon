@@ -441,7 +441,11 @@ not both ends of a range, a range outside its network, no address
 left) is a `# review:` line in place of its lines.  Each review line
 is a warning of the job too.  A pool with several ranges is read as
 the largest run they make, and a row of the sections not translated
-names the pool where the others are left out (see
+names the pool where the others are left out; what a pool excludes
+(`excluded-address`, `excluded-range`, the older `exclude-address`)
+is taken out of it, with the device's own addresses, and a row names
+a pool its exclusions split, empty, or state in a form that cannot be
+read (see
 [`vendors/juniper_junos.md`](vendors/juniper_junos.md)).
 
 | Path | Class | Reason |

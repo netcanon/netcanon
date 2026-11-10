@@ -59,7 +59,15 @@ welcome.
   largest run they make (ranges that meet or overlap are one run; of
   two as large, the lower), and a row of the sections not translated
   names the pool where some of its ranges are not in that run; a pool
-  that states neither a network nor a range is such a row too.  A
+  that states neither a network nor a range is such a row too.  What
+  a pool excludes (`excluded-address`, `excluded-range`, and the
+  older form's `exclude-address`) is taken out of what it hands out,
+  with the device's own interface addresses: a pool whose exclusions
+  take out none of it is read as it was, and otherwise as the largest
+  run left, both its ends stated.  A row names a pool whose
+  exclusions leave more than one run, one left with no address (not
+  translated), and one with an exclusion that cannot be read (not
+  taken out).  A
   pool with both ends of a range and no network is written with no
   `network`, which Junos has not been shown to take
 - Local users with hashed passwords — `$1$` / `$5$` / `$6$` / `$9$`

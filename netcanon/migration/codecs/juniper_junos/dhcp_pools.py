@@ -41,6 +41,20 @@ make (:func:`one_range`), and a row of the sections not translated
 says the rest (:func:`pool_rows`), as it does a pool that states
 neither a network nor a range, which the tree has no addresses of.
 
+A pool can also exclude addresses from what it hands out:
+``excluded-address <ip>`` and ``excluded-range <R> low|high <ip>``
+under ``family inet`` (Juniper: from Junos 18.1R1, "to prevent them
+from being allocated from an address pool"), and ``exclude-address
+<ip>`` in the older ``system services dhcp pool <CIDR>``.  The tree has
+no place for an exclusion, so the parser takes the excluded addresses
+out of what the pool hands out (:func:`pool_reading`): where they take
+out none of it, the pool is read as it was; otherwise it is read as the
+largest run left once the excluded addresses and the device's own
+interface addresses (which Junos does not hand out either) are taken
+out, with both its ends stated, and a row says the runs left out, a
+pool that is left with no address, and an exclusion that cannot be
+read (:func:`exclusion_rows`).
+
 Nothing here reads config text; a loop over what the tree holds is
 ticked all the same, since a pasted config can give an output many
 pools and interfaces.
@@ -48,18 +62,28 @@ pools and interfaces.
 
 from __future__ import annotations
 
+import bisect
+import functools
 import ipaddress
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from ...canonical.intent import CanonicalDHCPPool, CanonicalIntent, CanonicalInterface
 from ...canonical.transforms import synthesize_svis_from_vlan_l3
-from ...limits import ticked
+from ...limits import tick, ticked
 from .._dhcp_pools import Handed, OwnAddresses, as_int, as_text, hosts, what_it_hands_out
 from .._helpers import a_few_named
 
 #: How many characters of a pool's name a row shows.
 _NAME_SHOWN = 40
+
+#: The head of a row for a pool, and the words of its exclusions, by
+#: whether the pool is of the older ``system services dhcp`` form.
+_EXCLUSION_HEADS = (
+    (False, "access address-assignment pool", "family inet excluded-address or excluded-range"),
+    (True, "system services dhcp pool", "exclude-address"),
+)
 
 
 def one_range(ranges: Mapping[str, Mapping[str, str]], network: str) -> tuple[str, str, bool]:
@@ -87,11 +111,34 @@ def one_range(ranges: Mapping[str, Mapping[str, str]], network: str) -> tuple[st
     if len(ranges) <= 1:
         bounds = next(iter(ranges.values()), {})
         return bounds.get("low", ""), bounds.get("high", ""), False
+    runs, unread = _runs(ranges, _edge(network))
+    if not runs:
+        bounds = next(iter(ranges.values()))
+        return bounds.get("low", ""), bounds.get("high", ""), True
+    low, high, low_stated, high_stated = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
+    return (
+        as_text(low) if low_stated else "",
+        as_text(high) if high_stated else "",
+        len(runs) > 1 or unread,
+    )
+
+
+def _edge(network: str) -> tuple[int, int] | None:
+    """The first and the last host of *network*, or ``None`` where it
+    is not stated or is not an IPv4 network."""
     try:
-        edge = hosts(ipaddress.IPv4Network(network, strict=False)) if network else None
+        return hosts(ipaddress.IPv4Network(network, strict=False)) if network else None
     except ValueError:
-        edge = None
-    # Each span: its low and its high, and whether the source states each.
+        return None
+
+
+def _runs(
+    ranges: Mapping[str, Mapping[str, str]], edge: tuple[int, int] | None,
+) -> tuple[list[list[Any]], bool]:
+    """The runs a pool's *ranges* make, in order, each ``[low, high,
+    low stated, high stated]`` (an end a range does not state is the
+    *edge* of the network's hosts), and whether some range cannot be
+    read."""
     spans: list[tuple[int, int, bool, bool]] = []
     for bounds in ticked(ranges.values()):
         low = as_int(bounds["low"]) if "low" in bounds else (edge[0] if edge else None)
@@ -110,14 +157,158 @@ def one_range(ranges: Mapping[str, Mapping[str, str]], network: str) -> tuple[st
                 run[3] = run[3] or high_stated
         else:
             runs.append([low, high, low_stated, high_stated])
-    if not runs:
-        bounds = next(iter(ranges.values()))
-        return bounds.get("low", ""), bounds.get("high", ""), True
-    low, high, low_stated, high_stated = max(runs, key=lambda run: (run[1] - run[0], -run[0]))
-    return (
-        as_text(low) if low_stated else "",
-        as_text(high) if high_stated else "",
-        len(runs) > 1 or len(spans) < len(ranges),
+    return runs, len(spans) < len(ranges)
+
+
+def _merged(spans: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
+    """*spans* in order, those that meet or overlap made one."""
+    merged: list[tuple[int, int]] = []
+    for low, high in ticked(sorted(spans)):
+        if merged and low <= merged[-1][1] + 1:
+            if high > merged[-1][1]:
+                merged[-1] = (merged[-1][0], high)
+        else:
+            merged.append((low, high))
+    return merged
+
+
+def _less(runs: Sequence[tuple[int, int]], taken: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
+    """What is left of *runs* once *taken* is taken out of them: both
+    in order, neither with two spans that meet."""
+    left: list[tuple[int, int]] = []
+    first = 0
+    for low, high in ticked(runs):
+        while first < len(taken) and taken[first][1] < low:
+            tick()
+            first += 1
+        at = low
+        each = first
+        while each < len(taken) and taken[each][0] <= high:
+            tick()
+            if taken[each][0] > at:
+                left.append((at, taken[each][0] - 1))
+            at = max(at, taken[each][1] + 1)
+            each += 1
+        if at <= high:
+            left.append((at, high))
+    return left
+
+
+def excluded_spans(
+    addresses: Iterable[str], ranges: Mapping[str, Mapping[str, str]],
+) -> tuple[list[tuple[int, int]], bool]:
+    """The addresses a pool excludes -- each of *addresses*, and each of
+    *ranges* (by name, its ``low`` and its ``high``) -- as spans in
+    order, and whether one of them cannot be read: an address that is
+    not one, or a range that does not state both ends or states a low
+    above its high (Juniper's reference names both ends, and does not
+    say what a range with one of them excludes)."""
+    spans: list[tuple[int, int]] = []
+    unread = False
+    for address in ticked(addresses):
+        value = as_int(address)
+        if value is None:
+            unread = True
+        else:
+            spans.append((value, value))
+    for bounds in ticked(ranges.values()):
+        low, high = as_int(bounds.get("low", "")), as_int(bounds.get("high", ""))
+        if low is None or high is None or low > high:
+            unread = True
+        else:
+            spans.append((low, high))
+    return _merged(spans), unread
+
+
+@dataclass(frozen=True)
+class Reading:
+    """What the tree holds of a pool, and what the rows say of it.
+
+    Attributes:
+        start_ip: The low end of the range the tree holds, ``""`` where
+            it is not stated.
+        end_ip: The high end.
+        several: Some of the pool's ranges are not in that range
+            (:func:`pool_rows`).
+        split: The addresses it excludes leave more than one run of
+            what it hands out, and the others are not in that range.
+        none_left: It excludes every address it hands out that is not
+            the device's own; the tree holds no pool of it.
+        unread: It states an exclusion that cannot be read
+            (:func:`excluded_spans`), which is not taken out.
+    """
+
+    start_ip: str
+    end_ip: str
+    several: bool
+    split: bool = False
+    none_left: bool = False
+    unread: bool = False
+
+
+def own_addresses_of(tree: CanonicalIntent) -> Callable[[], OwnAddresses]:
+    """The addresses of *tree*'s own interfaces, read the first time
+    they are asked for: only a pool that excludes an address needs
+    them."""
+    return functools.cache(lambda: OwnAddresses(pool_interfaces(tree)))
+
+
+def pool_reading(
+    ranges: Mapping[str, Mapping[str, str]],
+    network: str,
+    excluded_addresses: Iterable[str],
+    excluded_ranges: Mapping[str, Mapping[str, str]],
+    own: Callable[[], OwnAddresses],
+) -> Reading:
+    """What the tree holds of a pool whose network is *network*, whose
+    ranges are *ranges* (:func:`one_range`), and which excludes
+    *excluded_addresses* and *excluded_ranges* (:func:`excluded_spans`).
+
+    The tree has no place for an exclusion.  Where the excluded
+    addresses take out nothing the pool hands out, the pool is read as
+    :func:`one_range` reads it, its ends as stated.  Otherwise what it
+    hands out is its ranges -- or, with none, its network's hosts --
+    less the excluded addresses and *own*, the device's own interface
+    addresses (Junos's DHCP guide: "Broadcast addresses, interface
+    addresses, and excluded addresses are not available"); the largest
+    run of that is kept, the lower of two as large, with both its ends
+    stated, since an end no range states would be read as the edge of
+    the hosts, which an excluded address can be.  An address that is
+    the device's own is taken out of what the pool hands out before an
+    exclusion is weighed, so that a pool that excludes only its
+    router's address is read as it was.
+
+    Returns:
+        The reading, with what a row says of the pool.
+    """
+    start_ip, end_ip, several = one_range(ranges, network)
+    excluded, unread = excluded_spans(excluded_addresses, excluded_ranges)
+    as_read = Reading(start_ip, end_ip, several, unread=unread)
+    if not excluded:
+        return as_read
+    edge = _edge(network)
+    if ranges:
+        before = [(run[0], run[1]) for run in _runs(ranges, edge)[0]]
+    else:
+        before = [edge] if edge else []
+    addresses = own()
+    taken: list[tuple[int, int]] = []
+    for low, high in ticked(before):
+        taken.extend(addresses.spans_within(low, high))
+    handed = _less(before, taken)
+    left = _less(handed, excluded)
+    if left == handed:
+        return as_read
+    if not left:
+        return Reading("", "", several, none_left=True, unread=unread)
+    low, high = max(left, key=lambda run: (run[1] - run[0], -run[0]))
+    # A run of the ranges that holds two runs of what is left is split
+    # by what is taken out; the other runs are a row of their own.
+    starts = [run_low for run_low, _ in before]
+    holders = [bisect.bisect_right(starts, run_low) - 1 for run_low, _ in left]
+    return Reading(
+        as_text(low), as_text(high), several,
+        split=len(set(holders)) < len(holders), unread=unread,
     )
 
 
@@ -145,6 +336,40 @@ def pool_rows(several: Sequence[str], no_addresses: Sequence[str]) -> list[str]:
             "family inet with no network and no range -- no address of it the tree can "
             "hold; not translated",
         )
+    return rows
+
+
+def exclusion_rows(
+    split: Sequence[tuple[bool, str]],
+    none_left: Sequence[tuple[bool, str]],
+    unread: Sequence[tuple[bool, str]],
+) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the exclusions of the
+    pools (:class:`Reading`): each pool is ``(older form, name)``, and a
+    few are named in a row and the rest counted.
+
+    Args:
+        split: The pools whose excluded addresses leave more than one
+            run, the largest of which is kept.
+        none_left: The pools left with no address.
+        unread: The pools with an exclusion that cannot be read.
+    """
+    reasons = (
+        (split, "what the pool hands out, less the addresses it excludes and this "
+                "device's own, is more than one run; the tree holds one run of a pool, "
+                "so the largest is kept and the others are not translated"),
+        (none_left, "every address the pool hands out is excluded or this device's "
+                    "own, so it hands out none; not translated"),
+        (unread, "an exclusion this parser cannot read (an address that is not one, a "
+                 "range without both ends or with its low above its high) is not "
+                 "translated, so the target may hand out an address the source does not"),
+    )
+    rows: list[str] = []
+    for pools, reason in reasons:
+        for older, head, words in _EXCLUSION_HEADS:
+            names = [_shown(name) for is_older, name in ticked(pools) if is_older == older]
+            if names:
+                rows.append(f"{head} {a_few_named(names)}: {words} -- {reason}")
     return rows
 
 

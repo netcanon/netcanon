@@ -93,7 +93,8 @@ netcanon/migration/codecs/<vendor>/
 │                       # one end, a review line for one with no
 │                       # address to write; and the one range the
 │                       # parser reads a pool of several as (their
-│                       # largest run, a row for the rest); every writer
+│                       # largest run, a row for the rest), less what
+│                       # the pool excludes; every writer
 │                       # reads what a pool hands out from
 │                       # codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
