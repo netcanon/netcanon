@@ -332,9 +332,11 @@ Provenance in
   parser gives the pool that subnet as its network; a zone with no
   static address (a DHCP client, say) gives the pool none.  Up to
   0.7.7 the parser gave no pool a network, so a target that states
-  one wrote none.  On IOS-XE CLI a pool with no network hands out
-  nothing, and a `review:` line in it and a warning of the job say
-  so; add the `network` line by hand.  On an OPNsense TARGET a pool
+  one wrote none.  On IOS-XE CLI a pool with no network is not
+  written, and a `review:` line in its place and a warning of the
+  job say so; write the pool by hand.  On Junos it is written with
+  its range and no `network`, which Junos has not been shown to
+  take.  On an OPNsense TARGET a pool
   is written
   under the zone of its interface.  One that names no interface (an
   IOS-XE pool that serves clients a relay

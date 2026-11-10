@@ -636,13 +636,26 @@ def _write_pool(
     except ValueError:
         network = None
     label = pool.network or pool.interface or "POOL"
-    name = (pool.interface or pool.network or "POOL").replace("/", "_")
+    if not pool.network:
+        # A pool hands out the addresses of its network (the
+        # chapter above), and the parser makes no pool of one that
+        # states none: its options alone would be a pool that hands
+        # out nothing.
+        written.stanzas.append(
+            f"! review: a DHCP pool of the source ({label}) is not written: it "
+            "states no network, and an IOS-XE pool hands out the addresses of its network",
+        )
+        written.warnings.append(
+            f"IOS-XE DHCP pool {label}: it is not written, since it states no "
+            "network; a review line in the output says so.",
+        )
+        return
+    name = (pool.interface or pool.network).replace("/", "_")
     stanza = [f"ip dhcp pool {name}"]
     if vrf:
         stanza.append(f" vrf {vrf}")
-    if pool.network:
-        net, mask = dest_mask(pool.network)
-        stanza.append(f" network {net} {mask}")
+    net, mask = dest_mask(pool.network)
+    stanza.append(f" network {net} {mask}")
     why = _bound_here(pool, iface, network)
     if why is not None:
         stanza.append(
@@ -658,7 +671,7 @@ def _write_pool(
         gaps = _range_gaps(pool, network) if network is not None else None
         if gaps is None:
             reason = (
-                "the pool has no network here" if network is None
+                "its network is not an IPv4 network" if network is None
                 else f"it is not inside the network {network}"
             )
             stanza.append(
@@ -715,7 +728,9 @@ def render_pools(
     pool on an interface in a VRF states the VRF.  A pool the output
     does not serve on the interface the source serves it on, or whose
     range is not inside its network, has a review line, and a warning
-    says so.
+    says so.  A pool that states no network is not written (a pool
+    hands out the addresses of its network): a review line stands in
+    its place, and a warning says so.
 
     Args:
         pools: The tree's pools.

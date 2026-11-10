@@ -1349,6 +1349,35 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos DHCP pool that states one end of its range is written a
+  whole one, and a pool Junos or IOS-XE can write no address of is
+  not written, and each is said.**  Juniper's
+  reference of `range` names its `low` and its `high` and does not say
+  what a range with one of them is; a pool hands out its network's
+  addresses where it states no range (the Junos DHCP User Guide: "the
+  pool will use all available addresses within the subnet
+  specified").  The Junos renderer wrote a pool that states one end of
+  its range as a `range` with that end alone, and the Junos and IOS-XE
+  CLI renderers wrote a pool with neither a range nor a network as its
+  options alone -- a pool that hands out nothing -- each with nothing
+  said.  The Junos renderer now writes a pool that states one end as
+  what the tree reads it to hand out: from that end to the other end
+  of its network's hosts, less the addresses the output gives its own
+  interfaces (the largest run where those leave several, since the
+  parser reads one range of a pool back), under a `# review:` line.  A
+  pool Junos can be given no address for (no network and not both ends
+  of a range, a range outside its network, no address left) is a
+  `# review:` line in place of its lines, and has no
+  `dhcp-local-server` group.  On IOS-XE CLI, whose pool hands out the
+  addresses of its network, a pool that states no network is a
+  `! review:` line in place of its `ip dhcp pool`.  Each review line is
+  a warning of the job too (`JunosCodec.render_warnings`).  A pool
+  with no range, and one with both ends of it, are written as before.
+  The Junos writer is a module of its own
+  (`juniper_junos/dhcp_pools.py`).  Guarded by
+  `tests/unit/migration/test_a_pool_with_no_range.py`, which has no
+  open cell now, the Junos `test_a_pool_with_one_end.py` and the
+  IOS-XE `test_a_pool_as_the_server_hands_it_out.py`.
 - **An EOS DHCP pool is read and written in EOS's own grammar, and
   served on its interface.**  Arista documents the DHCP server of EOS
   as `dhcp server [vrf <name>]`, with a `subnet <prefix>` for each
@@ -5984,16 +6013,12 @@ timestamp if your timezone matters for an audit.
   answers give for IOS XE 17.6 and later and its configuration guide
   does not: a `review:` line above it says so.  The vendor page says
   it.
-- **A DHCP pool that states one end of its range is not given a
-  whole one on Junos.**  FortiOS, RouterOS, OPNsense and EOS are
-  written what a pool with no whole range hands out (see "Fixed"), and
-  IOS-XE and Junos hand out a pool's network where it states no range.
-  A pool that states one end of its range is written on Junos as a
-  `range` with that end alone (a `low` and no `high`, or the other
-  way), which Junos has not been shown to take.  A pool with neither a
-  range nor a network is written with its options alone on IOS-XE and
-  Junos, and nothing is said (EOS writes no such pool, and says so).
-  Each is pinned in `tests/unit/migration/test_a_pool_with_no_range.py`.
+- **A Junos DHCP pool is read as one range.**  A Junos pool can state
+  several (`range <name> low|high`), and the parser reads the first
+  `low` and the first `high` it states, whichever range each is in,
+  and says nothing of the others.  A pool that states both ends of a
+  range and no network is written on Junos with no `network`, which
+  Junos has not been shown to take.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

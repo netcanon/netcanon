@@ -86,7 +86,12 @@ netcanon/migration/codecs/<vendor>/
 │                       # (arista_eos) reader and writer of EOS's
 │                       # `dhcp server [vrf]` / `subnet` grammar and
 │                       # an interface's `dhcp server ipv4`, which
-│                       # says where a subnet is served; every writer
+│                       # says where a subnet is served;
+│                       # (juniper_junos) a writer only: an address-
+│                       # assignment pool and its dhcp-local-server
+│                       # group, a whole range for a pool that states
+│                       # one end, a review line for one with no
+│                       # address to write; every writer
 │                       # reads what a pool hands out from
 │                       # codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
@@ -1247,7 +1252,8 @@ the policy locally:
   one that states one end hands out from that end to the network's
   edge; a target that takes no pool without a range (FortiOS, RouterOS,
   OPNsense, EOS) is written that span, less the addresses the output gives
-  its own interfaces (`OwnAddresses`).  `what_it_hands_out(pool, own)`
+  its own interfaces (`OwnAddresses`), and so is a Junos pool that states
+  one end of its range.  `what_it_hands_out(pool, own)`
   returns `None` for a pool that states its whole range, a `Handed`
   (the span, the runs left free, `largest()`) for one the writer has to
   give a range, and a reason in words for one it cannot (no network,

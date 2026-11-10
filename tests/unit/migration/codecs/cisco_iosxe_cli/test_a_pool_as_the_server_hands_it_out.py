@@ -284,6 +284,25 @@ class TestARangeIsWrittenAsItsExclusions:
         excluded = [line for line in IOS.render(tree).splitlines() if "excluded-address" in line]
         assert excluded == ["ip dhcp excluded-address 10.0.10.1", "ip dhcp excluded-address 10.0.10.3"]
 
+    @pytest.mark.parametrize("ends", [{}, {"start_ip": "10.0.10.4", "end_ip": "10.0.10.9"}])
+    def test_a_pool_with_no_network_is_not_written_and_is_said(self, ends: dict[str, str]) -> None:
+        # A pool hands out the addresses of its network: written with
+        # its options alone, it would be a pool that hands out nothing,
+        # and the parser reads no pool of it.
+        tree = _tree(
+            [CanonicalDHCPPool(interface="Vlan10", gateway="10.0.10.1", **ends)],
+            [_iface("Vlan10", "10.0.10.1")],
+        )
+        out = IOS.render(tree)
+        assert "ip dhcp pool" not in out
+        assert "excluded-address" not in out
+        assert "! review: a DHCP pool of the source (Vlan10) is not written: it states no network" in out
+        assert IOS.render_warnings(tree) == [
+            "IOS-XE DHCP pool Vlan10: it is not written, since it states no network; "
+            "a review line in the output says so.",
+        ]
+        assert IOS.parse(out).dhcp_servers == []
+
 
 # --- through the pipeline -----------------------------------------------------
 
