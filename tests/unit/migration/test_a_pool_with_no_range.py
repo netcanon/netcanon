@@ -69,8 +69,9 @@ CASES: dict[str, dict[str, str]] = {
 #: Written the addresses the pool hands out (each module's docstring
 #: cites the vendor: FortiOS hands out none from a server with no
 #: ``ip-range``; RouterOS's ``ranges`` is "( mandatory )"; OPNsense
-#: will not save a zone with no range).
-TOLD = {"fortigate_cli", "mikrotik_routeros", "opnsense"}
+#: will not save a zone with no range; Arista states nothing a subnet
+#: with no ``range`` hands out).
+TOLD = {"arista_eos", "fortigate_cli", "mikrotik_routeros", "opnsense"}
 
 #: The platform hands out the network of a pool with no range: Junos
 #: "will use all available addresses within the subnet specified";
@@ -94,19 +95,10 @@ _NEITHER = (
     "options alone, and nothing is said"
 )
 OPEN: dict[tuple[str, str], tuple[str, str]] = {
-    ("arista_eos", "no range"): ("network only", (
-        "the output states the pool's network and no range; what an EOS "
-        "pool with no range hands out is not established"
-    )),
-    ("arista_eos", "one end"): ("other", (
-        "the output states the pool's network and no range: the end the "
-        "source states is not written"
-    )),
     ("juniper_junos", "one end"): ("network only", (
         "the output writes a range with a low and no high; what Junos "
         "does with one is not established"
     )),
-    ("arista_eos", "no network"): ("other", _NEITHER),
     ("cisco_iosxe_cli", "no network"): ("other", _NEITHER),
     ("juniper_junos", "no network"): ("other", _NEITHER),
 }

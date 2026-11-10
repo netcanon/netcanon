@@ -587,15 +587,33 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # reason says which.  juniper_junos__mikrotik_routeros is not raised: every
 # pool of one Junos capture names no interface and now comes back as no
 # pool, the loss its YAML declares.
+#
+# One up and three down, for ``dhcp_servers``, when the EOS codec began to
+# read and write EOS's own DHCP server (a ``subnet`` of ``dhcp server``,
+# served on an interface with ``dhcp server ipv4``) in place of ``ip dhcp
+# pool``, whose name it had taken for the pool's interface: what the
+# paragraphs above say of an EOS pool's name no longer holds.
+# arista_eos__cisco_iosxe_cli (1 to 2): the synthetic kitchen sink's pools
+# now come back whole.  The loss is real and no committed capture shows it:
+# the IOS-XE CLI parser reads a pool less its default router, so a range that
+# begins at the gateway comes back one address shorter (pinned in
+# ``tests/unit/migration/codecs/arista_eos/test_dhcp_pool_round_trip.py``).
+# arista_eos__mikrotik_routeros (2 to 1): the kitchen sink's subnet served to
+# relayed clients only names no interface and comes back as no pool, the loss
+# its YAML declares.  cisco_iosxe_cli__arista_eos (3 to 2) and
+# mikrotik_routeros__arista_eos (2 to 1): EOS states a domain for its whole
+# server, so the kitchen sinks' pools of differing domains come back without
+# theirs.  fortigate_cli__arista_eos stays at 1: its kitchen sink shows the
+# same loss, which its YAML now declares where it had called the field good.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
     "arista_eos__aruba_aoss": 2,
     "arista_eos__cisco_iosxe": 3,
-    "arista_eos__cisco_iosxe_cli": 1,
+    "arista_eos__cisco_iosxe_cli": 2,
     "arista_eos__fortigate_cli": 3,
     "arista_eos__juniper_junos": 4,
-    "arista_eos__mikrotik_routeros": 2,
+    "arista_eos__mikrotik_routeros": 1,
     "arista_eos__opnsense": 4,
     "aruba_aoss__arista_eos": 3,
     "aruba_aoss__cisco_iosxe": 2,
@@ -608,7 +626,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe__cisco_iosxe_cli": 1,
     "cisco_iosxe__fortigate_cli": 1,
     "cisco_iosxe__juniper_junos": 1,
-    "cisco_iosxe_cli__arista_eos": 3,
+    "cisco_iosxe_cli__arista_eos": 2,
     "cisco_iosxe_cli__aruba_aoss": 2,
     "cisco_iosxe_cli__cisco_iosxe": 1,
     "cisco_iosxe_cli__fortigate_cli": 3,
@@ -630,7 +648,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "juniper_junos__fortigate_cli": 4,
     "juniper_junos__mikrotik_routeros": 3,
     "juniper_junos__opnsense": 4,
-    "mikrotik_routeros__arista_eos": 2,
+    "mikrotik_routeros__arista_eos": 1,
     "mikrotik_routeros__aruba_aoss": 1,
     "mikrotik_routeros__cisco_iosxe": 1,
     "mikrotik_routeros__cisco_iosxe_cli": 2,

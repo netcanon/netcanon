@@ -1107,7 +1107,10 @@ BEFORE: dict[str, str] = {
     "real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt": "06ce2c081564",
     "real/arista_eos/karneliuk_a_eos1_eos4260.txt": "0b4c4b217747",
     "real/arista_eos/ksator_dcs_7150s64_eos4224.txt": "1b74762ebc5b",
-    "synthetic/arista_eos/kitchen_sink.txt": "5f8ca989330b",
+    # Moved on purpose: its pools are written in EOS's `dhcp server`
+    # grammar, and one is served on `Vlan100` (dhcp_pools.py): was
+    # "5f8ca989330b".
+    "synthetic/arista_eos/kitchen_sink.txt": "85bc13b04b06",
     "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
     "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
     "real/cisco_iosxr/batfish_ibgp_border01.txt": "639b6fd2954a",

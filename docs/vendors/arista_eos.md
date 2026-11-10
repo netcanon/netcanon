@@ -46,6 +46,39 @@ corpus yet — operator captures from EOS 4.27+ are welcome (see
   (ship-before-wire path stabilised)
 - Routing instances (`/routing-instances/instance` declared
   supported on Arista — VRF + EVPN paths translate cleanly)
+- DHCP server pools — `dhcp server [vrf <name>]`, a `subnet
+  <prefix>` a pool (its range, DNS servers, lease, default gateway;
+  the server's DNS servers, lease and domain where the subnet states
+  none), and `dhcp server ipv4` under each interface that serves
+  (Arista's EOS User Manual, "DHCP Server", and the `dhcp-servers`
+  template of Arista's AVD).  Which subnet an interface serves is not
+  stated: a subnet is taken to be served on the interface with
+  `dhcp server ipv4`, in the server's VRF, that holds an address of
+  it, and one no such interface holds an address of to be served to
+  relayed clients only (no interface).  That is an inference; where
+  two interfaces qualify the pool is put on the first, and a row of
+  the sections not translated says so.  A `disabled` server, and a
+  subnet EOS disables (a range outside it, ranges that overlap, an
+  address reserved twice, subnets that overlap), are left out and
+  said.  Of several ranges the largest is kept; reservations, TFTP
+  settings, vendor options, client classes and DHCPv6 are rows.  A subnet
+  whose server states no lease either is given one day, and a row
+  says EOS's own default is not established.  Onto EOS each pool is a
+  `subnet` of the server of its interface's VRF, with `dhcp server
+  ipv4` under the interface where it holds an address of the pool's
+  network; a domain is written for the server where every subnet has
+  that one, and what EOS cannot be given (a domain that differs, DNS
+  servers past two, a lease that does not end or is longer than 2000
+  days, a range outside the network, a pool with no network or one
+  that overlaps another) is a `! review:` line and a warning of the
+  job.  A pool that states no whole range is written as what it
+  hands out: its network's hosts less the output's own addresses.
+  `ip dhcp pool` is no form Arista documents for the server: it is
+  not read as a pool, and a row says so.  ⚠️ Up to 0.7.7 a pool was
+  read only from `ip dhcp pool <name>` and written so, with its name
+  where the tree keeps the interface a pool is served on (onto
+  RouterOS, a server's `interface=` that no interface of the output
+  is), and a config in EOS's own grammar had no pool at all
 
 ## L3 redundancy: VRRP + VARP anycast-gateway
 
@@ -156,10 +189,6 @@ Canonical mapping:
 - **`/interfaces/interface/dhcp-client`** — EOS spells a DHCP client
   `ip address dhcp`, which the codec neither reads nor writes: the
   interface is written without one (severity `warn`).
-- **`/dhcp-servers/pool/interface`** — the renderer names a DHCP pool
-  after its interface (`ip dhcp pool <interface>`) and the parser
-  reads the name back as the interface, but no line of the output says
-  that the interface serves the pool (severity `warn`).
 
 ## What we don't do
 
@@ -260,7 +289,7 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
   indentation.**  This parser tells which lines belong to a stanza by
   their indentation.  A text with no line indented but a comment, the
   lines of a stanza it reads (`interface`, `vlan <id>`, `vrf instance`
-  / `vrf definition`, `ip dhcp pool`, `router bgp`) at the left
+  / `vrf definition`, `dhcp server`, `ip dhcp pool`, `router bgp`) at the left
   margin, is refused: the job is `failed`, its error `parse failed:
   arista_eos: this text has no indentation. ...`, naming the first
   line that opens a stanza with the line after it at the margin.  It

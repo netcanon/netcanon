@@ -47,43 +47,41 @@ side.
 
 ## Arista EOS
 
-Source: [Arista EOS — DHCP Server / DHCP Relay](https://www.arista.com/en/um-eos/eos-dhcpv4-server)
-Retrieved: 2026-05-01
+Sources: [Arista EOS User Manual — DHCP Server](https://www.arista.com/en/um-eos/eos-dhcp-overview),
+and the `dhcp-servers` template of Arista's config generator, AVD
+(`eos_cli_config_gen`).
+Retrieved: 2026-11-09
 
 ```
-ip dhcp pool LAN_POOL
-   network 10.0.0.0/24
-   default-router 10.0.0.1
-   dns-server 10.0.0.1 1.1.1.1
-   domain-name lab.example.net
-   lease 0 1 0
-   range 10.0.0.100 10.0.0.200
+dhcp server
+   !
+   subnet 10.0.0.0/24
+      !
+      range 10.0.0.100 10.0.0.200
+      dns server 10.0.0.1 1.1.1.1
+      lease time 0 days 1 hours 0 minutes
+      default-gateway 10.0.0.1
+   !
+   subnet 10.100.0.0/24
+      !
+      range 10.100.0.100 10.100.0.200
+      dns server 10.100.0.1
+      lease time 0 days 8 hours 0 minutes
+      default-gateway 10.100.0.1
 !
-ip dhcp pool USERS_POOL
-   network 10.100.0.0/24
-   default-router 10.100.0.1
-   dns-server 10.100.0.1
-   domain-name users.example.net
-   lease 0 8 0
-   range 10.100.0.100 10.100.0.200
-!
+interface Vlan100
+   ip address 10.100.0.1/24
+   dhcp server ipv4
 ```
 
-Arista's `ip dhcp pool` is a single block — the pool name plus
-network / default-router / dns-server / domain-name / lease /
-range parameters live together.  Lease time uses
-`<days> <hours> <minutes>` form (Cisco-derived).
-
-Static reservations use a separate per-host syntax:
-
-```
-ip dhcp pool RESERVATIONS
-   host 10.0.0.50
-   client-identifier 01aa.bbcc.ddee.01
-```
-
-(Less common; Arista DC leafs typically delegate DHCP to an
-external service.)
+EOS keeps one server a VRF (`dhcp server [vrf <name>]`), a `subnet
+<prefix>` for each pool with its ranges, DNS servers (up to two),
+lease (days, hours and minutes) and default gateway, and
+`dhcp server ipv4` under each interface that serves.  A domain is a
+setting of the whole server.  Reservations are a `reservations`
+block of the subnet.  See
+[`../arista_eos_to_opnsense/dhcp.md`](../arista_eos_to_opnsense/dhcp.md)
+for the grammar in full.
 
 ## Cross-vendor mapping
 
@@ -92,44 +90,50 @@ list[CanonicalDHCPPool]` with fields `interface` / `network` /
 `start_ip` / `end_ip` / `gateway` / `dns_servers: list[str]` /
 `lease_time` (seconds) / `domain_name`.
 
-RouterOS -> Arista round-trip:
+RouterOS -> Arista:
 
-* RouterOS three-section form joins on parse: `/ip pool` →
-  `start_ip` / `end_ip`, `/ip dhcp-server` → `interface` +
-  `lease_time`, `/ip dhcp-server network` → `network` +
-  `gateway` + `dns_servers` + `domain_name`.
-* Arista render emits a single `ip dhcp pool <name>` block with
-  the joined attributes.
+* The RouterOS parser joins the three sections (see
+  [`../../vendors/mikrotik_routeros.md`](../../vendors/mikrotik_routeros.md)):
+  `/ip dhcp-server` → `interface` + `lease_time`, its
+  `address-pool=` → `start_ip` / `end_ip`, the `/ip dhcp-server
+  network` that holds the range → `network` + `gateway` +
+  `dns_servers` + `domain_name`.
+* The EOS output writes each pool as a `subnet` of the server of its
+  interface's VRF, and `dhcp server ipv4` under the interface where
+  it holds an address of the pool's network.  Where it does not, or
+  the output has no such interface, a `! review:` line in the subnet
+  and a warning of the job say so.  The EOS parser reads the pool's
+  interface back from that line.
 
 Lossy bits:
 
-* **Multiple ranges per pool:** RouterOS pools with multiple
-  `ranges=10.0.0.100-10.0.0.150,10.0.0.180-10.0.0.200` segments
-  collapse to a single start_ip/end_ip range on canonical (the
-  union of the segments).  Arista render emits one `range` line.
+* **Multiple ranges per pool:** the tree holds one run a pool, so of
+  a `ranges=` of several the largest is kept and the others are a row
+  of the sections not translated.  EOS writes one `range` line.
 
-* **Static reservations:** RouterOS `/ip dhcp-server lease`
-  rows have no canonical field and drop to raw_sections.
-  Arista render emits no reservations.
+* **Static reservations, custom options and the keys the tree has no
+  place for:** RouterOS `/ip dhcp-server lease`, `/ip dhcp-server
+  option`, `ntp-server=`, `next-server=` and the like have no
+  canonical field and are not written.
 
-* **Custom DHCP options:** RouterOS supports custom options via
-  `/ip dhcp-server option` (option 43 vendor-specific data,
-  option 82 relay agent info, etc.) — not modelled canonically.
-  Drops on render.
+* **What EOS cannot be given as the tree has it:** a domain that not
+  every subnet of the server has, DNS servers past two, a lease that
+  does not end, a range outside the network.  Each is a `! review:`
+  line and a warning of the job.
 
-* **Lease-time format:** RouterOS uses `1h` / `8h` / `1d` time-
-  unit form; Arista uses `<days> <hours> <minutes>`.  Codec
-  converts via the canonical `lease_time` integer-seconds field.
+* **Lease-time format:** RouterOS uses `1h` / `8h` / `1d` time-unit
+  form; EOS uses days / hours / minutes, a minute at the finest.
+  Converted through the canonical `lease_time` integer seconds.
 
-* **DC leaf typical:** Arista DC leafs usually delegate DHCP to
-  an external service rather than running on-device pools, so
-  the cross-pair lift may produce a config the operator doesn't
-  want.  Review banner is appropriate.
+* **DC leaf typical:** Arista DC leafs usually delegate DHCP to an
+  external service rather than running on-device pools, so the
+  cross-pair lift may produce a config the operator doesn't want.
 
 The MikroTik synthetic kitchen-sink carries two pools (`lan_pool`
-+ `users_pool`) bound to `bridge1` / `vlan100` respectively.
-Both lift to `CanonicalDHCPPool` and render to Arista as `ip
-dhcp pool LAN_POOL` / `ip dhcp pool USERS_POOL` blocks.
++ `users_pool`) bound to `bridge1` / `vlan100` respectively.  Each
+is a `subnet` of the EOS output's `dhcp server`, served on the
+interface each becomes; their two domains differ, so neither is
+written and each subnet has a review line.
 
-Disposition: **lossy** — basic pool round-trips with documented
-caveats; static reservations and option codes drop.
+Disposition: **lossy** — a pool and where it is served round-trip;
+several ranges, static reservations and option codes do not.

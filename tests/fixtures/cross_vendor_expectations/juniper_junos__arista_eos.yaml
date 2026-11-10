@@ -370,7 +370,7 @@ per_field_expectation:
 
   dhcp_servers:
     disposition: lossy
-    reason: "Junos's two-stage 'set system services dhcp-local-server' + 'set access address-assignment pool' model maps loosely to Arista's 'ip dhcp pool' grammar (host-side scopes, options). Basic pools (network + range + gateway + DNS) round-trip; per-platform advanced options drift. Both vendors are typically deployed as DHCP relays (helper-address) rather than servers in DC-leaf roles."
+    reason: "Junos's two-stage 'set system services dhcp-local-server' + 'set access address-assignment pool' model maps loosely to Arista's 'dhcp server' grammar (a 'subnet' a pool, the domain a setting of the server, reservations and options). Basic pools (network + range + gateway + DNS) round-trip; per-platform advanced options drift. Both vendors are typically deployed as DHCP relays (helper-address) rather than servers in DC-leaf roles."
 
   # ── Tier 2 — SNMP ──
 

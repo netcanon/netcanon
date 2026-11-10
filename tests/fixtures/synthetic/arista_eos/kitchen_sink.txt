@@ -35,19 +35,23 @@ username readonly privilege 1 role network-operator secret 5 $1$fakeSalt$fakeMd5
 !
 vrf instance TENANT_A
 !
-ip dhcp pool USERS
-   network 10.100.0.0 255.255.255.0
-   range 10.100.0.100 10.100.0.200
-   default-router 10.100.0.1
-   dns-server 10.0.0.53 10.0.0.54
-   domain-name example.net
-   lease 0 12 0
+dhcp server vrf TENANT_A
+   dns domain name ipv4 example.net
+   !
+   subnet 10.100.0.0/24
+      !
+      range 10.100.0.100 10.100.0.200
+      dns server 10.0.0.53 10.0.0.54
+      lease time 0 days 12 hours 0 minutes
+      default-gateway 10.100.0.1
 !
-ip dhcp pool VOICE
-   network 10.100.20.0/24
-   range 10.100.20.50 10.100.20.150
-   default-router 10.100.20.1
-   lease 1
+dhcp server
+   !
+   subnet 10.100.20.0/24
+      !
+      range 10.100.20.50 10.100.20.150
+      lease time 1 days 0 hours 0 minutes
+      default-gateway 10.100.20.1
 !
 vlan 10
    name USERS
@@ -120,6 +124,7 @@ interface Vlan100
    description "Tenant A data SVI"
    vrf TENANT_A
    ip address 10.100.0.1/24
+   dhcp server ipv4
    ipv6 address 2001:db8:100:100::1/64
 !
 interface Vlan200

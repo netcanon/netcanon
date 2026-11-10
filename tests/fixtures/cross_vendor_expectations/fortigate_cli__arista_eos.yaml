@@ -270,17 +270,18 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: good
-    note: >
-      The arista_eos codec now advertises ``/dhcp-servers/pool`` in
-      its supported set (Cluster E.1-A wire-up: render emits ``ip
-      dhcp pool <name>`` with network / range / default-router /
-      dns-server / domain-name / lease, and parse harvests them
-      back).  FortiGate-source ``config system dhcp server`` pools
-      therefore round-trip cleanly — verified byte-model-equal on
-      the 6-pool ``user_contrib_fg100e`` fixture (interface /
-      network / start_ip / end_ip / gateway / dns_servers /
-      lease_time / domain_name all preserved).  FortiGate-only
+    disposition: lossy
+    reason: >
+      FortiGate-source ``config system dhcp server`` pools are written
+      as ``subnet`` blocks of EOS's ``dhcp server``, each with ``dhcp
+      server ipv4`` under its interface, and read back with interface,
+      network, range, gateway, DNS servers and lease.  EOS states a
+      domain for its whole server, so where the pools of a server have
+      different domains none is written (a ``! review:`` line and a
+      warning of the job say so) and they come back without theirs, as
+      the synthetic kitchen sink's two pools do; the committed captures
+      come back as they were.  DNS servers past two are not written
+      (a subnet takes two), under a review line.  FortiGate-only
       advanced pool options (vci-match, ntp-service) never enter
       CanonicalDHCPPool, so they are pre-canonical loss the
       comparator cannot observe rather than a cross-vendor drop;

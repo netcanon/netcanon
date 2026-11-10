@@ -82,8 +82,12 @@ netcanon/migration/codecs/<vendor>/
 │                       # sections a pool is (the /ip pool, the
 │                       # /ip dhcp-server on its interface with its
 │                       # lease, the network with its options), a
-│                       # review line for each it cannot write; all
-│                       # three read what a pool hands out from
+│                       # review line for each it cannot write;
+│                       # (arista_eos) reader and writer of EOS's
+│                       # `dhcp server [vrf]` / `subnet` grammar and
+│                       # an interface's `dhcp server ipv4`, which
+│                       # says where a subnet is served; every writer
+│                       # reads what a pool hands out from
 │                       # codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
@@ -1242,7 +1246,7 @@ the policy locally:
   network (Junos and Cisco IOS say so; a /31 or /32 is all of it), and
   one that states one end hands out from that end to the network's
   edge; a target that takes no pool without a range (FortiOS, RouterOS,
-  OPNsense) is written that span, less the addresses the output gives
+  OPNsense, EOS) is written that span, less the addresses the output gives
   its own interfaces (`OwnAddresses`).  `what_it_hands_out(pool, own)`
   returns `None` for a pool that states its whole range, a `Handed`
   (the span, the runs left free, `largest()`) for one the writer has to

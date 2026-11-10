@@ -514,6 +514,12 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "a DHCP pool with neither a network and a range nor a static binding, "
         "which the source's server discards; not translated",
     ),
+    "disabled-subnet": (
+        "disabled: ",
+        "a subnet the source's DHCP server disables (a range outside it or "
+        "over another, an address reserved twice, or a subnet over another), "
+        "so it serves nothing; not translated",
+    ),
 }
 
 #: A word of a path that names a secret.  What follows it is the
@@ -559,7 +565,8 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             server that is not enabled, a FortiOS DHCP server of
             ``status disable``, or a RouterOS ``/ip dhcp-server`` of
             ``disabled=yes``) or ``"incomplete"`` (an AOS-S
-            DHCP pool the server discards).
+            DHCP pool the server discards) or ``"disabled-subnet"``
+            (an EOS DHCP server's subnet that EOS disables).
         path: The words of the statement's path, outermost first.
 
     Returns:

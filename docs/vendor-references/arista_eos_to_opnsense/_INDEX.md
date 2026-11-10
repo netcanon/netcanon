@@ -25,7 +25,7 @@ surface is firmly out of scope on the Arista side.
 | `interfaces.md` | Arista flat `Ethernet<N>` / `Port-Channel<N>` / `Vlan<N>` / `Loopback<N>` versus OPNsense BSD device names + zone labels (`<wan>` / `<lan>` / `<optN>`). |
 | `vlans.md` | Arista per-port `switchport access/trunk` (transposed onto `CanonicalVlan` lists) versus OPNsense VLAN-as-tagged-sub-interface. |
 | `static_routes.md` | Arista flat `ip route` versus OPNsense's two-block `<gateways>` + `<staticroutes>` model. |
-| `dhcp.md` | Arista named `ip dhcp pool` versus OPNsense interface-keyed `<dhcpd>` blocks; codec wire-up partial on OPNsense side. |
+| `dhcp.md` | Arista `dhcp server` (a `subnet` a pool, served on each interface with `dhcp server ipv4`) versus OPNsense interface-keyed `<dhcpd>` blocks; a subnet served to relayed clients only names no zone. |
 | `snmp.md` | v1/v2c surface round-trips; SNMPv3 USM lives in OPNsense plugin's snmpd.conf, not config.xml. |
 | `local_users.md` | Arista `$1$` MD5-crypt / `$6$` SHA-512-crypt versus OPNsense `<password>`, which takes bcrypt and (since #462) SHA-512 crypt: `$6$` carries across, `$1$` does not. |
 | `radius.md` | RADIUS server config — round-trips host / port pair and a key written as typed; a `key 7` is refused. |

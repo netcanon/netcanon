@@ -251,10 +251,11 @@ per_field_expectation:
   dhcp_servers:
     disposition: unsupported
     reason: >
-      The arista_eos parser reads ``ip dhcp pool`` (of the committed
-      inputs only the synthetic kitchen sink has one, and it is
-      dropped on this target; every real capture is empty on both
-      sides).  The aruba_aoss render writes no pool: AOS-S has a DHCP server
+      The arista_eos parser reads EOS's DHCP server (``dhcp server``
+      and its ``subnet`` blocks; of the committed inputs only the
+      synthetic kitchen sink has one, and it is dropped on this target;
+      every real capture is empty on both sides).  The aruba_aoss
+      render writes no pool: AOS-S has a DHCP server
       of its own (``dhcp-server pool``, which the aruba_aoss parser
       reads), but an output for AOS-S has a comment for each pool,
       not a stanza, and ``/dhcp-servers/pool`` is declared

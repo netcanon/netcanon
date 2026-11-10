@@ -394,10 +394,8 @@ per_field_expectation:
     note: >
       OpenConfig has no fully-baked DHCP server model in widely-
       deployed Cisco IOS-XE versions.  The NETCONF parser doesn't
-      attempt to read DHCP XML.  Disposition stays `not_applicable`
-      (no input to render); arista_eos codec also doesn't currently
-      parse `ip dhcp pool` blocks, so the field is bidirectionally
-      empty regardless of pipeline.
+      attempt to read DHCP XML, so the source side is empty and there
+      is nothing to render.  Disposition stays `not_applicable`.
     references: [oc-system]
 
   snmp:

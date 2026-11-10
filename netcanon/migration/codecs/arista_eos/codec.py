@@ -14,6 +14,9 @@ Module layout (post-split):
   router-bgp + interface walkers, and helpers like
   ``_infer_iface_type`` / ``_expand_vlan_list``.
 * ``render.py`` — canonical tree → EOS CLI text.
+* ``dhcp_pools.py`` — the DHCP server (``dhcp server [vrf <name>]``,
+  its subnets, an interface's ``dhcp server ipv4``) read as the tree's
+  pools and written from them, both ways in one module.
 
 Structural strategy: EOS CLI is line-oriented with ``!`` delimiters,
 nearly identical to Cisco IOS syntax for the subset we model.  The
@@ -53,6 +56,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
+from .dhcp_pools import render_pools
 from .parse import parse_intent, without_bodies
 from .render import render_intent
 
@@ -73,13 +77,6 @@ _DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
         "CARP) is not written, a `! review:` line in its interface says so, "
         "and the redundancy has to be made again on the target.",
         ("/interfaces/interface/vrrp-groups/group",),
-    ),
-    (
-        "The renderer names a DHCP pool after its interface (`ip dhcp "
-        "pool <interface>`), and the parser reads the name back as the "
-        "interface, but no line of the output says that the interface "
-        "serves the pool: where the pool is served is not written.",
-        ("/dhcp-servers/pool/interface",),
     ),
 )
 
@@ -524,6 +521,19 @@ class AristaEOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def render_warnings(self, tree: Any) -> list[str]:
+        """The warnings every target gives, and one for each review
+        line of the output's DHCP server: a pool not written, not
+        served on the interface the source serves it on, or written
+        without a range, a lease, a domain or DNS servers it states
+        (:mod:`.dhcp_pools`)."""
+        warnings = super().render_warnings(tree)
+        if isinstance(tree, CanonicalIntent):
+            from ...canonical.transforms import synthesize_svis_from_vlan_l3
+            interfaces = [*tree.interfaces, *synthesize_svis_from_vlan_l3(tree)]
+            warnings += render_pools(tree.dhcp_servers, interfaces).warnings
+        return warnings
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

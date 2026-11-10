@@ -850,9 +850,10 @@ class TestADeactivatedStatement:
         )
         expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_count(0)
         expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
-            "A line that begins disabled: is a DHCP pool or setting of a switch "
-            "whose DHCP server is not enabled, and one that begins incomplete: is "
-            "a DHCP pool the server discards: neither served anything there, and "
-            "each is left out here for that reason. Write it on the target by "
-            "hand only if the target is to serve it."
+            "A line that begins disabled: is a DHCP server, pool or setting the "
+            "source did not serve: its server is not enabled, or EOS disables the "
+            "subnet. One that begins incomplete: is a DHCP pool the server "
+            "discards. Neither served anything there, and each is left out here "
+            "for that reason. Write it on the target by hand only if the target "
+            "is to serve it."
         )
