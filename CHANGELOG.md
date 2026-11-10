@@ -1349,6 +1349,30 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos DHCP pool of several ranges is read as the largest run
+  they make, and the others are said.**  A Junos address-assignment
+  pool can state several ranges (`range <name> low|high`), and
+  Juniper's subscriber-management guide says every range of a pool is
+  searched for an address to hand out; the tree holds one run of a
+  pool.  The parser read the first `low` and the first `high` the pool
+  stated, whichever range each was in -- one range made of two -- and
+  said nothing of the others.  It now keeps each range by its name,
+  joins those that meet or overlap into one run, keeps the largest run
+  (the lower of two as large, as the RouterOS parser does), and names
+  the pool in a row of the sections not translated where some of its
+  ranges are not in that run.  An end of the kept run that no range
+  states stays unstated, so that a renderer takes the output's own
+  addresses out of it as it does for one range.  The parser also read
+  `low <ip> high <ip>` on one line -- as Juniper's own example types
+  the legacy `address-range` -- as its `low` alone; kept the first
+  value of an end set twice, where the device keeps the last, so that
+  an applied group's end won over the config's own; and left out a
+  pool that states a `high` and no network, and one that states
+  neither a network nor a range, with nothing said.  The first of
+  those two is read now, and the renderers treat it as such a pool
+  from any source (a review line where it cannot be written); the
+  second is a row.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_pool_of_several_ranges.py`.
 - **A Junos DHCP pool that states one end of its range is written a
   whole one, and a pool Junos or IOS-XE can write no address of is
   not written, and each is said.**  Juniper's
@@ -6013,12 +6037,9 @@ timestamp if your timezone matters for an audit.
   answers give for IOS XE 17.6 and later and its configuration guide
   does not: a `review:` line above it says so.  The vendor page says
   it.
-- **A Junos DHCP pool is read as one range.**  A Junos pool can state
-  several (`range <name> low|high`), and the parser reads the first
-  `low` and the first `high` it states, whichever range each is in,
-  and says nothing of the others.  A pool that states both ends of a
-  range and no network is written on Junos with no `network`, which
-  Junos has not been shown to take.
+- **A DHCP pool with both ends of a range and no network is written
+  on Junos with no `network`.**  Junos has not been shown to take a
+  pool with no network.
 - **The HSRP version is not kept.**  The tree has no field for it:
   the IOS-XE CLI and NX-OS renderers write version 2 only where a
   group needs it (a group above 255, or on IOS-XE an IPv6 address),

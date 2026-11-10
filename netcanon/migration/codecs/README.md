@@ -87,11 +87,13 @@ netcanon/migration/codecs/<vendor>/
 │                       # `dhcp server [vrf]` / `subnet` grammar and
 │                       # an interface's `dhcp server ipv4`, which
 │                       # says where a subnet is served;
-│                       # (juniper_junos) a writer only: an address-
+│                       # (juniper_junos) the writer of an address-
 │                       # assignment pool and its dhcp-local-server
 │                       # group, a whole range for a pool that states
 │                       # one end, a review line for one with no
-│                       # address to write; every writer
+│                       # address to write; and the one range the
+│                       # parser reads a pool of several as (their
+│                       # largest run, a row for the rest); every writer
 │                       # reads what a pool hands out from
 │                       # codecs/_dhcp_pools.py
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule

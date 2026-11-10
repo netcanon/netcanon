@@ -440,7 +440,9 @@ with one end is.  One that can be given no address (no network and
 not both ends of a range, a range outside its network, no address
 left) is a `# review:` line in place of its lines.  Each review line
 is a warning of the job too.  A pool with several ranges is read as
-one (see [`vendors/juniper_junos.md`](vendors/juniper_junos.md)).
+the largest run they make, and a row of the sections not translated
+names the pool where the others are left out (see
+[`vendors/juniper_junos.md`](vendors/juniper_junos.md)).
 
 | Path | Class | Reason |
 |---|---|---|
