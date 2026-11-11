@@ -57,6 +57,14 @@ and Aruba's reconciliation involves three separate code paths in
    see :meth:`ArubaAOSSCodec.format_port_identity`, the
    ``identity.kind == "svi"`` branch.)
 
+An interface of another vendor that stands for a VLAN -- a routed
+sub-interface, or a VLAN interface its parser links to its VLAN
+record -- reaches path 2 the same way: before the render it is
+renamed ``Vlan<N>`` by the tree's own VLAN id
+(:func:`~netcanon.migration.codecs.aruba_aoss.vlan_interfaces.prepare`),
+so its addresses are absorbed into the VLAN's stanza; one AOS-S
+cannot write is a ``; review:`` line.
+
 The cross-vendor orchestrator in
 :mod:`netcanon.migration.canonical.port_names` respects this by
 reading the :attr:`CodecBase.absorbs_svi_into_vlan` class flag —

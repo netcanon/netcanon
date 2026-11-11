@@ -314,7 +314,7 @@ def test_the_check_sees_the_old_render(monkeypatch) -> None:
     """With the next hop written as the tree holds it, as before, the
     check fails on a route out a port, to ``Null0``, and in a VRF."""
 
-    def as_before(route) -> str:
+    def as_before(route, *_rest) -> str:
         hop = route.gateway or ""
         dist = f" distance {route.metric}" if route.metric else ""
         return f"ip route {route.destination} {hop}{dist}"

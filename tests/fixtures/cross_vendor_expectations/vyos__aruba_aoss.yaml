@@ -181,6 +181,9 @@ per_field_expectation:
       placeholder, but the port inventory an operator reads off the migrated
       config is shorter than the one they started with.  Diff the two before
       cutover.
+      And AOS-S has no sub-interface: a `vif` is written as the VLAN of its
+      tag and comes back as `Vlan<tag>`, and a `vif` AOS-S has no form for
+      (one that is disabled) is left out under a `; review:` line.
     references: [vyos-aoss-surface]
 
   "interfaces[].description":
@@ -315,20 +318,26 @@ per_field_expectation:
 
   # -- VLANs -- absent on the source side entirely ---------------------------
   #
-  # ZERO of the 13 committed VyOS fixtures produce a single VLAN record.  VyOS
+  # No committed VyOS fixture produces a single VLAN record.  VyOS
   # expresses tagging as a `vif` sub-interface, which lands in `interfaces[]`
   # as `eth1.100`, and expresses L3 on the interface record.  A software router
-  # has no campus VLAN database to migrate.  All six keys below are therefore
-  # source-side gaps, and each says which side the re-authoring belongs on.
+  # has no campus VLAN database to migrate.  The keys below are therefore
+  # source-side gaps, and each says which side the re-authoring belongs on --
+  # but for the two a `vif` reaches: AOS-S has no sub-interface, and writes a
+  # `vif` as the VLAN of its tag, tagged on its port.
 
   "vlans[].id":
-    disposition: not_applicable
-    note: >
-      Source-side gap, declared and measured: vyos declares `/vlans/vlan/id`
-      UNSUPPORTED, so no VLAN record is ever built from this source, and no
-      committed cell produces one.  aruba_aoss declares `/vlans/vlan/id`
-      supported, so a campus VLAN database authored on the target after
-      cutover will stick.
+    disposition: lossy
+    reason: >
+      vyos declares `/vlans/vlan/id` UNSUPPORTED, so no VLAN record is ever
+      built from this source.  The output has some all the same: a `vif`
+      sub-interface is written as the AOS-S VLAN of its tag (`vlan <tag>`,
+      `tagged <port>`, its addresses) and comes back as a VLAN record and as
+      the interface `Vlan<tag>`; the port leaves VLAN 1 (`no untagged`),
+      which comes back as a record too.  A `vif` AOS-S has no form for (one
+      that is disabled, as on the kitchen-sink cell) is left out under a
+      `; review:` line.  aruba_aoss declares `/vlans/vlan/id` supported, so a
+      campus VLAN database authored on the target after cutover will stick.
     references: [vyos-aoss-surface]
 
   "vlans[].name":
@@ -365,12 +374,13 @@ per_field_expectation:
     references: [vyos-aoss-surface]
 
   "vlans[].tagged_ports":
-    disposition: not_applicable
-    note: >
-      Same source-side gap as `vlans[].untagged_ports`, same measurement:
-      empty on all 13 cells.  VyOS expresses tagging as a `vif`
+    disposition: lossy
+    reason: >
+      The source populates none: VyOS expresses tagging as a `vif`
       sub-interface, which lands in `interfaces[]` as `eth1.100`, not as trunk
-      membership on a VLAN record.
+      membership on a VLAN record.  The output writes the tag where AOS-S has
+      it, as the `vif`'s port in the VLAN's `tagged` list, so a VLAN the
+      source did not have comes back with a tagged port.
     references: [vyos-aoss-surface]
 
   "vlans[].description":

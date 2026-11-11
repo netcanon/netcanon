@@ -12,9 +12,13 @@
 # SVI-on-VLAN L3, SNMP — is empty on the source side.
 #
 # The dominant loss on this pair is NOT the interface inventory.  Unlike the
-# campus->DC pairs, every interface record survives (147/147 names across the
-# 11 real captures, 9/9 on the kitchen-sink cell), and description, enabled,
-# ipv4 and ipv6 addressing are preserved on every record that carries them.
+# campus->DC pairs, an interface record survives: a routed sub-interface is
+# written as the AOS-S VLAN of its 802.1Q tag and comes back as `Vlan<tag>`,
+# and only a sub-interface AOS-S has no form for is left out, under a
+# `; review:` line -- none on the captures, whose sub-interfaces in a VRF are
+# written without it, as every interface of a VRF is.  Enabled, ipv4 and ipv6
+# addressing are preserved on every record; a sub-interface's description is
+# not written.
 # What is lost is three whole CONCEPTS: the VRF, the local user, and the
 # memberless LAG bundle.  Each of those loses records wholesale, so the audit
 # marks every sub-field of the parent list drifted for that one reason — which
@@ -40,8 +44,9 @@ meta:
   target_vendor: aruba_aoss
   primary_use_case: >
     Small-site downgrade: an IOS-XR router replaced at a branch or lab edge by
-    an ArubaOS-Switch that keeps the hostname, the whole interface inventory
-    with its addressing and admin state, the synthesised VLAN ids, the LAG
+    an ArubaOS-Switch that keeps the hostname, the interface inventory
+    with its addressing and admin state (a routed sub-interface as the VLAN
+    of its tag), the synthesised VLAN ids, the LAG
     bundles that have members, and the global-table static routes.  What does
     not survive is everything VRF-shaped (the routing instances themselves,
     per-route VRF binding, per-interface VRF membership), the local user
@@ -119,17 +124,23 @@ per_field_expectation:
       Re-add `logging <ip>` for each collector before cutover.
     references: [iosxr-aoss-surface]
 
-  # -- Interfaces -- the inventory survives; three attributes do not ---------
+  # -- Interfaces -- a sub-interface becomes a VLAN; three attributes are lost
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      The interface inventory does NOT shrink on this pair — preserved on 12 of
-      12 cells; hand round-trips counted 147 of 147 names surviving across the
-      11 real captures plus 9 of 9 on the kitchen-sink cell.  Read this as "no
-      interface was lost", not as "the render is deployable": the AOS-S output
-      carries the IOS-XR names
-      through verbatim (`GigabitEthernet0/0/0/2`, `Bundle-Ether500`,
+    disposition: lossy
+    reason: >
+      AOS-S has no sub-interface.  A routed sub-interface is written as the
+      VLAN of its 802.1Q tag -- `vlan <tag>`, `tagged <port>` and its
+      addresses -- and the AOS-S parser reads it back as `Vlan<tag>`, with
+      its addresses and its admin state.  One AOS-S has no form for is left
+      out of the output under a `; review:` line, with a warning, and the job
+      is `partial`: a sub-interface that is shut down, one that matches two
+      tags or takes its port's untagged frames, one of VLAN 1, and one whose
+      tag another unit or a VLAN with a port or an address also has.  A
+      sub-interface in a VRF -- the captures' case -- is written without it,
+      as every interface of a VRF is (AOS-S has none; the VRF's loss is on
+      `routing_instances`).  Every other name comes through
+      verbatim (`GigabitEthernet0/0/0/2`, `Bundle-Ether500`,
       `Loopback0`), which are not legal AOS-S port identifiers.  The fidelity
       harness scores preservation, not target-syntax validity; port-shape
       translation is a separate step
@@ -146,15 +157,23 @@ per_field_expectation:
       XR parser keeps the quotes of a description the router
       prints quoted (the CST design capture's BVI500 and
       Gi0/0/0/12), so those land between apostrophes.  A
-      description with no `"` is preserved.
+      description with no `"` is preserved on every interface
+      written as one.  A sub-interface written as the VLAN of its
+      tag loses its description: the VLAN is written with no
+      `name` line, and the AOS-S parser reads the VLAN's name,
+      empty, back as the description of `Vlan<tag>` (measured on
+      each cell whose sub-interface has one).
     references: [iosxr-aoss-surface]
 
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 12 of 12 cells, and on 147 of 147 records across
-      the 11 real captures — including shutdown ports, which survive as
-      shutdown rather than being dropped.  Declared supported on both sides.
+      Admin state comes back on every interface that is written, checked by
+      name -- shutdown ports included, which survive as shutdown rather than
+      being dropped, and a sub-interface on the VLAN of its tag.  A
+      sub-interface that is shut down is not written (an AOS-S VLAN cannot
+      be), and that loss is the record's, on `interfaces[].name`.  Declared
+      supported on both sides.
     references: [iosxr-aoss-surface]
 
   "interfaces[].mtu":
@@ -179,8 +198,11 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on all 3 cells that populate it (10 of 10 addressed records in
-      the real captures, address + prefix-length intact).  aruba_aoss wired the IPv6 address
+      Preserved on every cell that populates it, address and prefix-length
+      intact; a sub-interface's on the VLAN of its tag (`ipv6 address` in the
+      `vlan` stanza, read back on `Vlan<tag>`).  The address of a
+      sub-interface that is left out is lost with it, on
+      `interfaces[].name`.  aruba_aoss wired the IPv6 address
       paths in GAP-EVPN-3 and declares them supported; cisco_iosxr declares
       them supported too.
     references: [iosxr-aoss-surface]
@@ -188,8 +210,11 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells (every addressed record across the real
-      captures).  Both matrices
+      Every address of an interface that is written comes back, checked by
+      name; a sub-interface's on the VLAN of its tag (read back on
+      `Vlan<tag>`).  The address of a sub-interface that is left out under a
+      review line -- none on the captures -- is lost with it, and that loss
+      is on `interfaces[].name`.  Both matrices
       declare `/interfaces/interface/ipv4/address/ip` + `prefix-length`
       supported.  The anycast companion `.../virtual-gateway-address` is
       unsupported on BOTH sides, so it cannot degrade this pair — no IOS-XR
@@ -244,18 +269,20 @@ per_field_expectation:
       migrated from an IOS-XR source until the source parses VRRP.
     references: [iosxr-aoss-surface]
 
-  # -- VLANs -- a synthesised id-list, and nothing else ----------------------
+  # -- VLANs -- a synthesised id-list, and the VLANs of the sub-interfaces --
 
   "vlans[].id":
-    disposition: good
-    note: >
-      Preserved on all 4 cells that populate it.  Both matrices declare
-      `/vlans/vlan/id` supported.  One caveat that is NOT a loss on this key
-      but changes what the id means: IOS-XR has no VLAN database, so the codec
-      synthesises these records from routed sub-interface `encapsulation
-      dot1q`, and the sub-interface's own tag binding is a separate field that
-      aruba_aoss declares unsupported (GAP 7).  The VLAN id arrives; the
-      routed sub-interface that carried it arrives untagged.
+    disposition: lossy
+    reason: >
+      IOS-XR has no VLAN database, so the codec synthesises a VLAN record
+      from each routed sub-interface's `encapsulation dot1q`, and every one
+      arrives.  The output holds one more: a sub-interface written as the
+      VLAN of its tag is tagged on its port, and a port that AOS-S has tagged
+      in a VLAN and untagged in none is taken out of VLAN 1 (`vlan 1`, `no
+      untagged <port>`), which comes back as a VLAN record the source did not
+      have.  A sub-interface left out under a review line leaves its
+      synthesised VLAN behind with no port.  Both matrices declare
+      `/vlans/vlan/id` supported.
     references: [iosxr-aoss-surface]
 
   "vlans[].name":
@@ -293,12 +320,13 @@ per_field_expectation:
     references: [iosxr-aoss-surface]
 
   "vlans[].tagged_ports":
-    disposition: not_applicable
-    note: >
-      Source-side gap, same mechanism as `vlans[].untagged_ports`: no IOS-XR
-      cell populates trunk membership because the VLAN records are synthesised
-      from routed sub-interfaces.  aruba_aoss declares
-      `/vlans/vlan/tagged-ports` supported.
+    disposition: lossy
+    reason: >
+      The source holds no trunk membership: its VLAN records are synthesised
+      from routed sub-interfaces, and the tag is the sub-interface's.  The
+      output writes that tag where AOS-S has it, as the sub-interface's port
+      in the VLAN's `tagged` list, so a VLAN with no port comes back with
+      one.  aruba_aoss declares `/vlans/vlan/tagged-ports` supported.
     references: [iosxr-aoss-surface]
 
   "vlans[].description":

@@ -39,7 +39,11 @@ from netcanon.migration.codecs.juniper_junos import parse as junos_parse
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
-from tests.unit.migration.test_units_follow_their_port import _holders, _tags
+from tests.unit.migration.test_units_follow_their_port import (
+    _A_VLAN_OF_ITS_TAG,
+    _holders,
+    _tags,
+)
 
 JUNOS = "juniper_junos"
 
@@ -173,13 +177,18 @@ def _unit_problems(target_name: str) -> list[str]:
     out = target.parse(job.rendered)
     where = job.port_renames.get("ge-0/0/1", "ge-0/0/1")
     expected = "ge-0/0/1.0" if target_name == JUNOS else f"{where}.54"
+    # A target with no sub-interface writes the VLAN of its tag.
+    tagged = _A_VLAN_OF_ITS_TAG.get(target_name)
+    on = "Vlan54" if tagged is not None else expected
     holders = _holders(out, "10.54.0.1")
     if len(holders) != 1:
         return [f"10.54.0.1 is on {[h.name for h in holders]}"]
     (unit,) = holders
     problems: list[str] = []
-    if unit.name != expected:
-        problems.append(f"10.54.0.1 is on {unit.name!r}, not {expected!r}")
+    if unit.name != on:
+        problems.append(f"10.54.0.1 is on {unit.name!r}, not {on!r}")
+    if tagged is not None and tagged(job.rendered, 54) != [where]:
+        problems.append(f"VLAN 54 is tagged on {tagged(job.rendered, 54)}, not [{where!r}]")
     others = {address.ip for address in unit.ipv4_addresses} - {"10.54.0.1"}
     if others:
         problems.append(f"{unit.name!r} holds {sorted(others)} as well")

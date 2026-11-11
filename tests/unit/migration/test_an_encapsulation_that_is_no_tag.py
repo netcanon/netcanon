@@ -19,6 +19,8 @@ sub-interface's, and is read as before.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from netcanon.migration._tier3_detection import is_left_out_row
@@ -106,12 +108,23 @@ def _job(target: str, text: str) -> MigrationJob:
     )
 
 
-def _problems(job: MigrationJob, row: str) -> list[str]:
+#: Targets that write a sub-interface as the VLAN of its tag, tagged on
+#: its port, and with no description (AOS-S routes on a VLAN): the
+#: tagged sub-interface is in the output as that VLAN.
+_AS_THE_VLAN_OF_ITS_TAG = {"aruba_aoss"}
+
+
+def _problems(job: MigrationJob, row: str, target: str = "") -> list[str]:
     out = job.rendered or ""
     problems: list[str] = []
     if _NO_TAG in out:
         problems.append(f"{_NO_TAG} is in the output")
-    if _TAGGED not in out:
+    if target in _AS_THE_VLAN_OF_ITS_TAG:
+        if not re.search(r"^vlan 100\n[ \t]+tagged ", out, re.MULTILINE):
+            problems.append("vlan 100 is not in the output, tagged on its port")
+        if re.search(r"^vlan 7\b", out, re.MULTILINE):
+            problems.append("the sub-interface of no tag is a VLAN of the output")
+    elif _TAGGED not in out:
         problems.append(f"{_TAGGED} is not in the output")
     if row not in job.dropped_tier3_sections:
         problems.append("no row says it was left out")
@@ -123,7 +136,7 @@ def _problems(job: MigrationJob, row: str) -> list[str]:
 def test_no_target_is_given_it(statement: str, target: str) -> None:
     header = "GigabitEthernet0/0/0/1.7 l2transport"
     job = _job(target, _text(header, statement))
-    assert _problems(job, _row(header, statement)) == []
+    assert _problems(job, _row(header, statement), target) == []
 
 
 def test_the_check_sees_the_old_reading(monkeypatch: pytest.MonkeyPatch) -> None:

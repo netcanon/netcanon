@@ -331,6 +331,31 @@ _TAG_AS_A_VLAN_OF_ITS_NAME = {
 }
 
 
+def _aoss_tagged(text: str, vid: int) -> list[str]:
+    """The ports the ``tagged`` lines of the ``vlan <vid>`` stanza of an
+    AOS-S *text* name, as written (a stanza runs from its header to the
+    next line in column 0)."""
+    ports: list[str] = []
+    inside = False
+    for line in text.splitlines():
+        words = line.split()
+        if line[:1].strip():
+            inside = words == ["vlan", str(vid)]
+        elif inside and words[:1] == ["tagged"]:
+            ports += [p for p in ",".join(words[1:]).split(",") if p]
+    return ports
+
+
+#: Targets that route on a VLAN and have no sub-interface: one is
+#: written as VLAN <tag>, tagged on its port, with its addresses.  The
+#: AOS-S parser reads the addresses back onto ``Vlan<tag>`` and the port
+#: into the VLAN's tagged ports; the reader beside each name reads the
+#: ports a VLAN's stanza tags from the text.  The tag is taken where the
+#: parser reads it so AND the text states it.  Typed here, not read from
+#: the codec.
+_A_VLAN_OF_ITS_TAG = {"aruba_aoss": _aoss_tagged}
+
+
 def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
     """The tags the output carries on *iface*, read the target's way."""
     tags = {iface.dot1q_vlan} - {None}
@@ -339,6 +364,13 @@ def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
         tags |= {
             vlan.id for vlan in out.vlans
             if vlan.name == iface.name and says(rendered, iface.name, vlan.id)
+        }
+    tagged = _A_VLAN_OF_ITS_TAG.get(target_name)
+    vid = iface.name[4:] if iface.name.startswith("Vlan") else ""
+    if tagged is not None and vid.isdigit():
+        tags |= {
+            vlan.id for vlan in out.vlans
+            if vlan.id == int(vid) and vlan.tagged_ports and tagged(rendered, vlan.id)
         }
     return tags
 
@@ -354,8 +386,10 @@ class TestASubInterfaceOnEveryPair:
         """Read from the output, by address: each unit is on one
         interface, no interface holds two, and its name is what its
         port became with the unit after it -- or, onto a target whose
-        sub-interface is named by its tag, the tag.  A unit that is not in the
-        output at all has to be in ``port_drops``, with its port."""
+        sub-interface is named by its tag, the tag; onto one that has no
+        sub-interface, the VLAN of its tag, tagged on its port.  A unit
+        that is not in the output at all has to be in ``port_drops``,
+        with its port."""
         source, target = get_codec(source_name), get_codec(target_name)
         port, text = _UNITS[source_name]
         job = run_plan_with_overrides(source, target, text, port_rename_map={})
@@ -381,6 +415,15 @@ class TestASubInterfaceOnEveryPair:
                 else unit
             )
             assert job.port_renames.get(name, name) == f"{where}.{after}"
+            tagged = _A_VLAN_OF_ITS_TAG.get(target_name)
+            if tagged is not None:
+                # No sub-interface: the VLAN of its tag, on its port.
+                tag = _tag_of(source_name, unit)
+                assert iface.name == f"Vlan{tag}", f"{name} is on {iface.name!r}"
+                (vlan,) = [v for v in out.vlans if v.id == tag]
+                assert [p.lower() for p in vlan.tagged_ports] == [where.lower()], name
+                assert tagged(job.rendered, tag) == [where], name
+                continue
             assert iface.name == f"{where}.{after}", f"{name} is on {iface.name!r}"
 
     @pytest.mark.parametrize(
@@ -513,6 +556,47 @@ class TestASubInterfaceOnEveryPair:
         ]
         assert lost == [ip for _, ip in _UNIT_ADDRESSES]
         assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize("defect", ["under_its_own_name", "on_no_port"])
+    @pytest.mark.parametrize(
+        "source_name",
+        sorted(s for s in _UNITS if (s, "aruba_aoss") not in _PORT_HAS_NO_NAME),
+    )
+    def test_aoss_is_read_for_the_vlan_it_wrote(
+        self, source_name: str, defect: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Handed the AOS-S renderer as it was -- a sub-interface under
+        its own name, a stanza AOS-S has no form for -- or one that
+        writes the VLAN of the tag and tags no port in it, the reading
+        finds no unit on the VLAN of its tag, on its port: the check
+        above fails."""
+        from netcanon.migration.codecs.aruba_aoss import render as aoss_render
+        from netcanon.migration.codecs.aruba_aoss import vlan_interfaces
+
+        real = aoss_render.prepare_vlan_interfaces
+
+        def prepare(tree):
+            if defect == "under_its_own_name":
+                return vlan_interfaces.Prepared(tree)
+            prepared = real(tree)
+            for vlan in prepared.tree.vlans:
+                vlan.tagged_ports = []
+            return prepared
+
+        monkeypatch.setattr(aoss_render, "prepare_vlan_interfaces", prepare)
+        target = get_codec("aruba_aoss")
+        port, text = _UNITS[source_name]
+        job = run_plan_with_overrides(get_codec(source_name), target, text, port_rename_map={})
+        out = target.parse(job.rendered)
+        where = job.port_renames.get(port, port)
+        for unit, ip in _UNIT_ADDRESSES:
+            tag = _tag_of(source_name, unit)
+            holders = _holders(out, ip)
+            assert not (
+                [h.name for h in holders] == [f"Vlan{tag}"]
+                and tag in _tags("aruba_aoss", out, holders[0], job.rendered)
+                and _aoss_tagged(job.rendered, tag) == [where]
+            ), (unit, defect)
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),

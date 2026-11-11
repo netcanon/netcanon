@@ -86,6 +86,8 @@ from .accounts import account_lines
 from .dhcp_pools import Rendered, Stanza, render_pools
 from .parse import _lists_read_from, _members_read_from
 from .port_names import one_spelling, trunk_number
+from .vlan_interfaces import prepare as prepare_vlan_interfaces
+from .vlan_interfaces import vlan_id_of_name
 
 # ---------------------------------------------------------------------------
 # Render-only constants and helpers
@@ -132,42 +134,6 @@ _IS_AOS_PHYSICAL_PORT_RE = re.compile(
 )
 
 
-#: VLAN-id-encoding interface name patterns.  Used by the SVI-IP
-#: lookup (Finding 4) to discover an L3 SVI on a sibling
-#: :class:`CanonicalInterface` when the canonical
-#: :class:`CanonicalVlan` itself doesn't carry ``ipv4_addresses``.
-#:
-#: Matched forms (id captured in group 1):
-#:
-#: * ``Vlan10`` / ``vlan10`` — Cisco / generic factory-default.
-#: * ``<svi-parent>.<N>`` — dotted form, RESTRICTED to parent names
-#:   that are unambiguously SVI hosts on their source vendor:
-#:
-#:   * ``vlan<digits?>.<N>`` — OPNsense ``<if>vlan0.10</if>``,
-#:     where the parent itself is a VLAN device.
-#:   * ``irb.<N>`` — Junos Integrated Routing and Bridging unit
-#:     (the literal name ``irb`` is reserved on Junos for VLAN
-#:     SVIs).
-#:   * ``port<digits>.<N>`` — FortiGate VLAN sub-interface, the
-#:     vendor's canonical SVI shape (FortiGate has no separate
-#:     ``interface Vlan<N>`` concept; the dot1Q sub-interface IS
-#:     the L3 termination for that VLAN).
-#:
-#:   The earlier broader pattern ``^[A-Za-z][A-Za-z0-9_-]*\.\d+$``
-#:   was too permissive — it matched Cisco / Arista routed
-#:   sub-interfaces (``Ethernet1.10``, ``Port-Channel10.30``) which
-#:   are 802.1Q L3 sub-interfaces on a routed parent, NOT the
-#:   absorbed-into-VLAN SVI shape that Aruba consumes.  Stamping a
-#:   sub-interface's IP onto an unrelated ``vlan N`` block was the
-#:   Phase 4b "SVI absorption over-attribution" bug (see
-#:   ``test_svi_absorption_over_attribution.py``).  The fix is the
-#:   narrower whitelist below.
-_VLAN_ID_BARE_RE = re.compile(r"^[Vv]lan(\d+)$")
-_VLAN_ID_DOTTED_RE = re.compile(
-    r"^(?:[Vv]lan\d*|irb|port\d+)\.(\d+)$"
-)
-
-
 def _esc(value: str) -> str:
     """Escape a free-text value for an AOS-Switch ``"..."`` literal.
 
@@ -179,23 +145,6 @@ def _esc(value: str) -> str:
     Backslash first, then quote (order matters); a no-op for the common
     quote-free / backslash-free case."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def _vlan_iface_id(name: str) -> int | None:
-    """Extract a VLAN id encoded in an interface name, if any.
-
-    Returns the integer id when *name* matches one of the
-    VLAN-id-encoding shapes (see :data:`_VLAN_ID_BARE_RE` /
-    :data:`_VLAN_ID_DOTTED_RE`); returns ``None`` for shapes that
-    don't carry a VLAN id (physical ports, LAGs, loopbacks).
-    """
-    m = _VLAN_ID_BARE_RE.match(name)
-    if m:
-        return int(m.group(1))
-    m = _VLAN_ID_DOTTED_RE.match(name)
-    if m:
-        return int(m.group(1))
-    return None
 
 
 def _has_renderable_body(iface: Any) -> bool:
@@ -585,27 +534,32 @@ def _natives_not_carried(tree: CanonicalIntent) -> dict[int, dict[str, bool]]:
 # ---------------------------------------------------------------------------
 
 
-def _svi_indexes(tree: CanonicalIntent) -> tuple[dict[str, Any], dict[int, Any]]:
+def _svi_indexes(
+    tree: CanonicalIntent, not_a_vlan: frozenset[str] = frozenset(),
+) -> tuple[dict[str, Any], dict[int, Any]]:
     """The interfaces a VLAN stanza can take its addresses from: those
     whose name begins ``vlan``, by name; and by VLAN id, those whose
-    name encodes one (:func:`_vlan_iface_id`) and that hold an IPv4
-    address and no VRF."""
+    name encodes one (:func:`.vlan_interfaces.vlan_id_of_name`) and
+    that hold an IPv4 address and no VRF.  A name in *not_a_vlan* (an
+    interface :func:`.vlan_interfaces.prepare` refused) is in neither."""
     vlan_ifaces_by_name = {
         iface.name: iface for iface in tree.interfaces
         if iface.name.lower().startswith("vlan")
+        and iface.name.lower() not in not_a_vlan
     }
     # Pre-index VLAN-id-encoding interfaces so the SVI-IP lookup
     # below is O(1) per VLAN.  Covers Cisco-style ``Vlan10``, OPNsense
     # ``vlan0.10`` (the ``<if>`` element value the parser carries
-    # through verbatim from the ``<optN>`` zone), FortiGate
-    # ``port1.10`` dotted form, and any other interface whose name
-    # encodes a VLAN id via :func:`_vlan_iface_id`.  Used to recover
+    # through verbatim from the ``<optN>`` zone), and any other
+    # interface whose name encodes a VLAN id (a sub-interface is
+    # named ``Vlan<tag>`` by :func:`.vlan_interfaces.prepare`, by its
+    # tag, before this is asked).  Used to recover
     # SVI L3 from cross-vendor sources that keep VLAN-id and
     # SVI-L3 on separate canonical objects (Finding 4 in
     # ``user_smoke_findings.md`` — OPNsense supergate fixture).
     iface_by_vlan_id: dict[int, Any] = {}
     for iface in tree.interfaces:
-        vid = _vlan_iface_id(iface.name)
+        vid = vlan_id_of_name(iface.name, not_a_vlan)
         if vid is not None and iface.ipv4_addresses:
             # VRF-bound IRB / SVI interfaces are NOT absorbable.
             # AOS-S's ``vlan N { ip address ... }`` stanza has no VRF
@@ -645,21 +599,23 @@ def _stanza_ipv4(
 
 def _dhcp(
     tree: CanonicalIntent, by_name: dict[str, Any], by_id: dict[int, Any],
+    not_a_vlan: frozenset[str] = frozenset(),
 ) -> Rendered:
     """The output's DHCP server (:func:`.dhcp_pools.render_pools`), for
     the VLAN stanzas it writes and the addresses its interfaces hold.
 
     A VLAN's stanza stands for ``Vlan<id>``, for the interface its
     addresses are taken from, and for a pool's interface whose name
-    encodes the VLAN's id (:func:`_vlan_iface_id`: a Junos ``irb.10``,
+    encodes the VLAN's id (:func:`.vlan_interfaces.vlan_id_of_name`: a Junos ``irb.10``,
     whose address the Junos parser puts on VLAN 10 itself) -- the same
     names whose addresses the stanza writes.  Whether the stanza serves
-    the pool is then a matter of its subnets."""
+    the pool is then a matter of its subnets.  A name in *not_a_vlan*
+    stands for no VLAN."""
     if not tree.dhcp_servers:
         return Rendered()
     encoded: dict[int, set[str]] = {}
     for pool in ticked(tree.dhcp_servers):
-        vid = _vlan_iface_id(pool.interface) if pool.interface else None
+        vid = vlan_id_of_name(pool.interface, not_a_vlan) if pool.interface else None
         if vid is not None:
             encoded.setdefault(vid, set()).add(pool.interface.lower())
     stanzas: list[Stanza] = []
@@ -681,11 +637,22 @@ def _dhcp(
 
 def pool_warnings(tree: Any) -> list[str]:
     """A warning for each review line of the output's DHCP server, read
-    from the same function the renderer writes it with (:func:`_dhcp`)."""
+    from the same function the renderer writes it with (:func:`_dhcp`),
+    on the tree it writes (:func:`.vlan_interfaces.prepare`)."""
     if not isinstance(tree, CanonicalIntent):
         return []
-    by_name, by_id = _svi_indexes(tree)
-    return _dhcp(tree, by_name, by_id).warnings
+    prepared = prepare_vlan_interfaces(tree)
+    by_name, by_id = _svi_indexes(prepared.tree, prepared.not_a_vlan)
+    return _dhcp(prepared.tree, by_name, by_id, prepared.not_a_vlan).warnings
+
+
+def vlan_interface_warnings(tree: Any) -> list[str]:
+    """A warning for each sub-interface written as a VLAN and each
+    interface refused (:func:`.vlan_interfaces.prepare`), read from the
+    function the renderer writes them with."""
+    if not isinstance(tree, CanonicalIntent):
+        return []
+    return list(prepare_vlan_interfaces(tree).warnings)
 
 
 def render_intent(tree: Any) -> str:  # noqa: C901
@@ -700,6 +667,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             "aruba_aoss: tree must be a CanonicalIntent.",
             yang_path="/",
         )
+
+    # An interface that stands for a VLAN is that VLAN, by the tree's
+    # own id: a routed sub-interface is VLAN <tag>, tagged on its port,
+    # and a VLAN interface its record names is that record's
+    # ``Vlan<id>``; what cannot be is a review line where its stanza
+    # would be (:mod:`.vlan_interfaces`).
+    prepared = prepare_vlan_interfaces(tree)
+    tree = prepared.tree
 
     # An address AOS-S reads as one word is left out where it is not
     # one; a name or a text it writes between quotes, which HPE
@@ -911,10 +886,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # VLANs — the architecturally interesting part.  AOS-S's
     # VLAN-centric port membership is our canonical model's
     # natural form, so this is a direct projection.
-    vlan_ifaces_by_name, iface_by_vlan_id = _svi_indexes(tree)
+    vlan_ifaces_by_name, iface_by_vlan_id = _svi_indexes(tree, prepared.not_a_vlan)
     # The switch's DHCP server, decided before the VLAN stanzas: a
     # VLAN that serves a pool states ``dhcp-server`` in its stanza.
-    dhcp = _dhcp(tree, vlan_ifaces_by_name, iface_by_vlan_id)
+    dhcp = _dhcp(tree, vlan_ifaces_by_name, iface_by_vlan_id, prepared.not_a_vlan)
     # Track which interfaces were absorbed so the per-iface emission
     # loop skips them (otherwise we'd emit `interface vlan0.10` after
     # the L3 was already rolled into `vlan 10`).
@@ -1004,8 +979,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         #   2. a ``Vlan<N>`` CanonicalInterface (Cisco-style cross-
         #      vendor input);
         #   3. ANY CanonicalInterface whose name encodes the VLAN id
-        #      via :func:`_vlan_iface_id` (OPNsense ``vlan0.10``,
-        #      FortiGate ``port1.10``, generic ``vlan10``).
+        #      (:func:`.vlan_interfaces.vlan_id_of_name`: OPNsense
+        #      ``vlan0.10``, Junos ``irb.10``, generic ``vlan10``).  A
+        #      sub-interface and a VLAN interface its record names are
+        #      ``Vlan<id>`` by now (:mod:`.vlan_interfaces`).
         # Honour whichever has data so all three input shapes render
         # identically (:func:`_stanza_ipv4`).  The corresponding
         # sibling iface is skipped further down the interface emission
@@ -1182,8 +1159,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # config, so operators see the original vendor-name in the
     # collision review block.
     physical_ifaces: list[Any] = []
+    reviewed: set[str] = set()
     for iface in tree.interfaces:
         lname = iface.name.lower()
+        # An interface that stands for a VLAN and cannot be written as
+        # one: its review line, once, where its stanza would be.
+        if lname in prepared.not_a_vlan:
+            if lname not in reviewed and iface.name in prepared.review:
+                reviewed.add(lname)
+                lines.append(prepared.review[iface.name])
+            continue
         if lname.startswith("vlan"):
             continue
         if iface.name == "oobm":
@@ -1301,7 +1286,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # Static routes: a line the device takes, or a review line that
     # says why there is none (:func:`_route_line`).
     for route in tree.static_routes:
-        lines.append(_route_line(route))
+        lines.append(_route_line(route, prepared.not_a_vlan))
 
     # The switch's DHCP server: its pools after every VLAN, and
     # ``dhcp-server enable`` after the last pool, since the switch
@@ -1324,7 +1309,7 @@ def _is_address(value: str) -> bool:
     return True
 
 
-def _route_line(route: Any) -> str:
+def _route_line(route: Any, not_a_vlan: frozenset[str] = frozenset()) -> str:
     """The line AOS-S takes for *route*, or a ``; review:`` line that
     says why it takes none.
 
@@ -1340,7 +1325,11 @@ def _route_line(route: Any) -> str:
     * the discard (``Null0``) -- ``blackhole``, which discards with "no
       ICMP error notification" to the sender.  Whether the source
       answered such traffic with an ICMP unreachable is not in the tree.
-    * a VLAN interface -- ``vlan <id>``.
+    * a VLAN interface -- ``vlan <id>``: an interface whose name
+      encodes the id (:func:`.vlan_interfaces.vlan_id_of_name`), which
+      a sub-interface and a VLAN interface its record names are by the
+      time a route is written.  A name in *not_a_vlan* (an interface
+      :func:`.vlan_interfaces.prepare` refused) is no VLAN.
     * anything else -- a routed port, a LAG, a tunnel, a VRF, or no next
       hop at all -- has no form on AOS-S.  Written with the name where
       the hop goes, it was a line the switch refuses (``ip route
@@ -1371,7 +1360,7 @@ def _route_line(route: Any) -> str:
         return f"{keyword} route {dest} {hop}{dist}"
     if _DISCARD_HOP_RE.match(via):
         return f"{keyword} route {dest} blackhole{dist}"
-    vlan_id = _vlan_iface_id(via)
+    vlan_id = vlan_id_of_name(via, not_a_vlan)
     if vlan_id is not None:
         return f"{keyword} route {dest} vlan {vlan_id}{dist}"
     if via:

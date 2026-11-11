@@ -2228,6 +2228,23 @@ field)` cell into one of eight variance classes:
   routes both parent and sub-field cases here regardless of the
   YAML's expectation.
 
+**Records are paired by identity, then by address.**  Phase 1
+compares a list of records (interfaces, VLANs, routes) one record
+at a time, and first decides which record of the target's tree is
+which of the source's (`_paired_by_identity` in
+`tools/run_full_mesh.py`): each source record is paired with the
+first unpaired target record of its identity (an interface's name,
+a VLAN's id), a record left over on both sides -- one that came
+back under another name -- with the left-over record that holds the
+same addresses, and what is still left over in sorted order.
+Paired by position, every record after a renamed one was compared
+with its neighbour, and drifted on cells where it came back whole:
+an AOS-S output writes a routed sub-interface as the VLAN of its
+tag, read back as `Vlan<tag>`, which sorts elsewhere.  A rename
+does not change the addresses a record holds.  A list whose two
+sides hold different numbers of records is not compared record by
+record.
+
 **Vendor-correct rename equivalences.** Some canonical-field values
 legitimately differ in spelling across vendors without representing
 drift — Junos `ae<N>`, Cisco `Port-channel<N>` (and the `Po<N>`

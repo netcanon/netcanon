@@ -312,6 +312,70 @@ def test_list_order_change_does_not_register_as_drift() -> None:
     )
 
 
+def test_a_renamed_record_is_compared_with_itself_not_its_neighbours() -> None:
+    """A record that comes back under another name, and so sorts
+    elsewhere, is paired with the record left over on the other side;
+    every record whose name came back is paired with its own.  Paired by
+    position, each record between the two places was compared with its
+    neighbour: here a sub-interface back as ``Vlan100`` made both ports
+    after it drift in their addresses and admin state."""
+    src = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="Gi0/0/0/0.100", ipv4_addresses=[_ip("192.0.2.1")]),
+        CanonicalInterface(name="Gi0/0/0/1", ipv4_addresses=[_ip("198.51.100.1")]),
+        CanonicalInterface(name="Gi0/0/0/2", enabled=False),
+    ])
+    tgt = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="Gi0/0/0/1", ipv4_addresses=[_ip("198.51.100.1")]),
+        CanonicalInterface(name="Gi0/0/0/2", enabled=False),
+        CanonicalInterface(name="Vlan100", ipv4_addresses=[_ip("192.0.2.1")]),
+    ])
+    drift = compute_field_disposition(src, tgt)["interfaces"]["drift"]
+    assert isinstance(drift, dict)
+    assert list(drift) == ["interfaces[0] {'name': 'Gi0/0/0/0.100'}"]
+    assert set(drift["interfaces[0] {'name': 'Gi0/0/0/0.100'}"]) == {"name"}
+
+
+def test_renamed_records_are_paired_by_their_addresses() -> None:
+    """Two records that come back under names sorting in the other order
+    are each paired with the one that holds its addresses, not with the
+    one in its place: paired by position, the ``irb`` unit's IPv6
+    addresses were reported gone from it and new on the sub-interface."""
+    src = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="irb.900", ipv4_addresses=[_ip("192.0.2.1")]),
+        CanonicalInterface(name="xe-0/0/0.100", ipv4_addresses=[_ip("198.51.100.1")]),
+    ])
+    tgt = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="Vlan100", ipv4_addresses=[_ip("198.51.100.1")]),
+        CanonicalInterface(name="Vlan900", ipv4_addresses=[_ip("192.0.2.1")]),
+    ])
+    drift = compute_field_disposition(src, tgt)["interfaces"]["drift"]
+    assert isinstance(drift, dict)
+    assert {key: set(fields) for key, fields in drift.items()} == {
+        "interfaces[0] {'name': 'irb.900'}": {"name"},
+        "interfaces[1] {'name': 'xe-0/0/0.100'}": {"name"},
+    }
+
+
+def test_a_renamed_record_still_says_what_it_lost() -> None:
+    """Pairing a renamed record with the one left over does not hide a
+    loss of its own: the sub-interface that came back with no address
+    drifts in its addresses as well as its name."""
+    src = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="Gi0/0/0/0.100", ipv4_addresses=[_ip("192.0.2.1")]),
+        CanonicalInterface(name="Gi0/0/0/1"),
+    ])
+    tgt = CanonicalIntent(interfaces=[
+        CanonicalInterface(name="Gi0/0/0/1"),
+        CanonicalInterface(name="Vlan100"),
+    ])
+    drift = compute_field_disposition(src, tgt)["interfaces"]["drift"]
+    assert isinstance(drift, dict)
+    assert list(drift) == ["interfaces[0] {'name': 'Gi0/0/0/0.100'}"]
+    assert set(drift["interfaces[0] {'name': 'Gi0/0/0/0.100'}"]) == {
+        "name", "ipv4_addresses",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Unsupported-in-target classification
 # ---------------------------------------------------------------------------

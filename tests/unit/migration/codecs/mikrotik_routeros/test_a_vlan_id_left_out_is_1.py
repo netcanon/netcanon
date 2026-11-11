@@ -111,18 +111,39 @@ def _job(text: str, target: str) -> MigrationJob:
     )
 
 
+#: Targets that write a sub-interface as the VLAN of its tag, and leave
+#: one of VLAN 1 -- the switch's default VLAN, which every port is in --
+#: out, under a ``; review:`` line where its stanza would be, in a job
+#: that is ``partial``.  Typed by hand.
+_VLAN_1_IS_THE_SWITCHS = {"aruba_aoss"}
+
+
 def _problems(job: MigrationJob, target: str) -> list[str]:
     """What the output of *job* gets wrong about the two VLAN
     interfaces, read back with *target*'s own parser: an address not in
     the text, and -- where the job says ``completed`` -- an address on
     no interface, on two, or on one that does not carry its tag.  A
     target whose parser reads no tag makes the job ``partial`` (the
-    sub-interface rules), and is held to the text."""
+    sub-interface rules), and is held to the text.  Onto a target of
+    :data:`_VLAN_1_IS_THE_SWITCHS`, VLAN 1's address is not in the
+    text, and its review line is."""
     out = job.rendered or ""
+    left_out = target in _VLAN_1_IS_THE_SWITCHS
     problems = [
         f"{ip} is not in the output"
-        for ip in (_DEFAULTED_IP, _TAGGED_IP) if ip not in out
+        for ip in (_DEFAULTED_IP, _TAGGED_IP)
+        if ip not in out and not (left_out and ip == _DEFAULTED_IP)
     ]
+    if left_out:
+        if _DEFAULTED_IP in out:
+            problems.append(f"{_DEFAULTED_IP} is in the output")
+        if not [
+            line for line in out.splitlines()
+            if line.startswith("; review: interface ") and " carries VLAN 1, " in line
+        ]:
+            problems.append("no review line says VLAN 1's interface is left out")
+        if job.status is not MigrationJobStatus.partial:
+            problems.append(f"the job is {job.status.value}")
     if job.status is not MigrationJobStatus.completed:
         return problems
     back = get_codec(target).parse(out)

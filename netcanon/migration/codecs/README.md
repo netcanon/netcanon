@@ -102,6 +102,12 @@ netcanon/migration/codecs/<vendor>/
 │                       # the pool excludes; every writer
 │                       # reads what a pool hands out from
 │                       # codecs/_dhcp_pools.py
+├── vlan_interfaces.py  # (aruba_aoss) what an interface that stands
+│                       # for a VLAN is written as: a routed sub-
+│                       # interface as the VLAN of its 802.1Q tag,
+│                       # tagged on its port, a VLAN interface as the
+│                       # VLAN its record names, by id and never by
+│                       # name; a review line for each it cannot write
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```

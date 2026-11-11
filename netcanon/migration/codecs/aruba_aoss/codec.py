@@ -44,7 +44,12 @@ from . import port_names as _port_names
 from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
 from .accounts import account_warnings
 from .parse import _parse_port_list, parse_intent, without_banner_bodies
-from .render import _format_port_list, pool_warnings, render_intent
+from .render import (
+    _format_port_list,
+    pool_warnings,
+    render_intent,
+    vlan_interface_warnings,
+)
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -500,6 +505,27 @@ class ArubaAOSSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/interfaces/interface/dot1q-vlan",
+                reason=(
+                    "AOS-S routes on a VLAN and has no form for a routed "
+                    "sub-interface (Cisco `encapsulation dot1Q N`, Junos "
+                    "`unit N vlan-id`, a FortiOS or RouterOS VLAN interface "
+                    "on a port).  One is written as VLAN <tag>, tagged on its "
+                    "port, with its addresses -- and a VLAN of AOS-S is the "
+                    "switch's, not the port's.  It is refused under a "
+                    "`; review:` line where it has two tags, takes its port's "
+                    "untagged frames, is disabled, carries VLAN 1, carries a "
+                    "VLAN the config also has as a network of its own or as "
+                    "another sub-interface, or rides on no port; one in a VRF "
+                    "is written without it, as every interface is.  Its name "
+                    "and description are not written.  "
+                    "Error-level: the job is partial for any sub-interface, "
+                    "the ones written as a VLAN included, since the matrix "
+                    "cannot tell them apart."
+                ),
+                severity="error",
+            ),
             # -- Paths written only in some cases (see _DROPPED). --
             *(
                 LossyPath(path=path, reason=reason, severity="warn")
@@ -527,25 +553,16 @@ class ArubaAOSSCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
-                ),
-            ),
-            UnsupportedPath(
                 path="/interfaces/interface/dot1q-native",
                 reason=(
                     "Which routed sub-interface takes the untagged frames of "
                     "its port (IOS-XE `encapsulation dot1Q N native`, Junos "
-                    "`native-vlan-id N` with the unit of that `vlan-id`): this "
-                    "codec writes no routed sub-interface (see "
-                    "`/interfaces/interface/dot1q-vlan`), so it has no form "
-                    "here either.  Declared so that it is reported as a drop."
+                    "`native-vlan-id N` with the unit of that `vlan-id`): "
+                    "AOS-S writes a routed sub-interface as a VLAN tagged on "
+                    "its port (see `/interfaces/interface/dot1q-vlan`), and "
+                    "has no form for one that also takes the port's untagged "
+                    "frames.  Such a sub-interface is left out under a "
+                    "`; review:` line."
                 ),
             ),
             UnsupportedPath(
@@ -553,9 +570,9 @@ class ArubaAOSSCodec(CodecBase):
                 reason=(
                     "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
                     "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
-                    "outer N inner M`) has no form in this codec, whose "
-                    "routed sub-interface tag is itself not wired: declared "
-                    "so that it is reported as a drop."
+                    "outer N inner M`) has no form on AOS-S, whose VLAN is "
+                    "one tag.  Such a sub-interface is left out under a "
+                    "`; review:` line."
                 ),
             ),
             UnsupportedPath(
@@ -717,10 +734,13 @@ class ArubaAOSSCodec(CodecBase):
         DHCP server: a pool not written, a range or a lease written
         otherwise than the source states it, an option AOS-S is not
         given, a pool no VLAN of the output serves
-        (:mod:`.dhcp_pools`)."""
+        (:mod:`.dhcp_pools`); and one for each sub-interface written as
+        the VLAN of its tag and each interface that stands for a VLAN
+        and is left out under a review line (:mod:`.vlan_interfaces`)."""
         return [
             *account_warnings(getattr(tree, "local_users", None) or []),
             *pool_warnings(tree),
+            *vlan_interface_warnings(tree),
         ]
 
     # -----------------------------------------------------------------
