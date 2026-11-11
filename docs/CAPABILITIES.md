@@ -1276,14 +1276,14 @@ in rendered output find every such site.
   ([`netcanon/migration/_bonds.py`](../netcanon/migration/_bonds.py)).
   A RouterOS `active-backup`, `balance-tlb` or `balance-alb` bond, a
   VyOS `active-backup`, `transmit-load-balance` or
-  `adaptive-load-balance` bond and an OPNsense `failover` lagg need no
-  aggregate of the switch ports they face: `active-backup` and
-  `failover` send through one port at a time, and the others balance
-  what they send without the switch's help.  A switch has no such
-  bond.  Onto EOS, IOS-XE CLI,
-  NX-OS, OS10, AOS-CX, AOS-S, Junos and FortiOS it is written as a
-  static aggregate (`mode on`, a `trunk`, no LACP, `set lacp-mode
-  static`), with a line beside it of the form
+  `adaptive-load-balance` bond, an OPNsense `failover` lagg and a
+  FortiOS redundant interface need no aggregate of the switch ports
+  they face: `active-backup`, `failover` and a redundant interface
+  send through one port at a time, and the others balance what they
+  send without the switch's help.  A switch has no such bond.  Onto
+  EOS, IOS-XE CLI, NX-OS, OS10, AOS-CX, AOS-S and Junos it is written
+  as a static aggregate (`mode on`, a `trunk`, no LACP), with a line
+  beside it of the form
 
       review: <LAG> is a bond in the source that needs no aggregate of
       its peer ports (active-backup or the like); this platform has no
@@ -1291,10 +1291,11 @@ in rendered output find every such site.
       peer must be configured as
 
   and the job warns of it; IOS XR, which writes no review line, says
-  it in the job's warnings alone.  Onto RouterOS, VyOS and OPNsense
-  it is written as their own (`mode=active-backup`, `mode
-  active-backup`, `failover`), and a static aggregate as theirs
-  (`mode=balance-xor`, `mode xor-hash`, `loadbalance`).
+  it in the job's warnings alone.  Onto RouterOS, VyOS, OPNsense and
+  FortiOS it is written as their own (`mode=active-backup`, `mode
+  active-backup`, `failover`, `set type redundant`), and a static
+  aggregate as theirs (`mode=balance-xor`, `mode xor-hash`,
+  `loadbalance`, `set lacp-mode static`).
 
 ### C1. A value of several lines (a job warning)
 

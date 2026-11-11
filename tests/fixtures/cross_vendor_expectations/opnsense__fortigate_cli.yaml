@@ -567,9 +567,9 @@ per_field_expectation:
       ``roundrobin`` protos are static aggregates and are written
       ``set lacp-mode static``, and so is ``<proto>none</proto>``,
       which passes no traffic (read as static: a known limitation).
-      ``failover`` needs no aggregate on the peer and has no
-      FortiOS equivalent: it is written ``set lacp-mode static``
-      with a ``# review:`` line and a job warning.  The OPNsense
+      ``failover`` needs no aggregate on the peer and is written
+      as a FortiOS redundant interface (``set type redundant``),
+      one member at a time as on OPNsense.  The OPNsense
       matrix classifies ``/lags/lag/name`` and ``/lags/lag/members``
       as supported and ``/lags/lag/mode`` as lossy.
     references: [opn-laggs, fgt-lags]

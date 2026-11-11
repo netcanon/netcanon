@@ -100,8 +100,11 @@ FortiGate -> OPNsense:
   actively, so both Forti modes collapse to the single `lacp`
   proto).  FortiGate `static` → OPNsense `<proto>loadbalance</proto>`.
   Cross-pair degrades the active/passive distinction silently.
-  In the inverse direction OPNsense `failover` reads as
-  `active-backup`, which FortiOS has no form for: it is written
-  `set lacp-mode static` with a `# review:` line and a job warning.
+  A FortiOS redundant interface (`set type redundant`), in which
+  "traffic only goes over one interface at any time" (FortiOS
+  Administration Guide, "Aggregation and redundancy"), reads as
+  `active-backup` and is written `<proto>failover</proto>`; in the
+  inverse direction OPNsense `failover` reads as `active-backup` and
+  is written as a redundant interface.
 - The OPNsense codec's capability matrix classifies `/lags/lag/name` and
   `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

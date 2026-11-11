@@ -1210,11 +1210,12 @@ it faces must be configured for: an LACP partner (`active`,
 `mode on`, an AOS-S `trunk`, RouterOS `balance-xor`, VyOS `xor-hash`,
 OPNsense `loadbalance`), or nothing (`active-backup`: a Linux
 `active-backup`, `balance-tlb` or `balance-alb` bond, a lagg
-`failover`, which need no configuration of the switch).  Each parser reads its
+`failover`, a FortiOS redundant interface, which need no configuration
+of the switch).  Each parser reads its
 platform's word into the value the vendor's page describes, and each
 renderer writes the target's own form of it.  A codec states in
 `active_backup_written_as` what it writes for `active-backup`:
-`itself` (the three hosts), `static` (every switch: a static
+`itself` (the three hosts and FortiOS), `static` (every switch: a static
 aggregate, with a review line beside it where the target writes
 review lines, and a warning from `CodecBase.render_warnings`), or
 `nothing` (a target that writes no LAG).  The outputs are read by a

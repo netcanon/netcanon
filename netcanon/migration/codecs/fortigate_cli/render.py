@@ -53,7 +53,7 @@ import ipaddress
 import re
 from typing import Any
 
-from ..._bonds import ACTIVE_BACKUP, active_backup_review
+from ..._bonds import ACTIVE_BACKUP
 from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
@@ -837,19 +837,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.description and label and label != iface.description:
                 out.append(_LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label))
             if lag is not None:
-                out.append("        set type aggregate")
+                # A bond whose peer needs no aggregate is a redundant
+                # interface, one member at a time; any other LAG an
+                # aggregate (netcanon.migration._bonds).
+                redundant = lag.mode == ACTIVE_BACKUP
+                out.append(
+                    "        set type "
+                    + ("redundant" if redundant else "aggregate")
+                )
                 if lag.members:
                     quoted = " ".join(
                         f'"{_esc(m)}"' for m in lag.members
                     )
                     out.append(f"        set member {quoted}")
-                out.append(
-                    f"        set lacp-mode "
-                    f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
-                )
-                if lag.mode == ACTIVE_BACKUP:
+                if not redundant:
                     out.append(
-                        f"        # {active_backup_review(_esc(lag.name))}"
+                        f"        set lacp-mode "
+                        f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
                     )
             elif is_vlan:
                 # VLAN identification can come from either signal —

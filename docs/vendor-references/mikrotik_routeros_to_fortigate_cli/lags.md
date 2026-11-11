@@ -29,8 +29,9 @@ Notable RouterOS specifics:
 
 Sources:
 - [FortiGate / FortiOS 7.4 Administration Guide — Aggregate interfaces](https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings) — `set type aggregate / set member / set lacp-mode`.
+- [FortiGate / FortiOS 7.0 Administration Guide — Aggregation and redundancy](https://docs.fortinet.com/document/fortigate/7.0.1/administration-guide/567758) — `set type redundant`: "traffic only goes over one interface at any time".
 
-Retrieved: 2026-04-30
+Retrieved: 2026-04-30 (Aggregation and redundancy: 2026-11-11)
 
 ```
 config system interface
@@ -60,7 +61,7 @@ CanonicalLAG.mode: str   # "active" (LACP) | "passive" | "static" | "active-back
 - **members** — `good`.  RouterOS `slaves=ether3,ether4` parses to canonical `members=["ether3", "ether4"]`; FortiOS render emits `set member "port3" "port4"` after the rename mesh.
 - **mode** — `lossy`.  RouterOS-unique modes lose information on FortiGate render:
   - `802.3ad` -> FortiOS `lacp-mode active` (RouterOS does not distinguish active vs passive LACP, so the FortiGate side defaults to active).
-  - `active-backup`, `balance-tlb`, `balance-alb` (canonical `active-backup`) -> FortiOS has no native active-backup mode on aggregate interfaces; closest analogue is FortiOS interface redundancy (`set type redundant`) which the FortiGate codec does not currently render via the LAG path.  The render emits `set lacp-mode static` with a `# review:` line and a job warning: the switch's ports must then be configured as that static aggregate, or the host bond re-designed.
+  - `active-backup`, `balance-tlb`, `balance-alb` (canonical `active-backup`) -> a FortiOS redundant interface (`set type redundant`, no `lacp-mode`), in which "traffic only goes over one interface at any time".  Its peer needs no aggregate, as the bond's peer does not; `balance-tlb` and `balance-alb` balance what they send over every member and a redundant interface does not, so that balancing is lost.
   - `balance-rr`, `balance-xor`, `broadcast` (canonical `static`) -> `set lacp-mode static`.  The semantic of the load-distribution algorithm is lost.
 - **lag_member_of** on member interfaces — `good`.  RouterOS membership is recorded only on the bond's `slaves=` attribute; the MikroTik codec back-fills `lag_member_of` on each member by inverting the membership map.  FortiOS render adds the rename-meshed member ports to `set member` on the aggregate parent.
 - **IP addresses on the bond / aggregate parent** — `good` (handled via the per-interface IP address fields).

@@ -4,8 +4,9 @@
 
 Sources:
 - [FortiGate / FortiOS 7.4 Administration Guide — Aggregate interfaces](https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings) — `set type aggregate / set member / set lacp-mode`.
+- [FortiGate / FortiOS 7.0 Administration Guide — Aggregation and redundancy](https://docs.fortinet.com/document/fortigate/7.0.1/administration-guide/567758) — `set type redundant`: "traffic only goes over one interface at any time".
 
-Retrieved: 2026-04-30
+Retrieved: 2026-04-30 (Aggregation and redundancy: 2026-11-11)
 
 ```
 config system interface
@@ -74,6 +75,6 @@ Plus `CanonicalInterface.lag_member_of` on each member port.
 
 - **name** — `lossy`.  FortiOS aggregates are operator-named (`agg1`, `LAG_uplink`); RouterOS bonds are operator-named (`bond1`).  The port-rename mesh applies operator-curated mappings on cross-vendor render.  No structural information is lost — only the surface name.
 - **members** — `good`.  FortiOS quoted-list `set member "port2" "port3"` parses to canonical `members=["port2", "port3"]`; RouterOS render emits `slaves=ether2,ether3` after the rename mesh translates port names.
-- **mode** — `lossy`.  FortiOS `lacp-mode active` and `lacp-mode passive` both map to RouterOS `mode=802.3ad` (RouterOS does not distinguish active vs passive LACP — its 802.3ad mode is symmetric).  FortiOS `lacp-mode static` (manual port-channel, no LACP) maps to RouterOS `mode=balance-xor` as the closest static-load-distribution analogue, with a banner.  RouterOS-unique modes (active-backup, balance-rr, balance-tlb, balance-alb, broadcast) only appear in the inverse direction, where `balance-rr` and `broadcast` read as `static` (`lacp-mode static`) and `active-backup`, `balance-tlb` and `balance-alb` read as `active-backup`, which FortiOS has no form for: it is written `set lacp-mode static` with a `# review:` line and a job warning.
+- **mode** — `lossy`.  FortiOS `lacp-mode active` and `lacp-mode passive` both map to RouterOS `mode=802.3ad` (RouterOS does not distinguish active vs passive LACP — its 802.3ad mode is symmetric).  FortiOS `lacp-mode static` (manual port-channel, no LACP) maps to RouterOS `mode=balance-xor` as the closest static-load-distribution analogue, with a banner.  A FortiOS redundant interface (`set type redundant`), in which "traffic only goes over one interface at any time", is read as canonical `active-backup` and written `mode=active-backup`.  In the inverse direction `balance-rr` and `broadcast` read as `static` (`lacp-mode static`) and `active-backup`, `balance-tlb` and `balance-alb` read as `active-backup`, written as a redundant interface (`set type redundant`, no `lacp-mode`).
 - **lag_member_of** on member interfaces — `good`.  FortiOS members carry no per-member channel-group reference (the membership is recorded only on the aggregate parent's `set member` list); the FortiGate codec back-fills `lag_member_of` on each member by inverting the membership map.  RouterOS render does not require a per-member directive (membership is on the bond's `slaves=` attribute).
 - **IP addresses on the aggregate parent** — `good` (handled via the per-interface IP address fields, not via LAG-specific machinery).

@@ -47,6 +47,10 @@ shape.  Key points:
 - Members declared as `set member "port3" "port4"` (space-separated
   quoted list).
 - `set lacp-mode {active|passive|static}`.
+- `set type redundant`: "traffic only goes over one interface at any
+  time" ([FortiOS Administration Guide — Aggregation and
+  redundancy](https://docs.fortinet.com/document/fortigate/7.0.1/administration-guide/567758),
+  retrieved 2026-11-11).
 - Aggregate names are operator-named (no fixed prefix).
 
 ## Cross-vendor mapping (OPNsense -> FortiGate)
@@ -73,10 +77,8 @@ name, members, mode   # mode: active | passive | static | active-backup
   `loadbalance` / `fec` / `roundrobin` → FortiGate `set lacp-mode
   static`; so does `<proto>none</proto>`, which passes no traffic on
   OPNsense (a known limitation: the tree has no value for it).
-  OPNsense `failover` needs no aggregate on the peer, and FortiOS
-  has no such aggregate: it is written `set lacp-mode static` with a
-  `# review:` line and a job warning, and the peer's ports must then
-  be configured as that static aggregate (or the host bond
-  re-designed).
+  OPNsense `failover` needs no aggregate on the peer, and is
+  written as a FortiOS redundant interface (`set type redundant`),
+  which sends through one member at a time as `failover` does.
 - The OPNsense codec's capability matrix classifies `/lags/lag/name` and
   `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

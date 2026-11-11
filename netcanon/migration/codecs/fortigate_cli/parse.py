@@ -60,6 +60,7 @@ import shlex
 from collections.abc import Iterator
 from typing import ClassVar
 
+from ..._bonds import ACTIVE_BACKUP
 from ..._radius_secrets import FORTIOS_ENVELOPE
 from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
@@ -144,10 +145,13 @@ _CANONICAL_MODE_TO_FORTIGATE_LACP = {
     "active": "active",
     "passive": "passive",
     "static": "static",
-    # An aggregate has no active-backup mode: a static one, said in a
-    # review line (netcanon.migration._bonds).
-    "active-backup": "static",
 }
+# A bond whose peer needs no aggregate (``active-backup``,
+# netcanon.migration._bonds) is no aggregate here: it is a redundant
+# interface, in which "traffic only goes over one interface at any
+# time" (Fortinet, FortiOS Administration Guide, "Aggregation and
+# redundancy").  ``set type redundant`` is read as that LAG and the
+# renderer writes it back.
 
 
 # ---------------------------------------------------------------------------
@@ -646,18 +650,23 @@ def _apply_system_interface(  # noqa: C901
                 ))
             except ValueError:
                 pass
-        elif type_value == "aggregate":
-            # LAG / 802.3ad bundle.  Members arrive as a space-
-            # separated token list on the `set member` line.
+        elif type_value in ("aggregate", "redundant"):
+            # LAG / 802.3ad bundle, or a redundant interface (one
+            # member at a time: an active-backup bond).  Members
+            # arrive as a space-separated token list on the `set
+            # member` line.
             iface.interface_type = "ianaift:ieee8023adLag"
             members: list[str] = []
             if member_tokens:
                 for tok in member_tokens:
                     members.extend(m for m in tok.split() if m)
-            lacp_mode = edit.settings.get("lacp-mode")
-            mode = _FORTIGATE_LACP_TO_CANONICAL.get(
-                lacp_mode[0].lower() if lacp_mode else "active", "active"
-            )
+            if type_value == "redundant":
+                mode = ACTIVE_BACKUP
+            else:
+                lacp_mode = edit.settings.get("lacp-mode")
+                mode = _FORTIGATE_LACP_TO_CANONICAL.get(
+                    lacp_mode[0].lower() if lacp_mode else "active", "active"
+                )
             intent.lags.append(CanonicalLAG(
                 name=name,
                 members=members,
@@ -805,6 +814,7 @@ def _link_lag_members(intent: CanonicalIntent) -> None:
 _PORT_BY_STATED_TYPE = {
     "physical": "ianaift:ethernetCsmacd",
     "aggregate": "ianaift:ieee8023adLag",
+    "redundant": "ianaift:ieee8023adLag",
 }
 
 #: What a parent read as a port is typed, by its name's kind, where
@@ -834,7 +844,8 @@ def _a_vlan_on_a_port_is_a_sub_interface(
 
     The parent is a port where its own edit says ``set type
     physical``, and an aggregate where it says ``set type
-    aggregate`` without ``set fortilink enable``.  A FortiLink
+    aggregate`` or ``set type redundant`` without ``set fortilink
+    enable``.  A FortiLink
     aggregate carries the VLANs of the FortiSwitches it manages, and
     a hardware or software switch (``set type hard-switch``,
     ``switch``) carries VLANs as a bridge does: a VLAN interface on

@@ -625,7 +625,8 @@ class CanonicalLAG(BaseModel):
             over every member, the peer's ports grouped as one too, as
             Cisco ``mode on``), or ``"active-backup"`` (the peer's
             ports need no aggregate: Linux ``active-backup`` /
-            ``balance-tlb`` / ``balance-alb``, FreeBSD ``failover``).
+            ``balance-tlb`` / ``balance-alb``, FreeBSD ``failover``, a
+            FortiOS redundant interface).
             See :mod:`netcanon.migration._bonds`.
     """
 

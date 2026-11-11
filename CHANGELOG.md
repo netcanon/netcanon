@@ -1365,6 +1365,35 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiOS redundant interface is read and written as the bond that
+  needs nothing of its peer.**  In a redundant interface (`set type
+  redundant`) "traffic only goes over one interface at any time"
+  (Fortinet, FortiOS Administration Guide, "Aggregation and
+  redundancy"): it is FortiOS's form of the bond the tree holds as
+  `active-backup`.  The parser did not read it.  Such an interface was
+  a port with its address and its members ports of no LAG, so onto
+  FortiOS it came back with no type and no members, and given a name
+  in the port map onto any other target it was a LAG with no members,
+  in jobs that said `completed`.  It is read now as a LAG of its
+  members, and a VLAN interface on it is a sub-interface, as on an
+  aggregate.  And FortiOS writes such a LAG of another platform -- a
+  RouterOS `active-backup`, `balance-tlb` or `balance-alb` bond, a
+  VyOS one, an OPNsense `failover` lagg -- as a redundant interface,
+  no longer as a static aggregate (`set lacp-mode static`), which the
+  ports it faces would have had to be configured as.  A `balance-tlb`
+  or `balance-alb` bond balances what it sends over every port and a
+  redundant interface does not: that balancing is lost, as it is onto
+  OPNsense.  Onto a switch a redundant interface is a static aggregate
+  with a review line and a warning in the job.  Its name is the
+  operator's own, as an aggregate's is: it needs an entry in the port
+  map onto another vendor.  No committed input has a redundant
+  interface; onto FortiOS the synthetic RouterOS config's
+  `active-backup` bond is written as one now, with no review line and
+  no warning, and no job's status moves.  Guarded by
+  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`, which sends
+  a FortiOS aggregate of each `lacp-mode` and a redundant interface
+  onto every codec, and reads a FortiOS output with a reader of its
+  own.
 - **A static aggregate is written as one onto RouterOS, VyOS and
   OPNsense, and a bond that needs nothing of its peer is not read as
   one.**  A LAG's mode says what the ports it faces must be: an LACP

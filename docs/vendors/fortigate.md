@@ -389,14 +389,24 @@ loses the layout too.
   without `ENC` -- a config typed by hand, or a template -- is the
   secret itself, and migrates.  With 0.7.7 or earlier such a secret
   was refused on every other target as if it were encrypted.
-- **A host's active-backup bond has no form on FortiOS.**  A RouterOS
-  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
-  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
-  bond and an OPNsense `failover` LAGG need no aggregate on the ports
-  they face.  FortiOS has no such bond: the LAG is written as a static
-  aggregate (`set type aggregate`, `set lacp-mode static`) with a
-  `# review:` line beside it, and the job carries a warning.  Configure
-  the ports it faces as a static aggregate too, or re-design the bond.
+- **A redundant interface is the bond that needs nothing of its
+  peer.**  In a redundant interface (`set type redundant`) "traffic
+  only goes over one interface at any time" (Fortinet, FortiOS
+  Administration Guide, "Aggregation and redundancy"), so the ports it
+  faces need no aggregate, as a RouterOS `active-backup`, `balance-tlb`
+  or `balance-alb` bond, a VyOS `active-backup`,
+  `transmit-load-balance` or `adaptive-load-balance` bond and an
+  OPNsense `failover` LAGG need none.  It is read as such a LAG, of its
+  members, and each of those is written as one.  A `balance-tlb` or
+  `balance-alb` bond balances what it sends over every port and a
+  redundant interface does not: that balancing is lost.  Onto a switch
+  a redundant interface is a static aggregate with a review line beside
+  it and a warning in the job.  Its name is the operator's own, as an
+  aggregate's is: give it the target's name in the port map.  ⚠️ Up to
+  0.7.7 a redundant interface was read as a port with its address and
+  its members as ports of no LAG -- onto FortiOS it came back with no
+  type and no members -- and such a bond of another platform was
+  written as a static aggregate (`set lacp-mode static`).
 - **Two tags are left out.**  A VLAN interface whose `set
   interface` is another VLAN interface, and one that says `set
   vlan-protocol 8021ad`, is left out with its addresses, and a row
