@@ -136,7 +136,7 @@ One hand-authored fixture per codec exercising every field the codec's :class:`C
 | dell_os10/kitchen_sink.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 |
 | fortigate_cli/kitchen_sink.conf | WARN 15/21 | WARN 13/21 | WARN 13/21 | WARN 20/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 14/21 |
 | juniper_junos/kitchen_sink.set | WARN 13/21 | WARN 6/21 | WARN 11/21 | WARN 18/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | WARN 12/21 | WARN 11/21 | WARN 9/21 |
-| mikrotik_routeros/kitchen_sink.rsc | WARN 14/21 | WARN 12/21 | WARN 15/21 | WARN 20/21 | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 11/21 | WARN 17/21 | WARN 15/21 | WARN 20/21 | WARN 16/21 | WARN 14/21 |
+| mikrotik_routeros/kitchen_sink.rsc | WARN 14/21 | WARN 12/21 | WARN 15/21 | WARN 20/21 | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 11/21 | WARN 18/21 | WARN 15/21 | WARN 20/21 | WARN 16/21 | WARN 14/21 |
 | opnsense/kitchen_sink.xml | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 13/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 14/21 |
 | vyos/kitchen_sink.conf | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 | WARN 18/21 | WARN 16/21 | OK 21/21 |
 
@@ -11699,12 +11699,11 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "full"}, {"name": "auditor", "privilege_level": 1, "hashed_password": "", "role": "read"}, {"name": "operator", "privilege_l... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "10.0.0.10", "key": "fake-radius-shared-secret-1", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.0.11", "key": "fake-radius-shared-secret-2", "auth_port": 1645, "acct_port": 1646}] | [] | all 2 radius_servers dropped |
 
-### mikrotik_routeros/kitchen_sink.rsc → fortigate_cli  (WARN 17/21)
+### mikrotik_routeros/kitchen_sink.rsc → fortigate_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "bond1", "default_name": "", "description": "LACP bond to upstream core", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "bond1", "default_name": "", "description": "LACP bond to upstream cor", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip":... | {"interfaces[0] {'name': 'bond1'}": {"description": {"source": "LACP bond to upstream core", "target": "LACP bond to upstream cor"}}, "interfaces[1] {'name': 'bond2'}": {"description": {"source": "... |
-| lags | DRIFT | [{"name": "bond1", "members": ["ether3", "ether4"], "mode": "active"}, {"name": "bond2", "members": ["ether5", "ether6"], "mode": "active-backup"}] | [{"name": "bond1", "members": ["ether3", "ether4"], "mode": "active"}, {"name": "bond2", "members": ["ether5", "ether6"], "mode": "static"}] | {"lags[1] {'name': 'bond2'}": {"mode": {"source": "active-backup", "target": "static"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "full"}, {"name": "auditor", "privilege_level": 1, "hashed_password": "", "role": "read"}, {"name": "operator", "privilege_l... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "10.0.0.10", "key": "fake-radius-shared-secret-1", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.0.11", "key": "fake-radius-shared-secret-2", "auth_port": 1645, "acct_port": 1646}] | [{"host": "10.0.0.10", "key": "fake-radius-shared-secret-1", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.0.11", "key": "fake-radius-shared-secret-2", "auth_port": 1645, "acct_port": 1813}] | {"radius_servers[1] {'host': '10.0.0.11'}": {"acct_port": {"source": 1646, "target": 1813}}} |
 
