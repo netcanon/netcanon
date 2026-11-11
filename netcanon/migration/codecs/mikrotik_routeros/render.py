@@ -92,10 +92,15 @@ _LABEL_NOT_WRITTEN_REVIEW = (
 )
 
 
+#: A static aggregate is ``balance-xor``, which MikroTik calls a static
+#: LAG mode that "can work together with static Link Aggregation Group
+#: (LAG) interfaces"; ``active-backup`` needs no aggregate on the peer
+#: (:mod:`netcanon.migration._bonds`).
 _CANONICAL_MODE_TO_ROUTEROS_BONDING = {
     "active": "802.3ad",
     "passive": "802.3ad",    # RouterOS doesn't distinguish LACP passive
-    "static": "active-backup",
+    "static": "balance-xor",
+    "active-backup": "active-backup",
 }
 
 

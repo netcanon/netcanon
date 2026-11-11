@@ -141,7 +141,8 @@ lossy where vendors disagree on representation.
 
 * `snmp` — community, contact, location, trap-host, plus SNMPv3 USM
   users (auth/priv/group/engine — see per-codec notes below)
-* `lags` — name, mode (LACP / static), members; vendor-native names
+* `lags` — name, mode (LACP / a static aggregate / a bond whose peer
+  needs no aggregate, § C), members; vendor-native names
   reconciled via the LAG name-equivalence helper (`Po1` /
   `Port-channel1` / `ae1` / `trk1` are recognised as the same bundle)
 * `local_users` — name, privilege, role, hashed_password.  Hashes
@@ -769,7 +770,7 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/system/raw-sections/version-banner` | Lossy | The `// vyos-config-version` trailer + not-yet-modelled `service` / `system` management blocks (SSH / syslog / DNS) are discarded on parse and a synthesised trailer is emitted on render; re-apply those services on the target. |
 | `/local-users/user/privilege-level` | Lossy | `system login user` accounts have no numeric privilege in the common case; every login user is read as privilege 15 with no role.  The `encrypted-password` hash round-trips verbatim same-vendor; cross-vendor migration requires re-keying. |
 | `/local-users/user/role` | Lossy | A local user's role is a name of the platform that defines it.  VyOS states no role: every login user on VyOS 1.3 to 1.5 has full configuration access and sudo.  An account at privilege 15 is written without its role, and one below it is a review comment rather than an administrator. |
-| `/lags/lag/mode` | Lossy | Bonding `mode 802.3ad` (LACP) → `active`; the non-LACP modes (`active-backup` / `balance-rr` / `balance-xor` / …) collapse to `static` (the balancing algorithm is dropped — re-select on the target). |
+| `/lags/lag/mode` | Lossy | Bonding `mode 802.3ad`, and a bond with no `mode` (the default), → LACP `active`; `round-robin` / `xor-hash` / `broadcast` → a static aggregate, written `mode xor-hash`; `active-backup` / `transmit-load-balance` / `adaptive-load-balance` → `active-backup`, a bond whose peer needs no aggregate, written `mode active-backup`.  A passive bundle is written with no `mode`.  The balancing algorithm is dropped — re-select it on the target. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | v3 USM auth/privacy keys carry one of two leaves under both `auth` and `privacy`: `encrypted-password` (localised against VyOS's own engine ID) or `plaintext-password` (VyOS hashes it on commit).  Both are parsed — `plaintext-password` was previously dropped on the floor, building the user with an empty key — and each is re-emitted through the leaf matching its recorded kind, so a passphrase is never relabelled as this agent's own localised key.  Round-trips verbatim same-vendor; cross-vendor migration requires re-keying (vendor-specific salts), and a foreign key is never accepted INTO VyOS. |
 | `/snmp/v3-user/engine-id` | Lossy | VyOS declares a single config-wide `engineid` for the whole agent; the canonical model carries it per-user, so the one value maps onto every v3 user (and a single `engineid` is emitted when the users share one). |
 | `/routing-instances/instance/table` | Lossy | VyOS requires a numeric `table <id>` on every `vrf name <X>`; the canonical RoutingInstance carries no table number, so a deterministic id (`100 + sort-index`) is synthesised on render.  The original table id is not preserved. |
@@ -1270,6 +1271,30 @@ in rendered output find every such site.
   `classify_port_name` can't place it, the renderer emits
   `! interface <name> -- review: foreign port` rather than
   emitting an interface stanza for an unknown chassis position.
+
+* **A bond whose peer needs no aggregate**
+  ([`netcanon/migration/_bonds.py`](../netcanon/migration/_bonds.py)).
+  A RouterOS `active-backup`, `balance-tlb` or `balance-alb` bond, a
+  VyOS `active-backup`, `transmit-load-balance` or
+  `adaptive-load-balance` bond and an OPNsense `failover` lagg need no
+  aggregate of the switch ports they face: `active-backup` and
+  `failover` send through one port at a time, and the others balance
+  what they send without the switch's help.  A switch has no such
+  bond.  Onto EOS, IOS-XE CLI,
+  NX-OS, OS10, AOS-CX, AOS-S, Junos and FortiOS it is written as a
+  static aggregate (`mode on`, a `trunk`, no LACP, `set lacp-mode
+  static`), with a line beside it of the form
+
+      review: <LAG> is a bond in the source that needs no aggregate of
+      its peer ports (active-backup or the like); this platform has no
+      such bond, and it is written as a static aggregate, which its
+      peer must be configured as
+
+  and the job warns of it; IOS XR, which writes no review line, says
+  it in the job's warnings alone.  Onto RouterOS, VyOS and OPNsense
+  it is written as their own (`mode=active-backup`, `mode
+  active-backup`, `failover`), and a static aggregate as theirs
+  (`mode=balance-xor`, `mode xor-hash`, `loadbalance`).
 
 ### C1. A value of several lines (a job warning)
 

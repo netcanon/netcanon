@@ -4,6 +4,7 @@
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <opnsense>
@@ -21,8 +22,11 @@ Retrieved: 2026-04-30
 - `<laggif>` — synthesised device name (`lagg0`, `lagg1`, …;
   zero-based).
 - `<members>` — comma-separated list of member NIC device names.
-- `<proto>` values: `lacp` (always advertises actively),
-  `failover`, `loadbalance`, `roundrobin`, `none` (static).
+- `<proto>` values: `lacp` (always advertises actively);
+  `failover` (by default accepts traffic only on the active port,
+  and needs no aggregate on the peer); `fec`, `loadbalance`,
+  `roundrobin` (static aggregates: the peer's ports are grouped,
+  with no LACP); `none` (passes no traffic, per lagg(4)).
 
 ## Arista EOS
 
@@ -64,13 +68,16 @@ Canonical fields (`CanonicalLAG`).
   translates.
 - `lags[].mode`: **lossy** — OPNsense `<proto>lacp</proto>` ↔
   Arista `mode active` (FreeBSD always advertises actively, so
-  passive LACP is unreachable).  OPNsense `<proto>none</proto>`
-  ↔ Arista `mode on` (static).  Failover / loadbalance /
-  roundrobin variants have no Arista equivalent and collapse to
-  static with a comment.
+  passive LACP is unreachable).  OPNsense `loadbalance`, `fec` and
+  `roundrobin` are read as a static aggregate and written Arista
+  `mode on`; so is `none`, which passes no traffic on OPNsense (a
+  known limitation: the tree has no value for it).  `failover`
+  needs no aggregate on the peer, and Arista has no such bond: it
+  is written `channel-group N mode on` with a `! review:` line and
+  a job warning, and the switch's ports must then be configured as
+  that static aggregate (or the host bond re-designed).
 - `interfaces[].lag_member_of`: **lossy** — both codecs
   round-trip the back-pointer but the LAG name itself differs;
   port-rename mesh canonicalises.
-- The OPNsense codec capability matrix does not currently
-  advertise `/lag/aggregate` in its supported set; round-trip
-  is partial pending wire-up.
+- The OPNsense codec capability matrix classifies `/lags/lag/name` and
+  `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

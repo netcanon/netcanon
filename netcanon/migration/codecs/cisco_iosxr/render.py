@@ -90,6 +90,9 @@ _CANON_TO_IOSXR_BUNDLE_MODE = {
     "active": "active",
     "passive": "passive",
     "static": "on",
+    # IOS XR has no active-backup bond: a static bundle, said in the
+    # job's warnings (netcanon.migration._bonds).
+    "active-backup": "on",
 }
 
 #: Fallback BGP ASN when no route-distinguisher exposes a numeric

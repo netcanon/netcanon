@@ -69,10 +69,21 @@ translatable with caveats:
 
 - **`/routing/static-route/description`** — render emits destination +
   next-hop + distance only; the static-route name / description drops.
-- **`/lags/lag/mode`** — bonding `mode 802.3ad` (LACP) maps to
-  `active`; the non-LACP modes (`active-backup` / `balance-rr` /
-  `balance-xor` / …) collapse to `static` (the specific balancing
-  algorithm drops — re-select it on the target).
+- **`/lags/lag/mode`** — bonding `mode 802.3ad`, and a bond with no
+  `mode` line ("The default is 802.3ad", VyOS), is LACP; a passive
+  LACP bundle is written with no `mode` line.  `round-robin`,
+  `xor-hash` and `broadcast` are a static aggregate, whose peer groups
+  its ports too, and are written `mode xor-hash`; `active-backup`,
+  `transmit-load-balance` and `adaptive-load-balance` need nothing of
+  their peer and are written `mode active-backup`.  The balancing
+  algorithm is not carried — re-select it on the target.  Onto a
+  switch, which has no bond that needs nothing of its peer, an
+  `active-backup` bond is a static aggregate with a review line beside
+  it and a warning in the job.  ⚠️ Up to 0.7.7 a bond with no `mode`
+  line was read as a static aggregate, a bond that needs nothing of
+  its peer was read as one too, and a static aggregate of another
+  vendor was written with no `mode` line — an LACP bond: translate a
+  config with a LAG again.
 - **`/routing-instances/instance/table`** — VyOS requires a numeric
   `table <id>` on every `vrf name <X>`; the canonical model carries no
   table number, so the codec synthesises a deterministic id

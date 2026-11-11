@@ -39,6 +39,7 @@ Notes:
 Source: [OPNsense Devices manual — LAGG
 tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-05-01
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <opnsense>
@@ -67,10 +68,13 @@ Notes:
   writes a LAG member onto OPNsense in `<members>` alone, and says in a
   comment in the `<lagg>` which elements the source gave the member
   that are not written (added 2026-10-20).
-- `<proto>` enumerates `lacp` / `failover` / `loadbalance` /
-  `roundrobin` / `none` (static).  FreeBSD's lagg(4) driver always
-  advertises actively when LACP is selected (no separate
-  passive mode).
+- `<proto>` enumerates `lacp` / `failover` / `fec` / `loadbalance` /
+  `roundrobin` / `none`.  `fec`, `loadbalance` and `roundrobin` are
+  static (`loadbalance` "does not negotiate aggregation with the
+  peer"); `failover` by default accepts traffic only on the active
+  port and needs no aggregate on the peer; `none` passes no traffic
+  (lagg(4)).  FreeBSD's lagg(4) driver always advertises actively
+  when LACP is selected (no separate passive mode).
 - The lagg device shows up as `<if>lagg0</if>` on a zone interface
   to use it as a routed/firewalled interface.
 
@@ -79,7 +83,7 @@ Notes:
 Canonical fields covered (`CanonicalLAG`):
 
 ```
-name, members, lacp_mode
+name, members, mode   # mode: active | passive | static | active-backup
 ```
 
 FortiGate -> OPNsense:
@@ -94,9 +98,10 @@ FortiGate -> OPNsense:
 - LACP mode: FortiGate `active` / `passive` ↔ OPNsense
   `<proto>lacp</proto>` (the FreeBSD driver always advertises
   actively, so both Forti modes collapse to the single `lacp`
-  proto).  FortiGate `static` ↔ OPNsense `<proto>none</proto>`.
+  proto).  FortiGate `static` → OPNsense `<proto>loadbalance</proto>`.
   Cross-pair degrades the active/passive distinction silently.
-- The OPNsense codec parses `<laggs>` but its capability matrix
-  does NOT currently advertise `/lag/aggregate` under supported;
-  render is partial pending wire-up.  CanonicalLAG records from a
-  FortiGate source emit a banner / TODO marker on OPNsense.
+  In the inverse direction OPNsense `failover` reads as
+  `active-backup`, which FortiOS has no form for: it is written
+  `set lacp-mode static` with a `# review:` line and a job warning.
+- The OPNsense codec's capability matrix classifies `/lags/lag/name` and
+  `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

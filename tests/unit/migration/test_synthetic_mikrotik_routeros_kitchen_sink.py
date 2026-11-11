@@ -194,7 +194,7 @@ def test_populates_every_expected_canonical_field(
     assert "ether3" in lag_by_name["bond1"].members
     assert "ether4" in lag_by_name["bond1"].members
     assert "bond2" in lag_by_name
-    assert lag_by_name["bond2"].mode == "static"        # active-backup
+    assert lag_by_name["bond2"].mode == "active-backup"  # needs no aggregate
     # LAG members back-link
     assert iface_by_name["ether3"].lag_member_of == "bond1"
     assert iface_by_name["ether5"].lag_member_of == "bond2"

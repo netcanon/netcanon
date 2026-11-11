@@ -35,6 +35,7 @@ Junos LAG notes:
 
 Source: [OPNsense Devices manual (LAGG tab)](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <laggs version="1.0.0">
@@ -78,10 +79,11 @@ Junos -> OPNsense:
   OPNsense `<members>` round-trips the list as a comma-separated
   string.  Member names themselves rename via the port-rename
   mesh (Junos `ge-0/0/2` → an OPNsense device name such as `igb2`).
-- `lags[].mode`: **lossy** — Junos's three-way `active` / `passive` /
-  static collapses to OPNsense's single `<proto>lacp</proto>`
-  (FreeBSD always advertises actively).  Static-mode Junos LAGs
-  cross-pair degrades to LACP on OPNsense.
+- `lags[].mode`: **lossy** — Junos `active` / `passive` collapse to
+  OPNsense's single `<proto>lacp</proto>` (FreeBSD always advertises
+  actively).  A static-mode Junos LAG (no `lacp` line) is written
+  `<proto>loadbalance</proto>`, which lagg(4) calls "a static setup"
+  that "does not negotiate aggregation with the peer".
 - LACP timeout (`fast` / `slow`) is not modelled canonically; drops.
 
 Caveat: the juniper_junos codec parses LAG members today (the
@@ -89,7 +91,6 @@ Caveat: the juniper_junos codec parses LAG members today (the
 but `CanonicalLAG.members` population from `ether-options 802.3ad`
 back-pointers depends on codec wire-up.
 
-Disposition: **lossy** — name rename + LACP-mode collapse +
-codec wire-up gap in the OPNsense capability matrix
-(`/lag/aggregate` is not advertised on either side; render
-is partial).
+Disposition: **lossy** — name rename + LACP-mode collapse.  The
+OPNsense capability matrix classifies `/lags/lag/name` and
+`/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

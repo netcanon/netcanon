@@ -584,13 +584,15 @@ per_field_expectation:
       backup / balance-xor / balance-rr / broadcast / balance-tlb /
       balance-alb) ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4): lacp /
       failover / loadbalance / roundrobin / none).  Mode mapping
-      collapses RouterOS-rich modes: ``broadcast``, ``balance-tlb``,
-      ``balance-alb`` have no FreeBSD lagg equivalent and degrade
-      with banner.  Naming convention differs (``bond1`` vs
-      ``lagg1``: the port translator keeps the number).  OPNsense codec
-      parses ``<laggs>`` but its capability matrix doesn't currently
-      advertise ``/lag/aggregate``; render is partial pending
-      wire-up.  LACP-specific extras (system-priority, key, port-
+      collapses RouterOS-rich modes: the static ``balance-xor``,
+      ``balance-rr`` and ``broadcast`` are written ``loadbalance``,
+      and ``active-backup``, ``balance-tlb`` and ``balance-alb``,
+      which need no aggregate on the peer, ``failover``.  Naming
+      convention differs (``bond1`` vs ``lagg1``: the port
+      translator keeps the number).  The OPNsense and RouterOS
+      matrices classify ``/lags/lag/name`` and ``/lags/lag/members``
+      as supported and ``/lags/lag/mode`` as lossy.
+      LACP-specific extras (system-priority, key, port-
       priority) are not modelled canonically.
     references: [mikrotik_bonding, opnsense-laggs]
 

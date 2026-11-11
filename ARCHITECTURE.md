@@ -1203,6 +1203,25 @@ surface, never fed to the renderer or any transform — so the
 deliberate drop is surfaced honestly (the silent-drop-honesty
 discipline `docs/METHODOLOGY.md` treats as flagship).
 
+**A bond is written as what its peer must be**
+(`netcanon/migration/_bonds.py`).  A LAG's mode says what the ports
+it faces must be configured for: an LACP partner (`active`,
+`passive`), a static aggregate of their own (`static`: a switch's
+`mode on`, an AOS-S `trunk`, RouterOS `balance-xor`, VyOS `xor-hash`,
+OPNsense `loadbalance`), or nothing (`active-backup`: a Linux
+`active-backup`, `balance-tlb` or `balance-alb` bond, a lagg
+`failover`, which need no configuration of the switch).  Each parser reads its
+platform's word into the value the vendor's page describes, and each
+renderer writes the target's own form of it.  A codec states in
+`active_backup_written_as` what it writes for `active-backup`:
+`itself` (the three hosts), `static` (every switch: a static
+aggregate, with a review line beside it where the target writes
+review lines, and a warning from `CodecBase.render_warnings`), or
+`nothing` (a target that writes no LAG).  The outputs are read by a
+reader of each target's grammar typed in the test, never by the
+codec's parser (`tests/unit/migration/test_a_bond_needs_of_its_peer.py`),
+which also holds each codec's attribute to what it writes.
+
 When adding a new codec, audit each policy and decide whether to
 opt in.  Most cases: opt in.  Re-implementing the policy locally is
 the wrong call — see `netcanon/migration/codecs/README.md`

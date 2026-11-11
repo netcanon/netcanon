@@ -277,10 +277,13 @@ per_field_expectation:
       Port-channel<N>`` + per-member ``channel-group <N> mode
       active``.  Naming convention differs (``bond1`` vs
       ``Port-channel10``); rename mesh canonicalises.  RouterOS's
-      non-LACP modes (active-backup, balance-rr, balance-xor,
-      balance-tlb, balance-alb, broadcast) have no Cisco
-      EtherChannel equivalent; codec emits a banner and the
-      operator decides.
+      static modes (balance-xor, balance-rr, broadcast) are written
+      ``channel-group N mode on``.  active-backup, balance-tlb and
+      balance-alb need no aggregate on the peer and have no Cisco
+      EtherChannel equivalent: they are written ``mode on`` with a
+      ``! review:`` line and a job warning, and the operator
+      configures the switch's ports as that static aggregate or
+      re-designs the bond.
     references: [mikrotik_bonding]
 
   local_users:

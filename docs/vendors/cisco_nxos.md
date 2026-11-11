@@ -315,6 +315,14 @@ translate it again from `show running-config` as the switch prints it.
   is not read: the sub-interface is left out with its addresses, and
   a row of the Tier-3 banner names it.  ⚠️ Up to 0.7.7 the line's
   first number was the tag.
+- **A host's active-backup bond has no form on NX-OS.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  NX-OS has no such bond: the LAG is written as a static
+  aggregate (`channel-group <N> mode on`) with a `! review:` line
+  beside it, and the job carries a warning.  Configure the ports it
+  faces as a static aggregate too, or re-design the bond.
 - **A VLAN's address with no interface of its own gets one.**  A
   source can hold a VLAN's address on the VLAN itself: Junos folds
   the address of an `irb` unit that a VLAN binds with `l3-interface`

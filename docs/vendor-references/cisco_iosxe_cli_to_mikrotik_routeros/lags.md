@@ -24,6 +24,8 @@ on | desirable | auto}`.  `active` is LACP-active, `on` is static
 
 Source: [Bonding — RouterOS](https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding)
 
+Source: [Linux bonding — Switch Configuration](https://docs.kernel.org/networking/bonding.html)
+
 Retrieved: 2026-04-30
 
 ```
@@ -51,7 +53,7 @@ bond level; Cisco declares it on the member.
 The canonical surface is
 
 ```
-CanonicalLAG(name, members[], mode: "active" | "passive" | "static")
+CanonicalLAG(name, members[], mode: "active" | "passive" | "static" | "active-backup")
 ```
 
 ### Mode mapping
@@ -60,12 +62,16 @@ CanonicalLAG(name, members[], mode: "active" | "passive" | "static")
 |---|---|---|
 | `active` | `active` | `802.3ad` |
 | `passive` | `passive` | `802.3ad` (no separate passive on RouterOS) |
-| `on` | `static` | `balance-xor` (rough equivalent) or `802.3ad` w/ no peer |
+| `on` | `static` | `balance-xor` (MikroTik's mode for a static LAG) |
 
-RouterOS's bonding modes beyond `802.3ad` (active-backup, balance-
-rr, balance-xor) have no Cisco equivalent — operators using those
-modes are running Linux-bond semantics that don't translate to the
-Catalyst-style EtherChannel.
+On the inverse, RouterOS `balance-rr`, `balance-xor`, `broadcast`
+and a bond with no `mode` (the default is `balance-rr`) need the
+peer's ports grouped, and read as `static` (`mode on`).
+`active-backup`, `balance-tlb` and `balance-alb` need no
+configuration of the switch, have no Cisco equivalent, and read as
+`active-backup`, which is written onto IOS-XE as `channel-group N
+mode on` with a `! review:` line and a job warning: the switch's
+ports must then be grouped as that static aggregate.
 
 ### Name mapping
 

@@ -578,11 +578,11 @@ per_field_expectation:
       LACP modes collapse: FortiGate ``set lacp-mode active`` /
       ``passive`` both map to OPNsense ``<proto>lacp</proto>`` (the
       FreeBSD driver always advertises actively); FortiGate
-      ``static`` ↔ OPNsense ``<proto>none</proto>``.  Cross-pair
-      degrades the active/passive distinction silently.  OPNsense
-      codec parses ``<laggs>`` but its capability matrix doesn't
-      currently advertise ``/lag/aggregate``; render is partial
-      pending wire-up.
+      ``static`` -> OPNsense ``<proto>loadbalance</proto>``.
+      Cross-pair degrades the active/passive distinction silently.
+      The OPNsense matrix classifies ``/lags/lag/name`` and
+      ``/lags/lag/members`` as supported and ``/lags/lag/mode`` as
+      lossy.
     references: [fgt-lags, opn-laggs]
 
   local_users:

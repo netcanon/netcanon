@@ -333,18 +333,30 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
     return lines
 
 
+#: Canonical LAG mode -> VyOS bonding ``mode``.  A static aggregate is
+#: ``xor-hash``, which "distributes traffic and handles failover
+#: identically to 802.3ad, but operates without the LACP" (VyOS
+#: bonding); with no line a bond is 802.3ad (netcanon.migration._bonds).
+_CANONICAL_TO_VYOS_BOND_MODE = {
+    "active": "802.3ad",
+    "static": "xor-hash",
+    "active-backup": "active-backup",
+}
+
+
 def _bond_extra(lag, indent: str) -> list[str]:
     """Render a bonding interface's ``mode`` + ``member`` lines from the
     matching :class:`CanonicalLAG` (members sorted, one ``interface``
     line each: VyOS defines ``member interface`` as a leaf of many
-    values, and prints it so).  ``mode 802.3ad`` is emitted for an
-    ``active`` (LACP) LAG; a ``static`` LAG omits the line (VyOS
-    applies its default)."""
+    values, and prints it so).  ``mode`` is written from
+    :data:`_CANONICAL_TO_VYOS_BOND_MODE`; a ``passive`` LAG has no line,
+    and is VyOS's default, 802.3ad."""
     if lag is None:
         return []
     out: list[str] = []
-    if lag.mode == "active":
-        out.append(f"{indent}mode 802.3ad")
+    mode = _CANONICAL_TO_VYOS_BOND_MODE.get(lag.mode)
+    if mode:
+        out.append(f"{indent}mode {mode}")
     if lag.members:
         out.append(f"{indent}member {{")
         for member in sorted(lag.members):

@@ -542,10 +542,12 @@ per_field_expectation:
       port-rename mesh.  LACP modes collapse: Cisco active /
       passive both render as OPNsense ``<proto>lacp</proto>``
       (FreeBSD always advertises actively).  Cisco static mode
-      (``on``) and PAgP (``desirable`` / ``auto``) have no LACP
-      equivalent; cross-pair degrades.  OPNsense codec parses
-      ``<laggs>`` but its capability matrix doesn't advertise
-      ``/lag/aggregate``; render is partial.
+      (``on``) is written ``<proto>loadbalance</proto>``, a static
+      setup that does not negotiate aggregation with the peer
+      (lagg(4)); PAgP (``desirable`` / ``auto``) has no LACP
+      equivalent; cross-pair degrades.  The OPNsense matrix
+      classifies ``/lags/lag/name`` and ``/lags/lag/members`` as
+      supported and ``/lags/lag/mode`` as lossy.
     references: [opnsense-laggs]
 
   local_users:

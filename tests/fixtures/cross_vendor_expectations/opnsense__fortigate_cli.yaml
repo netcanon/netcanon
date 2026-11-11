@@ -563,13 +563,15 @@ per_field_expectation:
       on FortiOS — both codecs handle the normalisation.  LACP
       modes: OPNsense ``<proto>lacp</proto>`` -> FortiGate
       ``set lacp-mode active`` (FreeBSD lagg(4) always advertises
-      actively); OPNsense ``<proto>none</proto>`` -> FortiGate
-      ``set lacp-mode static``.  OPNsense's ``failover`` /
-      ``loadbalance`` / ``roundrobin`` protos have no FortiGate
-      LACP equivalent and collapse to ``static`` with a comment.
-      OPNsense codec parses ``<laggs>`` but its capability matrix
-      doesn't currently advertise ``/lag/aggregate``; round-trip
-      is partial pending wire-up.
+      actively); OPNsense's ``loadbalance`` / ``fec`` /
+      ``roundrobin`` protos are static aggregates and are written
+      ``set lacp-mode static``, and so is ``<proto>none</proto>``,
+      which passes no traffic (read as static: a known limitation).
+      ``failover`` needs no aggregate on the peer and has no
+      FortiOS equivalent: it is written ``set lacp-mode static``
+      with a ``# review:`` line and a job warning.  The OPNsense
+      matrix classifies ``/lags/lag/name`` and ``/lags/lag/members``
+      as supported and ``/lags/lag/mode`` as lossy.
     references: [opn-laggs, fgt-lags]
 
   local_users:

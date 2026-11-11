@@ -1365,6 +1365,47 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A static aggregate is written as one onto RouterOS, VyOS and
+  OPNsense, and a bond that needs nothing of its peer is not read as
+  one.**  A LAG's mode says what the ports it faces must be: an LACP
+  partner, a static aggregate of their own (a switch's `channel-group
+  N mode on`, an AOS-S `trunk`), or nothing at all -- a Linux
+  `active-backup`, `balance-tlb` or `balance-alb` bond "do not require
+  any specific configuration of the switch" (Linux bonding), and nor
+  does a FreeBSD `failover` lagg, which sends through one port.  The tree had
+  one value, `static`, for the last two.  The hosts' renderers wrote it
+  as a bond that needs nothing: RouterOS `mode=active-backup`, OPNsense
+  `<proto>failover</proto>` -- which accepts traffic "only ... through
+  the active port" (lagg(4)), so what the switch sends on the other
+  port is dropped -- and on VyOS no `mode` line, which is 802.3ad ("The
+  default is 802.3ad", VyOS), an LACP bond facing a port that speaks
+  none.  Their parsers read a bond that needs nothing as `static`,
+  which every switch then wrote as `mode on`, a static aggregate the
+  host's bond is not; and the VyOS parser read a bond with
+  no `mode` line as `static` too.  The jobs said `completed`.  The tree
+  now holds `active-backup` for a bond that needs nothing of its peer
+  (`netcanon/migration/_bonds.py`).  A static aggregate is written
+  RouterOS `mode=balance-xor`, VyOS `mode xor-hash` and OPNsense
+  `loadbalance`, each the platform's own static aggregate, and a bond
+  that needs nothing is written `mode=active-backup`, `mode
+  active-backup` and `failover`.  A switch has no such bond: it is
+  written as a static aggregate, with a review line beside it (IOS XR,
+  which writes no review line, says it in the job's warnings alone)
+  and a warning in the job, for the switch's ports must then be
+  configured as one.  A VyOS bond with no `mode` line is read as LACP,
+  and an OPNsense `fec` or `broadcast` lagg as a static aggregate
+  rather than as LACP.  Over the configs under `tests/fixtures/`, the
+  static LAGs of an AOS-S and an IOS XR configuration and of the
+  synthetic AOS-CX, AOS-S and OS10 configs are written so onto the
+  three hosts, and the synthetic RouterOS config's `active-backup` bond
+  onto each switch gains the review line and the warning; no job's
+  status moves.  The RouterOS to NX-OS expectation said the mode of
+  every bond round-trips, which it never did for that bond; it is
+  `lossy` now.  Guarded by
+  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`, which reads
+  each output with a reader of its target's grammar, typed from the
+  vendors' own pages, and holds what each codec says it writes for
+  such a bond to what it writes.
 - **A port numbered 0 is not written onto RouterOS as `ether0`.**
   RouterOS counts a port from 1: every factory name of the committed
   exports, target profiles and model families does, and with no
@@ -6310,6 +6351,16 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A LAG's hashing is not carried, and an OPNsense `none` lagg is a
+  static aggregate.**  A LAG is translated as what its peer must be
+  (LACP, a static aggregate, or nothing), not as how it spreads
+  traffic: RouterOS `balance-rr` and `broadcast` come back
+  `balance-xor`, VyOS `round-robin` and `broadcast` `xor-hash`,
+  OPNsense `roundrobin`, `fec` and `broadcast` `loadbalance`, and
+  `balance-tlb` / `balance-alb` (RouterOS) or `transmit-load-balance` /
+  `adaptive-load-balance` (VyOS) `active-backup`.  OPNsense `none`
+  passes no traffic at all (lagg(4)), and the tree has no value for a
+  LAG that carries nothing: it is read as a static aggregate.
 - **A local user's role is a target's built-in role, or its own
   platform's.**  A role the source config defines for itself (a Junos
   login class, an EOS or NX-OS custom role, an AOS-CX or OS10 user

@@ -431,8 +431,11 @@ per_field_expectation:
       OPNsense's ``failover`` / ``loadbalance`` / ``roundrobin``
       modes have no LACP equivalent on Cisco; cross-pair render
       degrades to ``mode on`` (static, no LACP exchange).
-      OPNsense parses ``<laggs>`` but Cisco codec doesn't advertise
-      ``/lag/aggregate`` in its capability matrix.
+      ``failover`` needs no aggregate on the peer, so its ``mode
+      on`` carries a ``! review:`` line and a job warning.  The
+      OPNsense matrix classifies ``/lags/lag/name`` and
+      ``/lags/lag/members`` as supported and ``/lags/lag/mode`` as
+      lossy.
     references: [opnsense-laggs]
 
   local_users:

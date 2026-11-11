@@ -329,6 +329,10 @@ class CiscoIOSXECodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: The OpenConfig render writes no LAG (a declared loss).  See
+    #: ``CodecBase.active_backup_written_as``.
+    active_backup_written_as: ClassVar[str] = "nothing"
+
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"

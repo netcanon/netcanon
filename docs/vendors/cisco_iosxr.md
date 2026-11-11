@@ -246,6 +246,14 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
   sub-interface is not translated`).  The older form, `dot1q vlan 20`
   (`dot1q vlan 20 30` for two tags), is read the same way.
+- **A host's active-backup bond has no form on IOS XR.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  IOS XR has no such bond: the LAG is written as a static
+  bundle (`bundle id <N> mode on`), and the job carries a warning; the
+  output has no review line for it.  Configure the ports it faces as a
+  static aggregate too, or re-design the bond.
 - **An encapsulation that is no 802.1Q tag is left out.**
   `encapsulation untagged` maps "untagged frames on an interface", and
   `encapsulation default` "any tagged or untagged traffic that has not

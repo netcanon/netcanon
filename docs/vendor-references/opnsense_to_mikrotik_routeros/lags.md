@@ -20,7 +20,12 @@ Retrieved: 2026-04-30
 OPNsense uses the FreeBSD ``lagg(4)`` driver.  LAG names are
 auto-numbered (``lagg0``, ``lagg1``, …); kernel-assigned in
 creation order.  ``<proto>`` values: ``lacp`` (active-only),
-``failover``, ``loadbalance``, ``roundrobin``, ``none``.
+``failover``, ``fec``, ``loadbalance``, ``roundrobin``, ``none``.
+``failover`` by default accepts traffic only on the active port and
+needs no aggregate on the peer; ``loadbalance`` "is a static setup
+and does not negotiate aggregation with the peer"; ``none`` passes
+no traffic ([FreeBSD
+lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)).
 
 ## MikroTik RouterOS
 
@@ -56,9 +61,11 @@ Canonical surface:
 CanonicalLAG(name, members[], mode)
 ```
 
-The OPNsense codec parses ``<laggs>`` into CanonicalLAG records but
-its capability matrix doesn't currently advertise ``/lag/aggregate``
-in supported[].  Render is partial pending wire-up.
+``mode`` is one of ``active`` / ``passive`` (LACP), ``static`` (a
+static aggregate: the peer's ports are grouped too) and
+``active-backup`` (the peer's ports need no aggregate).  The OPNsense
+and RouterOS capability matrices classify ``/lags/lag/name`` and
+``/lags/lag/members`` as supported and ``/lags/lag/mode`` as lossy.
 
 ### name
 
@@ -85,11 +92,11 @@ mode set is a subset of RouterOS's):
 
 | OPNsense `<proto>` | RouterOS `mode=` |
 |---|---|
-| `lacp` | `802.3ad` |
-| `failover` | `active-backup` |
-| `loadbalance` | `balance-xor` |
-| `roundrobin` | `balance-rr` |
-| `none` | (no direct equivalent; collapse to `balance-xor` with banner) |
+| `lacp` | `802.3ad` (canonical `active`) |
+| `failover` | `active-backup` (canonical `active-backup`) |
+| `loadbalance` / `fec` | `balance-xor` (canonical `static`) |
+| `roundrobin` | `balance-xor` (canonical `static`; the round-robin algorithm is not kept) |
+| `none` | `balance-xor` (read as `static`, a known limitation: `none` passes no traffic, and the tree has no value for it) |
 
 LACP-specific extras (system-priority, key, port-priority) are not
 modelled canonically; cross-pair emits RouterOS defaults on render.
@@ -100,4 +107,4 @@ modelled canonically; cross-pair emits RouterOS defaults on render.
 |---|---|
 | `lags[].name` | lossy (rename-mesh canonicalises) |
 | `lags[].members` | lossy (rename-mesh canonicalises member identities) |
-| `lags[].mode` | lossy (`<proto>none</proto>` has no clean RouterOS analogue) |
+| `lags[].mode` | lossy (`roundrobin`, `fec` and `none` come back as `balance-xor`; `<proto>none</proto>` has no clean RouterOS analogue) |

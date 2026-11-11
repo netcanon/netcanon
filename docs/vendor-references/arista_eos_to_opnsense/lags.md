@@ -38,6 +38,7 @@ Arista LAG notes:
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 OPNsense uses the FreeBSD `lagg(4)` driver with `<laggs>` /
 `<lagg>` elements:
@@ -58,8 +59,11 @@ OPNsense uses the FreeBSD `lagg(4)` driver with `<laggs>` /
 - `<laggif>` — synthesised device name (`lagg0`, `lagg1`, …);
   zero-based.
 - `<members>` — comma-separated list of member NIC device names.
-- `<proto>` values: `lacp` (always advertises actively),
-  `failover`, `loadbalance`, `roundrobin`, `none` (static).
+- `<proto>` values: `lacp` (always advertises actively);
+  `failover` (by default accepts traffic only on the active port,
+  and needs no aggregate on the peer); `fec`, `loadbalance`,
+  `roundrobin` (static aggregates: the peer's ports are grouped,
+  with no LACP); `none` (passes no traffic, per lagg(4)).
 - A member is an UNASSIGNED interface: "Only unassigned interfaces can
   be added to LAGG" (same page, Other Types).  So a member is named in
   `<laggs>` and in no zone of `<interfaces>`, and has no description,
@@ -75,7 +79,7 @@ Canonical fields (`CanonicalLAG`):
 ```
 name: str
 members: list[str]
-mode: str       # "active" | "passive" | "static"
+mode: str       # "active" | "passive" | "static" | "active-backup"
 ```
 
 Plus the back-pointer on each member interface:
@@ -94,11 +98,12 @@ Plus the back-pointer on each member interface:
   names (`em2`, `igb1`, …).  Rename mesh translates.
 - `lags[].mode`: **lossy** — Arista `active` / `passive` collapse
   to OPNsense `<proto>lacp</proto>` (FreeBSD always advertises
-  actively); Arista `on` (static) maps to `<proto>none</proto>`.
-  Passive variant does not survive.
+  actively); Arista `on` (static) maps to
+  `<proto>loadbalance</proto>`, which lagg(4) calls "a static setup"
+  that "does not negotiate aggregation with the peer".  Passive
+  variant does not survive.
 - `interfaces[].lag_member_of`: **lossy** — both codecs
   round-trip the back-pointer but the LAG name itself differs
   (`Port-Channel10` versus `lagg10`).
-- The OPNsense codec capability matrix does not currently
-  advertise `/lag/aggregate` in its supported set; render is
-  partial pending wire-up.
+- The OPNsense codec capability matrix classifies `/lags/lag/name` and
+  `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

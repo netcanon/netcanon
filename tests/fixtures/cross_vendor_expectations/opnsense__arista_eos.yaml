@@ -491,13 +491,15 @@ per_field_expectation:
       Member lists round-trip via the rename mesh.  LACP modes:
       OPNsense ``<proto>lacp</proto>`` ↔ Arista ``mode active``
       (FreeBSD always advertises actively, so passive LACP is
-      unreachable from this direction); OPNsense
-      ``<proto>none</proto>`` ↔ Arista ``mode on`` (static).
-      OPNsense's failover / loadbalance / roundrobin protos have
-      no Arista LACP equivalent and collapse to ``mode on`` with
-      a comment.  OPNsense codec parses ``<laggs>`` but its
-      capability matrix doesn't currently advertise
-      ``/lag/aggregate``; round-trip is partial pending wire-up.
+      unreachable from this direction); OPNsense's loadbalance /
+      fec / roundrobin protos are static aggregates and are written
+      Arista ``mode on``, and so is ``<proto>none</proto>``, which
+      passes no traffic (read as static: a known limitation).
+      ``failover`` needs no aggregate on the peer and has no Arista
+      equivalent: it is written ``mode on`` with a ``! review:``
+      line and a job warning.  The OPNsense matrix classifies
+      ``/lags/lag/name`` and ``/lags/lag/members`` as supported and
+      ``/lags/lag/mode`` as lossy.
     references: [opnsense-laggs, arista-lacp-cg]
 
   local_users:

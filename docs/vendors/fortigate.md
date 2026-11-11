@@ -389,6 +389,14 @@ loses the layout too.
   without `ENC` -- a config typed by hand, or a template -- is the
   secret itself, and migrates.  With 0.7.7 or earlier such a secret
   was refused on every other target as if it were encrypted.
+- **A host's active-backup bond has no form on FortiOS.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  FortiOS has no such bond: the LAG is written as a static
+  aggregate (`set type aggregate`, `set lacp-mode static`) with a
+  `# review:` line beside it, and the job carries a warning.  Configure
+  the ports it faces as a static aggregate too, or re-design the bond.
 - **Two tags are left out.**  A VLAN interface whose `set
   interface` is another VLAN interface, and one that says `set
   vlan-protocol 8021ad`, is left out with its addresses, and a row

@@ -619,9 +619,14 @@ class CanonicalLAG(BaseModel):
         name: Vendor-native LAG name (e.g. ``Port-Channel1``,
             ``ae0``, ``bond0``, ``Trk1``).
         members: Member interface names, vendor-native.
-        mode: LACP negotiation mode.  ``"active"`` (default — LACP
-            active), ``"passive"`` (LACP passive), or ``"static"``
-            (no LACP, manual aggregation).
+        mode: What the bond needs of its peer.  ``"active"``
+            (default — LACP active), ``"passive"`` (LACP passive),
+            ``"static"`` (no LACP: a static aggregate, frames hashed
+            over every member, the peer's ports grouped as one too, as
+            Cisco ``mode on``), or ``"active-backup"`` (the peer's
+            ports need no aggregate: Linux ``active-backup`` /
+            ``balance-tlb`` / ``balance-alb``, FreeBSD ``failover``).
+            See :mod:`netcanon.migration._bonds`.
     """
 
     name: str

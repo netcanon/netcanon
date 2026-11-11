@@ -63,6 +63,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree
 from ..._radius_secrets import (
     AOSS_ENVELOPE,
@@ -98,6 +99,9 @@ _MODE_TO_AOS_TRUNK_TYPE = {
     "active": "lacp",
     "passive": "lacp",    # AOS-S doesn't distinguish active/passive at this layer
     "static": "trunk",
+    # No active-backup bond on AOS-S: a static trunk, with a review line
+    # (netcanon.migration._bonds).
+    ACTIVE_BACKUP: "trunk",
 }
 
 
@@ -976,6 +980,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         trunk_type = _lag_mode_to_aos_type(lag.mode)
         lines.append(f"trunk {port_list} {trunk_name} {trunk_type}")
         given_back.update(_given_back(_members_read_from(lines[-1]), lag.members))
+        if lag.mode == ACTIVE_BACKUP:
+            lines.append(f"; {active_backup_review(trunk_name)}")
 
     # VLANs — the architecturally interesting part.  AOS-S's
     # VLAN-centric port membership is our canonical model's

@@ -147,6 +147,21 @@ XML element mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec
   source.  Most fields parse + render cleanly within the
   documented surface.
+- **`/lags/lag/mode`** — `<proto>lacp</proto>` is LACP, with no
+  active/passive distinction (a passive bundle comes back active).
+  `failover` sends on one port and accepts traffic "only ... through
+  the active port" (lagg(4)): its peer needs no aggregate, and it is
+  read and written as such.  `loadbalance`, `fec`, `roundrobin` and
+  `broadcast` are a static aggregate, whose peer groups its ports too,
+  and are written `loadbalance`.  `none` passes no traffic at all
+  (lagg(4)), and the tree has no value for a LAG that carries
+  nothing: it is read as a static aggregate (a known limitation —
+  look at what such a lagg is for before translating it).  Onto a
+  switch a `failover` lagg is a static aggregate with a review line
+  beside it and a warning in the job.  ⚠️ Up to 0.7.7 a static
+  aggregate of another vendor was written `failover`, a `failover`
+  lagg was read as a static aggregate, and `fec` and `broadcast` were
+  read as LACP: translate a config with a LAG again.
 - **`/local-users/user/role`** — a local user's role is a name of the
   platform that defines it.  OPNsense writes
   `<groupname>admins</groupname>` at privilege 15 and `users` below

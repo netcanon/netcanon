@@ -68,7 +68,14 @@ equivalent.
 
 The canonical surface is `CanonicalIntent.lags:
 list[CanonicalLAG]` with fields `name` / `members: list[str]` /
-`mode` (`active|passive|static`).
+`mode` (`active|passive|static|active-backup`).  `static` is a
+static aggregate whose peer groups its ports too; `active-backup` is
+a bond whose peer needs no aggregate.  The Linux bonding guide
+([Switch Configuration](https://docs.kernel.org/networking/bonding.html))
+says which is which: `active-backup`, `balance-tlb` and
+`balance-alb` "do not require any specific configuration of the
+switch", while `balance-rr`, `balance-xor` and `broadcast` need the
+switch's ports grouped.
 
 RouterOS -> Arista round-trip:
 
@@ -77,12 +84,12 @@ RouterOS -> Arista round-trip:
 | RouterOS | Arista | Notes |
 |---|---|---|
 | `mode=802.3ad` | `mode active` | Direct; LACP active |
-| `mode=balance-xor` | `mode on` (static) | Closest static analogue with banner |
-| `mode=active-backup` | `mode active` | Lossy — Arista has no active-backup; codec emits banner.  Operator likely wants single-port + STP redundancy or VRRP rather than channel-group. |
-| `mode=balance-rr` | `mode on` (static) | Lossy — round-robin not modelled by Arista; banner. |
-| `mode=balance-tlb` | `mode on` | Lossy — adaptive load balancing not modelled; banner. |
-| `mode=balance-alb` | `mode on` | Same as balance-tlb. |
-| `mode=broadcast` | (no equivalent) | Drops with banner; canonical mode falls back to `static`. |
+| `mode=balance-xor` | `mode on` (static) | Static aggregate (canonical `static`); MikroTik's mode for a static LAG |
+| `mode=balance-rr`, or no `mode` (RouterOS's default) | `mode on` (static) | Static aggregate (canonical `static`); round-robin is not modelled, and the inverse writes `balance-xor` |
+| `mode=broadcast` | `mode on` (static) | Static aggregate (canonical `static`); the inverse writes `balance-xor` |
+| `mode=active-backup` | `mode on` + `! review:` line | Canonical `active-backup`.  Arista has no bond that needs nothing of its peer: written as a static aggregate with a review line and a job warning.  The switch's ports must be configured as that static aggregate, or the host bond re-designed (single port + STP redundancy or VRRP). |
+| `mode=balance-tlb` | `mode on` + `! review:` line | Same as active-backup. |
+| `mode=balance-alb` | `mode on` + `! review:` line | Same as active-backup. |
 
 **Naming mesh:** RouterOS `bond1` -> Arista `Port-Channel1` (the
 rename mesh canonicalises; capital-C distinguishes from Cisco's
@@ -102,11 +109,13 @@ manually if needed.
 The MikroTik synthetic kitchen-sink carries `bond1` (LACP /
 802.3ad) and `bond2` (active-backup).  `bond1` lifts cleanly to
 `CanonicalLAG(name="bond1", mode="active", members=["ether3",
-"ether4"])` -> Arista `interface Port-Channel1`.  `bond2`
-collapses to `mode="static"` with banner because Arista has no
-active-backup; the operator likely wants either separate ports
-with STP / VRRP redundancy, or a static-channel-group.
+"ether4"])` -> Arista `interface Port-Channel1`.  `bond2` lifts to
+`mode="active-backup"` and is written `channel-group N mode on` with
+a `! review:` line because Arista has no active-backup; the operator
+likely wants either separate ports with STP / VRRP redundancy, or
+the switch's ports configured as that static channel-group.
 
-Disposition: **lossy** — LACP modes round-trip cleanly; non-LACP
-RouterOS-only modes (active-backup, balance-rr/tlb/alb,
-broadcast) collapse to static with operator review banners.
+Disposition: **lossy** — LACP modes round-trip cleanly; the static
+modes (balance-xor, balance-rr, broadcast) are written `mode on`;
+active-backup, balance-tlb and balance-alb are written `mode on`
+with a `! review:` line and a job warning.

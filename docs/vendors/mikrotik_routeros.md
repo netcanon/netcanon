@@ -228,6 +228,20 @@ can appear BEFORE `/interface vrrp` in the source.
 
 ## Lossy paths
 
+- **`/lags/lag/mode`** — `mode=802.3ad` is LACP (a passive bundle is
+  written `802.3ad` and comes back active).  `balance-rr`,
+  `balance-xor`, `broadcast` and a bond with no `mode` (RouterOS's
+  default is `balance-rr`) are a static aggregate, whose peer groups
+  its ports too, and are written `mode=balance-xor`, which MikroTik
+  says works with a static LAG; `active-backup`, `balance-tlb` and
+  `balance-alb` "do not require any specific configuration of the
+  switch" (Linux bonding) and are written `mode=active-backup`.  The
+  balancing algorithm is not carried — re-select it on the target.
+  Onto a switch such a bond is a static aggregate with a review line
+  beside it and a warning in the job.  ⚠️ Up to 0.7.7 a static
+  aggregate of another vendor was written `mode=active-backup`, and
+  an `active-backup`, `balance-tlb` or `balance-alb` bond was read as
+  a static aggregate: translate a config with a LAG again.
 - **`/local-users/user/role`** — a local user's role is a name of the
   platform that defines it.  RouterOS writes `group=full` at privilege
   15, `group=write` from 10 to 14 and `group=read` below 10, chosen

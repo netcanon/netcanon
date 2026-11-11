@@ -4,6 +4,7 @@
 
 Source: [OPNsense Devices manual (LAGG tab)](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <laggs version="1.0.0">
@@ -72,15 +73,22 @@ OPNsense -> Junos:
 - `lags[].mode`: **lossy** — OPNsense `<proto>lacp</proto>` maps
   to Junos `aggregated-ether-options lacp active` (default to
   `active` on render — OPNsense doesn't carry the active/passive
-  discriminator).
+  discriminator).  `loadbalance`, `fec` and `roundrobin` ("a static
+  setup" that "does not negotiate aggregation with the peer",
+  lagg(4)) are written as an `ae<N>` with no
+  `aggregated-ether-options lacp`; so is `none`, which passes no
+  traffic on OPNsense (a known limitation: the tree has no value
+  for it).  `failover` needs no aggregate on the peer, and Junos has
+  no such bond: it is written as that static `ae<N>` with a
+  `# review:` line and a job warning, and the switch's ports must
+  then be configured as that static aggregate (or the host bond
+  re-designed).
 - Chassis `device-count` synthesis: OPNsense never declares one;
   Junos render synthesises a default value (typically equal to the
   number of `ae<N>` interfaces in the canonical tree).
 
-Caveat: opnsense codec parses `<laggs>` but its capability matrix
-doesn't currently advertise `/lag/aggregate`; the canonical
-`CanonicalLAG` records may not populate fully.  Marked `lossy`
-rather than `good` accordingly.
+The OPNsense codec's capability matrix classifies `/lags/lag/name` and
+`/lags/lag/members` as supported and `/lags/lag/mode` as lossy.
 
-Disposition: **lossy** — name rename + LACP-mode synthesis +
-codec wire-up gap.
+Disposition: **lossy** — name rename + LACP-mode synthesis + the
+static and failover protos written as a static `ae<N>`.

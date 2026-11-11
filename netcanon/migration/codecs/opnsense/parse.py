@@ -1364,10 +1364,18 @@ def _parse_opnsense_vip(
 # ---------------------------------------------------------------------------
 
 # OPNsense LAG proto values -> canonical CanonicalLAG.mode
+# (netcanon.migration._bonds).  ``failover`` sends and receives through
+# one port and needs no aggregate on the peer; ``loadbalance`` and
+# ``fec`` are "a static setup", and ``roundrobin`` and ``broadcast``
+# send over every port (lagg(4)).  ``none`` passes no traffic at all,
+# which the tree has no word for: it is read as a static aggregate (a
+# known limitation, docs/vendors/opnsense.md).
 _OPNSENSE_PROTO_TO_CANONICAL = {
     "lacp": "active",
-    "failover": "static",
+    "failover": "active-backup",
+    "fec": "static",
     "loadbalance": "static",
     "roundrobin": "static",
+    "broadcast": "static",
     "none": "static",
 }

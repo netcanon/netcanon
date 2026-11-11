@@ -30,7 +30,7 @@ cadence).  **Phase 1**: ``system host-name``; interfaces (``ethernet``
 and ``protocols static`` routes.  **Phase 2**: ``system login user``
 local users (name + ``authentication encrypted-password``); ``system``
 / ``service`` ``ntp`` servers; and ``bonding bondN`` LAGs (``mode
-802.3ad`` → LACP, members via both the 1.4 ``member interface`` form and
+802.3ad`` or no ``mode`` → LACP, members via both the 1.4 ``member interface`` form and
 the legacy ``bond-group`` form).  **Phase 3**: ``service snmp`` (v1/v2c
 community + ``location`` / ``contact`` + v3 USM users) and VRF (``vrf
 name <X> { table <N> }`` routing instances + the per-interface ``vrf
@@ -216,6 +216,10 @@ class VyOSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: A bond whose peer needs no aggregate is a mode of its own here.
+    #: See ``CodecBase.active_backup_written_as``.
+    active_backup_written_as: ClassVar[str] = "itself"
+
     #: ``vif <vid>`` is the sub-interface and its tag at once: ``eth1.200``
     #: carries VLAN 200.  See ``CodecBase.units_are_named_by_their_tag``.
     units_are_named_by_their_tag: ClassVar[bool] = True
@@ -366,11 +370,15 @@ class VyOSCodec(CodecBase):
             LossyPath(
                 path="/lags/lag/mode",
                 reason=(
-                    "VyOS bonding `mode 802.3ad` (LACP) maps to `active`; the "
-                    "non-LACP modes (`active-backup` / `balance-rr` / "
-                    "`balance-xor` / ...) collapse to `static` (the specific "
+                    "VyOS bonding `mode 802.3ad` (LACP), and a bond with no "
+                    "`mode` (802.3ad is the default), map to `active`, and a "
+                    "`passive` bundle comes back `active`.  `active-backup`, "
+                    "`transmit-load-balance` and `adaptive-load-balance` need "
+                    "no aggregate on the peer and map to `active-backup`; "
+                    "`round-robin`, `xor-hash` and `broadcast` are a static "
+                    "aggregate, `static`, written `xor-hash`.  The specific "
                     "balancing algorithm is dropped — re-select it on the "
-                    "target)."
+                    "target."
                 ),
                 severity="warn",
             ),

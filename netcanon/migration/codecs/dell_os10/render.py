@@ -96,6 +96,7 @@ exists in the ``cisco_nxos`` render for the same reason.
 
 from __future__ import annotations
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
 from ..._user_secrets import (
@@ -151,6 +152,9 @@ _CANON_TO_OS10_LAG_MODE = {
     "active": "active",
     "passive": "passive",
     "static": "on",
+    # No active-backup bond on OS10: a static aggregate, said in a
+    # review line (netcanon.migration._bonds).
+    ACTIVE_BACKUP: "on",
 }
 
 #: Interface-kind render order, matching the order a real switch prints
@@ -710,10 +714,13 @@ def _render_interface(
     if iface.lag_member_of:
         ident = _port_names.classify_port_name(iface.lag_member_of)
         if ident.kind == "lag" and ident.index is not None:
-            mode = _CANON_TO_OS10_LAG_MODE.get(
-                lag_mode_by_name.get(iface.lag_member_of, "active"), "active",
-            )
+            canonical = lag_mode_by_name.get(iface.lag_member_of, "active")
+            mode = _CANON_TO_OS10_LAG_MODE.get(canonical, "active")
             block.append(f" channel-group {ident.index} mode {mode}")
+            if canonical == ACTIVE_BACKUP:
+                block.append(
+                    f" ! {active_backup_review(f'port-channel{ident.index}')}"
+                )
 
     block.extend(_render_switchport_lines(iface, untagged_stated))
 

@@ -228,6 +228,10 @@ class OPNsenseCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: A bond whose peer needs no aggregate is a mode of its own here.
+    #: See ``CodecBase.active_backup_written_as``.
+    active_backup_written_as: ClassVar[str] = "itself"
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
         vendor_id="opnsense",
@@ -316,7 +320,10 @@ class OPNsenseCodec(CodecBase):
                     "OPNsense `lagg` uses a single `lacp` proto with no "
                     "active/passive distinction, so a `passive` LACP bundle "
                     "re-parses as `active` (audit bb47f21 T0-1, verified by "
-                    "round-trip probe)."
+                    "round-trip probe).  A static aggregate is written "
+                    "`loadbalance`, so `roundrobin`, `fec` and `broadcast` "
+                    "come back `loadbalance`, and `none`, which passes no "
+                    "traffic, is read as a static aggregate."
                 ),
                 severity="warn",
             ),

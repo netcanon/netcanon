@@ -28,6 +28,7 @@ on | desirable | auto}``.  ``active`` / ``passive`` are LACP;
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 OPNsense models link aggregation via FreeBSD's ``lagg(4)`` driver:
 
@@ -74,7 +75,7 @@ Canonical fields (see ``CanonicalLAG``):
 ```
 name: str           # vendor-native name
 members: list[str]  # member interface names
-mode: str           # "active" | "passive" | "static"
+mode: str           # "active" | "passive" | "static" | "active-backup"
 ```
 
 Cisco -> OPNsense:
@@ -89,11 +90,12 @@ Cisco -> OPNsense:
   collapse to OPNsense's single ``lacp`` proto.  ``passive`` LACP is
   not directly representable on OPNsense; renders as ``lacp`` and
   the device advertises actively.  ``static`` Cisco mode (``on``)
-  has no LACP packet exchange and maps loosely to OPNsense's
-  ``loadbalance`` or ``failover`` (which are also non-LACP) — the
-  semantics differ.
+  has no LACP packet exchange and is written ``loadbalance``, which
+  ``lagg(4)`` calls "a static setup" that "does not negotiate
+  aggregation with the peer".  ``failover`` is not a static
+  aggregate (its peer needs no aggregate) and is not written for
+  ``on``.
 
-Disposition: **lossy** at the field level.  At the WIRE-UP level:
-the OPNsense codec parses ``<laggs>`` (per ``parse.py``) but the
-codec's capability matrix does not currently advertise ``/lag/aggregate``
-paths.  Cross-pair render of LAGs is partial.
+Disposition: **lossy** at the field level.  The OPNsense codec's
+capability matrix classifies ``/lags/lag/name`` and ``/lags/lag/members``
+as supported and ``/lags/lag/mode`` as lossy.

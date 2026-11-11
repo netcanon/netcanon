@@ -380,6 +380,14 @@ translate it again from `show running-configuration` as the switch prints it.
   and `'`, and a route whose gateway holds either is left out whole;
   each with a `review:` line.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A host's active-backup bond has no form on OS10.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  OS10 has no such bond: the LAG is written as a static
+  aggregate (`channel-group <N> mode on`) with a `! review:` line
+  beside it, and the job carries a warning.  Configure the ports it
+  faces as a static aggregate too, or re-design the bond.
 ⚠️ **Auto-detection finds about three OS10 configs in four.**
 OS10 and IOS-XE share the `!`-delimited Cisco shape, so a capture that
 spends its opening bytes on a template header, a console login banner or
