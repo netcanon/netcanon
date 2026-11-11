@@ -9236,7 +9236,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}, "interfaces[2] {'name': 'lo'}": {"interface_type": {"sou... |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": ""}] | [] | all 1 local_users dropped |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → opnsense  (WARN 18/21)
@@ -9323,7 +9323,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | {"interfaces[2] {'name': 'lo'}": {"interface_type": {"source": "", "target": "ianaift:bridge"}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$km/6j4hX0Ayo$dk2z5LeUOayHopgLGZJII0whBMidnvsd4LfT6LcIcR9ReabX0kcXjZOlmmqDGWuo1FvpnV.X2IRl5NeEZpuI31", "role": ""}] | [] | all 1 local_users dropped |
 
 ### vyos/metasploit-vyos-config.conf → opnsense  (WARN 19/21)
@@ -9879,7 +9879,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | domain | DRIFT | internal.sigkill.org |  | domain: 'internal.sigkill.org' → '' |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | {"interfaces[5] {'name': 'eth5'}": {"dhcp_client": {"source": true, "target": false}}, "interfaces[6] {'name': 'lo'}": {"interface_type": {"source": "", "target": "ianaift:bridge"}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | count drift: 7 → 6 (interfaces) |
 | local_users | DRIFT | [{"name": "scott", "privilege_level": 15, "hashed_password": "$6$xxxxxxx", "role": ""}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$xxxxxxxxx", "role": ""}] | [] | all 2 local_users dropped |
 
 ### vyos/scottlaird-vyos-parser.conf → opnsense  (WARN 18/21)
@@ -9966,7 +9966,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "LAN", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.0.2.1", "prefix_length": 24, "virtual_... | [{"name": "eth0", "default_name": "", "description": "LAN", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.0.2.1", "prefix_length": 24, "virtual_... | {"interfaces[1] {'name': 'lo'}": {"interface_type": {"source": "", "target": "ianaift:bridge"}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "LAN", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.0.2.1", "prefix_length": 24, "virtual_... | [{"name": "eth0", "default_name": "", "description": "LAN", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.0.2.1", "prefix_length": 24, "virtual_... | count drift: 2 → 1 (interfaces) |
 | snmp | DRIFT | {"community": "", "location": "HOME", "contact": "netadmin@example.test", "trap_hosts": [], "v3_users": [{"name": "vyos", "group": "default", "auth_protocol": "sha", "auth_passphrase": "", "auth_ki... | {"community": "", "location": "HOME", "contact": "netadmin@example.test", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$fakeSaltVyos$fakeHashExampleValueNotARealCredential0000000000000000000000000000000000000000000000", "role": ""}] | [] | all 1 local_users dropped |
 
@@ -10056,7 +10056,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, "virtual_gate... | {"interfaces[2] {'name': 'lo'}": {"interface_type": {"source": "", "target": "ianaift:bridge"}}} |
+| interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, "virtual_gate... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [] | all 1 local_users dropped |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.11"], "source_interface": "", "udp_port": 8472}] | [] | all 1 vxlan_vnis dropped |
 
@@ -10148,7 +10148,7 @@ One section per non-OK real-capture cell (1150 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, "virtual_gate... | {"interfaces[2] {'name': 'lo'}": {"interface_type": {"source": "", "target": "ianaift:bridge"}}} |
+| interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, "virtual_gate... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [] | all 1 local_users dropped |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.10"], "source_interface": "", "udp_port": 8472}] | [] | all 1 vxlan_vnis dropped |
 
