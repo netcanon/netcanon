@@ -195,6 +195,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
 
     Collapses Cisco-style three-part notation by DROPPING the
     middle (module) digit when it's 0 — ``Gi1/0/24`` → ``1/24``.
+    A member of 0 is written as member 1, as a port of 0 is written
+    as port 1: AOS-S numbers both from 1.
     For non-zero middle digits (typically uplink modules on Cisco
     stack members) the caller gets a ``None`` return so the
     orchestrator emits a "review uplink mapping" warning rather
@@ -243,8 +245,19 @@ def format_port_identity(identity: PortIdentity) -> str | None:
                 f"{identity.stack or 1}/"
                 f"{identity.subslot_letter}{identity.port or 1}"
             )
+        # AOS-S numbers stack and VSF members from 1 (the model
+        # families: a 2930M stack is members 1-10, a 2930F fabric
+        # 1-8), and :func:`physical_port_name` refuses a member below
+        # 1.  A Junos FPC 0, an IOS XR slot 0 and an IOS-XE router's
+        # slot 0 are the first of theirs, and are written on member 1
+        # as port 0 is written as port 1.  A port of member 0 beside
+        # the same port of member 1 then has one name, which the run
+        # reports as two source names on one name of the output (the
+        # job is ``partial``).  Up to 0.7.7 it was written ``0/<n>``,
+        # a member AOS-S does not have, in a job that said
+        # ``completed``.
         if identity.stack is not None:
-            return f"{identity.stack}/{identity.port or 1}"
+            return f"{identity.stack or 1}/{identity.port or 1}"
         return str(identity.port or 1)
     if identity.kind == "lag":
         return f"Trk{identity.index or 1}"

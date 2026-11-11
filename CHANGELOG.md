@@ -1349,6 +1349,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A port of member 0 is not written onto AOS-S as `0/<n>`.**  AOS-S
+  numbers stack and VSF members from 1, and a Junos FPC, an IOS XR
+  slot and an IOS-XE router's slot are numbered from 0.  With no
+  devices declared, a Junos `ge-0/0/2`, an IOS XR
+  `GigabitEthernet0/0/0/2` and an IOS-XE `GigabitEthernet0/0/2` were
+  written `interface 0/2`, a member AOS-S does not have, in a job that
+  said `completed`.  Such a port is written on member 1, as a port 0
+  is written as port 1: `1/2`.  A port of member 0 beside the same
+  port of member 1 then has one name, and the job is `partial` and
+  lists the two.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_no_member_0.py`, which
+  also reads every committed capture of the other codecs for a name of
+  member 0.
 - **A sub-interface of IOS XR that AOS-S leaves out leaves no empty
   VLAN behind.**  IOS XR has no VLAN stanza, and its parser gives each
   802.1Q tag a sub-interface states a VLAN record with no name and no
