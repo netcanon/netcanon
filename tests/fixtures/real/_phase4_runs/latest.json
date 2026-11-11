@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-11-09T22:11:17+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261109T220328Z.json",
-  "mesh_run_started_utc": "2026-11-09T22:03:06+00:00",
+  "started_utc": "2026-11-10T23:46:09+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261110T234605Z.json",
+  "mesh_run_started_utc": "2026-11-10T23:45:52+00:00",
   "cells_total": 1469,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -603,10 +603,10 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8774,
+    "ALIGNED": 8776,
     "CODEC_BUG": 4,
-    "EXPECTED_LOSSY": 4166,
-    "EXPECTED_UNSUPPORTED": 2704,
+    "EXPECTED_LOSSY": 4174,
+    "EXPECTED_UNSUPPORTED": 2694,
     "METHODOLOGY_ISSUE_under": 2006,
     "METHODOLOGY_ISSUE_over": 15,
     "STRUCTURAL_ONLY": 5802,
@@ -659,7 +659,7 @@
     {
       "source_codec": "aruba_aoss",
       "target_codec": "aruba_aoss",
-      "drifted_total": 3
+      "drifted_total": 2
     },
     {
       "source_codec": "cisco_iosxe",
