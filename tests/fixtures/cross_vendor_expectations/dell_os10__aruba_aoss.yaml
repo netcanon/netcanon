@@ -212,11 +212,12 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   interfaces[].vrrp_groups:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cell; no cell drifts.  An OS10 `vlan<id>` is
+      the interface of VLAN <id>, and its VRRP groups are written in that
+      VLAN's stanza.  Up to 0.7.7 the renderer looked for `Vlan<id>`
+      only, and the groups were dropped.
     references: [os10-aoss-surface]
 
   lags:

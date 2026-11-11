@@ -1349,6 +1349,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A VLAN interface is written onto AOS-S whatever its grammar calls
+  it, and an interface whose name only begins `vlan` is written at
+  all.**  AOS-S writes a VLAN interface's addresses and VRRP groups in
+  its VLAN's stanza, and the renderer looked for the interface by one
+  name, `Vlan<id>`.  An AOS-CX `interface vlan 31` or an OS10
+  `interface vlan31` lost its IPv6 addresses, and the OS10 one its
+  VRRP groups; a VLAN interface that is shut down came out as an
+  address that is up, from every grammar that has one, since the
+  parsers put its address on its VLAN; and an interface whose name
+  begins `vlan` and that no VLAN stanza takes -- a FortiOS loopback
+  called `vlan-guest`, a RouterOS bridge called `vlanbr` -- was left
+  out with its addresses: in jobs that said nothing of any of it.  A
+  VLAN interface of a grammar that has one (`Vlan<id>`, `vlan <id>`
+  or `vlan<id>`, in any letter case, typed a VLAN interface by its
+  parser, with no tag and no parent, and not from RouterOS, FortiOS or
+  OPNsense, whose names are not read for a VLAN's id) is now
+  `Vlan<id>` in the whole tree before the render, so its VLAN's stanza
+  takes its IPv4 and IPv6 addresses, its VRRP groups and the DHCP
+  pools on it; one whose
+  VLAN the config does not declare is given a VLAN record where it
+  holds something.  What AOS-S cannot be given so is left out under a
+  `; review:` line and a warning: one that is shut down and holds an
+  address or a VRRP group (an AOS-S VLAN cannot be disabled; its VLAN
+  is still written with its ports and without the address, a pool it
+  served and a route out of it each have a review line, and the job
+  stays `completed`, nothing of it having been in force), and a second
+  interface of one VLAN.  Any other name that begins `vlan` is written
+  as every name AOS-S has no form for is, `interface <name>` with what
+  it holds.  The OS10 to AOS-S expectation declares
+  `interfaces[].vrrp_groups` good where it was lossy.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_vlan_interface_of_its_grammar.py`.
 - **An interface that stands for a VLAN is written onto AOS-S as that
   VLAN, by the tree's own id.**  AOS-S routes on a VLAN and has no form
   for an interface that is one unit of a port, and the renderer read a
@@ -1363,7 +1394,13 @@ timestamp if your timezone matters for an audit.
   written as `vlan <tag>` with `tagged <port>`, its IPv4 and IPv6
   addresses and its VRRP groups, and its port, tagged in a VLAN and
   untagged in none, is taken out of VLAN 1; a VLAN interface its parser
-  links to its VLAN is written as that VLAN, by the record's id.
+  links to its VLAN is written as that VLAN, by the record's id -- and,
+  where the VLAN has a label, by the label: AOS-S calls such a VLAN by
+  it, so that its record is named after no interface, and a RouterOS
+  `comment=` or a FortiOS `set alias` is the label of the VLAN and its
+  interface alike -- and the same where the job dropped its parent, a
+  bridge AOS-S has no name for, which left it written as `interface
+  <name>` with its address.
   Either is `Vlan<id>` in the whole tree before the render, so a DHCP
   pool on it is served by its VLAN (a pool on a FortiGate VLAN
   interface was served only to relayed clients) and a route out of it
@@ -1374,8 +1411,12 @@ timestamp if your timezone matters for an audit.
   or as another sub-interface, one on no port AOS-S can tag (a VLAN,
   a loopback, another unit, or a name with a space, a comma or a
   quote in it: an AOS-S port list is written without quotes); a VLAN
-  interface that is disabled or that two VLANs name; and either where
-  another interface already stands for its VLAN.  One in a VRF is
+  interface that is disabled, that two VLANs name or whose label two
+  VLANs have, or that nothing links to a VLAN -- an OPNsense VLAN
+  device whose VLAN has a `<descr>`, which the zone on it does not
+  share, or one an entry of the port map named for no VLAN (an entry
+  that names it `Vlan<id>` says its VLAN); and either where another
+  interface already stands for its VLAN.  One in a VRF is
   written without it, as every interface of a VRF is.  A
   sub-interface's name and description are not written.
   `/interfaces/interface/dot1q-vlan` is declared lossy at severity

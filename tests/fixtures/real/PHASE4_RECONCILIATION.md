@@ -10,9 +10,9 @@ Intra-vendor self-pairs skipped (no Phase 3 YAML — by design, Phase 3 is cross
 
 | Variance class | Count | Severity |
 |---|---:|---|
-| ALIGNED | 8765 | ok |
+| ALIGNED | 8766 | ok |
 | CODEC_BUG | 4 | **high** |
-| EXPECTED_LOSSY | 4168 | ok |
+| EXPECTED_LOSSY | 4167 | ok |
 | EXPECTED_UNSUPPORTED | 2696 | ok |
 | METHODOLOGY_ISSUE_under | 2021 | low/medium |
 | METHODOLOGY_ISSUE_over | 15 | low |

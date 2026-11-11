@@ -894,6 +894,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # loop skips them (otherwise we'd emit `interface vlan0.10` after
     # the L3 was already rolled into `vlan 10`).
     absorbed_iface_names: set[str] = set()
+    # And which a stanza stands for, whether or not it took anything of
+    # them: a name that begins ``vlan`` and is none of these is written
+    # as any other name of no AOS-S form is, with what it holds.
+    stood_for: set[str] = set()
     # AOS-S requires the global ``router vrrp`` enable BEFORE any VLAN
     # mounts a ``vrrp vrid`` instance (AOS-S 16.10 "Basic configuration
     # process": ``router vrrp`` then ``vlan N / vrrp vrid``).  Emit it
@@ -989,6 +993,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # loop.
         svi_iface = vlan_ifaces_by_name.get(f"Vlan{vlan.id}")
         id_match = iface_by_vlan_id.get(vlan.id)
+        stood_for.update(i.name for i in (svi_iface, id_match) if i is not None)
         addrs, taken_from = _stanza_ipv4(vlan, vlan_ifaces_by_name, iface_by_vlan_id)
         if taken_from is not None:
             absorbed_iface_names.add(taken_from.name)
@@ -1169,7 +1174,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 reviewed.add(lname)
                 lines.append(prepared.review[iface.name])
             continue
-        if lname.startswith("vlan"):
+        # One a VLAN's stanza stands for, or that is written as a
+        # VLAN, has no stanza of its own.  Any other name that begins
+        # ``vlan`` (a FortiOS loopback called ``vlan-guest``) is
+        # written as other names of no AOS-S form are, with what it
+        # holds: skipped here, it vanished from the output.
+        if lname.startswith("vlan") and (
+            iface.name in stood_for or lname in prepared.as_vlans
+        ):
             continue
         if iface.name == "oobm":
             continue

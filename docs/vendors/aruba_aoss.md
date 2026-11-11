@@ -298,7 +298,16 @@ interface's name:
 - **A VLAN interface its parser links to its VLAN** (on RouterOS and
   OPNsense, among others) is written as the VLAN of that record.  On
   RouterOS a name is free text, and `vlan10` may carry VLAN 20; up to
-  0.7.7 its address was written into VLAN 10, or nowhere.
+  0.7.7 its address was written into VLAN 10, or nowhere.  AOS-S calls
+  a VLAN that has a label by the label, so its record is then named
+  after no interface: on RouterOS and FortiOS, where one label
+  (`comment=`, `set alias`) is the VLAN's and its interface's, the
+  interface is found by it.  An OPNsense VLAN device and the zone on
+  it are labelled apart, and nothing links the device to a VLAN that
+  has a `<descr>`: it is left out, below.  An entry of the port map
+  that names one `Vlan<id>` says its VLAN.  One whose parent the job
+  drops -- a bridge AOS-S has no name for, such as RouterOS's default
+  `bridge` -- is found the same way, never by its name.
 
 Either is renamed `Vlan<id>` in the whole tree before it is written,
 so the VLAN's stanza takes the DHCP pools on it (`dhcp-server`) and
@@ -318,8 +327,11 @@ address) or as another sub-interface, one on no port AOS-S can tag
 (a VLAN, a loopback, another unit, or a name with a space, a comma
 or a quote in it: a port list is written without quotes, and a
 FortiOS or RouterOS name is free text);
-a VLAN interface that is disabled or that more than one VLAN names;
-and either where another interface already stands for its VLAN.  A
+a VLAN interface that is disabled, that more than one VLAN names or
+whose label more than one has, or that nothing links to a VLAN (an
+OPNsense device whose VLAN has a label, one an entry of the port map
+named for no VLAN); and either where another interface already stands
+for its VLAN.  A
 route out of one that is left out is not written either, and its own
 review line says so.
 
@@ -332,6 +344,53 @@ that did not tag its port.  Guarded by
 `tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`,
 which sends each form from each source through the plan path and reads
 the output as text and with the AOS-S parser.
+
+## A VLAN interface is its VLAN
+
+The grammars that have an interface for a VLAN each name it their own
+way: `interface Vlan31` on IOS-XE, NX-OS and EOS, `interface vlan 31`
+on AOS-CX, `interface vlan31` on OS10.  Any of them, in any letter
+case, typed a VLAN interface by its parser and with no 802.1Q tag and
+no parent -- and never from RouterOS, FortiOS or OPNsense, whose
+parsers link a VLAN interface to its VLAN (above) -- is written in the
+stanza of its VLAN: its IPv4 and IPv6
+addresses, its VRRP groups, the DHCP pools on it (`dhcp-server`) and a
+route out of it (`vlan <id>`).  It is renamed `Vlan<id>` in the whole
+tree first, as an interface that stands for a VLAN is (above), and
+one whose VLAN the config does not declare is given a VLAN record
+where it holds an address or a VRRP group.  Up to 0.7.7 the renderer
+looked for `Vlan<id>` alone: an AOS-CX or OS10 VLAN interface lost its
+IPv6 addresses, and an OS10 one its VRRP groups (its IPv4 address is
+on its VLAN's record, where those parsers put it).
+
+What AOS-S cannot be given so is left out under a `; review:` line
+where its stanza would be and a warning of the job:
+
+- **One that is shut down** and holds an address or a VRRP group.  An
+  AOS-S VLAN cannot be disabled, and written, the address would be up
+  on the switch -- as it was up to 0.7.7, from every grammar, since
+  the parsers put the address on the VLAN.  Its VLAN's stanza is still
+  written, with its ports and without that address; a pool it served
+  and a route out of it each have a review line of their own.  The job
+  stays `completed`: nothing of it was in force.  One that holds
+  nothing is written as its VLAN, and nothing more is said.
+- **A second interface of one VLAN** (`Vlan30` and `vlan 30` in one
+  tree): an AOS-S VLAN stanza is one interface's.  The one named
+  `vlan<id>` with no space, in any letter case, is written, and
+  otherwise the first.  One that cannot be renamed `Vlan<id>`, another
+  interface having that name in some letter case, is left out the
+  same way.
+
+An interface whose name only begins `vlan` -- a FortiOS loopback
+called `vlan-guest` or `VLAN30`, a RouterOS bridge called `vlanbr` --
+is no VLAN's: its type says so, and on those platforms a name is free
+text, so its shape vouches for nothing.  It is written as every name
+AOS-S has no form for is, `interface <name>` with what it holds, for a
+reviewer to see.  Up to 0.7.7 it was left out of the output with its
+addresses, and nothing said so.  Guarded by
+`tests/unit/migration/codecs/aruba_aoss/test_a_vlan_interface_of_its_grammar.py`,
+which sends each form from each grammar through the plan path and
+reads the output as text and with the AOS-S parser.
 
 ## Lossy paths
 
