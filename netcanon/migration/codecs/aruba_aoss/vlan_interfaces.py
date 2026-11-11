@@ -85,6 +85,18 @@ An interface whose name begins ``vlan`` and that no VLAN stanza takes
 ``vlanbr``) is not one of these: the renderer writes it as it writes
 every other name of no AOS-S form, with what it holds.
 
+A unit of a port or a LAG of AOS-S that has no 802.1Q tag (``2.100``,
+``Trk1.100``: the name the port translator gives a unit it sends after
+its port, or an entry of the port map) is not written either: AOS-S
+has no form for a unit of a port, and writes one only as the VLAN of
+its tag.  Where it holds an address, a VRRP group, a description or an
+MTU, a ``; review:`` line and a warning say so; one that holds none of
+them loses nothing, and nothing is said.  Written, it was ``interface
+2.100``, a name AOS-S has no form for, with its address.  The AOS-CX
+and OS10 parsers read no tag for a sub-interface, so each of theirs is
+such a unit.  A unit of a name of no AOS-S form (``ge-0/0/2.100``, left
+as the source has it) is written as every such name is, for a reviewer.
+
 An interface in a VRF is written without it, as the renderer writes
 every other interface of a VRF (a ``Vlan<id>`` of IOS-XE among them):
 AOS-S has no VRF, and ``/interfaces/interface/config/vrf`` is declared
@@ -103,6 +115,7 @@ from ..._vlan_labels import NAMES_A_VLAN_AFTER_ITS_INTERFACE
 from ...canonical.intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 from ...canonical.port_names import rewrite_port_names, split_unit
 from ...limits import ticked
+from .port_names import classify_port_name
 
 #: A name that encodes a VLAN's id, and the id: ``Vlan10`` /
 #: ``vlan10`` (Cisco and generic), and a unit of a VLAN device or of a
@@ -177,8 +190,11 @@ class Prepared:
         review: For each interface that is refused, by its name in
             :attr:`tree`: the ``; review:`` line written where its
             stanza would be.
-        not_a_vlan: The refused names, in lower case: no reading of a
-            VLAN id from a name may take one of them.
+        not_a_vlan: The refused names, in lower case, and those of the
+            units of a port with no tag that are written nowhere and
+            said nowhere (they hold nothing): no reading of a VLAN id
+            from a name may take one of them, and the renderer writes
+            no stanza of theirs.
         warnings: One warning of the job for each sub-interface written
             as a VLAN and for each interface refused.
         as_vlans: The names in :attr:`tree`, in lower case, of the
@@ -424,6 +440,36 @@ def _one_interface_each(
     return final
 
 
+#: The kinds of name (:func:`.port_names.classify_port_name`) whose
+#: unit is a unit of a port: a port or a LAG of AOS-S.
+_PORT_KINDS = frozenset({"physical", "lag"})
+
+
+def _units_with_no_tag(
+    tree: CanonicalIntent, taken: set[int],
+) -> tuple[list[_Decision], set[str]]:
+    """Each interface of *tree* that is a unit of a port or a LAG of
+    AOS-S and has no 802.1Q tag, of those :func:`_decide` did not decide
+    (*taken*, by index): those that hold an address, a VRRP group, a
+    description or an MTU, refused, as decisions; and the names of all
+    of them, in lower case.  AOS-S has no form for a unit of a port."""
+    refused: list[_Decision] = []
+    names: set[str] = set()
+    for index, iface in enumerate(ticked(tree.interfaces)):
+        if index in taken or iface.dot1q_vlan is not None:
+            continue
+        unit = split_unit(iface.name)
+        if unit is None or classify_port_name(unit[0]).kind not in _PORT_KINDS:
+            continue
+        names.add(iface.name.lower())
+        if _holds_something(iface) or iface.description or iface.mtu is not None:
+            refused.append((index, None, (
+                f"is a unit of {unit[0]} with no 802.1Q tag read for it, and "
+                f"AOS-S writes a unit of a port only as the VLAN of its tag"
+            ), False))
+    return refused, names
+
+
 def _the_svis(
     tree: CanonicalIntent, svis: list[tuple[int, int]],
 ) -> tuple[list[_Decision], list[tuple[int, int]], list[tuple[int, int]]]:
@@ -513,11 +559,16 @@ def prepare(tree: CanonicalIntent) -> Prepared:
     :attr:`Prepared.tree` is a copy.
     """
     decided, by_its_name, svis = _decide(tree)
-    if not decided and not svis:
+    units_refused, units = _units_with_no_tag(
+        tree, {d[0] for d in decided} | {index for index, _vid in svis},
+    )
+    if not decided and not svis and not units:
         return Prepared(tree)
     svis_refused, svis_written, svis_stripped = _the_svis(tree, svis)
     review: dict[str, str] = {}
-    refused: set[str] = set()
+    # A unit of a port with no tag is written nowhere, and said where it
+    # holds something (``units_refused``).
+    refused: set[str] = set(units)
     warnings: list[str] = []
     renames: dict[str, str] = {
         tree.interfaces[index].name: f"Vlan{vid}"
@@ -526,7 +577,9 @@ def prepare(tree: CanonicalIntent) -> Prepared:
     }
     written: list[tuple[int, int, str]] = []
     as_vlans: set[str] = set()
-    every = [*_one_interface_each(tree, decided, by_its_name), *svis_refused]
+    every = [
+        *_one_interface_each(tree, decided, by_its_name), *svis_refused, *units_refused,
+    ]
     for index, vid, why, sub in every:
         iface = tree.interfaces[index]
         if why or vid is None:      # (a VLAN interface of no one VLAN has a reason)

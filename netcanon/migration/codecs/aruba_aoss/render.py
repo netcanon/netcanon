@@ -1168,7 +1168,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     for iface in tree.interfaces:
         lname = iface.name.lower()
         # An interface that stands for a VLAN and cannot be written as
-        # one: its review line, once, where its stanza would be.
+        # one, or a unit of a port with no tag, which AOS-S has no form
+        # for: its review line, once, where its stanza would be (none for
+        # a unit that holds nothing).
         if lname in prepared.not_a_vlan:
             if lname not in reviewed and iface.name in prepared.review:
                 reviewed.add(lname)

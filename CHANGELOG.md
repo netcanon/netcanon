@@ -1349,6 +1349,23 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A unit of a port that has no 802.1Q tag is not written onto AOS-S
+  as `interface <port>.<unit>`.**  AOS-S has no form for a unit of a
+  port, and writes a sub-interface as the VLAN of its tag; a unit
+  with no tag -- every AOS-CX and OS10 sub-interface, whose parsers
+  read no tag, or a unit whose config states none -- went after its
+  port as `2.100` or `Trk1.100` and was written `interface 2.100`
+  with its address, a name AOS-S has no form for.  It is now left out:
+  where it holds an address, a VRRP group, a description or an MTU,
+  under a `; review:` line where its stanza would be and a warning of
+  the job; otherwise nothing of it is lost, and nothing is said.  A
+  route out of it has a review line of its own, as before.  A unit of
+  a name of no AOS-S form (`ge-0/0/2.100`, where the port was not
+  translated) is still written as every such name is, for a reviewer.  With no
+  devices declared, or where an entry of the port map names the unit,
+  the job is not held for it: the review line and a warning say it
+  (Known limitations).  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`.
 - **A VLAN interface is written onto AOS-S whatever its grammar calls
   it, and an interface whose name only begins `vlan` is written at
   all.**  AOS-S writes a VLAN interface's addresses and VRRP groups in
@@ -6737,7 +6754,11 @@ timestamp if your timezone matters for an audit.
   or two OS10 configs, the same tag is lost — as it is on every
   path, and as it was — and there nothing in the job says so.  A
   target with no routed
-  sub-interface gets an interface named `<port>.<unit>`.  Some
+  sub-interface gets an interface named `<port>.<unit>`, but for
+  AOS-S, which leaves such a unit out under a `; review:` line where
+  it holds something; with no devices declared the job is not
+  `partial` for it either way, nor onto AOS-S where an entry of the
+  port map names the unit.  Some
   firewall pseudo-interfaces the source codec does not
   classify are reported as off-inventory, and onto another vendor a
   FortiGate's stock `fortilink` aggregate is reported as displaced or
