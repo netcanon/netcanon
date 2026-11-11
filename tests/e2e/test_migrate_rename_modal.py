@@ -445,13 +445,16 @@ _JUNOS_ONLY_A_LOOPBACK = (
     "set interfaces lo0 unit 0 family inet address 192.0.2.1/32\n"
 )
 
-#: A VyOS router with a port, its loopback and a dummy interface.  On
-#: RouterOS the loopback is ``lo``, and the dummy is written ``lo`` too.
-_VYOS_LO_AND_A_DUMMY = (
-    "set system host-name r1\n"
-    "set interfaces ethernet eth0 address 10.1.0.1/24\n"
-    "set interfaces loopback lo address 192.0.2.1/32\n"
-    "set interfaces dummy dum0 address 192.0.2.2/32\n"
+#: A RouterOS 7 router with an address on its own loopback, ``lo``, and
+#: on an empty bridge ``loopback0``.  On VyOS both are loopback 0, which
+#: is ``lo`` there too: ``lo`` keeps its name and the bridge is put on it.
+_ROS_LO_AND_A_BRIDGE_LOOPBACK = (
+    "# 2026-01-01 00:00:00 by RouterOS 7.18.2\n"
+    "/interface bridge\n"
+    "add name=loopback0\n"
+    "/ip address\n"
+    "add address=192.0.2.1/32 interface=lo network=192.0.2.1\n"
+    "add address=192.0.2.2/32 interface=loopback0 network=192.0.2.2\n"
 )
 
 #: An EOS port-channel with two members.
@@ -682,19 +685,23 @@ class TestRenameModalNamesThatAreNoPort:
     def test_a_warning_quoting_one_is_on_its_row(
         self, page: Page, live_server_url: str,
     ):
-        """VyOS to RouterOS: the dummy ``dum0`` is put on ``lo``,
-        which is the loopback's name there too, and the job warns
-        that two names share it.  The name the warning quotes is
+        """RouterOS to VyOS: the bridge ``loopback0`` is put on
+        ``lo``, which is the loopback's name there too, and the job
+        warns that two names share it.  The name the warning quotes is
         where a rename ENDS, and such a name is taken for a target's
         and given no row -- unless the job says it is a source name,
         which for a loopback only the list of names that are no
         port does.  (A Junos unit of ``lo0`` was this example, and is
-        a loopback of its own now.)"""
-        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
+        a loopback of its own now; and then VyOS ``lo`` and ``dum0``
+        onto RouterOS, where a loopback of another vendor is
+        ``loopback<N>`` now.)"""
+        _open_modal_on(
+            page, live_server_url, "mikrotik_routeros", "vyos", _ROS_LO_AND_A_BRIDGE_LOOPBACK,
+        )
         row = page.locator(_tid("migrate-rename-row-lo"))
         expect(row).to_have_count(1)
         expect(row).to_have_class(re.compile(r"\bhas-warning\b"))
-        expect(page.locator(_tid("migrate-rename-row-dum0"))).to_have_count(1)
+        expect(page.locator(_tid("migrate-rename-row-loopback0"))).to_have_count(1)
 
     def test_the_rail_counts_its_row(self, page: Page, live_server_url: str):
         _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
@@ -781,15 +788,17 @@ class TestRenameModalNamesThatAreNoPort:
     def test_a_fusion_nobody_typed_holds_nothing(
         self, page: Page, live_server_url: str,
     ):
-        """VyOS to RouterOS once more: the translator itself puts
-        ``dum0`` on ``lo``, which keeps its name.  That is the job
+        """RouterOS to VyOS once more: the translator itself puts
+        ``loopback0`` on ``lo``, which keeps its name.  That is the job
         as it came back, and its row carries the warning.  It is not
         counted as a collision, though a name that keeps its name is
         tallied: only against an entry of the operator's own, or
         Apply would be held before anything was typed, and every
         other edit with it."""
-        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
-        expect(page.locator(_tid("migrate-rename-auto-dum0"))).to_have_text("lo")
+        _open_modal_on(
+            page, live_server_url, "mikrotik_routeros", "vyos", _ROS_LO_AND_A_BRIDGE_LOOPBACK,
+        )
+        expect(page.locator(_tid("migrate-rename-auto-loopback0"))).to_have_text("lo")
         summary = page.locator(_tid("migrate-rename-summary"))
         expect(summary).to_contain_text("auto")
         expect(summary).not_to_contain_text("collision")
@@ -1250,12 +1259,14 @@ class TestRenameModalNamesNotSettled:
     def test_an_apply_that_settles_nothing(
         self, page: Page, live_server_url: str,
     ):
-        """VyOS to RouterOS: ``dum0`` is put on ``lo``, which keeps
-        its name.  Nothing holds Apply; pressed with nothing decided,
-        it comes back as it went, and the footer does not say
+        """RouterOS to VyOS: ``loopback0`` is put on ``lo``, which
+        keeps its name.  Nothing holds Apply; pressed with nothing
+        decided, it comes back as it went, and the footer does not say
         "Rendered output refreshed" over a job that is still not
         settled."""
-        _open_modal_on(page, live_server_url, "vyos", "mikrotik_routeros", _VYOS_LO_AND_A_DUMMY)
+        _open_modal_on(
+            page, live_server_url, "mikrotik_routeros", "vyos", _ROS_LO_AND_A_BRIDGE_LOOPBACK,
+        )
         strip = _strip(page)
         assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
             "1 name of the output given more than one source name"
@@ -1267,11 +1278,11 @@ class TestRenameModalNamesNotSettled:
         expect(strip).to_be_visible()
         assert "status: partial" in _status_line(page)
         # A name of its own settles it.
-        override = page.locator(_tid("migrate-rename-override-dum0"))
+        override = page.locator(_tid("migrate-rename-override-loopback0"))
         override.click()
-        override.press_sequentially("lo1")
+        override.press_sequentially("dum1")
         override.press("Tab")
-        assert _apply(page)["port_rename_map"] == {"dum0": "lo1"}
+        assert _apply(page)["port_rename_map"] == {"loopback0": "dum1"}
         expect(strip).to_be_hidden()
         assert "status: completed" in _status_line(page)
 

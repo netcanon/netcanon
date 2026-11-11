@@ -31,6 +31,12 @@ IOS-XE ``name``, an OPNsense ``<descr>``).  Where the interface has a
 description of its own, the VLAN's label is written in a ``# review:``
 line above it.
 
+A loopback is an empty bridge, ``loopback<N>``, except ``lo``: the
+loopback RouterOS 7.14 and later has of its own, which no line can add
+(:func:`_is_system_lo`).  Its addresses are put on it as they are, and
+what no line says of it (a description; that it is disabled) is said in
+a ``# review:`` line and a warning (:func:`system_lo_notes`).
+
 Shared name/type helpers (``_is_vlan_name`` and the like) live in
 :mod:`.parse`, and which names are factory port names in
 :mod:`.port_names`; both are imported here — the README's split-codec
@@ -334,8 +340,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         i for i in tree.interfaces
         if i.interface_type == "ianaift:bridge"
     ]
-    # Loopback interfaces in RouterOS have no native primitive --
-    # the documented idiom is an empty bridge with no slaves
+    # RouterOS 6 has no loopback interface, and 7.14 and later has one
+    # only, ``lo`` -- the documented idiom for a loopback is an empty
+    # bridge with no slaves
     # (RouterOS community wiki at
     # https://wiki.mikrotik.com/wiki/Manual:Creating_IPv6_loopback_address
     # plus the RouterOS Bridging+Switching docs at
@@ -349,9 +356,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # bridge declaration up front means the ``/ip address`` row
     # binds to a real interface.  Phase 4b cisco_iosxe (NETCONF)
     # cross-vendor finding.
+    #
+    # Not ``lo``: RouterOS 7.14 and later has a loopback of its own by
+    # that name, which a bridge cannot be added under
+    # (:func:`_is_system_lo`).
     loopback_ifaces = [
         i for i in tree.interfaces
-        if _is_loopback_type(i)
+        if _is_loopback_type(i) and not _is_system_lo(i)
     ]
     # Cross-vendor sources (Cisco / Junos / OPNsense / FortiGate)
     # don't model an L2 software-bridge primitive the way RouterOS
@@ -466,6 +477,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if needs_synthetic_bridge1 and "bridge1" not in emitted_bridge_names:
             lines.append("add name=bridge1")
             emitted_bridge_names.add("bridge1")
+        lines.append("")
+    # ``lo`` is written no line of its own, so what no line says of it
+    # is said here, as it is in the job's warnings.
+    lo_notes = system_lo_notes(tree)
+    if lo_notes:
+        lines.extend(review for review, _ in lo_notes)
         lines.append("")
     # The VLAN children below bind to whichever parent we resolved.
     # Synthetic bridge1 wins only when no source-side parent was
@@ -735,6 +752,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # ----- /ip address -----
     ip_rows: list[tuple[str, int, str]] = []  # (ip, prefix, iface)
     for iface in tree.interfaces:
+        if _lo_held_down(iface):
+            continue
         for addr in iface.ipv4_addresses:
             ip_rows.append((addr.ip, addr.prefix_length, iface.name))
     ip_rows.extend(vrrp_v4_rows)
@@ -754,6 +773,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # ----- /ipv6 address (GAP-EVPN-3) -----
     ip6_rows: list[tuple[str, int, str]] = []
     for iface in tree.interfaces:
+        if _lo_held_down(iface):
+            continue
         for v6 in iface.ipv6_addresses:
             ip6_rows.append((v6.ip, v6.prefix_length, iface.name))
     ip6_rows.extend(vrrp_v6_rows)
@@ -1156,6 +1177,66 @@ def _is_loopback_type(iface: Any) -> bool:
     if iface.interface_type in _LOOPBACK_TYPES:
         return True
     return bool(_LOOPBACK_NAME_RE.match(iface.name))
+
+
+def _is_system_lo(iface: Any) -> bool:
+    """Return True for ``lo``, the loopback RouterOS 7.14 and later has
+    of its own (7.14beta: "system - expose "lo" interface").
+
+    It cannot be added or removed, and no other interface can take its
+    name, so it is written no ``/interface bridge`` line: an address is
+    put on it as it stands.  RouterOS 6 shows no ``lo``, and the port
+    translator writes any other loopback ``loopback<N>``
+    (:func:`.port_names.format_port_identity`), so only a ``lo`` of a
+    RouterOS config, or one an operator's entry names, reaches here.  A
+    bridge a config names ``lo`` is a bridge, and is written as one.
+    """
+    return iface.name == "lo" and iface.interface_type != "ianaift:bridge"
+
+
+def _lo_held_down(iface: Any) -> bool:
+    """Return True for a ``lo`` the source holds disabled: no line
+    disables RouterOS's own, so its addresses are left out rather than
+    put into service (:func:`system_lo_notes` says so)."""
+    return _is_system_lo(iface) and not iface.enabled
+
+
+def system_lo_notes(tree: Any) -> list[tuple[str, str]]:
+    """What the output cannot say of ``lo`` (:func:`_is_system_lo`), as
+    pairs of a ``# review:`` line and the job's warning for it.
+
+    ``lo`` is written no line of its own, so its description is not
+    written, and a ``lo`` the source holds disabled cannot be disabled:
+    its addresses are left out.
+
+    Returns:
+        One pair for a description, and one for a disabled ``lo``.
+    """
+    notes: list[tuple[str, str]] = []
+    for iface in getattr(tree, "interfaces", None) or []:
+        if not _is_system_lo(iface):
+            continue
+        if iface.description:
+            notes.append((
+                "# review: lo is the loopback RouterOS 7.14 and later has "
+                "of its own, and is written no line; its description in "
+                "the source is not written",
+                "lo is the loopback RouterOS 7.14 and later has of its "
+                "own, and is written no line, so its description in the "
+                "source is not written; a review line in the output says so.",
+            ))
+        if not iface.enabled:
+            held = bool(iface.ipv4_addresses or iface.ipv6_addresses)
+            left_out = "; its addresses are left out" if held else ""
+            notes.append((
+                "# review: lo is disabled in the source, and no line "
+                "disables the loopback RouterOS 7.14 and later has of its "
+                f"own{left_out}",
+                "lo is disabled in the source, and no line disables the "
+                f"loopback RouterOS 7.14 and later has of its own{left_out}; "
+                "a review line in the output says so.",
+            ))
+    return notes
 
 
 def _is_tunnel_type(iface: Any) -> bool:

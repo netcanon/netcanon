@@ -76,8 +76,10 @@ back to the rename-mesh-chosen interface name and emits a positional
 binding post-migration.
 
 An AOS-S loopback is written onto RouterOS as the RouterOS codec
-writes every loopback: an empty bridge holding its address
-(`loopback 0` is the bridge `lo`).  The other direction is in
+writes every loopback of another vendor: an empty bridge holding its
+address (`loopback 0` is the bridge `loopback0`).  It is not `lo`:
+RouterOS 7.14 and later has a `lo` of its own, which no interface can
+be added under.  The other direction is in
 `mikrotik_routeros_to_aruba_aoss/interface_naming.md`.
 
 ### Disposition

@@ -42,8 +42,9 @@ attribute — NOT the `name=` attribute.  The `name=` attribute is
 the wire identity (e.g. `ether1`, `bond1`, `vlan100`) and is
 constrained to RouterOS's naming rules.
 
-Loopback emulation: RouterOS has no first-class loopback
-concept.  Conventional form is an empty `/interface bridge` with
+Loopback emulation: RouterOS 6 has no first-class loopback
+concept, and 7.14 and later has one only, the system's `lo`, which
+the codec reads as loopback 0.  Conventional form for any other is an empty `/interface bridge` with
 no port members, plus `/ip address add address=10.255.0.1/32
 interface=loopback-bridge`.
 

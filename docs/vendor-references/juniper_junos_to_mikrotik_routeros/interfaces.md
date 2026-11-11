@@ -59,8 +59,8 @@ RouterOS uses flat factory-default names (`ether1` / `ether2` / ...,
 form keeps configuration stable across renames.  Speed is not
 encoded in the prefix.  IPv4 / IPv6 addresses are top-level
 `/ip address` and `/ipv6 address` records (NOT per-interface
-sub-stanzas).  RouterOS has no first-class loopback construct —
-operators emulate via empty bridges or via addresses on a virtual
+sub-stanzas).  RouterOS 6 has no first-class loopback construct, and 7.14 and
+later has one only, the system's `lo` — operators emulate via empty bridges or via addresses on a virtual
 interface.  IPv6 link-local addresses are auto-detected from prefix
 (`fe80::/10`); explicit declaration is uncommon.
 
@@ -87,7 +87,9 @@ interface.  IPv6 link-local addresses are auto-detected from prefix
 * Loopback (`lo0`): no first-class RouterOS equivalent; cross-pair
   drops to lossy (RouterOS render emulates via an empty bridge with
   a /32 address, or attaches the address to an existing physical
-  interface as a secondary).
+  interface as a secondary).  The codec writes `lo0` as the empty
+  bridge `loopback0`: RouterOS 7.14 and later has a `lo` of its own,
+  which no interface can be added under.
 * Management interfaces (`em0` / `fxp0`): no RouterOS equivalent
   (RouterOS has no out-of-band / management VRF distinction); fall
   back to a regular `/interface ethernet` record.

@@ -411,6 +411,22 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   both devices declared the plan lists such a port (`unbound_ports`)
   and the job is `partial`; without, nothing is reported.  Give the
   port another name.
+- **`lo` is RouterOS's own loopback, from 7.14.**  Every router of
+  7.14 or later has an interface `lo` that cannot be removed, and no
+  interface can be added under its name.  So the renderer writes no
+  line for a `lo` and puts its addresses on it, and a loopback from
+  another vendor (an IOS `Loopback0`, a Junos `lo0`, a VyOS `lo`) is
+  the empty bridge `loopback<N>`, which loads on 6 and on 7.  What no
+  line can say of `lo` -- its description, that it is disabled -- is
+  a `# review:` line and a warning, and the addresses of a `lo` the
+  source holds disabled are left out rather than put into service.  A
+  bridge a config names `lo` (a RouterOS 6 config can have one) is
+  written as a bridge.  RouterOS 6 has no `lo`, so an output with
+  addresses on it -- from a RouterOS 7 config -- needs a bridge of
+  that name before a 6.x router takes it.  An output of 0.7.7 or
+  earlier has `add name=lo` under `/interface bridge`, which 7.14 and
+  later refuses: see
+  [TROUBLESHOOTING](../TROUBLESHOOTING.md#routeros-refuses-interface-bridge-add-namelo).
 - **A port a config from another vendor names only as a LAG member
   or in a route** (an IOS route's interface that no stanza configures)
   has no interface of its own, and so no line of its own in the

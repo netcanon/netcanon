@@ -27,7 +27,7 @@ RouterOS uses **flat per-product naming**: `etherN` for ethernet, `wlanN` for wi
 
 `mtu=` is a per-port attribute on `/interface ethernet`.  `disabled=yes/no` is the admin flag (inverse of FortiOS `status up/down`).  `comment=` is the human description.
 
-There is no first-class loopback interface family — operators emulate via empty bridges.
+There is no first-class loopback interface family on RouterOS 6, and 7.14 and later has one loopback only, the system's `lo`, which the codec reads as loopback 0 — operators emulate any other via empty bridges.
 
 IPv4 / IPv6 addresses live under separate `/ip address` and `/ipv6 address` tables; CIDR is the wire format on both.  Link-local addresses (`fe80::/64`) appear explicitly in RouterOS source (FortiOS auto-derives them and does not include them in the parsed config).
 

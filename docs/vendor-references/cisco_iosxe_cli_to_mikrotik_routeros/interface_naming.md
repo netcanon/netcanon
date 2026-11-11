@@ -40,7 +40,7 @@ wlan1, wlan2                             (wireless radios)
 bridge1, bridge2                         (software bridges)
 vlan10, vlan20                           (VLAN pseudo-interfaces)
 bond1, bond2                             (bonding / LAG)
-lo (loopback aliasing through bridge)    (no first-class loopback)
+lo                                       (the system loopback, 7.14 and later)
 ```
 
 Operators almost always rename, e.g.

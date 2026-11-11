@@ -107,8 +107,9 @@ declaration — addresses live in `/ip address` / `/ipv6 address`
 sections with `interface=<name>` foreign keys.  Multiple
 addresses per interface are supported.
 
-Loopback emulation: RouterOS has no first-class loopback concept.
-The conventional form is an empty `/interface bridge` with no
+Loopback emulation: RouterOS 6 has no first-class loopback concept,
+and 7.14 and later has one only, the system's `lo`, which no
+interface can be added under.  The conventional form is an empty `/interface bridge` with no
 ports, plus `/ip address add address=10.255.0.1/32
 interface=lo-bridge`.
 

@@ -23,7 +23,9 @@ These tests pin:
 
 1. Loopback iface emits a dedicated ``/interface bridge add
    name=<name>`` declaration (RouterOS empty-bridge idiom for
-   loopback -- no native loopback primitive).
+   loopback -- RouterOS 6 has no loopback interface, and the one
+   7.14 and later has, ``lo``, is pinned in
+   ``test_the_system_loopback.py``).
 2. GRE / tunnel iface emits a dedicated ``/interface gre add
    name=<name> remote-address=0.0.0.0`` declaration with a review
    comment about the placeholder endpoint (canonical model has no
