@@ -355,6 +355,8 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
 - **VLANs are sub-interfaces.**  There is no VLAN database — a tagged
   VLAN appears as `encapsulation dot1q <vid>` on a sub-interface and
   is synthesised into the canonical VLAN id-list (no port membership).
+  Onto AOS-S, which writes a sub-interface as the VLAN of its tag, the
+  VLAN of a sub-interface it leaves out is not written either.
 - **SP routing is Tier-3.**  BGP / OSPF / IS-IS / MPLS / route-policy
   are surfaced on the migrate banner but never auto-rendered — every
   fixture's routing stanzas show up there.

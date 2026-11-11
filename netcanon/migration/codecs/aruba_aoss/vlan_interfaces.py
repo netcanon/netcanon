@@ -75,7 +75,11 @@ or as another sub-interface, rides on no port AOS-S can tag (a VLAN,
 a loopback, another unit, or a name an unquoted port list cannot
 hold), or where another interface already stands for its VLAN.  A VLAN record of its
 tag that holds nothing (the IOS XR parser makes one for each tag a
-sub-interface states) is the VLAN it is written as.  A VLAN interface
+sub-interface states) is the VLAN it is written as; where every
+sub-interface that carries its VLAN is refused, such a record is not
+written at all (:data:`_VLANS_ARE_ITS_TAGS`), for it states nothing the
+config said: written, it was a ``vlan <id>`` stanza of nothing, a VLAN
+the switch would make and no port is in.  A VLAN interface
 is refused where it is disabled, is named by more than one VLAN record,
 has the label of more than one, is named by none and has the label of
 none, or where another interface stands for its VLAN.
@@ -149,6 +153,15 @@ _SVI_TYPES = frozenset({"ianaift:l3ipvlan", "ianaift:l2vlan"})
 #: the interface is described by its zone's.  Measured, not assumed:
 #: ``test_an_interface_that_stands_for_a_vlan.py`` parses each.
 _ONE_LABEL = frozenset({"fortigate", "mikrotik_routeros"})
+
+#: The platforms (``CanonicalIntent.source_vendor``) whose parser makes
+#: a VLAN record of each 802.1Q tag a sub-interface states, and of
+#: nothing else: IOS XR has no VLAN stanza, and its parser gives each
+#: tag a record with no name and no port, so that a target of VLANs is
+#: given the ids.  Such a record, as the parser made it, states nothing
+#: of its own (:func:`_records_of_refused_tags`).  Measured, not
+#: assumed: ``test_an_interface_that_stands_for_a_vlan.py`` parses each.
+_VLANS_ARE_ITS_TAGS = frozenset({"cisco_iosxr"})
 
 #: The name AOS-S has for a VLAN's interface, and the id.  Read of a
 #: VLAN interface on a parent that no record links to its VLAN: only an
@@ -510,10 +523,41 @@ def _the_svis(
     return refused, written, stripped
 
 
+def _records_of_refused_tags(
+    tree: CanonicalIntent, every: list[_Decision],
+    by_its_name: dict[int, list[str]], svis_written: list[tuple[int, int]],
+) -> frozenset[int]:
+    """The VLANs of *tree* whose record its parser made of a
+    sub-interface's tag (:data:`_VLANS_ARE_ITS_TAGS`), is as the parser
+    made it (no name and nothing else), and that nothing else stands
+    for: every sub-interface that carries the VLAN is refused (*every*),
+    no other interface is written as it (*every*, *svis_written*) or
+    named after it (*by_its_name*), and no port of the tree names it.
+    Written, each was a ``vlan <id>`` stanza of nothing."""
+    if tree.source_vendor not in _VLANS_ARE_ITS_TAGS:
+        return frozenset()
+    refused = {vid for _index, vid, why, sub in every if sub and why and vid is not None}
+    held = {vid for _index, vid, why, sub in every if vid is not None and not (sub and why)}
+    held.update(vid for _index, vid in svis_written)
+    held.update(by_its_name)
+    candidates = refused - held
+    if not candidates:
+        return frozenset()
+    for iface in ticked(tree.interfaces):
+        named = {iface.access_vlan, iface.trunk_native_vlan, iface.voice_vlan}
+        if candidates & named or not candidates.isdisjoint(iface.trunk_allowed_vlans):
+            candidates -= named | set(iface.trunk_allowed_vlans)
+    return frozenset(
+        vlan.id for vlan in ticked(tree.vlans)
+        if vlan.id in candidates and vlan == CanonicalVlan(id=vlan.id, name="")
+    )
+
+
 def _written(
     tree: CanonicalIntent, renames: dict[str, str],
     written: list[tuple[int, int, str]],
     svis: tuple[list[int], list[tuple[int, int]]] = ([], []),
+    unwritten: frozenset[int] = frozenset(),
 ) -> CanonicalIntent:
     """A copy of *tree* with each name of *renames* renamed everywhere,
     and each sub-interface of *written* (index, VLAN id, port) untagged
@@ -521,8 +565,12 @@ def _written(
     *svis* are the VLANs whose interface of its grammar is written and
     has no record, each given one; and the VLAN interfaces of their
     grammar refused for being disabled (index, VLAN id), each of whose
-    addresses comes off every record of its VLAN."""
+    addresses comes off every record of its VLAN.  The records of the
+    VLANs of *unwritten* (:func:`_records_of_refused_tags`) are taken
+    out."""
     out = tree.model_copy(deep=True)
+    if unwritten:
+        out.vlans = [vlan for vlan in out.vlans if vlan.id not in unwritten]
     if renames:
         rewrite_port_names(out, lambda name: renames.get(name, name), units=False)
     of_id: dict[int, CanonicalVlan] = {}
@@ -605,8 +653,9 @@ def prepare(tree: CanonicalIntent) -> Prepared:
         vid for index, vid in svis_written
         if vid not in ids and _holds_something(tree.interfaces[index])
     })
-    if renames or written or records_made or svis_stripped:
-        tree = _written(tree, renames, written, (records_made, svis_stripped))
+    unwritten = _records_of_refused_tags(tree, every, by_its_name, svis_written)
+    if renames or written or records_made or svis_stripped or unwritten:
+        tree = _written(tree, renames, written, (records_made, svis_stripped), unwritten)
     as_vlans.update(f"vlan{vid}" for _index, vid in svis_written)
     return Prepared(
         tree, review, frozenset(refused), tuple(warnings), frozenset(as_vlans),

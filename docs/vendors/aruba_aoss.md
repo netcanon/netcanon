@@ -333,7 +333,10 @@ OPNsense device whose VLAN has a label, one an entry of the port map
 named for no VLAN); and either where another interface already stands
 for its VLAN.  A
 route out of one that is left out is not written either, and its own
-review line says so.
+review line says so.  From IOS XR, which has no VLAN stanza and whose
+parser makes a VLAN of each tag, the VLAN of a sub-interface that is
+left out is not written either, unless something written carries it:
+up to 0.7.7 it was an empty `vlan <id>` stanza.
 
 A unit of a port or a LAG that has no 802.1Q tag is not written
 either.  Every AOS-CX and OS10 sub-interface is one, since those

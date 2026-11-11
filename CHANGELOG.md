@@ -1349,6 +1349,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface of IOS XR that AOS-S leaves out leaves no empty
+  VLAN behind.**  IOS XR has no VLAN stanza, and its parser gives each
+  802.1Q tag a sub-interface states a VLAN record with no name and no
+  port, so that a target of VLANs is given the ids.  Onto AOS-S, a
+  sub-interface that cannot be written (disabled, two tags, VLAN 1, or
+  the same tag as another sub-interface) was left out under a
+  `; review:` line, and its VLAN was still written as `vlan 100` and
+  `exit`: a VLAN the switch would make and no port is in.  Such a
+  record, as the parser made it, is now written only where something
+  written carries its VLAN.  A VLAN the config states (any other
+  platform's `vlan` stanza) is written as before.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`,
+  which also measures which parsers make a VLAN of a tag.
 - **A unit of a port that has no 802.1Q tag is not written onto AOS-S
   as `interface <port>.<unit>`.**  AOS-S has no form for a unit of a
   port, and writes a sub-interface as the VLAN of its tag; a unit
