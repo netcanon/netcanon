@@ -8,7 +8,9 @@ a RouterOS VLAN interface ``vlan10`` that carries VLAN 20 put its address
 on VLAN 10 -- in jobs that said nothing of either.  Now a sub-interface
 is VLAN <tag>, tagged on its port, with its addresses, and a VLAN
 interface its parser links to its VLAN record by name is that record's
-VLAN; what cannot be written so is left out under a ``; review:`` line.
+VLAN -- or, where the VLAN is called by its label on AOS-S, the VLAN of
+the label it carries; what cannot be written so is left out under a
+``; review:`` line.
 
 The sources are typed by hand, one per grammar that states a
 sub-interface, each with a unit whose number is not its tag, and sent
@@ -18,6 +20,8 @@ parser; and each check is handed the defect it is for.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -33,6 +37,7 @@ from netcanon.migration.codecs.aruba_aoss import vlan_interfaces
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
+from tests.unit.migration.test_vlan_members_reach_the_output import _captures
 
 pytestmark = pytest.mark.unit
 
@@ -559,4 +564,194 @@ class TestAVlanInterfaceItsRecordNames:
             ["add address=10.20.0.1/24 interface=vlan10"],
         )
         out = _job("mikrotik_routeros", text, {}).rendered
+        assert _on(out, "10.20.0.1") != ["Vlan20"]
+
+
+#: RouterOS VLAN interfaces whose names say each other's VLAN, each with
+#: a label: ``vlan10`` carries VLAN 20 and is labelled ``Users``.
+_ROS_LABELLED = _ros(
+    ['add comment="Users" interface=bridge1 name=vlan10 vlan-id=20',
+     'add comment="Voice" interface=bridge1 name=vlan20 vlan-id=10'],
+    ["add address=10.20.0.1/24 interface=vlan10", "add address=10.10.0.1/24 interface=vlan20"],
+)
+
+#: The same on a FortiGate's FortiLink, labelled with ``set alias``.
+_FORTILINK_LABELLED = (
+    "config system interface\n"
+    '    edit "fortilink"\n        set vdom "root"\n        set fortilink enable\n'
+    "        set type aggregate\n    next\n"
+    '    edit "vlan10"\n        set vdom "root"\n        set ip 10.20.0.1 255.255.255.0\n'
+    '        set alias "Users"\n        set interface "fortilink"\n        set vlanid 20\n    next\n'
+    '    edit "vlan20"\n        set vdom "root"\n        set ip 10.10.0.1 255.255.255.0\n'
+    '        set alias "Voice"\n        set interface "fortilink"\n        set vlanid 10\n    next\n'
+    "end\n"
+)
+
+#: OPNsense VLAN devices on a bridge whose names say each other's tag,
+#: each with a ``<descr>``: ``vlan0.100`` carries VLAN 200, ``USERS``.
+_OPN_LABELLED = (
+    '<?xml version="1.0"?>\n<opnsense>\n'
+    "  <system><hostname>r1</hostname><domain>example.test</domain></system>\n"
+    "  <interfaces>\n"
+    "    <lan><if>igb1</if><enable>1</enable><ipaddr>192.0.2.1</ipaddr><subnet>24</subnet></lan>\n"
+    "    <opt1><if>vlan0.100</if><enable>1</enable><ipaddr>198.51.100.1</ipaddr>"
+    "<subnet>24</subnet></opt1>\n"
+    "    <opt2><if>vlan0.200</if><enable>1</enable><ipaddr>203.0.113.1</ipaddr>"
+    "<subnet>24</subnet></opt2>\n"
+    "  </interfaces>\n"
+    "  <bridges>\n    <bridged><members>lan</members><bridgeif>bridge0</bridgeif></bridged>\n"
+    "  </bridges>\n"
+    "  <vlans>\n"
+    "    <vlan><if>bridge0</if><tag>200</tag><descr>USERS</descr><vlanif>vlan0.100</vlanif></vlan>\n"
+    "    <vlan><if>bridge0</if><tag>100</tag><descr>VOICE</descr><vlanif>vlan0.200</vlanif></vlan>\n"
+    "  </vlans>\n</opnsense>\n"
+)
+
+_UNKNOWN = "which VLAN it carries is not known here: no VLAN is named after it, nor has its label"
+
+
+class TestAVlanInterfaceByItsLabel:
+    """A VLAN that has a label is called by it on AOS-S, and its record is
+    then named after no interface: where the platform has one label for
+    a VLAN and its interface, the record is found by the label the
+    interface carries; where none is found, the interface is left out
+    and said, never read by the digits of its name.  Read so, each
+    address below went to the other VLAN."""
+
+    @pytest.mark.parametrize(
+        ("source", "text"),
+        [("mikrotik_routeros", _ROS_LABELLED), ("fortigate_cli", _FORTILINK_LABELLED)],
+        ids=["routeros", "fortilink"],
+    )
+    def test_each_is_the_vlan_of_its_label(self, source: str, text: str) -> None:
+        out = _job(source, text, {}).rendered
+        stanzas = _stanzas(out)
+        assert (_on(out, "10.20.0.1"), _on(out, "10.10.0.1")) == (["Vlan20"], ["Vlan10"])
+        assert {'name "Users"', "ip address 10.20.0.1/24"} <= set(stanzas["vlan 20"])
+        assert {'name "Voice"', "ip address 10.10.0.1/24"} <= set(stanzas["vlan 10"])
+        assert not [h for h in stanzas if h.lower().startswith("interface vlan")]
+        assert not [line for line in out.splitlines() if line.startswith("; review: interface vlan")]
+
+    def test_one_that_holds_nothing_is_no_stanza(self) -> None:
+        text = _ros(['add comment="Users" interface=bridge1 name=vlan10 vlan-id=20'], [])
+        out = _job("mikrotik_routeros", text, {}).rendered
+        assert 'name "Users"' in _stanzas(out)["vlan 20"]
+        assert not [h for h in _stanzas(out) if h.startswith("interface ")]
+        assert not [line for line in out.splitlines() if line.startswith("; review: interface")]
+
+    def test_one_label_of_two_vlans_is_left_out(self) -> None:
+        text = _ros(
+            ['add comment="Users" interface=bridge1 name=vlan10 vlan-id=20',
+             'add comment="Users" interface=bridge1 name=vlan20 vlan-id=10'],
+            ["add address=10.20.0.1/24 interface=vlan10", "add address=10.10.0.1/24 interface=vlan20"],
+        )
+        job = _job("mikrotik_routeros", text, {})
+        why = "has the label of VLANs 10, 20, and which of them it carries is not known here"
+        assert _refused_problems(job, "vlan10", why, "10.20.0.1") == []
+        assert _refused_problems(job, "vlan20", why, "10.10.0.1") == []
+
+    def test_an_opnsense_device_with_a_label_is_left_out(self) -> None:
+        """OPNsense labels a VLAN device and the zone on it apart, so
+        nothing links ``vlan0.100`` to its VLAN once that VLAN is called
+        by its label.  The VLANs are written, by their labels."""
+        job = _job("opnsense", _OPN_LABELLED, {})
+        why = f"rides on bridge0, and {_UNKNOWN}"
+        assert _refused_problems(job, "vlan0.100", why, "198.51.100.1") == []
+        assert _refused_problems(job, "vlan0.200", why, "203.0.113.1") == []
+        stanzas = _stanzas(job.rendered)
+        assert 'name "USERS"' in stanzas["vlan 200"]
+        assert 'name "VOICE"' in stanzas["vlan 100"]
+
+    def test_an_entry_that_names_it_for_its_vlan(self) -> None:
+        """An entry of the port map that names it ``Vlan20``, the name
+        AOS-S has for VLAN 20's interface, says its VLAN: the record is
+        still named after the name the entry replaced."""
+        text = _ros(["add interface=bridge1 name=vlan10 vlan-id=20"], ["add address=10.20.0.1/24 interface=vlan10"])
+        out = _job("mikrotik_routeros", text, {"vlan10": "Vlan20"}).rendered
+        assert _on(out, "10.20.0.1") == ["Vlan20"]
+        assert "ip address 10.20.0.1/24" in _stanzas(out)["vlan 20"]
+
+    def test_an_entry_that_names_no_vlan_is_left_out(self) -> None:
+        """Up to 0.7.7 this was ``interface lan`` with the address, a
+        stanza AOS-S has no form for."""
+        text = _ros(["add interface=bridge1 name=vlan10 vlan-id=20"], ["add address=10.20.0.1/24 interface=vlan10"])
+        job = _job("mikrotik_routeros", text, {"vlan10": "lan"})
+        assert _refused_problems(job, "lan", f"rides on bridge1, and {_UNKNOWN}", "10.20.0.1") == []
+
+    def test_the_check_sees_the_link_by_its_label_taken_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(vlan_interfaces, "_ONE_LABEL", frozenset())
+        out = _job("mikrotik_routeros", _ROS_LABELLED, {}).rendered
+        assert (_on(out, "10.20.0.1"), _on(out, "10.10.0.1")) != (["Vlan20"], ["Vlan10"])
+
+    def test_the_check_sees_a_reading_by_its_digits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Handed a reader of the digits of any name, ``vlan0.100`` is
+        VLAN 100, which it does not carry."""
+        monkeypatch.setattr(
+            vlan_interfaces, "_AOSS_VLAN_NAME_RE", re.compile(r"[A-Za-z]+\d*\.?([1-9]\d{0,3})"),
+        )
+        job = _job("opnsense", _OPN_LABELLED, {})
+        assert _refused_problems(job, "vlan0.100", f"rides on bridge0, and {_UNKNOWN}", "198.51.100.1") != []
+
+
+def test_the_platforms_of_one_label() -> None:
+    """``_ONE_LABEL`` is the parsers that read one label as the
+    description of a VLAN and of the interface it is named after, on the
+    committed captures and on the sources typed here; on no tree of
+    theirs does the interface say otherwise.  OPNsense describes the
+    interface by its zone.  The sources are read as well because no
+    FortiOS capture has a VLAN interface on a FortiLink."""
+    same: set[str] = set()
+    apart: set[str] = set()
+    texts = [(codec, path.read_text(encoding="utf-8")) for codec, _rel, path in _captures()]
+    texts += [
+        ("mikrotik_routeros", _ROS_LABELLED), ("fortigate_cli", _FORTILINK_LABELLED),
+        ("opnsense", _OPN_LABELLED),
+    ]
+    for codec, text in texts:
+        tree = get_codec(codec).parse(text)
+        described = {iface.name: iface.description for iface in tree.interfaces}
+        for vlan in tree.vlans:
+            if vlan.description.strip() and vlan.name in described:
+                (same if described[vlan.name] == vlan.description else apart).add(tree.source_vendor)
+    assert same == set(vlan_interfaces._ONE_LABEL)
+    assert not same & apart, same & apart
+
+
+def _on_a_dropped_bridge(comment: str = "") -> str:
+    """RouterOS ``vlan10``, carrying VLAN 20, on a bridge named as
+    RouterOS names its default one: AOS-S has no name for it, and the
+    port translator takes it off the VLAN interface."""
+    return (
+        "/interface bridge\nadd name=bridge\n"
+        "/interface bridge port\nadd bridge=bridge interface=ether2\n"
+        f"/interface vlan\nadd {comment}interface=bridge name=vlan10 vlan-id=20\n"
+        "/ip address\nadd address=10.20.0.1/24 interface=vlan10\n"
+        "/system identity\nset name=r1\n"
+    )
+
+
+class TestOnAParentTheJobDrops:
+    """A VLAN interface whose parent the port translator dropped is found
+    by its record or its label all the same, and never read by its name:
+    read so, ``vlan10`` was VLAN 10's interface of a grammar, and its
+    address went into VLAN 10."""
+
+    @pytest.mark.parametrize("comment", ["", 'comment="Users" '], ids=["named", "labelled"])
+    def test_it_is_the_vlan_it_carries(self, comment: str) -> None:
+        job = _job("mikrotik_routeros", _on_a_dropped_bridge(comment), {})
+        assert job.unresolved_ports == ["bridge"]
+        out = job.rendered
+        assert _on(out, "10.20.0.1") == ["Vlan20"]
+        assert "ip address 10.20.0.1/24" in _stanzas(out)["vlan 20"]
+        assert "vlan 10" not in _stanzas(out)
+        assert not [h for h in _stanzas(out) if h.startswith("interface ")]
+
+    def test_one_that_nothing_links_is_left_out(self) -> None:
+        job = _job("mikrotik_routeros", _on_a_dropped_bridge(), {"vlan10": "lan"})
+        why = f"rides on no port of the output, and {_UNKNOWN}"
+        assert _refused_problems(job, "lan", why, "10.20.0.1") == []
+
+    def test_the_check_sees_it_read_by_its_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(vlan_interfaces, "NAMES_A_VLAN_AFTER_ITS_INTERFACE", frozenset())
+        out = _job("mikrotik_routeros", _on_a_dropped_bridge(), {}).rendered
         assert _on(out, "10.20.0.1") != ["Vlan20"]
