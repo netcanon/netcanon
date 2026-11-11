@@ -34,7 +34,7 @@ from netcanon.migration.canonical.intent import (
 from netcanon.migration.codecs.aruba_aoss import codec as aoss_codec
 from netcanon.migration.codecs.aruba_aoss import render as aoss_render
 from netcanon.migration.codecs.aruba_aoss import vlan_interfaces
-from netcanon.migration.codecs.registry import get_codec
+from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
 from tests.unit.migration.test_vlan_members_reach_the_output import _captures
@@ -885,3 +885,197 @@ class TestAUnitWithNoTag:
         job = _job(source, text, pmap)
         assert "interface 2.100" in _stanzas(job.rendered)
         assert _unit_problems(job, name, port) != []
+
+
+_XR_PORTS = (
+    "hostname r1\ninterface GigabitEthernet0/0/0/1\n!\ninterface GigabitEthernet0/0/0/2\n!\n"
+)
+
+
+def _xr_unit(port: int, unit: int, body: str) -> str:
+    return (
+        f"interface GigabitEthernet0/0/0/{port}.{unit}\n{body}"
+        f" ipv4 address 10.{unit % 250}.{port}.1 255.255.255.0\n!\n"
+    )
+
+
+#: IOS XR sub-interfaces AOS-S leaves out, and the VLAN of each.
+_XR_REFUSED: dict[str, tuple[str, int]] = {
+    "disabled": (_xr_unit(1, 100, " shutdown\n encapsulation dot1q 100\n"), 100),
+    "two tags": (_xr_unit(1, 100, " encapsulation dot1q 100 second-dot1q 200\n"), 100),
+    "VLAN 1": (_xr_unit(1, 1, " encapsulation dot1q 1\n"), 1),
+    "one tag on two ports": (
+        _xr_unit(1, 100, " encapsulation dot1q 100\n") + _xr_unit(2, 100, " encapsulation dot1q 100\n"), 100,
+    ),
+}
+
+#: A sub-interface, as each grammar that has one writes it, with an
+#: 802.1Q tag of 100, and no VLAN stanza.
+_A_TAG_AND_NO_VLAN: dict[str, str] = {
+    "cisco_iosxr": _XR_PORTS + _xr_unit(1, 100, " encapsulation dot1q 100\n") + "end\n",
+    "cisco_iosxe_cli": _IOSXE_PORT + _IOSXE_UNIT.format(body=" encapsulation dot1Q 100\n"),
+    "cisco_nxos": (
+        "hostname r1\ninterface Ethernet1/1\n  no switchport\n"
+        "interface Ethernet1/1.100\n  encapsulation dot1q 100\n  ip address 198.51.100.1/24\n"
+    ),
+    "arista_eos": (
+        "hostname r1\n!\ninterface Ethernet1\n   no switchport\n!\ninterface Ethernet1.100\n"
+        "   encapsulation dot1q vlan 100\n   ip address 198.51.100.1/24\n!\n"
+    ),
+    "aruba_aoscx": _NO_TAG["an AOS-CX unit, whose tag the parser does not read"][1],
+    "dell_os10": (
+        "hostname r1\ninterface ethernet1/1/1\n no switchport\n!\n"
+        "interface ethernet1/1/1.100\n encapsulation dot1q 100\n ip address 198.51.100.1/24\n!\n"
+    ),
+    "juniper_junos": (
+        "set system host-name r1\nset interfaces ge-0/0/1 vlan-tagging\n"
+        "set interfaces ge-0/0/1 unit 100 vlan-id 100\n"
+        "set interfaces ge-0/0/1 unit 100 family inet address 198.51.100.1/24\n"
+    ),
+    "vyos": "set system host-name r1\nset interfaces ethernet eth1 vif 100 address 198.51.100.1/24\n",
+    "fortigate_cli": (
+        'config system interface\n    edit "port1"\n    next\n    edit "v100"\n'
+        '        set interface "port1"\n        set vlanid 100\n'
+        "        set ip 198.51.100.1 255.255.255.0\n    next\nend\n"
+    ),
+    "mikrotik_routeros": (
+        "/interface vlan\nadd interface=ether2 name=vlan100 vlan-id=100\n"
+        "/ip address\nadd address=198.51.100.1/24 interface=vlan100\n"
+    ),
+    "opnsense": (
+        '<?xml version="1.0"?>\n<opnsense>\n'
+        "  <system><hostname>r1</hostname><domain>example.test</domain></system>\n"
+        "  <interfaces>\n"
+        "    <lan><if>igb1</if><enable>1</enable><ipaddr>192.0.2.1</ipaddr><subnet>24</subnet></lan>\n"
+        "    <opt1><if>vlan0.100</if><enable>1</enable><ipaddr>198.51.100.1</ipaddr>"
+        "<subnet>24</subnet></opt1>\n"
+        "  </interfaces>\n"
+        "  <vlans>\n    <vlan><if>igb1</if><tag>100</tag><vlanif>vlan0.100</vlanif></vlan>\n  </vlans>\n"
+        "</opnsense>\n"
+    ),
+}
+
+#: The public codecs with no source above, and why.
+_NO_SUB_INTERFACE_SOURCE: dict[str, str] = {
+    "aruba_aoss": "its grammar has no routed sub-interface",
+    "cisco_iosxe": "its parser reads no sub-interface's tag (the path is unsupported in its matrix)",
+}
+
+
+def _vlan_stanzas(text: str) -> list[str]:
+    return [header for header in _stanzas(text) if header.startswith("vlan ")]
+
+
+class TestAVlanOfARefusedTag:
+    """IOS XR has no VLAN stanza, and its parser makes a VLAN record of
+    each tag a sub-interface states.  A sub-interface AOS-S leaves out
+    left that VLAN written, ``vlan 100`` and ``exit``: a VLAN the
+    switch would make and no port is in."""
+
+    @pytest.mark.parametrize("case", sorted(_XR_REFUSED))
+    def test_is_not_written(self, case: str) -> None:
+        text, vid = _XR_REFUSED[case]
+        assert vid in [vlan.id for vlan in get_codec("cisco_iosxr").parse(_XR_PORTS + text).vlans]
+        job = _job("cisco_iosxr", _XR_PORTS + text + "end\n", {})
+        assert [x for x in job.rendered.splitlines() if x.startswith("; review: interface 0/1.")]
+        assert f"vlan {vid}" not in _vlan_stanzas(job.rendered)
+
+    def test_the_vlan_a_written_one_carries_is_written(self) -> None:
+        """Beside one that is left out: VLAN 200 is written, tagged on its
+        port, and VLAN 100 is not."""
+        text = (
+            _XR_PORTS + _xr_unit(1, 100, " shutdown\n encapsulation dot1q 100\n")
+            + _xr_unit(2, 200, " encapsulation dot1q 200\n") + "end\n"
+        )
+        out = _job("cisco_iosxr", text, {}).rendered
+        assert "vlan 100" not in _vlan_stanzas(out)
+        assert "tagged 0/2" in _stanzas(out)["vlan 200"]
+
+    def test_a_record_that_holds_something_is_written(self) -> None:
+        """As a tree: a record of the tag that is not as the parser makes
+        it (here, a name) says something, and is written."""
+        tree = CanonicalIntent(hostname="r1", source_vendor="cisco_iosxr", vlans=[
+            CanonicalVlan(id=100, name="USERS"),
+        ], interfaces=[
+            CanonicalInterface(name="1"),
+            CanonicalInterface(name="1.100", dot1q_vlan=100, enabled=False, ipv4_addresses=_address(_IP)),
+        ])
+        out, _warnings = _render(tree)
+        assert 'name "USERS"' in _stanzas(out)["vlan 100"]
+
+    def test_a_vlan_an_interface_is_named_after_is_written(self) -> None:
+        """As a tree: ``Vlan100`` stands for VLAN 100 by its name, which
+        is why the sub-interface of tag 100 is left out; the record of the
+        VLAN it stands for is written."""
+        tree = CanonicalIntent(hostname="r1", source_vendor="cisco_iosxr", vlans=[
+            CanonicalVlan(id=100, name=""),
+        ], interfaces=[
+            CanonicalInterface(name="1"),
+            CanonicalInterface(name="1.100", dot1q_vlan=100, ipv4_addresses=_address(_IP)),
+            CanonicalInterface(name="Vlan100", ipv4_addresses=_address("203.0.113.1")),
+        ])
+        out, _warnings = _render(tree)
+        assert [x for x in out.splitlines() if x.startswith("; review: interface 1.100 stands for VLAN 100")]
+        assert "vlan 100" in _vlan_stanzas(out)
+
+    @pytest.mark.parametrize("port", [
+        {"switchport_mode": "access", "access_vlan": 100},
+        {"switchport_mode": "trunk", "trunk_allowed_vlans": [100, 200]},
+    ])
+    def test_a_vlan_a_port_is_in_is_written(self, port: dict[str, object]) -> None:
+        """As a tree: a port in VLAN 100 is in the VLAN of the record,
+        whatever became of the sub-interface of its tag."""
+        tree = CanonicalIntent(hostname="r1", source_vendor="cisco_iosxr", vlans=[
+            CanonicalVlan(id=100, name=""), CanonicalVlan(id=200, name=""),
+        ], interfaces=[
+            CanonicalInterface(name="1"),
+            CanonicalInterface(name="1.100", dot1q_vlan=100, enabled=False, ipv4_addresses=_address(_IP)),
+            CanonicalInterface(name="2", **port),
+        ])
+        out, _warnings = _render(tree)
+        assert [x for x in out.splitlines() if x.startswith("; review: interface 1.100")]
+        assert "vlan 100" in _vlan_stanzas(out)
+
+    def test_a_vlan_another_platform_states_is_written(self) -> None:
+        """An IOS-XE ``vlan 100`` is the config's own: it is written,
+        though the sub-interface of its tag is left out."""
+        text = "vlan 100\n!\n" + _IOSXE_PORT + _IOSXE_UNIT.format(
+            body=" shutdown\n encapsulation dot1Q 100\n",
+        )
+        out = _job("cisco_iosxe_cli", text, _MAP).rendered
+        assert [x for x in out.splitlines() if x.startswith("; review: interface 2.100")]
+        assert "vlan 100" in _vlan_stanzas(out)
+
+    def test_the_check_sees_it_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(vlan_interfaces, "_VLANS_ARE_ITS_TAGS", frozenset())
+        text, vid = _XR_REFUSED["disabled"]
+        out = _job("cisco_iosxr", _XR_PORTS + text + "end\n", {}).rendered
+        assert f"vlan {vid}" in _vlan_stanzas(out)
+
+
+def test_the_platforms_whose_vlans_are_their_tags() -> None:
+    """``_VLANS_ARE_ITS_TAGS`` is the parsers that make a VLAN record of
+    a sub-interface's tag where the config states no VLAN, on the
+    sources typed here, one for each public codec but those named with
+    their reason (the AOS-CX and OS10 parsers read no tag, and are
+    typed all the same); and on every committed capture of theirs, each
+    VLAN record is a tag's, as the parser makes it, and each tag has
+    one."""
+    public = set(list_public_codecs())
+    assert set(_A_TAG_AND_NO_VLAN) | set(_NO_SUB_INTERFACE_SOURCE) == public
+    assert not set(_A_TAG_AND_NO_VLAN) & set(_NO_SUB_INTERFACE_SOURCE)
+    trees = {codec: get_codec(codec).parse(text) for codec, text in _A_TAG_AND_NO_VLAN.items()}
+    tagged = {codec for codec, tree in trees.items() if any(i.dot1q_vlan == 100 for i in tree.interfaces)}
+    assert tagged == set(trees) - {"aruba_aoscx", "dell_os10"}
+    made = {tree.source_vendor for tree in trees.values() if [vlan.id for vlan in tree.vlans] == [100]}
+    assert made == set(vlan_interfaces._VLANS_ARE_ITS_TAGS)
+    read = 0
+    for codec, _rel, path in _captures():
+        tree = get_codec(codec).parse(path.read_text(encoding="utf-8"))
+        if tree.source_vendor not in vlan_interfaces._VLANS_ARE_ITS_TAGS:
+            continue
+        tags = {iface.dot1q_vlan for iface in tree.interfaces if iface.dot1q_vlan is not None}
+        assert {vlan.id for vlan in tree.vlans} == tags
+        assert all(vlan == CanonicalVlan(id=vlan.id, name="") for vlan in tree.vlans)
+        read += bool(tags)
+    assert read
