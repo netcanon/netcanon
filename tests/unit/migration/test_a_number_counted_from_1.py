@@ -1,6 +1,6 @@
-"""A number AOS-CX, OS10 or EOS counts from 1 is never written as 0.
+"""A number AOS-CX, OS10, EOS or RouterOS counts from 1 is never written as 0.
 
-Each of the three counts a port, a stack member and a LAG from 1.
+Each of the first three counts a port, a stack member and a LAG from 1.
 ``vsf_switch_port_name``, ``os10_port_name`` and
 ``fixed_switch_port_name`` refuse a port below 1 (each module says
 which vendor guide it rests on).  HPE gives an AOS-CX LAG id of 1 to
@@ -15,6 +15,16 @@ name-shape translator wrote such a port ``0/1/3`` (AOS-CX),
 0``, ``port-channel0`` or ``Port-Channel0``.  No such switch has those
 names, and the jobs said ``completed``.  A 0 is now written as 1.  Where
 that gives two source names one name, the job says so.
+
+RouterOS counts a port from 1 as well: every factory name of the
+committed exports, target profiles and model families does, and with
+no configuration of its own a router puts its address "on ether1, or
+combo1, or sfp1" (MikroTik, Default configurations).  Its names are
+flat (``ether3``), so a port of member 0 or 1 and module 0 is written
+by its port number alone, and a port 0 there -- a VyOS ``eth0``, an
+OPNsense ``igb0``, a Junos ``ge-0/0/0`` -- was written ``ether0`` or
+``sfp-sfpplus0``, a port no router has.  It is written as port 1, and
+``bond0`` was already ``bond1``.
 
 Each name is read by a reader typed here, not by the codec's own
 classifier, which reads a 0 as readily as a 1.
@@ -38,7 +48,7 @@ from tests.unit.migration.test_vlan_members_reach_the_output import _captures
 
 pytestmark = pytest.mark.unit
 
-_TARGETS = ("aruba_aoscx", "dell_os10", "arista_eos")
+_TARGETS = ("aruba_aoscx", "dell_os10", "arista_eos", "mikrotik_routeros")
 
 #: What each target calls a port, a LAG and its management port,
 #: typed from the vendors' grammars.  A number above what a target
@@ -47,12 +57,19 @@ _PORT = {
     "aruba_aoscx": re.compile(r"(\d+)/(\d+)/(\d+)"),
     "dell_os10": re.compile(r"ethernet(\d+)/(\d+)/(\d+)"),
     "arista_eos": re.compile(r"Ethernet(\d+)(?:/(\d+))?"),
+    # The cage, then the port, then a breakout lane.  The longer cage
+    # names first: ``sfp28-1`` is not ``sfp`` and 28.
+    "mikrotik_routeros": re.compile(
+        r"(?:sfp-sfpplus|sfp28-|qsfp28-|qsfpplus|ether|combo|sfp)(\d+)(?:-(\d+))?"
+    ),
 }
 _LAG = {
     "aruba_aoscx": re.compile(r"lag (\d+)"),
     "dell_os10": re.compile(r"port-channel(\d+)"),
     "arista_eos": re.compile(r"Port-Channel(\d+)"),
+    "mikrotik_routeros": re.compile(r"bond(\d+)"),
 }
+#: RouterOS has no management port, and its formatter writes none.
 _MGMT = {
     "aruba_aoscx": re.compile(r"mgmt"),
     "dell_os10": re.compile(r"mgmt1/1/1"),
@@ -142,6 +159,13 @@ def test_no_number_the_formatter_writes_is_0(target: str) -> None:
             assert numbers == [identity.stack or 1, identity.module or 1, identity.port or 1]
         elif identity.kind == "physical" and target == "dell_os10":
             assert numbers == [1, identity.module or 1, identity.port or 1]
+        elif identity.kind == "physical" and target == "mikrotik_routeros":
+            # One flat number: the port itself on member 0 or 1 and
+            # module 0, and a number of its own past 100 elsewhere.
+            if (identity.stack or 0) <= 1 and not identity.module:
+                assert numbers == [identity.port or 1], (identity, name)
+            else:
+                assert numbers[0] >= 100, (identity, name)
         elif identity.kind == "physical":
             first = identity.port if identity.port is not None else identity.module
             assert numbers == [first or 1], (identity, name)
@@ -159,27 +183,46 @@ _JUNOS = "set system host-name r1\n"
 _ONE: dict[str, tuple[str, str, str, dict[str, str]]] = {
     "junos fpc 0": ("juniper_junos", "ge-0/0/3", (
         _JUNOS + "set interfaces ge-0/0/3 unit 0 family inet address 198.51.100.1/24\n"
-    ), {"aruba_aoscx": "1/1/3", "dell_os10": "ethernet1/1/3", "arista_eos": "Ethernet3"}),
+    ), {"aruba_aoscx": "1/1/3", "dell_os10": "ethernet1/1/3", "arista_eos": "Ethernet3",
+        "mikrotik_routeros": "ether3"}),
     "junos port 0": ("juniper_junos", "ge-0/0/0", (
         _JUNOS + "set interfaces ge-0/0/0 unit 0 family inet address 198.51.100.1/24\n"
-    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1"}),
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1"}),
+    "junos 10G port 0": ("juniper_junos", "xe-0/0/0", (
+        _JUNOS + "set interfaces xe-0/0/0 unit 0 family inet address 198.51.100.1/24\n"
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "sfp-sfpplus1"}),
+    "vyos eth0": ("vyos", "eth0", (
+        "set system host-name r1\nset interfaces ethernet eth0 address 198.51.100.1/24\n"
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1"}),
     "junos ae0": ("juniper_junos", "ae0", (
         _JUNOS + "set chassis aggregated-devices ethernet device-count 2\n"
         "set interfaces ge-1/0/5 ether-options 802.3ad ae0\n"
         "set interfaces ae0 unit 0 family inet address 198.51.100.1/24\n"
-    ), {"aruba_aoscx": "lag 1", "dell_os10": "port-channel1", "arista_eos": "Port-Channel1"}),
+    ), {"aruba_aoscx": "lag 1", "dell_os10": "port-channel1", "arista_eos": "Port-Channel1",
+        "mikrotik_routeros": "bond1"}),
     "ios xr slot 0": ("cisco_iosxr", "GigabitEthernet0/0/0/2", (
         "hostname r1\ninterface GigabitEthernet0/0/0/2\n"
         " ipv4 address 198.51.100.1 255.255.255.0\n!\nend\n"
-    ), {"aruba_aoscx": "1/1/2", "dell_os10": "ethernet1/1/2", "arista_eos": "Ethernet2"}),
+    ), {"aruba_aoscx": "1/1/2", "dell_os10": "ethernet1/1/2", "arista_eos": "Ethernet2",
+        "mikrotik_routeros": "ether2"}),
+    "ios xr port 0": ("cisco_iosxr", "GigabitEthernet0/0/0/0", (
+        "hostname r1\ninterface GigabitEthernet0/0/0/0\n"
+        " ipv4 address 198.51.100.1 255.255.255.0\n!\nend\n"
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1"}),
     "ios-xe router slot 0": ("cisco_iosxe_cli", "GigabitEthernet0/0/2", (
         "hostname r1\ninterface GigabitEthernet0/0/2\n"
         " ip address 198.51.100.1 255.255.255.0\n!\nend\n"
-    ), {"aruba_aoscx": "1/1/2", "dell_os10": "ethernet1/1/2", "arista_eos": "Ethernet2"}),
+    ), {"aruba_aoscx": "1/1/2", "dell_os10": "ethernet1/1/2", "arista_eos": "Ethernet2",
+        "mikrotik_routeros": "ether2"}),
     "ios-xe stack member 2": ("cisco_iosxe_cli", "GigabitEthernet2/0/1", (
         "hostname r1\ninterface GigabitEthernet2/0/1\n no switchport\n"
         " ip address 198.51.100.1 255.255.255.0\n!\nend\n"
-    ), {"aruba_aoscx": "2/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1"}),
+    ), {"aruba_aoscx": "2/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1001"}),
     "junos fxp0": ("juniper_junos", "fxp0", (
         _JUNOS + "set interfaces fxp0 unit 0 family inet address 198.51.100.1/24\n"
     ), {"aruba_aoscx": "mgmt", "dell_os10": "mgmt1/1/1", "arista_eos": "Management1"}),
@@ -194,6 +237,8 @@ _ONE: dict[str, tuple[str, str, str, dict[str, str]]] = {
 @pytest.mark.parametrize("case", sorted(_ONE))
 def test_a_name_numbered_from_0_is_written_from_1(case: str, target: str) -> None:
     source, name, text, written = _ONE[case]
+    if target not in written:
+        pytest.skip(f"{target} has no name for {name}")
     job = _job(source, target, text)
     assert job.port_renames.get(name) == written[target]
     assert job.status == MigrationJobStatus.completed, job.error
@@ -211,18 +256,26 @@ _TWO: dict[str, tuple[str, tuple[str, str], str, dict[str, str]]] = {
     "junos fpc 0 and 1": ("juniper_junos", ("ge-0/0/3", "ge-1/0/3"), (
         _JUNOS + "set interfaces ge-0/0/3 unit 0 family inet address 198.51.100.1/24\n"
         "set interfaces ge-1/0/3 unit 0 family inet address 203.0.113.1/24\n"
-    ), {"aruba_aoscx": "1/1/3", "dell_os10": "ethernet1/1/3", "arista_eos": "Ethernet3"}),
+    ), {"aruba_aoscx": "1/1/3", "dell_os10": "ethernet1/1/3", "arista_eos": "Ethernet3",
+        "mikrotik_routeros": "ether3"}),
     "junos port 0 and 1": ("juniper_junos", ("ge-0/0/0", "ge-0/0/1"), (
         _JUNOS + "set interfaces ge-0/0/0 unit 0 family inet address 198.51.100.1/24\n"
         "set interfaces ge-0/0/1 unit 0 family inet address 203.0.113.1/24\n"
-    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1"}),
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1"}),
+    "vyos eth0 and eth1": ("vyos", ("eth0", "eth1"), (
+        "set system host-name r1\nset interfaces ethernet eth0 address 198.51.100.1/24\n"
+        "set interfaces ethernet eth1 address 203.0.113.1/24\n"
+    ), {"aruba_aoscx": "1/1/1", "dell_os10": "ethernet1/1/1", "arista_eos": "Ethernet1",
+        "mikrotik_routeros": "ether1"}),
     "junos ae0 and ae1": ("juniper_junos", ("ae0", "ae1"), (
         _JUNOS + "set chassis aggregated-devices ethernet device-count 2\n"
         "set interfaces ge-1/0/5 ether-options 802.3ad ae0\n"
         "set interfaces ge-1/0/6 ether-options 802.3ad ae1\n"
         "set interfaces ae0 unit 0 family inet address 198.51.100.1/24\n"
         "set interfaces ae1 unit 0 family inet address 203.0.113.1/24\n"
-    ), {"aruba_aoscx": "lag 1", "dell_os10": "port-channel1", "arista_eos": "Port-Channel1"}),
+    ), {"aruba_aoscx": "lag 1", "dell_os10": "port-channel1", "arista_eos": "Port-Channel1",
+        "mikrotik_routeros": "bond1"}),
     "ios xr slot 0 and 1": ("cisco_iosxr", ("GigabitEthernet0/0/0/2", "GigabitEthernet0/1/0/2"), (
         "hostname r1\ninterface GigabitEthernet0/0/0/2\n ipv4 address 198.51.100.1 255.255.255.0\n!\n"
         "interface GigabitEthernet0/1/0/2\n ipv4 address 203.0.113.1 255.255.255.0\n!\nend\n"
@@ -257,7 +310,7 @@ def test_two_names_on_one_are_said(case: str, target: str) -> None:
 
 def test_no_committed_name_is_given_a_0() -> None:
     """Over every committed capture of every other codec: the name each
-    of the three targets writes for a port, a LAG or a management port
+    of the four targets writes for a port, a LAG or a management port
     is one it has, and a name numbered from 0 at the source is among
     them on each target."""
     from_0 = dict.fromkeys(_TARGETS, 0)

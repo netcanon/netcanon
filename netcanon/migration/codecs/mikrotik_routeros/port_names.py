@@ -359,11 +359,11 @@ def _flat_port_index(identity: PortIdentity) -> int:
     won't realistically collide with anything an operator would
     type by hand:
 
-        * ``stack`` is 1-or-None and ``module`` is 0-or-None →
+        * ``stack`` is 0, 1 or None and ``module`` is 0-or-None →
           return ``port`` (e.g. Cisco ``Gi1/0/24`` → ``ether24``,
-          MikroTik ``ether1`` round-trip → ``ether1``).  Equivalent
-          to the pre-fix behaviour for every shape that didn't
-          collide.
+          MikroTik ``ether1`` round-trip → ``ether1``), and 1 for a
+          port 0 (VyOS ``eth0``, OPNsense ``igb0``, Junos
+          ``ge-0/0/0`` → ``ether1``): RouterOS counts a port from 1.
         * Else → return ``(stack-1)*1000 + module*100 + port``
           (Cisco ``Te1/1/1`` → ``sfp-sfpplus101``, ``Te1/1/8`` →
           ``sfp-sfpplus108``, ``Te2/0/1`` → ``sfp-sfpplus1001``).
@@ -385,7 +385,16 @@ def _flat_port_index(identity: PortIdentity) -> int:
     module = identity.module if identity.module is not None else 0
     port = identity.port if identity.port is not None else 1
     if stack <= 1 and module == 0:
-        return port
+        # RouterOS counts a port from 1: every factory name of the
+        # committed exports, profiles and model families is, and with
+        # no configuration of its own a router puts its address "on
+        # ether1, or combo1, or sfp1" (MikroTik, Default
+        # configurations).  So a port 0 is written as port 1, as onto
+        # AOS-CX, OS10 and EOS: ``ether0`` is a port no router has,
+        # and the line that looks it up finds nothing.  A port 0 beside
+        # port 1 is then two ports on one name, and the job is
+        # ``partial`` and lists them.
+        return max(port, 1)
     # ``max(..., 0)``: a 0-based source (Junos FPC 0, IOS-XR slot 0) has
     # stack == 0, and ``stack - 1`` made the whole index NEGATIVE --
     # ``xe-0/2/0`` rendered as ``sfp-sfpplus-800``, which is not a name.

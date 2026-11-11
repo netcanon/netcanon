@@ -244,7 +244,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         #   output time, so we degrade gracefully.
         #
         # FortiGate, MikroTik, Cisco, and Junos all accept port=0
-        # similarly (FortiGate→``port1``, MikroTik→``sfp-sfpplus0``,
+        # similarly (FortiGate→``port1``, MikroTik→``sfp-sfpplus1``,
         # Cisco→``Gi0/0``, Junos→``xe-0/0/0``); Aruba's previous
         # ``port==0 → None`` short-circuit was the outlier and
         # silently dropped foreign-source LAN IPs (e.g. OPNsense

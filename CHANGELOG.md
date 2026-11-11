@@ -1365,6 +1365,29 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A port numbered 0 is not written onto RouterOS as `ether0`.**
+  RouterOS counts a port from 1: every factory name of the committed
+  exports, target profiles and model families does, and with no
+  configuration of its own a router puts its address "on ether1, or
+  combo1, or sfp1" (MikroTik, Default configurations).  A VyOS or
+  OPNsense port, a Junos port and an IOS XR or IOS-XE router's port
+  are numbered from 0.  With no devices declared, a VyOS `eth0`, an
+  OPNsense `igb0`, a Junos `ge-0/0/0` and an IOS XR
+  `GigabitEthernet0/0/0/0` were written `ether0`, and an OPNsense
+  `ixl0` and a Junos `xe-0/0/0` `sfp-sfpplus0`: ports no router has.
+  The line that looks the port up (`set [ find default-name=ether0
+  ]`) found none, and `add ... interface=ether0` named an interface
+  the router does not have, in jobs that said `completed`.  Such a
+  port is now written as port 1 (`ether1`, `sfp-sfpplus1`), as onto
+  AOS-CX, OS10 and EOS; `bond0` and `ae0` were already `bond1`.  A
+  port 0 beside port 1 then has one name, and the job is `partial`
+  and lists the two; an entry in the port map settles it.  Over the
+  committed captures (`tests/fixtures/real/`), ten more jobs onto
+  RouterOS are `partial` for that: eight of VyOS, one of OPNsense and
+  one of IOS XR; and three of the IOS-XE example configs elsewhere
+  under `tests/fixtures/`.  Guarded by
+  `tests/unit/migration/test_a_number_counted_from_1.py`, which now
+  reads the names RouterOS is given as well.
 - **A loopback of another vendor is a RouterOS bridge `loopback<N>`,
   and RouterOS's own `lo` is written no line.**  RouterOS 7.14 made
   `lo` an interface of the system (7.14beta: "system - expose "lo"

@@ -427,6 +427,20 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   earlier has `add name=lo` under `/interface bridge`, which 7.14 and
   later refuses: see
   [TROUBLESHOOTING](../TROUBLESHOOTING.md#routeros-refuses-interface-bridge-add-namelo).
+- **A port numbered 0 at the source is written as port 1 here.**
+  RouterOS counts a port from 1 (with no configuration of its own a
+  router puts its address "on ether1, or combo1, or sfp1", in
+  MikroTik's Default configurations).  With no devices declared, a
+  VyOS `eth0`, an OPNsense `igb0` and a Junos `ge-0/0/0` are
+  `ether1`, an OPNsense `ixl0` and a Junos `xe-0/0/0`
+  `sfp-sfpplus1`, and `bond0` and `ae0` `bond1`.  Beside the same
+  port numbered 1 that is one name: the job is `partial` and lists
+  both, and an entry in the port map settles it.  A port of a Junos
+  FPC 0 or 1 is written by its port number alone, so `ge-0/0/3` and
+  `ge-1/0/3` are both `ether3`, listed the same way.  ⚠️ Up to 0.7.7
+  a port 0 was written `ether0` or `sfp-sfpplus0`, a port no router
+  has, in a job that said `completed`.  Look for them in an old
+  output.
 - **A port a config from another vendor names only as a LAG member
   or in a route** (an IOS route's interface that no stanza configures)
   has no interface of its own, and so no line of its own in the
