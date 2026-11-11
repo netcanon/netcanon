@@ -1365,6 +1365,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A loopback of another vendor is a RouterOS bridge `loopback<N>`,
+  and RouterOS's own `lo` is written no line.**  RouterOS 7.14 made
+  `lo` an interface of the system (7.14beta: "system - expose "lo"
+  interface"): every such router has it, it cannot be removed, and no
+  interface can be added under its name.  The port translator wrote a
+  loopback 0 of every other vendor `lo` (an IOS-XE `Loopback0`, a
+  Junos `lo0`, a VyOS `lo`), and the renderer wrote every loopback as
+  the empty bridge MikroTik documents for one -- so the output held
+  `/interface bridge add name=lo`, a line a router of 7.14 or later
+  refuses, in jobs that said `completed`; and a RouterOS 7 config with
+  an address on its own `lo` came back from RouterOS with that line
+  too.  A loopback of another vendor is now the bridge `loopback<N>`,
+  which loads on RouterOS 6 and 7; the `lo` of a RouterOS config keeps
+  its name, the parser reads it as a loopback (it typed it as nothing),
+  and the renderer writes its addresses on it and no line for it.  What
+  no line says of `lo` is said in a review line and a warning: a
+  description is not written, and the addresses of a `lo` the source
+  holds disabled are left out rather than put into service.  A bridge a
+  config names `lo` is a bridge, as it was.  An output of 0.7.7 or
+  earlier that has `add name=lo` under `/interface bridge` needs that
+  bridge renamed (and the address lines that name it) before a router
+  of 7.14 or later takes it.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_the_system_loopback.py`,
+  which reads every public codec's own name for loopback 0 through the
+  translator and sends a loopback from each grammar written by hand
+  onto RouterOS.
+  On the cross-vendor audit, which translates no names, an empty
+  VyOS `lo` (`loopback lo { }`) is now written no line onto RouterOS
+  either -- the router has one -- and the vyos -> mikrotik_routeros
+  expectation records those records as lossy on `interfaces[].name`,
+  as the other VyOS pairs do.
 - **An AOS-S loopback is read, and written as the switch prints it.**
   HPE gives the command as `interface loopback <0-7>`, with a space,
   and an address on a loopback is given with no mask; a switch prints

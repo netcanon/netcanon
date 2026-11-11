@@ -2068,6 +2068,12 @@ def _infer_iface_type_from_name(name: str) -> str:
         return "ianaift:ieee8023adLag"
     if re.match(r"^(br|bridge)\d", name, re.IGNORECASE):
         return "ianaift:bridge"
+    if name == "lo":
+        # The loopback RouterOS 7.14 and later has of its own: an
+        # address is put on it with no ``add`` line for the interface.
+        # (A bridge a config names ``lo`` is a bridge: the
+        # ``/interface bridge`` handler types it.)
+        return "ianaift:softwareLoopback"
     return ""
 
 

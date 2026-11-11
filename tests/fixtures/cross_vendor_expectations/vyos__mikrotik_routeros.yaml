@@ -15,12 +15,16 @@
 # local accounts — and NOT the fabric surface neither device is doing.
 #
 # READ THIS BEFORE READING ANY DISPOSITION BELOW: the two record lists
-# that carry this pair are FULLY PRESERVED. 56 interface records in, 56
-# out, identical name sets on all 13 cells; 17 local-user records in, 17
-# out, zero accounts vanish. Every interface and local-user loss below is
-# therefore a genuine per-attribute loss that stands on its own
-# measurement, and the sub-fields that survive are declared `good` rather
-# than dragged down by a vanishing parent. Only `vxlan_vnis` and
+# that carry this pair are preserved but for one kind of record. 17
+# local-user records in, 17 out, zero accounts vanish. 56 interface
+# records in, 50 out: the six that do not arrive are each an EMPTY VyOS
+# `lo` (`loopback lo { }`, nothing set), which RouterOS 7.14 and later
+# has of its own and which is written no line, so the name sets are
+# identical on 7 of 13 cells and differ by that `lo` alone on the other
+# six. Every other interface and local-user loss below is therefore a
+# per-attribute loss that stands on its own measurement, and the
+# sub-fields that survive are declared `good` rather than dragged down by
+# a vanishing parent. The empty `lo`, `vxlan_vnis` and
 # `routing_instances` vanish structurally, and each is claimed exactly
 # once, on its identity key.
 #
@@ -29,6 +33,8 @@
 # RouterOS's cleartext `password=` field on the way), the system
 # domain-name, the VRF construct, the VXLAN overlay, and two attributes
 # of a dot-notation sub-interface that falls between two render filters.
+# The empty `lo` is not one: it holds nothing, and the router it lands
+# on has one.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
 # and in hand round-trips of the committed corpus — `vyos.parse()` ->
@@ -48,8 +54,9 @@ meta:
   primary_use_case: >
     Edge-router replacement: a VyOS software router swapped for a MikroTik
     RouterBOARD carrying the same routed interfaces, addressing, static
-    routes and LACP bundle.  Hostname, the full interface inventory with
-    its IPv4/IPv6 addressing, MTU and admin state, DNS, static routes, the
+    routes and LACP bundle.  Hostname, the interface inventory with its
+    IPv4/IPv6 addressing, MTU and admin state (bar an empty loopback, which
+    RouterOS 7.14 and later has of its own), DNS, static routes, the
     LAG with its members, SNMP v1/v2c, and every local account's name and
     role all survive.  What does not is the password on every migrated
     account — and the source hash is emitted into RouterOS's cleartext
@@ -144,34 +151,52 @@ per_field_expectation:
       on the RouterOS side is a build task, not a migration one.
     references: [vyos-mikrotik-surface]
 
-  # -- Interfaces -- inventory intact, one attribute affected ----------------
+  # -- Interfaces -- an empty `lo` not written, one attribute affected -------
   #
   # The measured record count is the headline: 56 interface records across
-  # the 13 cells, 56 after the round-trip, with identical name sets on
-  # every cell.  VyOS kernel-style names (`eth0`), dummy interfaces
-  # (`dum0`), the loopback (`lo`), the LACP bundle (`bond0`) and even the
-  # dot-notation sub-interfaces (`eth1.100`) all come back — the last of
-  # those as a VLAN interface on their port (`/interface vlan add
-  # interface=eth1 name=eth1.100 vlan-id=100`), with their description and
-  # admin state.
-  # Nothing in this block is a knock-on effect of a vanishing parent.
+  # the 13 cells, 50 after the round-trip.  The six that do not come back
+  # are each an empty VyOS `lo`, one on each of six cells, and they are
+  # claimed on `interfaces[].name`.  VyOS kernel-style names (`eth0`),
+  # dummy interfaces (`dum0`), a loopback that holds an address (`lo`),
+  # the LACP bundle (`bond0`) and even the dot-notation sub-interfaces
+  # (`eth1.100`) all come back — the last of those as a VLAN interface on
+  # their port (`/interface vlan add interface=eth1 name=eth1.100
+  # vlan-id=100`), with their description and admin state.
+  # The per-attribute notes below count the records that arrive; an empty
+  # `lo` holds no value of any of these attributes.  Nothing in this block
+  # is a knock-on effect of a vanishing parent.
 
   "interfaces[].name":
-    disposition: good
-    note: >
-      Preserved on 13 of 13 cells: 56 source interface records, 56 after
-      parse -> render -> re-parse, identical name sets.  The RouterOS
-      render does not rename VyOS ports to the `etherN` factory shape, does
-      not drop the loopback (it emits the documented empty-bridge idiom
-      `/interface bridge add name=lo`), and does not lose the dot-notation
-      sub-interfaces.  Both matrices declare `/interfaces/interface/name`
-      supported.
+    disposition: lossy
+    reason: >
+      6 of 56 interface records vanish, on 6 of 13 cells, and each is the
+      `lo` of a VyOS config that sets nothing on it (`loopback lo { }`):
+      the same six cells the vyos -> juniper_junos expectation lists for
+      its `lo`.  RouterOS 7.14 made `lo` an interface of the system
+      (7.14beta: "system - expose "lo" interface") that every such router
+      has, that cannot be removed and that no interface can be added
+      under, so the renderer writes no line for a `lo` and puts its
+      addresses on it as they are; an empty one is left with nothing to
+      write, and the re-parse never sees it.  The `lo` that holds an IPv4
+      and an IPv6 address (`kitchen_sink.conf`) comes back, with both.  Up
+      to 0.7.7 every `lo` was written `/interface bridge add name=lo`, a
+      line a router of 7.14 or later refuses.  The audit runs the bare
+      pipeline, which translates no names; through the port translator,
+      as an operator's job runs, a VyOS `lo` is written `loopback0`, the
+      empty bridge MikroTik documents for a loopback, empty or not, and
+      loads on RouterOS 6 and 7.  The RouterOS render still does not
+      rename VyOS ports to the `etherN` factory shape, nor lose the
+      dot-notation sub-interfaces.  Recorded `lossy`, as `lo`'s empty
+      record is on the other VyOS pairs: no attribute is lost with it, and
+      this key carries the record-level signal so that the sub-fields of
+      the other records are measured on their own.  Both matrices declare
+      `/interfaces/interface/name` supported.
     references: [vyos-mikrotik-surface]
 
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on 56 of 56 records: every populated description
+      Preserved on all 50 records that arrive: every populated description
       round-trips as RouterOS `comment="..."`, `eth1.100`'s `tenant vlan
       100` on `kitchen_sink.conf` included.  A dot-notation sub-interface
       is a VLAN interface on its port (`/interface vlan add interface=eth1
@@ -185,7 +210,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Preserved on 56 of 56 records, the shut ones included: `eth3`
+      Preserved on all 50 records that arrive, the shut ones included: `eth3`
       renders `disabled=yes` and re-parses shut, and so does the shut
       dot-notation sub-interface `eth1.200` on `kitchen_sink.conf`, a
       VLAN interface on its port with `disabled=yes`.  Up to 0.7.7
@@ -198,7 +223,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 56 of 56 records.  MTU is actually populated on only
+      Preserved on all 50 records that arrive.  MTU is populated on only
       one of them (`eth0`, 1500) and it round-trips unchanged as
       RouterOS `mtu=1500`.  `vyos` declares
       `/interfaces/interface/config/mtu` supported; `mikrotik_routeros`
@@ -210,7 +235,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 56 of 56 records; IPv6 is populated on 20 of them and
+      Preserved on all 50 records that arrive; IPv6 is populated on 20 of them and
       every address + prefix-length survives via `/ipv6 address add`.
       Both matrices declare `/interfaces/interface/ipv6/address/ip` and
       `.../prefix-length` supported.  One asymmetry that costs nothing
@@ -222,7 +247,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 56 of 56 records, the widest-populated interface
+      Preserved on all 50 records that arrive, the widest-populated interface
       attribute on the pair (21 records).  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.  This is the field the migration most depends on and it
@@ -233,40 +258,36 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 7 of 13 cells and 10 of 56 records — and the direction is
-      the OPPOSITE of a loss, which is the point worth recording.  `vyos`
-      populates `interface_type` on ZERO of its 56 records, so there is
-      nothing for RouterOS to lose; the round-trip INVENTS a type on
-      ten of them.
-      Seven are the loopback `lo`, which comes back `ianaift:bridge`.  That
-      is a mislabel with a good cause: RouterOS has no loopback primitive,
-      so the renderer emits the documented empty-bridge idiom
-      (`/interface bridge add name=lo`) — without it the loopback name
-      drops and its IP binds to a phantom interface — and the re-parse
-      then honestly types a bridge as a bridge.  One of the seven is the
-      `lo` of `houdev_vyos_dhcpv6_pd_client.conf`, an empty interface
-      record (`loopback lo { }`, nothing set) that the VyOS parser has
-      read since 2026-10; RouterOS keeps it as the same empty bridge and
-      the re-parse invents the same type, which is what makes that cell
-      the seventh.  The eighth record is `bond0`, typed
-      `ianaift:ieee8023adLag` off `/interface bonding`, which is simply
-      correct, and so are the last two, the dot-notation sub-interfaces
-      `eth1.100` and `eth1.200` on the same cell, typed
+      Drifts on 1 of 13 cells and 4 of the records that arrive — and the
+      direction is the OPPOSITE of a loss, which is the point worth
+      recording.  `vyos` populates `interface_type` on ZERO of its 56
+      records, so there is nothing for RouterOS to lose; the round-trip
+      INVENTS a type on four of them, all on `kitchen_sink.conf`.
+      One is the loopback `lo`, which holds an address and comes back
+      `ianaift:softwareLoopback`: RouterOS 7.14 and later has a `lo` of
+      its own, the render puts the addresses on it, and the re-parse types
+      an address on `lo` as a loopback's.  Up to 0.7.7 it came back
+      `ianaift:bridge`, on seven cells, from the empty-bridge line
+      (`/interface bridge add name=lo`) a router of 7.14 or later refuses;
+      the six empty `lo` records it was written for no longer arrive, and
+      are claimed on `interfaces[].name`.  The second record is `bond0`,
+      typed `ianaift:ieee8023adLag` off `/interface bonding`, which is
+      simply correct, and so are the last two, the dot-notation
+      sub-interfaces `eth1.100` and `eth1.200`, typed
       `ianaift:ethernetCsmacd` like the port each is a unit of.
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY, and `mikrotik_routeros` states the mechanism: RouterOS does
       not expose IANA ifType, so the codec infers it from the
       interface-name prefix.  Recorded `lossy` and not `unsupported`
       because the interface record, its addressing and its admin state are
-      untouched — this is a wrong hint, not lost forwarding state.  The
-      operator-visible effect is a migrated inventory that files the
-      loopback under bridges.
+      untouched — this is a hint the source did not give, not lost
+      forwarding state.
     references: [vyos-mikrotik-surface]
 
   "interfaces[].lag_member_of":
     disposition: good
     note: >
-      Preserved on 56 of 56 records.  Two records carry a membership
+      Preserved on all 50 records that arrive.  Two records carry a membership
       pointer (`eth4` and `eth5` -> `bond0`) and both survive: the render
       emits `/interface bonding add slaves=eth4,eth5 ... name=bond0` and
       the re-parse rebuilds the pointer on each member.  This is the

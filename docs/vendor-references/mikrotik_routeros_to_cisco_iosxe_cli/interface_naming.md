@@ -78,8 +78,10 @@ input.
 
 ### Loopback
 
-RouterOS has no first-class loopback; operators emulate via a
-zero-member `bridge` with an `/ip address` on it.  The MikroTik
+RouterOS 6 has no first-class loopback, and 7.14 and later has one
+only, the system's `lo`, which the codec reads as loopback 0;
+operators emulate any other via a zero-member `bridge` with an
+`/ip address` on it.  The MikroTik
 codec parses such bridges as `interface_type="softwareLoopback"`
 when the operator-form name suggests it (e.g. `loopback`,
 `Loopback0`).  On Cisco render this lands as `interface

@@ -38,9 +38,11 @@ RouterOS uses flat factory-default names (`ether1` / `ether2` / ...,
 form keeps configuration stable across renames.  Speed is not encoded
 in the prefix; SFP+ ports use `sfp-sfpplus1` etc.  IPv4 / IPv6
 addresses are top-level `/ip address` and `/ipv6 address` records
-(NOT per-interface sub-stanzas).  RouterOS has no first-class
-loopback construct — operators emulate via empty bridges or attach
-addresses to other interfaces as secondaries.
+(NOT per-interface sub-stanzas).  RouterOS 6 has no first-class
+loopback construct, and 7.14 and later has one only, the system's
+`lo`, which the codec reads as loopback 0 — operators emulate any
+other via empty bridges or attach addresses to other interfaces as
+secondaries.
 
 ## Junos form
 

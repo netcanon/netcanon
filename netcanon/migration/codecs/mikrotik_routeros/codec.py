@@ -79,7 +79,7 @@ from ..registry import register
 from . import port_names as _port_names
 from .dhcp_pools import render_pools
 from .parse import parse_intent
-from .render import _quote_if_needed, render_intent
+from .render import _quote_if_needed, render_intent, system_lo_notes
 
 __all__ = ["MikroTikRouterOSCodec"]
 
@@ -682,12 +682,15 @@ class MikroTikRouterOSCodec(CodecBase):
         the output has for a DHCP pool: one that states no whole range,
         one RouterOS can be given no range for, one that names no
         interface for its server, or one whose lease does not end
-        (:func:`.dhcp_pools.render_pools`)."""
+        (:func:`.dhcp_pools.render_pools`); and for ``lo``, RouterOS's
+        own loopback, which is written no line: its description, and
+        that it is disabled (:func:`.render.system_lo_notes`)."""
         warnings = super().render_warnings(tree)
         if isinstance(tree, CanonicalIntent):
             warnings += render_pools(
                 tree.dhcp_servers, tree.interfaces, _quote_if_needed,
             )[1]
+            warnings += [warning for _, warning in system_lo_notes(tree)]
         return warnings
 
     # -----------------------------------------------------------------

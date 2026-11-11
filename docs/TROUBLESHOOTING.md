@@ -1450,6 +1450,21 @@ config onto other hardware, declare both device models (API:
 of the declared target then moves the port there.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
+### "RouterOS refuses `/interface bridge add name=lo`"
+
+An output of 0.7.7 or earlier wrote a loopback 0 of another vendor (an
+IOS `Loopback0`, a Junos `lo0`, a VyOS `lo`) as a bridge named `lo`.
+RouterOS 7.14 and later has an interface `lo` of its own, and no
+interface can be added under its name, so the import stops at that
+line.  Translate the config again: a loopback from another vendor is
+now the bridge `loopback<N>`, and the `lo` of a RouterOS config is
+written no line.  To mend such an output by hand, either take the
+bridge line out and leave the addresses on `lo`, the router's own
+loopback, or rename the bridge (`add name=loopback0`) and every
+`interface=lo` that names it.  See
+[`vendors/mikrotik_routeros.md`](vendors/mikrotik_routeros.md) §
+"Common gotchas".
+
 ### The job says `parse failed:` for an IOS XR config
 
 Two sentences say that the text is not in the form `show

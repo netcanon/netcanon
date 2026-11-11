@@ -23,7 +23,10 @@ listed, with where each is shown, at :func:`is_factory_port_name`):
     * ``bridge`` / ``br-<name>``    — bridge (classified as
                                        ``virtual``; no direct cross-
                                        vendor analogue).
-    * ``lo`` / ``loopback<N>``      — loopback.
+    * ``lo`` / ``loopback<N>``      — loopback (``lo`` is the one
+                                       RouterOS 7.14 and later has of
+                                       its own; see
+                                       :func:`format_port_identity`).
     * ``<parent>.<id>``             — VLAN subinterface (SVI-analog).
     * ``wg<N>`` / ``wireguard<N>``
       ``gre<N>`` / ``ipip<N>``
@@ -275,7 +278,14 @@ def classify_port_name(name: str) -> PortIdentity:
             kind="lag", index=int(m.group(1)), original=name
         )
 
-    # Loopback: lo or loopback<N>.
+    # Loopback: lo or loopback<N>.  ``lo`` itself is the loopback
+    # RouterOS 7.14 and later has of its own, and is marked so: only a
+    # name so marked is written ``lo`` (:func:`format_port_identity`).
+    if stripped == "lo":
+        return PortIdentity(
+            kind="loopback", index=0, original=name,
+            meta={"mikrotik_system_lo": "yes"},
+        )
     if stripped.lower() == "lo":
         return PortIdentity(kind="loopback", index=0, original=name)
     m = _LOOPBACK_RE.match(stripped)
@@ -468,8 +478,18 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         # ``tests/fixtures/real/user_smoke_findings.md``).  Caller
         # can still override via rename_map.
         return f"vlan{identity.index}"
+    # ``lo`` is the loopback RouterOS 7.14 and later has of its own
+    # (7.14beta: "system - expose "lo" interface"); no interface can be
+    # added under its name, and RouterOS 6, which the codec also
+    # writes, shows none.  So a loopback is the empty bridge MikroTik
+    # documents for one, ``loopback<N>``, which loads on both, and only
+    # the ``lo`` of a RouterOS config is written ``lo``.  Up to 0.7.7 a
+    # Loopback0 was written ``lo``, as a bridge: a line RouterOS 7.14
+    # and later cannot take.
     if identity.kind == "loopback":
-        return "lo" if identity.index in (None, 0) else f"loopback{identity.index}"
+        if identity.meta.get("mikrotik_system_lo"):
+            return "lo"
+        return f"loopback{identity.index or 0}"
     if identity.kind == "tunnel":
         # Prefer the source-side subtype hint (same-vendor round-
         # trip preserves wg/gre/ipip/etc.); fall back to ``gre`` as
