@@ -389,7 +389,10 @@ where its stanza would be and a warning of the job:
   written, with its ports and without that address; a pool it served
   and a route out of it each have a review line of their own.  The job
   stays `completed`: nothing of it was in force.  One that holds
-  nothing is written as its VLAN, and nothing more is said.
+  nothing is written as its VLAN, and nothing more is said.  A Junos
+  `irb.<id>` that is disabled is left out the same way: its parser
+  keeps a disabled unit as an interface, and read by its name, its
+  address went into its VLAN's stanza, up.
 - **A second interface of one VLAN** (`Vlan30` and `vlan 30` in one
   tree): an AOS-S VLAN stanza is one interface's.  The one named
   `vlan<id>` with no space, in any letter case, is written, and

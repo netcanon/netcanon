@@ -1349,6 +1349,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A disabled Junos unit is down on every target that writes it.**  An `irb` unit
+  bound to a VLAN (`set vlans v10 l3-interface irb.10`) was folded onto
+  the VLAN's record, which has no state of its own, so `set interfaces
+  irb unit 10 disable` was lost and the unit's address was the VLAN's,
+  up: `interface Vlan10` with no `shutdown` (with `no shutdown` on
+  AOS-CX, NX-OS and OS10), Junos to Junos included.  And a device's
+  own `disable` (`set interfaces lo0 disable`, or an `interface-range`
+  that disables its members) stayed on the device: each unit above 0
+  is an interface of its own, and `lo0.1` came out as a live
+  `Loopback1`.  A disabled unit is now kept as the interface it is,
+  and a unit of a disabled device is disabled with it (a `unit 0
+  disable` disables no other unit).  Onto AOS-S, which has no form for
+  a VLAN that is disabled, such an `irb.<id>` is refused with a review
+  line, as a disabled VLAN interface of another grammar is.  Each was
+  in a job that said `completed`.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_a_disabled_unit_stays_down.py`,
+  which reads every target's output back with its own parser, and the
+  stanza that holds the address as text.
 - **A port of member 0 is not written onto AOS-S as `0/<n>`.**  AOS-S
   numbers stack and VSF members from 1, and a Junos FPC, an IOS XR
   slot and an IOS-XE router's slot are numbered from 0.  With no

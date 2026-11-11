@@ -502,6 +502,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         if gname in group_lines
     }
 
+    # The devices a line of their own disables, read before the unit-0
+    # passes take those lines apart (``_OWN``); a range that disables
+    # its members adds them below (:func:`_down_with_its_device`).
+    disabled_devices = {
+        name for name, state in ticked(list(iface_state.items()))
+        if state.get(_OWN, {}).get("enabled") is False
+    }
+
     # A unit 0 the tree has no form for, left out; a unit 0 that
     # carries a tag, made a record of its own.
     units_not_held = _units_0_the_tree_does_not_hold(iface_state)
@@ -559,6 +567,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 and not held_back(*own, "disable")
             ):
                 member_state["enabled"] = False
+                disabled_devices.add(member)
             for addr in attrs.get("ipv4", []):
                 if "/" in addr and not held_back(
                     *own, "unit", "0", "family", "inet", "address", addr,
@@ -700,7 +709,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         )
         iface = CanonicalInterface(
             name=name,
-            enabled=state.get("enabled", True),
+            enabled=(
+                state.get("enabled", True)
+                and not _down_with_its_device(name, disabled_devices)
+            ),
             description=state.get("description", ""),
             interface_type=_infer_iface_type(name),
             access_vlan=state.get("access_vlan"),
@@ -829,6 +841,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 stub = m.group(1) if m else iface_name
                 iface = CanonicalInterface(
                     name=stub,
+                    enabled=not _down_with_its_device(stub, disabled_devices),
                     interface_type=_infer_iface_type(stub),
                     vrf=ri.name,
                 )
@@ -971,7 +984,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     #      irb.<vid>`` binding (signalling SVI intent), AND
     #    * The irb.<vid> interface has no load-bearing fields
     #      beyond IPv4 (no VRF binding, no description, no IPv6,
-    #      no LAG membership, no MTU).
+    #      no LAG membership, no MTU), and is not disabled.
     #
     #    A real-capture fixture from Batfish (``junos2541``) carries
     #    irb.<vid> bindings inside ``routing-instances`` (VRF) — we
@@ -1012,7 +1025,12 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         sub_iface = iface_by_name.get(f"irb.{vid}")
         # An MTU is the unit's own as well: a VLAN record holds none,
         # so a unit folded with one (``family inet mtu 9000``) lost it,
-        # Junos to Junos included.
+        # Junos to Junos included.  So is a ``disable`` -- the unit's own
+        # (``irb unit 10 disable``) or the device's (``irb disable``):
+        # a VLAN record has no state of its own, and folded, a disabled
+        # unit's addresses were the VLAN's, up, on every target that
+        # writes them (``interface Vlan10`` with no ``shutdown``), Junos
+        # to Junos included, in jobs that said ``completed``.
         if sub_iface is not None and (
             sub_iface.vrf
             or sub_iface.description
@@ -1020,6 +1038,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             or sub_iface.lag_member_of
             or sub_iface.mtu is not None
             or sub_iface.ip_mtu is not None
+            or not sub_iface.enabled
         ):
             # Load-bearing — leave the iface alone, don't fold to vlan.
             continue
@@ -1077,7 +1096,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # 4. Prune any ``irb.<vid>`` sub-interface that was folded onto
     #    a CanonicalVlan in step 3.  ``bound_vids`` only contains
     #    vids that were safely foldable (no VRF / description / v6 /
-    #    LAG / MTU).  The bare ``irb`` is not pruned here: a record of that
+    #    LAG / MTU / disable).  The bare ``irb`` is not pruned here: a record of that
     #    name exists only when a line configures the device itself or
     #    its unit 0 (``found.stated``), and what such a line states --
     #    an MTU, an address on unit 0 -- is not a unit's to fold.
@@ -3089,6 +3108,28 @@ def _a_unit_the_tree_holds(state: dict[str, Any], *, unit_0: bool) -> bool:
         ):
             return False
     return _ENCAPSULATION not in state or bool(families & _INET_FAMILIES)
+
+
+def _down_with_its_device(name: str, disabled_devices: set[str]) -> bool:
+    """Whether *name* is a unit (``<device>.<unit>``) of a device in
+    *disabled_devices*: one a line of its own disables (``set interfaces
+    <device> disable``), or a range that does (``interface-range <r>
+    disable``).
+
+    A unit of a disabled device is down with it: Juniper's page on
+    disabling a physical interface says that logical interfaces use the
+    physical interface to reach the network, and that a disabled one is
+    marked down.  (It says nothing of ``irb`` or ``lo0`` in so many
+    words; the reading is the same.)  Read as up, a unit that is a
+    record of its own came out live on every target where it is an
+    interface of its own -- ``lo0.1`` as ``Loopback1``, ``irb.10`` as
+    ``Vlan10`` -- in jobs that said ``completed``.  Unit 0 is the
+    device's own record, and a ``unit 0 disable`` disables no other
+    unit: it is not the device's own line.
+    """
+    if "." not in name:
+        return False
+    return name.rpartition(".")[0] in disabled_devices
 
 
 def _units_0_the_tree_does_not_hold(

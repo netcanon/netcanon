@@ -252,6 +252,20 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   `plain-text-password` asks at a prompt), and up to 0.7.7 the typed
   string was written as `encrypted-password "<typed>"`, which no
   password matches.
+- **A disabled unit stays down.**  `set interfaces irb unit 10
+  disable` keeps `irb.10` as an interface, disabled, instead of folding
+  its address onto VLAN 10 (a VLAN record has no state of its own).
+  A unit of a device that is disabled -- `set interfaces lo0 disable`,
+  or an `interface-range` that disables its members -- is disabled
+  with it: Juniper's page on disabling a physical interface says that
+  logical interfaces use the physical interface to reach the network,
+  and that a disabled one is marked down.  A `unit 0 disable` disables
+  no other unit.  ⚠️ Up to 0.7.7 both were lost, and the unit's
+  address was up on every target that writes it (`interface Vlan10`,
+  `interface Loopback1`), Junos to Junos included; translate such a
+  config again.
+  Onto AOS-S a disabled `irb.<id>` that holds an address is left out
+  under a review line: an AOS-S VLAN cannot be disabled.
 - **Tagged units and their device.**  A unit's tag is `vlan-id N`,
   or `vlan-tags outer N inner M` for two (a TPID of `0x8100` is read);
   the output gives the device the statement its units need --

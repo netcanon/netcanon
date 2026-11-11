@@ -233,7 +233,10 @@ class TestTheParse:
         """The device's description, MTU and ``disable`` are the
         device's; the unit's description and ``family inet mtu`` the
         unit's.  Read onto one record, the unit's description took
-        the device's place."""
+        the device's place.  The unit is down with its device, as
+        every unit of a disabled device is
+        (``test_a_disabled_unit_stays_down.py``): the device's
+        ``disable`` is still none of the unit's own lines."""
         tree = get_codec(JUNOS).parse(_OWN_AND_THE_UNITS)
         by_name = {i.name: i for i in tree.interfaces}
         device, unit = by_name["ge-0/0/1"], by_name["ge-0/0/1.0"]
@@ -241,7 +244,7 @@ class TestTheParse:
             "PARENT", False, True,
         )
         assert (unit.description, unit.enabled, unit.ip_mtu, unit.mtu) == (
-            "UNIT", True, 1500, None,
+            "UNIT", False, 1500, None,
         )
 
     def test_a_disabled_unit_is_the_units(self) -> None:

@@ -54,7 +54,12 @@ of interface in the tree were written wrongly so:
   disabled and holds an address or a VRRP group, and its addresses are
   then taken off its VLAN's record, which still writes the VLAN's
   ports; and where another interface stands for its VLAN.  One that
-  has no VLAN record and holds something is given one.
+  has no VLAN record and holds something is given one.  An interface
+  whose NAME gives its VLAN's id in another grammar (a Junos
+  ``irb.<id>``, which its parser keeps as an interface where it is
+  disabled: a VLAN record has no state of its own) is refused the same
+  way where it is disabled and holds something.  Read by its name, its
+  address was written into its VLAN's stanza, up.
 
 Each is renamed ``Vlan<id>`` throughout the tree, through the one sweep
 of port names (:func:`~netcanon.migration.canonical.port_names.rewrite_port_names`),
@@ -363,8 +368,9 @@ def _decide(
     """What each sub-interface and each VLAN interface its record names
     stands for; for every other interface whose name encodes a VLAN id
     (:func:`vlan_id_of_name`) or that is a VLAN interface of its grammar
-    (:func:`_svi_id`), its name, by that id; and the latter, as (index,
-    VLAN id)."""
+    (:func:`_svi_id`), its name, by that id; and the latter, with each
+    interface whose name encodes its id and that is disabled and holds
+    something (:func:`_holds_something`), as (index, VLAN id)."""
     records_by_name: dict[str, list[CanonicalVlan]] = {}
     records: dict[int, CanonicalVlan] = {}
     for vlan in ticked(tree.vlans):
@@ -419,9 +425,17 @@ def _decide(
             by_its_name.setdefault(vid, []).append(iface.name)
             continue
         svi = _svi_id(iface)
+        encoded = svi if svi is not None else vlan_id_of_name(iface.name)
+        if (
+            svi is None and encoded is not None
+            and not iface.enabled and _holds_something(iface)
+        ):
+            # Disabled, it is decided as a VLAN interface of its grammar
+            # is (:func:`_the_svis`): refused, its addresses off its
+            # VLAN's record.  An AOS-S VLAN cannot be disabled.
+            svi = encoded
         if svi is not None:
             svis.append((index, svi))
-        encoded = svi if svi is not None else vlan_id_of_name(iface.name)
         if encoded is not None:
             by_its_name.setdefault(encoded, []).append(iface.name)
     return decided, by_its_name, svis
