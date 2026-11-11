@@ -977,7 +977,7 @@ class TestAVlanOfARefusedTag:
         text, vid = _XR_REFUSED[case]
         assert vid in [vlan.id for vlan in get_codec("cisco_iosxr").parse(_XR_PORTS + text).vlans]
         job = _job("cisco_iosxr", _XR_PORTS + text + "end\n", {})
-        assert [x for x in job.rendered.splitlines() if x.startswith("; review: interface 0/1.")]
+        assert [x for x in job.rendered.splitlines() if x.startswith("; review: interface 1/1.")]
         assert f"vlan {vid}" not in _vlan_stanzas(job.rendered)
 
     def test_the_vlan_a_written_one_carries_is_written(self) -> None:
@@ -989,7 +989,7 @@ class TestAVlanOfARefusedTag:
         )
         out = _job("cisco_iosxr", text, {}).rendered
         assert "vlan 100" not in _vlan_stanzas(out)
-        assert "tagged 0/2" in _stanzas(out)["vlan 200"]
+        assert "tagged 1/2" in _stanzas(out)["vlan 200"]
 
     def test_a_record_that_holds_something_is_written(self) -> None:
         """As a tree: a record of the tag that is not as the parser makes

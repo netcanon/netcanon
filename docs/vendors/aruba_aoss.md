@@ -698,6 +698,19 @@ have.
 
 ## Common gotchas
 
+- **A port of member 0 is written on member 1.**  AOS-S numbers stack
+  and VSF members from 1 (a 2930M stack is members 1-10, a 2930F
+  fabric 1-8), and a Junos `ge-0/0/2`, an IOS XR
+  `GigabitEthernet0/0/0/2` or an IOS-XE router's `GigabitEthernet0/0/2`
+  names its first member or slot 0.  With no devices declared, such a
+  port is written `1/2`, as the first port of a member, `0`, is written
+  `1`.  A port of member 0 beside the same port of member 1 then has
+  one name, and the job is `partial` and lists the two.  `1/2` is a
+  port of member 1 of a stack or a fabric.  A switch that is neither
+  names its ports with no member (`2`), and the source name does not
+  say which the target is.  ⚠️ Up to
+  0.7.7 such a port was written `0/2`, a member AOS-S does not have, in
+  a job that said `completed`.
 - **A RADIUS `encrypted-key` is carried to AOS-S only.**  With
   `encrypt-credentials` on, AOS-S prints a RADIUS key as
   `encrypted-key "<blob>"`, on a host line or on the global
