@@ -698,7 +698,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Bind to the parent the config states, and otherwise
             # to the one chosen above -- either an identified
             # source-side parent's renamed target name
-            # (router-on-stick: OPNsense ixl0 → sfp-sfpplus0) or
+            # (router-on-stick: OPNsense ixl0 → sfp-sfpplus1) or
             # the synthesised ``bridge1`` (switching topology) -- or,
             # for a sub-interface, its own port.
             parts.append(f"interface={_quote_if_needed(parent)}")

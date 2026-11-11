@@ -70,10 +70,11 @@ interface.  IPv6 link-local addresses are auto-detected from prefix
   translator keeps the port number of a port on FPC 0 or 1 and drops
   the FPC and PIC (`ge-0/0/5` and `ge-1/0/5` are both `ether5`,
   `xe-0/0/1` is `sfp-sfpplus1`); a port on another FPC gets a number
-  of its own (`ge-2/0/3` is `ether1003`).  It writes a port 0 as
-  `ether0` or `sfp-sfpplus0`, which RouterOS does not have.  Two
-  ports on one name make the job `partial`; an entry in the port
-  map settles that, and places a port 0.
+  of its own (`ge-2/0/3` is `ether1003`).  RouterOS counts a port
+  from 1, so a port 0 is written as port 1 (`ge-0/0/0` is `ether1`,
+  `xe-0/0/0` `sfp-sfpplus1`), and `ge-0/0/0` beside `ge-0/0/1` is one
+  name as well.  Two ports on one name make the job `partial`; an
+  entry in the port map settles that.
 * `description` -> `comment=`: free-form, both quote whitespace.
 * `enabled` -> `disabled=`: inverted boolean; Junos `set ... disable`
   vs `delete ... disable` -> RouterOS `disabled=yes` vs `disabled=no`.

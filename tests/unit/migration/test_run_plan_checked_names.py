@@ -1891,7 +1891,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # (`GigabitEthernet0/0/0/0` is `1/1/1`, `ethernet1/1/1`,
     # `Ethernet1`, as `GigabitEthernet0/0/0/1` is): port 0 beside port
     # 1 of one card is two ports on one name (+14).
-    "cisco_iosxr": (18, 0, 13, 1, 1, 4),
+    # And from (18, 0, 13, 1, 1, 4): RouterOS counts a port from 1,
+    # and port 0 is written as port 1 there as well
+    # (`GigabitEthernet0/0/0/0` is `ether1`, `TenGigE0/0/0/0`
+    # `sfp-sfpplus1`): the one job onto RouterOS that was `completed`
+    # lists a port 0 and a port 1 on one name (+1).
+    "cisco_iosxr": (19, 0, 13, 1, 1, 4),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
@@ -1952,12 +1957,18 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (4, 0, 0, 0, 25, 0): AOS-CX, OS10 and EOS count a port
     # from 1, and port 0 is written as port 1 there (`igb0` is
     # `1/1/1`, `ethernet1/1/1`, `Ethernet1`), beside port 1 (+5).
-    "opnsense": (9, 0, 0, 0, 25, 0),
+    # And from (9, 0, 0, 0, 25, 0): RouterOS counts a port from 1, and
+    # a port 0 is written as port 1 there (`igb0` is `ether1`): the one
+    # job onto RouterOS that was `completed` lists it beside port 1
+    # (+1).
+    "opnsense": (10, 0, 0, 0, 25, 0),
     # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
     # is written `Ethernet1` there, as `eth1` is: two ports on one name
     # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
     # that were `partial` already.
-    "vyos": (26, 0, 0, 0, 0, 0),
+    # And from (26, 0, 0, 0, 0, 0): RouterOS counts a port from 1, and
+    # `eth0` is written `ether1` there, as `eth1` is (+8).
+    "vyos": (34, 0, 0, 0, 0, 0),
 }
 
 #: Names the translator left as the source config has them that a
@@ -2024,8 +2035,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [76, 0, 72, 5, 63, 52]
-        assert sum(by_reason) == 268
+        assert by_reason == [86, 0, 72, 5, 63, 52]
+        assert sum(by_reason) == 278
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

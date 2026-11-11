@@ -81,7 +81,10 @@ OPNsense's zone label (``wan`` / ``lan`` / ``opt1``) doesn't match
 any RouterOS interface form.  The BSD device name (``em0``) doesn't
 either.  Port-rename mesh handles the conversion via the codec's
 ``classify_port_name`` / ``format_port_identity`` delegates.
-Canonical preserves the source string verbatim.
+Canonical preserves the source string verbatim.  RouterOS counts a
+port from 1, so the port translator writes ``igb0`` as ``ether1`` and
+``ixl0`` as ``sfp-sfpplus1``: ``igb0`` beside ``igb1`` is two ports
+on one name, and the job is ``partial`` and lists both.
 
 The ``default_name`` discriminator is RouterOS-only and arrives
 EMPTY from an OPNsense source — the RouterOS render falls back to

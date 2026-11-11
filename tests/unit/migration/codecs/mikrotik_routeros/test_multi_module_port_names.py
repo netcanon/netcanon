@@ -331,9 +331,14 @@ def test_collision_dedup_in_render_output():
     )
 
     # Also verify the canonical interface names themselves are
-    # unique post-rename — a different tree-level invariant.
+    # unique post-rename — a different tree-level invariant — but
+    # one: ``GigabitEthernet0/0`` is a port 0, which RouterOS does
+    # not have, and is written as port 1, ``ether1``, the name
+    # ``AppGigabitEthernet1/0/1`` has.  A job lists the two
+    # (``fused_ports``; ``tests/unit/migration/
+    # test_a_number_counted_from_1.py``).
     names = [iface.name for iface in intent.interfaces]
-    assert len(set(names)) == len(names), (
-        f"duplicate canonical interface names after rename: "
-        f"{ {n: names.count(n) for n in names if names.count(n) > 1} }"
+    shared = {n: names.count(n) for n in names if names.count(n) > 1}
+    assert shared == {"ether1": 2}, (
+        f"canonical interface names shared after rename: {shared}"
     )

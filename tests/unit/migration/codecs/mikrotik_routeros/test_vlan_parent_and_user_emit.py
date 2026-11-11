@@ -6,7 +6,7 @@ user_smoke_findings.md`):
 
 * #7 — for an OPNsense supergate source where ``ixl0`` carries the
   LAN IP AND all five VLANs, the render previously emitted the LAN
-  IP on the renamed parent (``sfp-sfpplus0``) BUT bound the VLANs
+  IP on the renamed parent (``sfp-sfpplus1``) BUT bound the VLANs
   to a synthesised ``bridge1`` — splitting the topology and
   rendering five user networks unreachable.  The bridge synthesis
   was unconditional once a VLAN existed.  The fix makes
@@ -78,12 +78,12 @@ def test_vlans_with_explicit_parent_dont_synthesize_bridge():
     the VLAN parent.  Output binds VLANs to that interface and
     emits NO ``/interface bridge add`` line.  Mirrors the OPNsense
     supergate smoke-test shape after rename: ``ixl0`` becomes
-    ``sfp-sfpplus0`` carrying the LAN IP, with five VLANs alongside.
+    ``sfp-sfpplus1`` carrying the LAN IP, with five VLANs alongside.
     """
     intent = CanonicalIntent(
         interfaces=[
             CanonicalInterface(
-                name="sfp-sfpplus0",
+                name="sfp-sfpplus1",
                 ipv4_addresses=[
                     CanonicalIPv4Address(
                         ip="192.168.88.2", prefix_length=24,
@@ -104,14 +104,14 @@ def test_vlans_with_explicit_parent_dont_synthesize_bridge():
 
     # No /interface bridge section synthesised.
     assert "add name=bridge1" not in out, (
-        f"unexpected bridge1 synthesis when ixl0/sfp-sfpplus0 is "
+        f"unexpected bridge1 synthesis when ixl0/sfp-sfpplus1 is "
         f"the VLAN parent\n--- output ---\n{out}"
     )
     # VLAN children bind directly to the parent's renamed name.
     for vid in (10, 11, 20, 100, 150):
         assert (
-            f"interface=sfp-sfpplus0 name=vlan{vid} vlan-id={vid}" in out
-        ), f"VLAN {vid} did not bind to sfp-sfpplus0:\n{out}"
+            f"interface=sfp-sfpplus1 name=vlan{vid} vlan-id={vid}" in out
+        ), f"VLAN {vid} did not bind to sfp-sfpplus1:\n{out}"
     # No phantom bridge-bound VLANs.
     assert "interface=bridge1" not in out
 
@@ -145,14 +145,14 @@ def test_vlans_without_explicit_parent_still_synthesize_bridge():
 def test_vlans_with_explicit_parent_lan_ip_and_vlans_share_parent():
     """The actual smoke-test bug pin: source has LAN IP on ``ixl0``
     AND five VLANs whose parent is ``ixl0``.  After cross-vendor
-    rename, ``ixl0`` is ``sfp-sfpplus0``.  Output must place the
+    rename, ``ixl0`` is ``sfp-sfpplus1``.  Output must place the
     LAN IP and the VLAN children on the SAME target name (no
-    split between sfp-sfpplus0 and a synthetic bridge1).
+    split between sfp-sfpplus1 and a synthetic bridge1).
     """
     intent = CanonicalIntent(
         interfaces=[
             CanonicalInterface(
-                name="sfp-sfpplus0",
+                name="sfp-sfpplus1",
                 description="LAN",
                 ipv4_addresses=[
                     CanonicalIPv4Address(
@@ -169,17 +169,17 @@ def test_vlans_with_explicit_parent_lan_ip_and_vlans_share_parent():
 
     out = render_intent(intent)
 
-    # The LAN IP lands on sfp-sfpplus0.
+    # The LAN IP lands on sfp-sfpplus1.
     assert (
-        "add address=192.168.88.2/24 interface=sfp-sfpplus0" in out
-    ), f"LAN IP not on sfp-sfpplus0:\n{out}"
-    # The VLANs land on sfp-sfpplus0 too.
+        "add address=192.168.88.2/24 interface=sfp-sfpplus1" in out
+    ), f"LAN IP not on sfp-sfpplus1:\n{out}"
+    # The VLANs land on sfp-sfpplus1 too.
     assert (
-        "interface=sfp-sfpplus0 name=vlan10 vlan-id=10" in out
-    ), f"VLAN 10 not on sfp-sfpplus0:\n{out}"
+        "interface=sfp-sfpplus1 name=vlan10 vlan-id=10" in out
+    ), f"VLAN 10 not on sfp-sfpplus1:\n{out}"
     assert (
-        "interface=sfp-sfpplus0 name=vlan11 vlan-id=11" in out
-    ), f"VLAN 11 not on sfp-sfpplus0:\n{out}"
+        "interface=sfp-sfpplus1 name=vlan11 vlan-id=11" in out
+    ), f"VLAN 11 not on sfp-sfpplus1:\n{out}"
     # And the topology stays cohesive — no bridge1 synthesis at all.
     assert "bridge1" not in out
 
@@ -257,7 +257,7 @@ def test_loopback_excluded_from_parent_candidates():
     intent = CanonicalIntent(
         interfaces=[
             CanonicalInterface(
-                name="sfp-sfpplus0",
+                name="sfp-sfpplus1",
                 ipv4_addresses=[
                     CanonicalIPv4Address(
                         ip="192.168.88.2", prefix_length=24,
@@ -278,8 +278,8 @@ def test_loopback_excluded_from_parent_candidates():
 
     out = render_intent(intent)
 
-    # sfp-sfpplus0 is the only non-loopback candidate → it wins.
-    assert "interface=sfp-sfpplus0 name=vlan10 vlan-id=10" in out
+    # sfp-sfpplus1 is the only non-loopback candidate → it wins.
+    assert "interface=sfp-sfpplus1 name=vlan10 vlan-id=10" in out
     assert "add name=bridge1" not in out
 
 
