@@ -369,13 +369,14 @@ per_field_expectation:
   # -- Services -------------------------------------------------------------
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
-      Symmetric gap: both matrices declare `/dhcp-servers/pool` unsupported
-      (aruba_aoss: "Render emits no DHCP server pool; intent.dhcp_servers are
-      dropped on migration").  No committed cell populates it — a campus switch
-      of either generation relays DHCP rather than serving it — so this is a
-      declaration-level statement, not an observed drop.
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/dhcp-servers/pool` unsupported,
+      so the canonical pool is never populated from this source and no
+      committed cell holds one.  aruba_aoss declares it SUPPORTED (it writes a
+      `dhcp-server pool` and reads one back), so a pool re-authored on the
+      AOS-S side will stick; a campus AOS-CX switch normally relays DHCP
+      rather than serving it.
     references: [aoscx-aoss-surface]
 
   "snmp.community":

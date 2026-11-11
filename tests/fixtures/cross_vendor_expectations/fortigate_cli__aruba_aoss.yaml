@@ -9,10 +9,10 @@
 # Several fields are direction-asymmetric:
 #
 #   * dhcp_servers: aruba -> fortigate is good (the Aruba parser
-#     reads a `dhcp-server pool`).  fortigate -> aruba is unsupported
-#     (FortiGate-source carries pools that have no Aruba target —
-#     the aruba_aoss render writes no pool, and declares
-#     /dhcp-servers/pool unsupported).
+#     reads a `dhcp-server pool`).  fortigate -> aruba is lossy: the
+#     aruba_aoss render writes each pool, but a FortiGate pool is
+#     served on an interface for which the output has no VLAN
+#     stanza, and AOS-S then serves it only through a relay.
 #   * vlans port-membership: aruba -> fortigate loses the per-VLAN
 #     port list (canonical has it; FortiGate render does not
 #     synthesise child VLAN interfaces).  fortigate -> aruba is
@@ -287,18 +287,21 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: unsupported
+    disposition: lossy
     reason: >
       FortiGate-source ``config system dhcp server`` populates
-      CanonicalDHCPPool records cleanly on parse.  The aruba_aoss
-      render writes no pool (``/dhcp-servers/pool`` is unsupported):
-      AOS-S has a DHCP server of its own (``dhcp-server pool``, which
-      the aruba_aoss parser reads), but the Aruba render emits a
-      comment for each pool describing what was lost, not a stanza.
-      FortiGate operators migrating to AOS-S configure each pool on
-      the switch by hand, or move DHCP to a separate server behind
-      an IP-helper relay.  Promote to lossy when the render writes
-      ``dhcp-server pool``.
+      CanonicalDHCPPool records cleanly on parse, and the aruba_aoss
+      render writes each as AOS-S's own ``dhcp-server pool`` (network,
+      range, gateway, DNS servers, domain and lease, which read back
+      whole), with ``dhcp-server enable`` last.  What is lost is
+      where it is served: AOS-S serves a pool on a VLAN whose stanza
+      states ``dhcp-server`` and holds an address of the pool's
+      network, and a FortiGate pool is served on a port, an aggregate
+      or a VLAN interface, none of which the FortiGate parser makes a
+      VLAN of.  Each such pool is written with a ``; review:`` line
+      (and a job warning), the switch serves it only to clients a
+      DHCP relay forwards to it, and the aruba_aoss parser reads it
+      back on no interface.
     references: [dhcp]
 
   snmp:
@@ -470,8 +473,8 @@ per_field_expectation:
 #
 #   * Direction-asymmetric losses are well-understood (dns_servers
 #     and syslog_servers are good in this direction where lossy
-#     in the forward; dhcp_servers escalates from not_applicable
-#     to unsupported because FortiGate now sources real pools).
+#     in the forward; dhcp_servers is lossy here, for where a
+#     pool is served, and good in the forward).
 #
 #   * Switching features (Aruba-side switchport / spanning-tree /
 #     voice-VLAN-via-LLDP-MED) are confidently unsupported on this
@@ -498,9 +501,5 @@ per_field_expectation:
 #     migration to Aruba — deferred indefinitely.  No Aruba
 #     analogue beyond Tier-3 ACLs (out of v1 scope on the AOS-S
 #     codec too).
-#
-#   * AOS-S 16.11+ DHCP-server support — promote dhcp_servers
-#     from unsupported to lossy when the aruba_aoss codec wires
-#     pool render.
 #
 #   * TACACS+ — no canonical model in v1.

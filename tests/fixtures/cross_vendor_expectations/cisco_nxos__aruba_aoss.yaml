@@ -494,8 +494,9 @@ per_field_expectation:
       Source-side absence, not a target gap: the cisco_nxos codec declares
       `/dhcp-servers/pool` unsupported and never populates
       `intent.dhcp_servers` (0 of 13 cells), so there is nothing for the AOS-S
-      target to lose.  The target declares the same path unsupported, so
-      closing the NX-OS parse side alone would not move this row.
+      target to lose.  AOS-S *can* write DHCP pools -- its matrix declares
+      `/dhcp-servers/pool` supported -- so closing the NX-OS parse side would
+      move this row to `good` or `lossy`, not leave it here.
     references: [nxos-aoss-surface]
 
   radius_servers:

@@ -51,7 +51,7 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - SNMP v1/v2c/v3 — `snmpv3 user` + `snmpv3 group` mappings; engine
   ID; trap-host with `trap-level` filtering
 - RADIUS — `radius-server host <ip> key <secret>`
-- DHCP server pools: **read, not written.**  The parser reads a
+- DHCP server pools: **read and written.**  The parser reads a
   `dhcp-server pool` where the server is enabled (`dhcp-server
   enable`; the server defaults to disabled): its network, its first
   range and default router, its DNS servers, domain and lease, on the
@@ -61,9 +61,26 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   said (`disabled:`), and so is a pool the server discards
   (`incomplete:`); a second range or router, a static binding, an
   option and a setting of the server are rows of the sections not
-  translated.  Onto AOS-S a pool is written only as a `;` comment that
-  names its network, gateway and range (`/dhcp-servers/pool` and each
-  of its fields are declared `unsupported`)
+  translated.  Onto AOS-S a pool is written as the switch prints one:
+  a `dhcp-server pool "pool-<N>"` stanza after the static routes, with
+  `default-router`, `dns-server` (up to eight), `domain-name`, `lease
+  DD:HH:MM` or `lease infinite` (none for the default of one day),
+  `network <address> <mask>` and its `range` lines; `dhcp-server` in
+  the stanza of the VLAN that serves it; and `dhcp-server enable`
+  after the last pool.  A VLAN serves a pool where its stanza holds an
+  address of the pool's network and stands for the pool's interface
+  (`Vlan<N>`, the interface its address is taken from, or a name that
+  encodes the VLAN's id, such as a Junos `irb.<N>`).  A pool on any
+  other interface -- a routed port, a bridge, a FortiGate VLAN
+  interface, an OPNsense zone's port -- is written with a `; review:`
+  line, and the switch serves it only to clients a DHCP relay
+  forwards to it.  HPE: the switch discards a pool with no network
+  and range, so such a pool is not written and a review line says so;
+  a pool that states no range, or one end of one, is written the
+  addresses it hands out less the output's own, in as many `range`
+  lines as that takes.  A lease is written in whole minutes, and one
+  longer than the 99 days of `DD` is not written.  Each review line
+  is a warning of the job too
 - Local users — one manager and one operator account, in the AOS-S
   forms (`sha1`, `sha256`, `plaintext`), and as a source the
   `aaa authentication local-user` accounts beside them; see

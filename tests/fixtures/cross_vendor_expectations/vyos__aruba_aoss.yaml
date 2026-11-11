@@ -406,14 +406,14 @@ per_field_expectation:
     references: [vyos-aoss-surface]
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
-      Both matrices declare `/dhcp-servers/pool` unsupported — a symmetric
-      gap.  aruba_aoss states it plainly ("Render emits no DHCP server pool").
-      Trivially empty on all 13 cells, so the gap is declared rather than
-      observed.  A VyOS box that was serving DHCP will need that service
-      re-homed somewhere else entirely; an AOS-S access switch normally
-      relays rather than serves.
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/dhcp-servers/pool` unsupported, so
+      `set service dhcp-server` never enters the canonical tree; trivially
+      empty on all 13 cells.  aruba_aoss declares the path SUPPORTED (it
+      writes a `dhcp-server pool`), so DHCP re-authored on the AOS-S side
+      will stick -- worth flagging on a VyOS migration specifically, because
+      a VyOS edge box very often IS the DHCP server for its LAN.
     references: [vyos-aoss-surface]
 
   # -- SNMP -- the v1/v2c surface is clean, USM is not -----------------------

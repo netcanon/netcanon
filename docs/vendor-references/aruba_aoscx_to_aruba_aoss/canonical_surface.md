@@ -230,8 +230,11 @@ target will stick.
 `unsupported`, because neither side can carry it and no re-authoring in the
 migration will help:
 
-`/system/domain` · `/system/timezone` · `/system/syslog-server` ·
-`/dhcp-servers/pool`
+`/system/domain` · `/system/timezone` · `/system/syslog-server`
+
+`/dhcp-servers/pool` was in this list until the aruba_aoss renderer wrote
+AOS-S's own `dhcp-server pool`; it is now a source-side gap only, recorded
+`not_applicable`.
 
 **Target-side drop** — the source populates the field and `aruba_aoss` declares
 it unsupported, so it vanishes on render. Recorded `unsupported`, and each is a

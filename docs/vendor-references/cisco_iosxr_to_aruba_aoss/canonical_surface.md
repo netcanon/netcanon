@@ -126,8 +126,9 @@ unsupported and renders nothing:
 - `/routing-instances/instance` — observed, 8 cells.
 
 **Symmetric gap → `unsupported`.** Both matrices declare it unsupported:
-`/system/timezone`, `/dhcp-servers/pool`, `/vxlan-vnis/*`,
-`/anycast-gateway-mac`.
+`/system/timezone`, `/vxlan-vnis/*`, `/anycast-gateway-mac`.
+`/dhcp-servers/pool` is a source-side gap only, since the aruba_aoss renderer
+writes a `dhcp-server pool`: `not_applicable`.
 
 ## Four findings worth carrying forward
 

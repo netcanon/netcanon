@@ -153,10 +153,11 @@ Those split three ways in the YAML, and the split is deliberate:
   AOS-S declares `/vlans/vlan/{id,name,tagged-ports,untagged-ports}`,
   `/vlans/vlan/ipv4/address/ip` and `/interfaces/interface/vrrp-groups/group`
   **supported**, so a campus L2 surface or a VRRP group authored on the target
-  after cutover will stick. The migration report should say that rather than
-  implying AOS-S cannot hold it.
+  after cutover will stick.  `dhcp_servers` joined this group when the
+  aruba_aoss renderer began writing a `dhcp-server pool`. The migration
+  report should say that rather than implying AOS-S cannot hold it.
 - **`unsupported`** where **both** matrices declare the gap — `timezone`,
-  `syslog_servers`, `dhcp_servers`, `anycast_gateway_mac`. Symmetric, and
+  `syslog_servers`, `anycast_gateway_mac`. Symmetric, and
   nothing carries them.
 - **`not_applicable`** for the structurally-absent Junos surfaces
   (`apply_groups`, `group_content`), for `evpn_type5_routes` (neither codec

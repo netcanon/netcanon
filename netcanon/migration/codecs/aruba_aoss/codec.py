@@ -44,7 +44,7 @@ from . import port_names as _port_names
 from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
 from .accounts import account_warnings
 from .parse import _parse_port_list, parse_intent, without_banner_bodies
-from .render import _format_port_list, render_intent
+from .render import _format_port_list, pool_warnings, render_intent
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -63,19 +63,6 @@ __all__ = [
 #: ``_CAPS.unsupported``; ``tests/unit/migration/
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
-        "no field of one is: its range, its interface, its gateway, DNS "
-        "servers, domain and lease go with it.",
-        (
-            "/dhcp-servers/pool/range",
-            "/dhcp-servers/pool/interface",
-            "/dhcp-servers/pool/gateway",
-            "/dhcp-servers/pool/dns-servers",
-            "/dhcp-servers/pool/domain-name",
-            "/dhcp-servers/pool/lease-time",
-        ),
-    ),
     (
         "No IPv4 virtual gateway is written "
         "(`ipv4/address/virtual-gateway-address` is unsupported), so "
@@ -256,6 +243,12 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/trunk-native-vlan",
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
+            # The switch's own DHCP server: a ``dhcp-server pool`` stanza
+            # for each pool, ``dhcp-server`` in the VLAN that serves it,
+            # ``dhcp-server enable`` last (:mod:`.dhcp_pools`).  What AOS-S
+            # cannot be given as the tree has it is a review line and a
+            # warning of the job.
+            "/dhcp-servers/pool",
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -617,10 +610,6 @@ class ArubaAOSSCodec(CodecBase):
                 reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
             ),
             UnsupportedPath(
-                path="/dhcp-servers/pool",
-                reason="Render emits no DHCP server pool; intent.dhcp_servers are dropped on migration.",
-            ),
-            UnsupportedPath(
                 path="/routing-instances/instance",
                 reason="Render emits no VRF/routing-instance construct; "
                 "intent.routing_instances are dropped on migration.",
@@ -724,8 +713,15 @@ class ArubaAOSSCodec(CodecBase):
     def render_warnings(self, tree: Any) -> list[str]:
         """A warning for each local user AOS-S is not given for a reason
         of its own: it holds one manager and one operator account
-        (:mod:`.accounts`)."""
-        return account_warnings(getattr(tree, "local_users", None) or [])
+        (:mod:`.accounts`); and one for each review line of the output's
+        DHCP server: a pool not written, a range or a lease written
+        otherwise than the source states it, an option AOS-S is not
+        given, a pool no VLAN of the output serves
+        (:mod:`.dhcp_pools`)."""
+        return [
+            *account_warnings(getattr(tree, "local_users", None) or []),
+            *pool_warnings(tree),
+        ]
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

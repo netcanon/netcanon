@@ -338,13 +338,14 @@ per_field_expectation:
   # -- Services -------------------------------------------------------------
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
-      Symmetric gap: BOTH matrices declare `/dhcp-servers/pool` unsupported, so
-      neither codec models a DHCP server pool and no committed cell populates
-      the field.  An SP edge router relays DHCP rather than serving it.  Stand
-      up DHCP scopes on the target by hand if the replaced device was serving
-      them.
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/dhcp-servers/pool` unsupported,
+      so the canonical pool is never populated from this source and no
+      committed cell holds one.  aruba_aoss declares it SUPPORTED, so DHCP
+      scopes re-authored on the AOS-S side will stick if the replaced device
+      was serving them; an SP edge router normally relays DHCP rather than
+      serving it.
     references: [iosxr-aoss-surface]
 
   "snmp.community":

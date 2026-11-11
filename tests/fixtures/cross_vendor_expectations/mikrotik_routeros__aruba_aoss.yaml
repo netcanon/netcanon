@@ -13,9 +13,8 @@
 # and the operator MUST set passwords manually post-migration).
 #
 # Aruba target also has structurally smaller feature footprint than
-# Cisco IOS-XE — fields like dhcp_servers (the Aruba render writes no
-# pool) are unsupported on the target side rather than lossy.  This is the
-# dominant difference from the inverse cisco_iosxe_cli pair.
+# Cisco IOS-XE.  This is the dominant difference from the inverse
+# cisco_iosxe_cli pair.
 
 meta:
   source_vendor: mikrotik_routeros
@@ -232,18 +231,21 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review banner ──
 
   dhcp_servers:
-    disposition: unsupported
+    disposition: lossy
     reason: >
       RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
       server network`` + ``/ip dhcp-server``) joins on parse to
       one CanonicalDHCPPool per enabled ``/ip dhcp-server`` and
-      emits in canonical scope.  The aruba_aoss render writes no pool
-      (``/dhcp-servers/pool`` is unsupported): AOS-S has a DHCP
-      server of its own (``dhcp-server pool``, which the aruba_aoss
-      parser reads), but cross-vendor render to Aruba drops the pool
-      config with a comment for each pool; the operator configures
-      each pool on the switch by hand, or a relay to a central
-      server.  RouterOS-only static reservations
+      emits in canonical scope, and the aruba_aoss render writes each
+      as AOS-S's own ``dhcp-server pool``, with ``dhcp-server
+      enable`` last.  What is lost is where it is served: AOS-S
+      serves a pool on a VLAN whose stanza states ``dhcp-server`` and
+      holds an address of the pool's network.  A pool on a VLAN
+      interface whose address the output writes in a VLAN stanza is
+      served there; one on a bridge or a port has no VLAN stanza in
+      the output, is written with a ``; review:`` line, and is served
+      only to clients a DHCP relay forwards to it.  RouterOS-only
+      static reservations
       (``/ip dhcp-server lease``) and DHCP option codes are not
       modelled canonically and drop to raw_sections; of a
       multi-range pool the tree keeps the largest run, and the
@@ -439,11 +441,9 @@ per_field_expectation:
 #     information loss" in this direction — the canonical model
 #     simply does not capture as much as the RouterOS source carries.
 #
-#   * dhcp_servers is unsupported on the Aruba target side rather
-#     than lossy.  AOS-S 16.x has a DHCP server of its own, which
-#     the parser reads, but the render writes no pool and declares
-#     /dhcp-servers/pool unsupported.  The pools, or a relay
-#     topology, are configured by hand.
+#   * dhcp_servers is lossy: the pools are written, but a pool on
+#     a bridge or a port has no VLAN stanza of the output to be
+#     served in.
 #
 # Deferred items (not researched in depth this pass):
 #

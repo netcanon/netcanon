@@ -19,7 +19,7 @@ because OPNsense never models those concepts to begin with.
 | `interfaces.md` | OPNsense zone-label `<wan>` / `<lan>` / `<optN>` mapped to BSD `<if>` versus Aruba bare-numeric / letter-uplink port names. |
 | `vlans.md` | OPNsense VLAN-as-tagged-sub-interface versus Aruba VLAN-centric port-membership. |
 | `static_routes.md` | OPNsense two-block `<gateways>` + `<staticroutes>` model versus Aruba CIDR `ip route`. |
-| `dhcp_relay_versus_pool.md` | OPNsense `<dhcpd>` interface-keyed pool versus Aruba, whose codec writes no `dhcp-server pool`. |
+| `dhcp_relay_versus_pool.md` | OPNsense `<dhcpd>` interface-keyed pool versus Aruba, whose codec writes a `dhcp-server pool` for it (an update at the top supersedes the body). |
 | `snmp.md` | OPNsense `<snmpd>` round-trips v1/v2c; SNMPv3 USM lives in plugin's snmpd.conf and is unsupported. |
 | `local_users.md` | OPNsense bcrypt versus Aruba SHA-1 / bcrypt / plaintext; hash compatibility is partial at best. |
 | `radius.md` | OPNsense `<authserver>` versus Aruba flat `radius-server host` form. |
