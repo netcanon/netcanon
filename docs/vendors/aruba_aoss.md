@@ -335,6 +335,19 @@ for its VLAN.  A
 route out of one that is left out is not written either, and its own
 review line says so.
 
+A unit of a port or a LAG that has no 802.1Q tag is not written
+either.  Every AOS-CX and OS10 sub-interface is one, since those
+parsers read no tag, and so is a unit whose config states none.  The
+port translator sends it after its port as `2.100` or `Trk1.100`.
+Where it holds an address, a VRRP group, a description or an MTU, a
+`; review:` line and a warning say so; one that holds none of them
+loses nothing, and nothing is said.  Up to 0.7.7 it was written
+`interface 2.100` with its address.  With no devices declared, or
+where an entry of the port map names the unit, the job is not `partial`
+for it: the review line and a warning say it.  A unit of a name of no
+AOS-S form (`ge-0/0/2.100`, where the port was not translated) is
+written as every such name is, for a reviewer.
+
 `/interfaces/interface/dot1q-vlan` is declared lossy at severity
 `error`, so a job with a routed sub-interface is `partial`;
 `dot1q-native` and `dot1q-inner-vlan` are unsupported.  Up to 0.7.7 a

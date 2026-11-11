@@ -2590,6 +2590,14 @@ _JUNOS_UNITS = (
 ).read_text(encoding="utf-8")
 
 
+#: What the AOS-S renderer writes for unit ``1.54`` of port 1, which
+#: has no tag: AOS-S writes a unit of a port only as the VLAN of its
+#: tag.
+_AOSS_NO_UNIT_OF_A_PORT = (
+    "; review: interface 1.54 is a unit of 1 with no 802.1Q tag read for it, "
+    "and AOS-S writes a unit of a port only as the VLAN of its tag; not written"
+)
+
 #: An IOS-XE sub-interface whose stanza states no ``encapsulation``.
 _IOS_UNIT_WITH_NO_TAG = "\n".join([
     "!", "version 17.9", "hostname r1", "!",
@@ -2798,8 +2806,10 @@ class TestSubInterfaces:
     def test_a_unit_with_no_tag_needs_a_decision(self) -> None:
         """An IOS-XE unit whose stanza states no ``encapsulation``,
         onto AOS-S.  It goes where its port goes like any unit, and
-        the tree holds no tag to go with it: the output has
-        ``interface 1.54`` and nothing that says which VLAN it is.
+        the tree holds no tag to go with it: AOS-S, which writes a unit
+        of a port only as the VLAN of its tag, leaves ``1.54`` out
+        under a review line (before, the output had ``interface 1.54``
+        and nothing that said which VLAN it is).
         There is no tag for the validation report to list either,
         so counted as having followed it left the job ``completed``
         with nothing said.  It is recorded apart, stays among the
@@ -2814,7 +2824,9 @@ class TestSubInterfaces:
             _device("standalone", {"model": "JL260A"}),
         )
         plan = job.port_mapping_plan
-        assert job.port_renames[unit] == "1.54" and "interface 1.54" in job.rendered
+        assert job.port_renames[unit] == "1.54"
+        assert "interface 1.54" not in job.rendered.splitlines()
+        assert _AOSS_NO_UNIT_OF_A_PORT in job.rendered.splitlines()
         assert plan.untagged_units == {unit: "1.54"} and plan.sub_interfaces == {}
         assert plan.off_inventory == [unit] and plan.unresolved_ports == [unit]
         assert job.status == MigrationJobStatus.partial
@@ -2834,7 +2846,13 @@ class TestSubInterfaces:
         )
         plan = job.port_mapping_plan
         assert plan.untagged_units == {} and plan.unresolved_ports == []
-        assert not [w for w in job.warnings if "802.1Q" in w]
+        # Nothing more is said of its tag; but an entry that names the
+        # unit does not give AOS-S a form for it, and the renderer says
+        # it is not written (the job is not held for it: CHANGELOG,
+        # Known limitations).
+        said = [w for w in job.warnings if "802.1Q" in w]
+        assert said == ([] if answer is None else [_AOSS_NO_UNIT_OF_A_PORT[len("; review: "):]])
+        assert "interface 1.54" not in job.rendered.splitlines()
         assert job.status == MigrationJobStatus.completed
         # And that is the end of it.  The plan's line says to name
         # the unit; a unit of a port the target lists is where the

@@ -755,3 +755,133 @@ class TestOnAParentTheJobDrops:
         monkeypatch.setattr(vlan_interfaces, "NAMES_A_VLAN_AFTER_ITS_INTERFACE", frozenset())
         out = _job("mikrotik_routeros", _on_a_dropped_bridge(), {}).rendered
         assert _on(out, "10.20.0.1") != ["Vlan20"]
+
+
+#: Units of a port with no 802.1Q tag in the tree, as each source writes
+#: one, and the port map that sends each after its port: the source,
+#: the text, the map, and the unit's name and port in the output.
+_NO_TAG: dict[str, tuple[str, str, dict[str, str], str, str]] = {
+    "an IOS-XE unit": ("cisco_iosxe_cli", _IOSXE_PORT + _IOSXE_UNIT.format(body=""), _MAP, "2.100", "2"),
+    "a Junos unit": (
+        "juniper_junos",
+        "set system host-name r1\nset interfaces ge-0/0/2 unit 100 family inet address 198.51.100.1/24\n",
+        {"ge-0/0/2": "2"}, "2.100", "2",
+    ),
+    "an AOS-CX unit, whose tag the parser does not read": (
+        "aruba_aoscx",
+        "hostname r1\ninterface 1/1/2\n    no shutdown\n    routing\n"
+        "interface 1/1/2.100\n    encapsulation dot1q 100\n    ip address 198.51.100.1/24\n",
+        {"1/1/2": "2"}, "2.100", "2",
+    ),
+    "a unit of a LAG": (
+        "cisco_nxos",
+        "hostname r1\ninterface port-channel1\n  no switchport\n"
+        "interface port-channel1.100\n  ip address 198.51.100.1/24\n"
+        "interface Ethernet1/1\n  channel-group 1 mode active\n",
+        {"Ethernet1/1": "1"}, "Trk1.100", "Trk1",
+    ),
+}
+
+
+def _no_tag_why(port: str) -> str:
+    return (
+        f"is a unit of {port} with no 802.1Q tag read for it, and AOS-S writes a "
+        f"unit of a port only as the VLAN of its tag"
+    )
+
+
+def _unit_problems(job: MigrationJob, name: str, port: str, ip: str = _IP) -> list[str]:
+    """What is wrong with unit *name* of *port*, which has no tag, in the
+    output of *job*: no stanza of its own; one review line where it would
+    be and one warning, each saying why; its address in no line, and read
+    back onto nothing by the AOS-S parser."""
+    out = job.rendered or ""
+    problems: list[str] = []
+    own = [h for h in _stanzas(out) if h.lower() == f"interface {name.lower()}"]
+    if own:
+        problems.append(f"the output has {own}")
+    line = f"; review: interface {name} {_no_tag_why(port)}; not written"
+    if [x for x in out.splitlines() if x == line] != [line]:
+        problems.append("it has no review line, or more than one")
+    said = f"interface {name} {_no_tag_why(port)}; not written"
+    if [w for w in job.warnings if w == said] != [said]:
+        problems.append("the job does not say it once")
+    if ip in out:
+        problems.append(f"{ip} is in the output")
+    back = get_codec(AOSS).parse(out)
+    onto = [i.name for i in back.interfaces if any(a.ip == ip for a in i.ipv4_addresses)]
+    onto += [f"vlan {v.id}" for v in back.vlans if any(a.ip == ip for a in v.ipv4_addresses)]
+    if onto:
+        problems.append(f"{ip} is read onto {onto}")
+    return problems
+
+
+class TestAUnitWithNoTag:
+    """AOS-S has no form for a unit of a port, and writes a sub-interface
+    as the VLAN of its tag.  A unit with no tag in the tree went after its
+    port and was written ``interface 2.100`` with its address, a name
+    AOS-S has no form for."""
+
+    @pytest.mark.parametrize("case", sorted(_NO_TAG))
+    def test_is_left_out_under_a_review_line(self, case: str) -> None:
+        source, text, pmap, name, port = _NO_TAG[case]
+        units = [i for i in get_codec(source).parse(text).interfaces if "." in i.name]
+        assert [i.dot1q_vlan for i in units] == [None]
+        assert _unit_problems(_job(source, text, pmap), name, port) == []
+
+    def test_one_that_holds_a_description_only(self) -> None:
+        text = _IOSXE_PORT + "interface GigabitEthernet0/0/2.100\n description uplink unit\n!\n"
+        job = _job("cisco_iosxe_cli", text, _MAP)
+        assert _unit_problems(job, "2.100", "2") == []
+        assert "uplink unit" not in job.rendered
+
+    def test_one_that_holds_an_mtu_only(self) -> None:
+        """As a tree, rendered: AOS-S writes no MTU of an interface, and
+        the unit is said all the same."""
+        tree = CanonicalIntent(hostname="r1", interfaces=[
+            CanonicalInterface(name="2"), CanonicalInterface(name="2.100", mtu=1500),
+        ])
+        out, warnings = _render(tree)
+        assert "interface 2.100" not in _stanzas(out)
+        line = f"interface 2.100 {_no_tag_why('2')}; not written"
+        assert [x for x in out.splitlines() if x == f"; review: {line}"] == [f"; review: {line}"]
+        assert [w for w in warnings if w == line] == [line]
+
+    def test_one_that_holds_nothing_is_not_said(self) -> None:
+        """Nothing of it is lost: no stanza, no review line, no warning
+        of the renderer's (the port translator still says it went with
+        its port with no tag)."""
+        text = _IOSXE_PORT + "interface GigabitEthernet0/0/2.100\n shutdown\n!\n"
+        job = _job("cisco_iosxe_cli", text, _MAP)
+        assert not [h for h in _stanzas(job.rendered) if "2.100" in h]
+        assert not [x for x in job.rendered.splitlines() if "2.100" in x]
+        assert not [w for w in job.warnings if w.startswith("interface 2.100")]
+
+    def test_a_route_out_of_it_has_its_own_review_line(self) -> None:
+        text = _IOSXE_PORT + _IOSXE_UNIT.format(body="") + (
+            "ip route 192.0.2.0 255.255.255.0 GigabitEthernet0/0/2.100\n"
+        )
+        out = _job("cisco_iosxe_cli", text, _MAP).rendered
+        assert not [x for x in out.splitlines() if x.startswith("ip route")]
+        assert [x for x in out.splitlines() if x.startswith("; review: static route 192.0.2.0/24")] == [
+            "; review: static route 192.0.2.0/24 goes out 2.100, and AOS-S names only "
+            "an address, a VLAN or a null route as a next hop; not written",
+        ]
+
+    def test_a_unit_of_a_name_of_no_aoss_form_is_written_for_review(self) -> None:
+        """Where its port was not translated, a unit is written as every
+        name of no AOS-S form is, with what it holds."""
+        tree = CanonicalIntent(hostname="r1", interfaces=[
+            CanonicalInterface(name="ge-0/0/2.100", ipv4_addresses=_address(_IP)),
+        ])
+        out, _warnings = _render(tree)
+        assert "ip address 198.51.100.1/24" in _stanzas(out)["interface ge-0/0/2.100"]
+
+    def test_the_check_sees_it_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Handed the renderer as it was (no unit with no tag found), the
+        check above fails."""
+        monkeypatch.setattr(vlan_interfaces, "_units_with_no_tag", lambda tree, taken: ([], set()))
+        source, text, pmap, name, port = _NO_TAG["an IOS-XE unit"]
+        job = _job(source, text, pmap)
+        assert "interface 2.100" in _stanzas(job.rendered)
+        assert _unit_problems(job, name, port) != []
