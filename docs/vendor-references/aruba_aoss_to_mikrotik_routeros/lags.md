@@ -64,7 +64,9 @@ CanonicalLAG(name, members: list[str], mode: str)
 ```
 
 with `mode` normalised to `"active"` (LACP active) / `"passive"`
-(LACP passive, rare) / `"static"` (no LACP).
+(LACP passive, rare) / `"static"` (a static aggregate: no LACP,
+and the peer's ports grouped too) / `"active-backup"` (one port at
+a time; the peer's ports need no aggregate).
 
 ### Mode mapping
 
@@ -74,7 +76,8 @@ with `mode` normalised to `"active"` (LACP active) / `"passive"`
 | `trunk` | `balance-xor` | `static` |
 | `fec` | `balance-xor` (with banner) | `static` |
 | `dt-lacp` | `802.3ad` (with banner — RouterOS has no MC-LAG) | `active` |
-| (RouterOS `active-backup` / `balance-rr` / `balance-tlb` etc.) | (no Aruba equivalent) | `static` (with banner) |
+| (no Aruba equivalent) | `balance-rr` / `broadcast` / no `mode` (come back `balance-xor`) | `static` |
+| (no Aruba equivalent; the inverse writes `trunk` with a review line) | `active-backup` / `balance-tlb` / `balance-alb` (come back `active-backup`) | `active-backup` |
 
 Aruba `dt-lacp` (multi-chassis distributed-trunk) has no native
 RouterOS equivalent — RouterOS does not implement MC-LAG.
@@ -101,4 +104,4 @@ the rename mesh maps each member.
 | `lags[].name` | lossy (`Trk<N>` <-> `bond<N>` rename) |
 | `lags[].members` | good (rename mesh maps physical ports) |
 | `lags[].mode` | lossy (Aruba `fec` / `dt-lacp` collapse to `static` / `active` with banner) |
-| RouterOS-only modes | lossy on inverse direction (`active-backup` etc. -> `static`) |
+| RouterOS-only modes | lossy on inverse direction (`balance-rr` / `broadcast` -> `static`, written `trunk`; `active-backup` / `balance-tlb` / `balance-alb` -> `active-backup`, written as a static `trunk` with a review line) |

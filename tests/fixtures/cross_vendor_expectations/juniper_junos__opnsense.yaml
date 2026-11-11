@@ -682,13 +682,14 @@ per_field_expectation:
     reason: >
       Junos ``ae<N>`` ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4)
       driver naming; both zero-based).  Member lists round-trip via
-      the port-rename mesh.  LACP modes collapse: Junos's three-way
-      ``active`` / ``passive`` / static maps to OPNsense's single
-      ``<proto>lacp</proto>`` (FreeBSD always advertises actively).
+      the port-rename mesh.  LACP modes collapse: Junos ``active`` /
+      ``passive`` map to OPNsense's single ``<proto>lacp</proto>``
+      (FreeBSD always advertises actively); a static Junos LAG (no
+      ``lacp``) is written ``<proto>loadbalance</proto>``.
       Junos chassis-wide ``device-count`` allocation has no OPNsense
-      analogue.  OPNsense codec parses ``<laggs>`` but its capability
-      matrix doesn't currently advertise ``/lag/aggregate``; render
-      is partial.
+      analogue.  The OPNsense matrix classifies ``/lags/lag/name``
+      and ``/lags/lag/members`` as supported and ``/lags/lag/mode``
+      as lossy.
     references: [junos-lag-overview, junos-ae-example, opnsense-laggs]
 
   # ── Tier 2 — local users ──

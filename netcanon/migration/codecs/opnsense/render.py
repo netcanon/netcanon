@@ -1083,8 +1083,13 @@ def _pretty_print(root: ET.Element) -> str:
 # LAG proto map — render direction (inverse of parse).
 # ---------------------------------------------------------------------------
 
+#: A static aggregate is ``loadbalance``, "a static setup" that "does
+#: not negotiate aggregation with the peer" (lagg(4)); ``failover``
+#: accepts traffic on its active port only, so it is written only for a
+#: bond whose peer needs no aggregate (netcanon.migration._bonds).
 _CANONICAL_MODE_TO_OPNSENSE_PROTO = {
     "active": "lacp",
     "passive": "lacp",   # OPNsense doesn't distinguish active/passive at this layer
-    "static": "failover",
+    "static": "loadbalance",
+    "active-backup": "failover",
 }

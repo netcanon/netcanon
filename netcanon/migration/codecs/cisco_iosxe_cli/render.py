@@ -44,6 +44,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._derived_values import (
     is_derivation_keyword,
 )
@@ -614,11 +615,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 "passive": "passive",
                 "static": "on",
                 "on": "on",
+                # No active-backup bond here: a static aggregate, said
+                # in a review line (netcanon.migration._bonds).
+                ACTIVE_BACKUP: "on",
             }.get(mode.lower(), "active")
             if lag_num is not None:
                 body.append(
                     f" channel-group {lag_num} mode {wire_mode}"
                 )
+                if mode == ACTIVE_BACKUP:
+                    body.append(
+                        f" ! {active_backup_review(f'Port-channel{lag_num}')}"
+                    )
         # Enabled state — Cisco default is ``no shutdown`` so
         # we only emit when explicitly disabled.  Parsers that
         # didn't see ``shutdown`` leave enabled=True.

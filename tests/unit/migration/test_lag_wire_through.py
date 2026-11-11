@@ -309,13 +309,16 @@ add slaves=ether1,ether2 mode=802.3ad name=bond1
         assert lag.members == ["ether1", "ether2"]
         assert lag.mode == "active"
 
-    def test_active_backup_is_static(self):
+    def test_active_backup_is_active_backup(self):
+        # A bond that needs no aggregate of its peer is not a static
+        # aggregate (netcanon.migration._bonds; every mode is held in
+        # test_a_bond_needs_of_its_peer.py).
         raw = """\
 /interface bonding
 add slaves=ether1,ether2 mode=active-backup name=bond1
 """
         intent = MikroTikRouterOSCodec().parse(raw)
-        assert intent.lags[0].mode == "static"
+        assert intent.lags[0].mode == "active-backup"
 
     def test_render_emits_bonding_section(self):
         intent = CanonicalIntent(
@@ -367,7 +370,10 @@ class TestOPNsenseLAGParseRender:
         assert lag.members == ["em0", "em1"]
         assert lag.mode == "active"
 
-    def test_proto_failover_is_static(self):
+    def test_proto_failover_is_active_backup(self):
+        # lagg(4) failover needs no aggregate of its peer
+        # (netcanon.migration._bonds; every protocol is held in
+        # test_a_bond_needs_of_its_peer.py).
         raw = """\
 <opnsense>
 <laggs>
@@ -380,7 +386,7 @@ class TestOPNsenseLAGParseRender:
 </opnsense>
 """
         intent = OPNsenseCodec().parse(raw)
-        assert intent.lags[0].mode == "static"
+        assert intent.lags[0].mode == "active-backup"
 
     def test_render_emits_laggs_element(self):
         intent = CanonicalIntent(

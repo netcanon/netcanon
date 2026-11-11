@@ -122,6 +122,18 @@ logger = logging.getLogger(__name__)
 #: ``system host-name <name>`` leaf (matched by path + this value regex).
 _HOSTNAME_KEY = "host-name"
 
+#: VyOS bonding ``mode`` -> canonical LAG mode (netcanon.migration._bonds).
+#: A mode not listed is read as a static aggregate.
+_VYOS_BOND_MODE_TO_CANONICAL = {
+    "802.3ad": "active",
+    "active-backup": "active-backup",
+    "transmit-load-balance": "active-backup",
+    "adaptive-load-balance": "active-backup",
+    "round-robin": "static",
+    "xor-hash": "static",
+    "broadcast": "static",
+}
+
 #: Interface block types that materialise a :class:`CanonicalInterface`
 #: in Phase 1 (``bonding`` is deferred to the LAG phase).
 _IFACE_BLOCK_TYPES = frozenset({"ethernet", "loopback", "dummy"})
@@ -418,7 +430,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     def _touch_lag(name: str) -> dict:
         lg = lags.get(name)
         if lg is None:
-            lg = {"mode": "static", "members": []}
+            # A bond with no ``mode`` line is 802.3ad: "The default
+            # is 802.3ad" (VyOS bonding, 1.3 to current).
+            lg = {"mode": "active", "members": []}
             lags[name] = lg
             lag_order.append(name)
         return lg
@@ -743,16 +757,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             continue
 
         # ── Phase 2: bond mode (interfaces / bonding bondN / mode <m>) ──
-        # `802.3ad` is LACP -> "active"; other modes (active-backup,
-        # balance-rr, ...) collapse to "static" (declared lossy).
+        # `802.3ad` is LACP -> "active"; a bond whose peer needs no
+        # aggregate (active-backup, transmit-load-balance,
+        # adaptive-load-balance) -> "active-backup"; the rest
+        # (round-robin, xor-hash, broadcast) -> "static", a static
+        # aggregate (netcanon.migration._bonds; declared lossy).
         if (
             key == "mode" and value
             and len(stack) == 2
             and stack[0][0] == "interfaces"
             and stack[1][0] == "bonding"
         ):
-            _touch_lag(stack[1][1])["mode"] = (
-                "active" if value == "802.3ad" else "static"
+            _touch_lag(stack[1][1])["mode"] = _VYOS_BOND_MODE_TO_CANONICAL.get(
+                value, "static",
             )
             continue
 

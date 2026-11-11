@@ -289,11 +289,11 @@ per_field_expectation:
       trk<N> lacp``.  Naming convention differs (``bond1`` vs
       ``Trk1``); rename mesh canonicalises.  Mode mapping:
       ``802.3ad`` -> ``lacp``, ``balance-xor`` -> ``trunk``
-      (static).  RouterOS-only modes (active-backup, balance-rr,
-      balance-tlb, balance-alb, broadcast) have no Aruba
-      EtherChannel equivalent; codec collapses to static
-      ``trunk`` with a banner — operator must validate that
-      static aggregation is acceptable for the destination peer.
+      (static), and so do balance-rr and broadcast.  active-backup,
+      balance-tlb and balance-alb need no aggregate on the peer and
+      have no Aruba equivalent; they are written as a static
+      ``trunk`` with a review line and a job warning — the
+      switch's ports must then be configured as that static trunk.
     references: [lags]
 
   local_users:

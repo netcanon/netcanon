@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
+from .._bonds import active_backup_warnings
 from .._long_numbers import first_long_run, first_long_run_line, parse_refused, render_refused
 from .._one_line import first_control_character, first_line_break
 from .._roles import below_admin_warnings
@@ -220,6 +221,16 @@ class CodecBase(ABC):
     #: (:func:`netcanon.migration._user_secrets.holds_no_secret`); the
     #: default :meth:`render_warnings` says so under this name.
     local_user_target_label: ClassVar[str | None] = None
+
+    #: What :meth:`render` writes for a LAG the tree holds as an
+    #: ``active-backup`` bond (:mod:`netcanon.migration._bonds`):
+    #: ``"itself"`` where the platform has such a bond, ``"static"``
+    #: where it writes a static aggregate in its place, with a review
+    #: line beside it and a warning in the job (the default
+    #: :meth:`render_warnings`), and ``"nothing"`` where it writes no
+    #: LAG at all.  ``tests/unit/migration/test_a_bond_needs_of_its_peer.py``
+    #: renders such a LAG onto every public codec and reads it back.
+    active_backup_written_as: ClassVar[Literal["itself", "static", "nothing"]] = "static"
 
     #: Human-readable description of what :meth:`parse` expects.  Shown
     #: in the /migrate UI's format-hint banner.  One short paragraph,
@@ -561,15 +572,20 @@ class CodecBase(ABC):
             and one for each account a target with no role below an
             administrator leaves out
             (:func:`netcanon.migration._roles.below_admin_warnings`);
-            none otherwise.
+            then one for each active-backup LAG, where
+            :attr:`active_backup_written_as` is ``"static"``
+            (:func:`netcanon.migration._bonds.active_backup_warnings`).
         """
+        warnings: list[str] = []
         label = self.local_user_target_label
-        if not label:
-            return []
-        users = getattr(tree, "local_users", None) or []
-        return empty_hash_warnings(users, label) + below_admin_warnings(
-            users, getattr(tree, "source_vendor", ""), self.name, label,
-        )
+        if label:
+            users = getattr(tree, "local_users", None) or []
+            warnings += empty_hash_warnings(users, label) + below_admin_warnings(
+                users, getattr(tree, "source_vendor", ""), self.name, label,
+            )
+        if self.active_backup_written_as == "static":
+            warnings += active_backup_warnings(getattr(tree, "lags", None) or [])
+        return warnings
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield canonical xpaths for every leaf in *tree*.

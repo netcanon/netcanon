@@ -253,6 +253,14 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
   lists both, and an entry in the port map settles it.  ⚠️ Up to 0.7.7
   such a name was written `Ethernet0` or `Port-Channel0`, in a job that
   said `completed`.  Look for them in an old output.
+- **A host's active-backup bond has no form on EOS.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  EOS has no such bond: the LAG is written as a static
+  aggregate (`channel-group <N> mode on`) with a `! review:` line
+  beside it, and the job carries a warning.  Configure the ports it
+  faces as a static aggregate too, or re-design the bond.
 - **A RADIUS `key 7` is carried to EOS only.**  EOS prints a RADIUS
   key in its own form, `key 7 <blob>`.  It is written back as it was
   onto EOS; onto any other target the server is written with no key,

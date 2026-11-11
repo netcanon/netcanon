@@ -20,7 +20,7 @@ RouterOS bonding modes mirror the Linux kernel's bonding driver:
 |---|---|
 | `802.3ad` | LACP (the cross-vendor standard) |
 | `active-backup` | One slave active, others standby |
-| `balance-rr` | Round-robin packet distribution (no peer support) |
+| `balance-rr` | Round-robin packet distribution; the default when no `mode` is given |
 | `balance-xor` | Static hash; no LACP signalling |
 | `broadcast` | Frames duplicated to all slaves |
 | `balance-tlb` | Adaptive transmit load balancing |
@@ -28,6 +28,12 @@ RouterOS bonding modes mirror the Linux kernel's bonding driver:
 
 LAG name is operator-chosen (``bond1``, ``bond2``); members are
 listed inline with ``slaves=ether3,ether4``.
+
+`balance-rr`, `balance-xor` and `broadcast` need the peer's ports
+grouped as a static aggregate; `active-backup`, `balance-tlb` and
+`balance-alb` "do not require any specific configuration of the
+switch" ([Linux bonding, Switch
+Configuration](https://docs.kernel.org/networking/bonding.html)).
 
 ## OPNsense
 
@@ -56,10 +62,10 @@ OPNsense ``<proto>`` values map to FreeBSD ``lagg(4)`` protocols:
 | `<proto>` | Description |
 |---|---|
 | `lacp` | IEEE 802.3ad LACP (active-only; FreeBSD always negotiates actively) |
-| `failover` | Primary/standby (closest to RouterOS active-backup) |
-| `loadbalance` | Static hash distribution (closest to RouterOS balance-xor) |
+| `failover` | Primary/standby (closest to RouterOS active-backup); by default accepts traffic only on the active port |
+| `loadbalance` | Static hash distribution (closest to RouterOS balance-xor); "a static setup" that "does not negotiate aggregation with the peer" ([lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)) |
 | `roundrobin` | Round-robin (closest to RouterOS balance-rr) |
-| `none` | Bundle interfaces without aggregation logic |
+| `none` | Disables traffic on the interface (lagg(4)) |
 
 ## Cross-vendor mapping
 
@@ -69,9 +75,11 @@ Canonical surface:
 CanonicalLAG(name, members[], mode)
 ```
 
-The OPNsense codec parses ``<laggs>`` into CanonicalLAG records but
-its capability matrix doesn't currently advertise ``/lag/aggregate``
-in supported[].  Render is partial pending wire-up.
+``mode`` is one of ``active`` / ``passive`` (LACP), ``static`` (a
+static aggregate: the peer's ports are grouped too) and
+``active-backup`` (the peer's ports need no aggregate).  The OPNsense
+and RouterOS capability matrices classify ``/lags/lag/name`` and
+``/lags/lag/members`` as supported and ``/lags/lag/mode`` as lossy.
 
 ### name
 
@@ -99,13 +107,13 @@ Mode mapping:
 
 | RouterOS `mode=` | OPNsense `<proto>` | Notes |
 |---|---|---|
-| `802.3ad` | `lacp` | Direct match |
-| `active-backup` | `failover` | Direct match |
-| `balance-xor` | `loadbalance` | Direct match |
-| `balance-rr` | `roundrobin` | Direct match |
-| `broadcast` | (none) | OPNsense has no broadcast mode; collapse to `loadbalance` with banner |
-| `balance-tlb` | (none) | FreeBSD lagg has no adaptive-TLB mode; collapse to `failover` with banner |
-| `balance-alb` | (none) | FreeBSD lagg has no adaptive-ALB mode; collapse to `failover` with banner |
+| `802.3ad` | `lacp` | Direct match (canonical `active`) |
+| `active-backup` | `failover` | Direct match (canonical `active-backup`) |
+| `balance-xor` | `loadbalance` | Direct match (canonical `static`) |
+| `balance-rr`, or no `mode` | `loadbalance` | Canonical `static`; the round-robin algorithm is not kept |
+| `broadcast` | `loadbalance` | OPNsense has no broadcast mode; canonical `static` |
+| `balance-tlb` | `failover` | FreeBSD lagg has no adaptive-TLB mode; canonical `active-backup` (no aggregate on the peer) |
+| `balance-alb` | `failover` | FreeBSD lagg has no adaptive-ALB mode; canonical `active-backup` (no aggregate on the peer) |
 
 LACP-specific extras (system-priority, key, port-priority) are not
 modelled canonically (CanonicalLAG carries ``mode`` only); cross-pair

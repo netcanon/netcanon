@@ -63,11 +63,15 @@ allocation.
   the per-pane port-rename mesh.
 * `lags[].mode`: RouterOS `mode=802.3ad` -> Junos
   `aggregated-ether-options lacp active`.  RouterOS-only modes
-  (`active-backup`, `balance-rr`, `balance-tlb`, `balance-alb`,
-  `broadcast`) have no Junos LAG-record equivalent — flatten to
-  `lacp active` with banner OR drop to a non-aggregated form.
-* RouterOS `mode=balance-xor` (static hash) -> Junos LAG without
-  `lacp` (membership only).  Closest match.
+  `active-backup`, `balance-tlb` and `balance-alb` need no aggregate
+  on the peer and have no Junos LAG-record equivalent: they read as
+  `active-backup` and are written as a static `ae<N>` (no
+  `aggregated-ether-options lacp`) with a `# review:` line and a job
+  warning, and the switch's ports must then be configured as that
+  static aggregate (or the host bond re-designed).
+* RouterOS `mode=balance-xor` (static hash), `balance-rr` (also the
+  default when no `mode` is given) and `broadcast` -> canonical
+  `static` -> Junos LAG without `lacp` (membership only).
 * Chassis allocation: RouterOS dynamic; Junos render emits a
   synthesised `set chassis aggregated-devices ethernet device-count
   <N>` based on the count of `ae<N>` interfaces created.
@@ -75,6 +79,7 @@ allocation.
   unit 0 family inet address`.
 
 Disposition: **lossy** — `802.3ad` / `balance-xor` / `802.3ad-with-
-mode-changes` map cleanly; the RouterOS-only modes (active-backup,
-balance-rr, balance-tlb, balance-alb, broadcast) collapse with
-banner; chassis device-count synthesised on render.
+mode-changes` map cleanly; `balance-rr` and `broadcast` are written
+as a static `ae<N>`; active-backup, balance-tlb and balance-alb are
+written as a static `ae<N>` with a `# review:` line; chassis
+device-count synthesised on render.

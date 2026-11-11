@@ -33,7 +33,7 @@ ProCurve estate).  Asymmetry shows up in two places:
 | `dhcp.md` | RouterOS three-section DHCP form joins on parse; the Aruba target writes a `dhcp-server pool`, served on a VLAN whose stanza holds its network (an update at the top supersedes the body). |
 | `snmp.md` | v1/v2c access-keyword mapping (RouterOS flags -> Aruba Operator/Manager).  v3 USM auth/priv overlap; AES-256 -> AES-128 downgrade with banner. |
 | `local_users.md` | RouterOS named groups (full/write/read) -> Aruba two-role.  Password-export gap dominates — Aruba render emits empty SHA-1 hash. |
-| `lags.md` | RouterOS `bond<N>` (`802.3ad` / `balance-xor` / etc.) -> Aruba `Trk<N>`.  Non-LACP bonding modes collapse to static `trunk` with banner. |
+| `lags.md` | RouterOS `bond<N>` (`802.3ad` / `balance-xor` / etc.) -> Aruba `Trk<N>`.  Non-LACP bonding modes are written as a static `trunk`; `active-backup` / `balance-tlb` / `balance-alb`, whose peer needs no aggregate, with a review line beside it. |
 | `radius_aaa.md` | RouterOS `/radius` <-> Aruba flat `radius-server host`.  Service binding (`service=ppp,wireless,…`) drops on Aruba render. |
 | `routing_instances_vrf.md` | RouterOS codec parser gap on `/ip vrf`; Aruba structurally has no VRF concept.  EVPN / VXLAN unsupported on both. |
 

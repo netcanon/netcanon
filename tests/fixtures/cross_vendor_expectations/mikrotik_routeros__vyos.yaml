@@ -535,19 +535,20 @@ per_field_expectation:
     note: >
       Preserved exactly on the single cell that carries bonds: 2 LAG records
       in, 2 out, with names (`bond1`, `bond2`), member lists
-      (`ether3`+`ether4`, `ether5`+`ether6`) and MODE (`active`, `static`)
+      (`ether3`+`ether4`, `ether5`+`ether6`) and MODE (`active`, `active-backup`)
       all identical after parse -> render -> re-parse.  The render emits
       real `interfaces { bonding bondN { ... } }` stanzas, and
       `interfaces[].lag_member_of` survives on all 4 member ports alongside
       it — one mechanism seen from two keys, not two findings.
       Two caveats, both declared rather than observed.  BOTH matrices
-      declare `/lags/lag/mode` LOSSY: the vyos side collapses the non-LACP
-      modes (`active-backup` / `balance-rr` / `balance-xor` / ...) to
-      `static`, dropping the specific balancing algorithm.  The corpus
-      happens to exercise only `active` and `static`, which are exactly the
-      two values that survive the collapse, so the declared mode loss is
-      untested here — a RouterOS `bonding mode=balance-xor` would lose its
-      algorithm.
+      declare `/lags/lag/mode` LOSSY: a bond keeps whether its peer must
+      group its ports (`static`, written `xor-hash`) or need not
+      (`active-backup`), but not the specific balancing algorithm —
+      RouterOS `balance-rr` and `broadcast` come back `balance-xor`, and
+      `balance-tlb` and `balance-alb` come back `active-backup`.  The corpus
+      happens to exercise only `802.3ad` and `active-backup`, which both
+      survive, so the declared mode loss is untested here — a RouterOS
+      `bonding mode=balance-rr` would lose its algorithm.
       Second, a source-side matrix silence worth recording:
       `mikrotik_routeros` declares only `/lags/lag/mode`, and no path for
       `/lags/lag/name` or `/lags/lag/members`, while populating both.  That

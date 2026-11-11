@@ -966,9 +966,13 @@ def _parse_interface_bonding(
         /interface bonding
         add name=bond1 slaves=ether1,ether2 mode=802.3ad
 
-    ``mode`` values:
+    ``mode`` values (:mod:`netcanon.migration._bonds`):
         802.3ad -> LACP (canonical "active")
-        active-backup / balance-* / broadcast -> static
+        active-backup / balance-tlb / balance-alb -> "active-backup"
+            (MikroTik: balance-tlb needs no switch configuration; Linux
+            bonding: none of the three does)
+        balance-rr / balance-xor / broadcast, and no ``mode`` (the
+            default is balance-rr) -> "static"
     """
     for line in ticked(lines):
         if not line.startswith("add"):
@@ -1012,11 +1016,11 @@ def _parse_interface_bonding(
 
 _ROUTEROS_BONDING_MODE_TO_CANONICAL = {
     "802.3ad": "active",
-    "active-backup": "static",
+    "active-backup": "active-backup",
     "balance-rr": "static",
     "balance-xor": "static",
-    "balance-tlb": "static",
-    "balance-alb": "static",
+    "balance-tlb": "active-backup",
+    "balance-alb": "active-backup",
     "broadcast": "static",
 }
 

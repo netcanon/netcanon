@@ -68,6 +68,7 @@ import logging
 import re
 from typing import Any, NamedTuple
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._derived_values import (
     is_derivation_keyword,
 )
@@ -928,6 +929,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"set interfaces {ae_name} aggregated-ether-options "
                     f"lacp {mode}"
                 )
+            elif mode == ACTIVE_BACKUP:
+                # Junos has no active-backup bond: a static ``ae``
+                # (netcanon.migration._bonds).
+                out.append(f"# {active_backup_review(ae_name)}")
 
     # --- vlans + VLAN-to-VNI mappings (GAP 6) ---
     # Pre-index VXLAN VNIs by vlan_id for matched emission.

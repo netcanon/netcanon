@@ -1523,6 +1523,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   (AOS-S has no form for a port in no VLAN, and it stays in VLAN 1),
   what `no switchport access vlan` leaves an OS10 trunk with, and
   whether OS10 takes VLAN 1 on the allowed line of such a trunk.
+- **Never** let one canonical value stand for two things the device at
+  the other end of the wire must be.  `CanonicalLAG.mode` had one
+  value, `static`, for a static aggregate (a switch's `mode on`, whose
+  peer groups its ports too) and for a host bond that needs nothing
+  of its peer (Linux `active-backup`, lagg `failover`): the host
+  renderers wrote it as the second and their parsers read the second
+  as it, so a switch's static port-channel came out as a bond that
+  drops what the switch sends on its other port, in jobs that said
+  `completed`.  Ask of a value what it obliges the PEER to be, and
+  give each answer a value of its own (`netcanon/migration/_bonds.py`);
+  where a target has no form for one, write the nearest form and say
+  so -- a review line and a job warning -- never a silent pick.
+  **The blind spot:** each renderer and its own parser agreed on every
+  wrong cell, and the mesh compares trees.  Guarded by
+  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`, which reads
+  each output with a reader of the target's grammar typed from the
+  vendors' pages.
 - **Never** put a word of the config where a port name goes, and never
   make an interface record for a name the config configures nothing
   under.  A parser that takes the first word after a keyword for a

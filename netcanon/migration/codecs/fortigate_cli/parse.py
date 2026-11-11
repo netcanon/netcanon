@@ -144,6 +144,9 @@ _CANONICAL_MODE_TO_FORTIGATE_LACP = {
     "active": "active",
     "passive": "passive",
     "static": "static",
+    # An aggregate has no active-backup mode: a static one, said in a
+    # review line (netcanon.migration._bonds).
+    "active-backup": "static",
 }
 
 

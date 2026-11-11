@@ -4,6 +4,7 @@
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <opnsense>
@@ -23,8 +24,11 @@ OPNsense LAG notes:
 - FreeBSD `lagg(4)` driver synthesises `lagg<N>` device names
   (zero-based).
 - `<members>` is a comma-separated list of BSD NIC device names.
-- `<proto>` values: `lacp` (FreeBSD always advertises actively),
-  `failover`, `loadbalance`, `roundrobin`, `none` (static).
+- `<proto>` values: `lacp` (FreeBSD always advertises actively);
+  `failover` (by default accepts traffic only on the active port,
+  and needs no aggregate on the peer); `fec`, `loadbalance`,
+  `roundrobin` (static aggregates: the peer's ports are grouped,
+  with no LACP); `none` (passes no traffic, per lagg(4)).
 
 ## Aruba AOS-S
 
@@ -65,10 +69,14 @@ OPNsense -> Aruba:
 - `lags[].members`: **lossy** — OPNsense's BSD device names map to
   Aruba's bare-numeric / letter-uplink form via the rename mesh.
 - `lags[].mode`: **lossy** — OPNsense `proto=lacp` →
-  Aruba `lacp`; `proto=none` → Aruba `trunk` (static).  OPNsense
-  `failover` / `loadbalance` / `roundrobin` have no Aruba LACP
-  equivalent and collapse to `trunk` with a comment in the
-  validation report.
+  Aruba `lacp`; `loadbalance` / `fec` / `roundrobin` → Aruba
+  `trunk` (static); so does `proto=none`, which passes no traffic
+  on OPNsense (a known limitation: the tree has no value for it).
+  OPNsense `failover` needs no aggregate on the peer, and AOS-S has
+  no such bond: it is written `trunk <ports> trk<N> trunk` with a
+  review line beside it and a job warning, and the switch's ports
+  must then be configured as that static trunk (or the host bond
+  re-designed).
 - `interfaces[].lag_member_of`: **lossy** — back-pointer
   round-trips via `lag_member_of`, but the LAG name itself differs
   across the rename mesh.

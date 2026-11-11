@@ -8,6 +8,7 @@ Reverse direction.  Forward direction in
 Source: [OPNsense Devices manual — LAGG
 tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-05-01
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 ```xml
 <opnsense>
@@ -28,9 +29,13 @@ OPNsense notes:
 - LAGs use FreeBSD `lagg(4)` driver naming (`lagg0`, `lagg1`, ...).
   Numbering is ZERO-based.
 - `<members>` is comma-separated string of BSD device names.
-- `<proto>` enumerates `lacp` / `failover` / `loadbalance` /
-  `roundrobin` / `none` (static).  FreeBSD's lagg(4) driver always
-  advertises actively when LACP is selected.
+- `<proto>` enumerates `lacp` / `failover` / `fec` / `loadbalance` /
+  `roundrobin` / `none`.  `fec`, `loadbalance` and `roundrobin` are
+  static (`loadbalance` "does not negotiate aggregation with the
+  peer"); `failover` by default accepts traffic only on the active
+  port and needs no aggregate on the peer; `none` passes no traffic
+  (lagg(4)).  FreeBSD's lagg(4) driver always advertises actively
+  when LACP is selected.
 - The lagg device shows up as `<if>lagg0</if>` on a zone interface.
 
 ## FortiGate FortiOS
@@ -49,7 +54,7 @@ shape.  Key points:
 Canonical fields covered (`CanonicalLAG`):
 
 ```
-name, members, lacp_mode
+name, members, mode   # mode: active | passive | static | active-backup
 ```
 
 - **lossy** — Aggregate naming collision: OPNsense FreeBSD `lagg<N>`
@@ -65,10 +70,13 @@ name, members, lacp_mode
 - LACP mode: OPNsense `<proto>lacp</proto>` → FortiGate `set lacp-mode
   active` (FreeBSD lagg(4) always advertises actively, so the
   FortiGate target gets `active` rather than `passive`).  OPNsense
-  `<proto>none</proto>` ↔ FortiGate `set lacp-mode static`.
-  OPNsense's `failover` / `loadbalance` / `roundrobin` protos have
-  no FortiGate LACP equivalent and collapse to `static` with a
-  comment.
-- The OPNsense codec parses `<laggs>` but its capability matrix does
-  not currently advertise `/lag/aggregate`; round-trip is partial
-  pending wire-up.
+  `loadbalance` / `fec` / `roundrobin` → FortiGate `set lacp-mode
+  static`; so does `<proto>none</proto>`, which passes no traffic on
+  OPNsense (a known limitation: the tree has no value for it).
+  OPNsense `failover` needs no aggregate on the peer, and FortiOS
+  has no such aggregate: it is written `set lacp-mode static` with a
+  `# review:` line and a job warning, and the peer's ports must then
+  be configured as that static aggregate (or the host bond
+  re-designed).
+- The OPNsense codec's capability matrix classifies `/lags/lag/name` and
+  `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

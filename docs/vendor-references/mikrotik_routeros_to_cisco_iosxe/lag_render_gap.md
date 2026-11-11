@@ -28,10 +28,11 @@ The MikroTik parser populates:
   interface, pointing to the bonding name.
 
 RouterOS supports modes the canonical model does not enumerate
-exhaustively (`active-backup`, `balance-rr`, `balance-xor`,
-`balance-tlb`, `balance-alb`, `broadcast`).  These map to canonical
-`mode="static"` with banner; only `802.3ad` maps cleanly to
-`active`.
+exhaustively.  `802.3ad` maps to `active`; `balance-rr` (also the
+default when no `mode` is given), `balance-xor` and `broadcast`,
+which need the peer's ports grouped, map to `mode="static"`; and
+`active-backup`, `balance-tlb` and `balance-alb`, which need no
+aggregate on the peer, map to `mode="active-backup"`.
 
 ## What the cisco_iosxe target render emits
 
@@ -67,8 +68,10 @@ hand-editing the member relationships on the target Cisco device.
 `lags`: `unsupported` with reason citing the render-side wire-up
 gap.  When the cisco_iosxe codec grows
 `openconfig-if-aggregate` render support, this flips to `lossy` —
-RouterOS-side modes beyond `802.3ad` (active-backup, balance-rr,
-etc.) have no Cisco EtherChannel equivalent and would lose nuance.
+RouterOS-side `active-backup`, `balance-tlb` and `balance-alb` have
+no Cisco EtherChannel equivalent (the CLI target writes them as a
+static `channel-group N mode on` with a `! review:` line), and the
+balancing algorithm of the static modes is not kept.
 
 `interfaces[].lag_member_of`: `unsupported` — same render gap.
 

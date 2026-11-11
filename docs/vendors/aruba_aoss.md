@@ -757,6 +757,14 @@ have.
   say which the target is.  ⚠️ Up to
   0.7.7 such a port was written `0/2`, a member AOS-S does not have, in
   a job that said `completed`.
+- **A host's active-backup bond has no form on AOS-S.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  AOS-S has no such bond: the LAG is written as a static
+  trunk (`trunk <ports> trk<N> trunk`) with a `; review:` line after
+  it, and the job carries a warning.  Configure the ports it faces as
+  a static aggregate too, or re-design the bond.
 - **A RADIUS `encrypted-key` is carried to AOS-S only.**  With
   `encrypt-credentials` on, AOS-S prints a RADIUS key as
   `encrypted-key "<blob>"`, on a host line or on the global

@@ -356,12 +356,14 @@ per_field_expectation:
       ``channel-group 10 mode active``.  Naming convention differs
       (``bond1`` vs ``Port-Channel10``); rename mesh canonicalises
       (and Arista's capital-C ``Port-Channel`` distinguishes from
-      Cisco's lowercase-c form).  RouterOS's non-LACP modes
-      (active-backup, balance-rr, balance-xor, balance-tlb,
-      balance-alb, broadcast) have no Arista EtherChannel
-      equivalent — codec emits a banner (``mode=active-backup``
-      collapses to the closest static analogue with operator
-      review).  RouterOS-only ``transmit-hash-policy=`` /
+      Cisco's lowercase-c form).  RouterOS's static modes
+      (balance-xor, balance-rr, broadcast) are written
+      ``channel-group N mode on``.  active-backup, balance-tlb and
+      balance-alb need no aggregate on the peer and have no Arista
+      EtherChannel equivalent: they are written ``mode on`` with a
+      ``! review:`` line and a job warning, and the switch's ports
+      must be configured as that static aggregate.  RouterOS-only
+      ``transmit-hash-policy=`` /
       ``link-monitoring=`` per-bond tunables lack canonical
       surface.
     references: [mikrotik_bonding]

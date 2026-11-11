@@ -80,7 +80,7 @@ operators use VRRP or routing protocols.
 
 The canonical surface is `CanonicalIntent.lags:
 list[CanonicalLAG]` with fields `name` / `members: list[str]` /
-`mode` (`active|passive|static`).  Per-interface
+`mode` (`active|passive|static|active-backup`).  Per-interface
 `CanonicalInterface.lag_member_of` carries the back-pointer.
 
 Arista -> RouterOS round-trip:

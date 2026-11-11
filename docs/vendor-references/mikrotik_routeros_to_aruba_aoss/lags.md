@@ -55,24 +55,30 @@ The canonical surface is
 CanonicalLAG(name, members: list[str], mode: str)
 ```
 
-with `mode` normalised to `"active"` / `"passive"` / `"static"`.
+with `mode` normalised to `"active"` / `"passive"` / `"static"` (a
+static aggregate: the peer's ports are grouped too) /
+`"active-backup"` (the peer's ports need no aggregate).
 
 ### Mode mapping
 
 | RouterOS | Aruba | Canonical |
 |---|---|---|
 | `802.3ad` | `lacp` | `active` |
-| `active-backup` | (no equivalent) | `static` (with banner) |
-| `balance-rr` | (no equivalent) | `static` (with banner) |
+| `active-backup` | `trunk` + review line | `active-backup` |
+| `balance-rr`, or no `mode` (RouterOS's default) | `trunk` | `static` |
 | `balance-xor` | `trunk` | `static` |
-| `balance-tlb` / `balance-alb` | (no equivalent) | `static` (with banner) |
-| `broadcast` | (no equivalent) | `static` (with banner) |
+| `balance-tlb` / `balance-alb` | `trunk` + review line | `active-backup` |
+| `broadcast` | `trunk` | `static` |
 
-RouterOS-only modes (`active-backup`, `balance-rr`, `balance-tlb`,
-`balance-alb`, `broadcast`) have no Aruba equivalent.  Cross-vendor
-render to Aruba collapses these to static `trunk` with a banner —
-operator must validate that static aggregation is acceptable for
-the destination peer.
+`balance-rr` and `broadcast`, like `balance-xor`, need the switch's
+ports grouped (Linux bonding,
+[Switch Configuration](https://docs.kernel.org/networking/bonding.html)),
+and are written as a static `trunk`.  `active-backup`, `balance-tlb`
+and `balance-alb` need no configuration of the switch, and AOS-S has
+no such bond: they are written `trunk <ports> trk<N> trunk` with a
+review line beside it and a warning in the job, and the switch's
+ports must then be configured as that static trunk (or the host bond
+re-designed).
 
 ### Naming
 
@@ -92,4 +98,4 @@ suffix preservation.
 |---|---|
 | `lags[].name` | lossy (`bond<N>` <-> `Trk<N>` rename) |
 | `lags[].members` | good (rename mesh maps physical ports) |
-| `lags[].mode` | lossy (RouterOS-only modes collapse to `static` with banner) |
+| `lags[].mode` | lossy (RouterOS-only modes are written as a static `trunk`; `active-backup` / `balance-tlb` / `balance-alb` with a review line) |

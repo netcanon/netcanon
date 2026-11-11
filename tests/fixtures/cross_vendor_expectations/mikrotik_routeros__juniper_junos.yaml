@@ -617,11 +617,13 @@ per_field_expectation:
       mode=802.3ad`` -> Junos's ``ae<N>`` + per-member
       ``ether-options 802.3ad ae<N>``.  ``mode=802.3ad`` round-trips
       cleanly; ``mode=balance-xor`` (static hash) -> Junos LAG
-      without ``lacp`` (closest static analogue).  RouterOS-only
-      modes (``active-backup``, ``balance-rr``, ``balance-tlb``,
-      ``balance-alb``, ``broadcast``) have no Junos LAG-record
-      equivalent — collapse to LACP-active or non-aggregated form
-      with banner.  Junos requires a chassis-wide
+      without ``lacp`` (closest static analogue), and so do
+      ``balance-rr`` and ``broadcast``.  ``active-backup``,
+      ``balance-tlb`` and ``balance-alb`` need no aggregate on the
+      peer and have no Junos LAG-record equivalent: they are
+      written as a static ``ae<N>`` (no ``lacp``) with a
+      ``# review:`` line and a job warning.  Junos requires a
+      chassis-wide
       ``aggregated-devices ethernet device-count`` allocation;
       render synthesises a default value based on the canonical LAG
       count.

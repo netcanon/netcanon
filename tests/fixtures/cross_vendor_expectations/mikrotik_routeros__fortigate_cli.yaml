@@ -298,11 +298,13 @@ per_field_expectation:
       defaults to active).  ``mode=active-backup`` has no FortiOS
       aggregate analogue (closest is FortiOS interface redundancy
       ``set type redundant`` which the FortiGate codec does not
-      emit via the LAG path); collapses to ``lacp-mode static`` with
-      banner.  ``mode=balance-rr / balance-xor / balance-tlb /
-      balance-alb / broadcast`` — no FortiOS equivalent; collapse to
-      ``lacp-mode static`` with banner, losing the load-distribution
-      semantic.  Members preserve via the rename mesh applied to
+      emit via the LAG path); it is written ``lacp-mode static``
+      with a ``# review:`` line and a job warning, and so are
+      ``balance-tlb`` and ``balance-alb``, which also need no
+      aggregate on the peer.  ``mode=balance-rr / balance-xor /
+      broadcast`` are static aggregates, written ``lacp-mode
+      static``, losing the load-distribution semantic.  Members
+      preserve via the rename mesh applied to
       each slave name.  Naming differs (``bond1`` vs ``agg1``);
       rename mesh canonicalises.
     references: [lags]

@@ -560,10 +560,11 @@ per_field_expectation:
       LACP modes collapse: Arista active / passive both render as
       OPNsense ``<proto>lacp</proto>`` (FreeBSD always advertises
       actively).  Arista static mode (``on``) maps to OPNsense
-      ``<proto>none</proto>``.  PAgP-style modes don't apply
-      (Arista has no PAgP).  OPNsense codec parses ``<laggs>``
-      but its capability matrix doesn't currently advertise
-      ``/lag/aggregate``; render is partial pending wire-up.
+      ``<proto>loadbalance</proto>``, a static setup that does not
+      negotiate aggregation with the peer (lagg(4)).  PAgP-style
+      modes don't apply (Arista has no PAgP).  The OPNsense matrix
+      classifies ``/lags/lag/name`` and ``/lags/lag/members`` as
+      supported and ``/lags/lag/mode`` as lossy.
     references: [opnsense-laggs, arista-lacp-cg]
 
   local_users:

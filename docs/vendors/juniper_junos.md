@@ -252,6 +252,14 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   `plain-text-password` asks at a prompt), and up to 0.7.7 the typed
   string was written as `encrypted-password "<typed>"`, which no
   password matches.
+- **A host's active-backup bond has no form on Junos.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  Junos has no such bond: the LAG is written as a static
+  aggregate (an `ae<N>` with no `aggregated-ether-options lacp`) with a
+  `# review:` line beside it, and the job carries a warning.  Configure
+  the ports it faces as a static aggregate too, or re-design the bond.
 - **A disabled unit stays down.**  `set interfaces irb unit 10
   disable` keeps `irb.10` as an interface, disabled, instead of folding
   its address onto VLAN 10 (a VLAN record has no state of its own).

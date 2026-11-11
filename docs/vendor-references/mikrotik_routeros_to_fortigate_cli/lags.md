@@ -20,8 +20,9 @@ Notable RouterOS specifics:
 - Bonds live under `/interface bonding`.  `name=` is operator-driven (`bond1`, `bond2`).  `slaves=` is a comma-separated member list.
 - `mode=` selects the bonding algorithm:
   - `802.3ad` — IEEE 802.3ad LACP (the only RouterOS LACP form; symmetric — responds to peer mode).
-  - `active-backup` — primary/backup failover (no LACP).
-  - `balance-rr`, `balance-xor`, `balance-tlb`, `balance-alb`, `broadcast` — Linux-bonding-derived modes with no FortiGate equivalent.
+  - `active-backup` — primary/backup failover (no LACP); the peer's ports need no aggregate.
+  - `balance-rr` (the default when no `mode` is given), `balance-xor`, `broadcast` — static modes: the peer's ports are grouped, with no LACP.
+  - `balance-tlb`, `balance-alb` — adaptive load balancing; like `active-backup`, they need no configuration of the switch.
 - IP addresses attach to the bond via `/ip address add interface=bond1 ...`.
 
 ## FortiGate FortiOS CLI
@@ -52,14 +53,14 @@ Canonical surface (per-LAG):
 ```
 CanonicalLAG.name: str
 CanonicalLAG.members: list[str]
-CanonicalLAG.mode: str   # "active" (LACP) | "passive" | "static"
+CanonicalLAG.mode: str   # "active" (LACP) | "passive" | "static" | "active-backup"
 ```
 
 - **name** — `lossy`.  RouterOS bonds are operator-named (`bond1`); FortiOS aggregates are operator-named (`agg1`).  The port-rename mesh applies operator-curated mappings on cross-vendor render.
 - **members** — `good`.  RouterOS `slaves=ether3,ether4` parses to canonical `members=["ether3", "ether4"]`; FortiOS render emits `set member "port3" "port4"` after the rename mesh.
 - **mode** — `lossy`.  RouterOS-unique modes lose information on FortiGate render:
   - `802.3ad` -> FortiOS `lacp-mode active` (RouterOS does not distinguish active vs passive LACP, so the FortiGate side defaults to active).
-  - `active-backup` -> FortiOS has no native active-backup mode on aggregate interfaces; closest analogue is FortiOS interface redundancy (`set type redundant`) which the FortiGate codec does not currently render via the LAG path.  The render emits `lacp-mode static` with a banner.
-  - `balance-rr`, `balance-xor`, `balance-tlb`, `balance-alb`, `broadcast` -> FortiOS has no equivalent; collapse to `lacp-mode static` with banner.  The semantic of the load-distribution algorithm is lost.
+  - `active-backup`, `balance-tlb`, `balance-alb` (canonical `active-backup`) -> FortiOS has no native active-backup mode on aggregate interfaces; closest analogue is FortiOS interface redundancy (`set type redundant`) which the FortiGate codec does not currently render via the LAG path.  The render emits `set lacp-mode static` with a `# review:` line and a job warning: the switch's ports must then be configured as that static aggregate, or the host bond re-designed.
+  - `balance-rr`, `balance-xor`, `broadcast` (canonical `static`) -> `set lacp-mode static`.  The semantic of the load-distribution algorithm is lost.
 - **lag_member_of** on member interfaces — `good`.  RouterOS membership is recorded only on the bond's `slaves=` attribute; the MikroTik codec back-fills `lag_member_of` on each member by inverting the membership map.  FortiOS render adds the rename-meshed member ports to `set member` on the aggregate parent.
 - **IP addresses on the bond / aggregate parent** — `good` (handled via the per-interface IP address fields).

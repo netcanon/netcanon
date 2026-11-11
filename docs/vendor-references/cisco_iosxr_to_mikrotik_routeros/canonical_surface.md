@@ -137,7 +137,7 @@ set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9216
 — while the `/interface bonding` rows do not:
 
 ```
-add slaves=TenGigE0/0/0/26 mode=active-backup name=Bundle-Ether500 comment="…"
+add slaves=TenGigE0/0/0/26 mode=balance-xor name=Bundle-Ether500 comment="…"
 ```
 
 So **MTU on a physical port survives and MTU on a bundle does not.** On an SP
@@ -271,14 +271,17 @@ that no operator ever authored.
 The evidence dossier warns that a bare `lags` drift is usually the cross-vendor
 naming artefact. On this pair `lags` does not drift at all: 4 cells populate it,
 all 4 preserved, with `Bundle-Ether*` names, member lists and modes intact
-(`active` and `static` both round-trip, verified on
+(`active` and `static` both round-trip — a static `bundle id N mode on` is
+written `mode=balance-xor`, MikroTik's mode for a static LAG — verified on
 `iosxr_design_cst_pa3_xr752.cfg` and `kitchen_sink.cfg`), and
 `interfaces[].lag_member_of` round-trips exactly — 5 members on the 54-interface
 chassis, 2 on the kitchen sink.
 
-RouterOS declares `/lags/lag/mode` lossy for one specific case: a `passive`
-LACP bundle re-parses as `active`, because MikroTik `mode=802.3ad` has no
-passive variant. **No committed IOS-XR fixture carries a passive bundle**, so
+RouterOS declares `/lags/lag/mode` lossy: a `passive` LACP bundle re-parses as
+`active`, because MikroTik `mode=802.3ad` has no passive variant, and its own
+`balance-rr` / `broadcast` and `balance-tlb` / `balance-alb` come back as
+`balance-xor` and `active-backup`.  Only the first case can arise from an IOS-XR
+source. **No committed IOS-XR fixture carries a passive bundle**, so
 that path is undeclared-by-observation here — `lags` is `good` on this corpus
 and the caveat belongs to the target matrix, not to this pair.
 

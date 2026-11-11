@@ -53,8 +53,12 @@ interface (`name=bond1`) and a comma-separated `slaves=` list.  No
 chassis-wide allocation step.  Mode tokens: `802.3ad` (LACP),
 `active-backup` (failover, no Junos analogue), `balance-rr`
 (round-robin), `balance-xor` (static hash), `balance-tlb` /
-`balance-alb` (adaptive load-balancing), `broadcast`.  Only `802.3ad`
-maps cleanly to a Junos LAG; the others are RouterOS-only.
+`balance-alb` (adaptive load-balancing), `broadcast`.  `802.3ad` maps
+to a Junos LACP LAG, and `balance-rr`, `balance-xor` and `broadcast`
+(static: the peer's ports are grouped) to a static one, an `ae<N>`
+with no `aggregated-ether-options lacp`.  `active-backup`,
+`balance-tlb` and `balance-alb` need no aggregate on the peer and are
+RouterOS-only.
 
 ## Cross-vendor mapping
 
@@ -70,9 +74,11 @@ maps cleanly to a Junos LAG; the others are RouterOS-only.
   collapses to `802.3ad` on RouterOS render.  Junos's static (no-LACP)
   membership maps to RouterOS `mode=balance-xor` (closest static
   analogue) with a banner.
-* RouterOS-only modes (`active-backup`, `balance-rr`, `balance-tlb`,
-  `balance-alb`, `broadcast`) have no Junos equivalent and would only
-  appear in the inverse direction.
+* RouterOS-only modes (`active-backup`, `balance-tlb`, `balance-alb`)
+  have no Junos equivalent and would only appear in the inverse
+  direction, where they read as `active-backup` and are written as a
+  static `ae<N>` (no `aggregated-ether-options lacp`) with a
+  `# review:` line and a job warning.
 * Chassis allocation: Junos's `set chassis aggregated-devices
   ethernet device-count` has no RouterOS analogue (RouterOS
   allocates dynamically per-bond); drops on render.

@@ -4,6 +4,8 @@
 
 Source: [Bonding — RouterOS](https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding)
 
+Source: [Linux bonding — Switch Configuration](https://docs.kernel.org/networking/bonding.html)
+
 Retrieved: 2026-04-30
 
 ```
@@ -48,7 +50,7 @@ Cisco models channel-group modes:
 The canonical surface is
 
 ```
-CanonicalLAG(name, members[], mode: "active" | "passive" | "static")
+CanonicalLAG(name, members[], mode: "active" | "passive" | "static" | "active-backup")
 ```
 
 ### Mode mapping (MikroTik -> Cisco)
@@ -56,13 +58,18 @@ CanonicalLAG(name, members[], mode: "active" | "passive" | "static")
 | RouterOS mode | Canonical mode | Cisco mode |
 |---|---|---|
 | `802.3ad` | `active` | `active` |
-| `active-backup` / `balance-*` / `broadcast` | (no canonical) | (no Cisco equivalent) |
+| `balance-rr` (or no `mode`: RouterOS's default) / `balance-xor` / `broadcast` | `static` | `on` |
+| `active-backup` / `balance-tlb` / `balance-alb` | `active-backup` | `on`, with a `! review:` line |
 
-RouterOS source using `802.3ad` round-trips cleanly; using any
-other mode (active-backup, balance-xor, etc.) falls outside the
-canonical scope — these are Linux-bond-style modes with no
-Cisco-side LACP/EtherChannel equivalent.  The codec emits a
-banner and the operator decides.
+RouterOS source using `802.3ad` round-trips cleanly.  `balance-rr`,
+`balance-xor` and `broadcast` need the switch's ports grouped, and
+are written as a static `channel-group N mode on`.
+`active-backup`, `balance-tlb` and `balance-alb` "do not require any
+specific configuration of the switch" (Linux bonding), and IOS-XE
+has no such bond: they are written `channel-group N mode on` with a
+`! review:` line beside it and a warning in the job, and the
+switch's ports must then be configured as that static aggregate (or
+the host bond re-designed).
 
 ### Disposition
 
@@ -70,5 +77,5 @@ banner and the operator decides.
 |---|---|
 | `lags[].name` | lossy (vendor-specific naming; rename mesh handles) |
 | `lags[].members` | good |
-| `lags[].mode` | lossy (active-backup / balance-* RouterOS modes have no Cisco equivalent; only `802.3ad` round-trips cleanly) |
+| `lags[].mode` | lossy (active-backup / balance-tlb / balance-alb have no Cisco equivalent and are written `mode on` with a review line; the static modes are written `mode on`; only `802.3ad` round-trips cleanly) |
 | `interfaces[].lag_member_of` | good |

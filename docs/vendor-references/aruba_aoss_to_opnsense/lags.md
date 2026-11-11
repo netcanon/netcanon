@@ -26,6 +26,7 @@ trunk A3-A4 trk2 trunk
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 OPNsense uses the FreeBSD `lagg(4)` driver with `<laggs>` /
 `<lagg>` elements:
@@ -46,8 +47,12 @@ OPNsense uses the FreeBSD `lagg(4)` driver with `<laggs>` /
 - `<laggif>` — synthesised device name (`lagg0`, `lagg1`, …).
 - `<members>` — comma-separated list of member NIC device names.
 - `<proto>` — protocol; values include `lacp`, `failover`,
-  `loadbalance`, `roundrobin`, `none`.  FreeBSD always advertises
-  LACP actively when `proto=lacp`; there is no passive variant.
+  `fec`, `loadbalance`, `roundrobin`, `none`.  FreeBSD always
+  advertises LACP actively when `proto=lacp`; there is no passive
+  variant.  `failover` by default accepts traffic only on the
+  active port and needs no aggregate on the peer; `loadbalance` "is
+  a static setup and does not negotiate aggregation with the peer";
+  `none` passes no traffic (lagg(4)).
 - A member is an UNASSIGNED interface: "Only unassigned interfaces can
   be added to LAGG" (same page, Other Types).  So a member is named in
   `<laggs>` and in no zone of `<interfaces>`, and has no description,
@@ -63,7 +68,7 @@ Canonical fields (`CanonicalLAG`):
 ```
 name: str
 members: list[str]
-mode: str       # "active" | "passive" | "static"
+mode: str       # "active" | "passive" | "static" | "active-backup"
 ```
 
 Plus the back-pointer on each member interface:
@@ -84,11 +89,10 @@ Aruba -> OPNsense:
   members) lands as a comma-separated list on render.
 - `lags[].mode`: **lossy** — Aruba `lacp` / `dt-lacp` / `fec` /
   `trunk` collapse to OPNsense `<proto>lacp</proto>` /
-  `<proto>none</proto>` (static).  FreeBSD has no PAgP / passive-LACP
+  `<proto>loadbalance</proto>` (static).  FreeBSD has no PAgP / passive-LACP
   / Cisco-equivalent variants; mode degrades.
 - `interfaces[].lag_member_of`: **lossy** — both codecs round-trip
   the back-pointer but the LAG name itself differs (`Trk1` versus
   `lagg1`).
-- The OPNsense codec capability matrix does not currently advertise
-  `/lag/aggregate` in its supported set; render is partial pending
-  wire-up.
+- The OPNsense codec capability matrix classifies `/lags/lag/name` and
+  `/lags/lag/members` as supported and `/lags/lag/mode` as lossy.

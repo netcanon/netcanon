@@ -781,6 +781,24 @@ the policy locally:
   `tests/unit/migration/test_a_vlan_label_is_its_name.py`, which fails
   for one that is in neither.
 
+* **`netcanon/migration/_bonds.py`** — what a LAG's mode asks of its
+  peer.  Public API: `ACTIVE_BACKUP`, `active_backup_review(lag_name)`
+  (the text of the review line, without the comment marker),
+  `active_backup_warnings(lags)`.  A parser reads its platform's bond
+  or aggregate mode into `active` / `passive` (LACP), `static` (the
+  peer groups its ports too) or `active-backup` (the peer needs no
+  aggregate), from the vendor's own page.  A renderer that has a bond
+  needing nothing of its peer writes it and states
+  `active_backup_written_as = "itself"` in its class body; a target
+  with none writes a static aggregate with `active_backup_review(...)`
+  beside it in its comment syntax and leaves the attribute at its
+  default `"static"`, so that the base class's `render_warnings` warns
+  of each such LAG (a codec that overrides `render_warnings` without
+  calling the base calls `active_backup_warnings` itself, as AOS-S
+  does).  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`
+  holds the attribute to the output, and a new public codec needs a
+  reader of its grammar there.
+
 * **`netcanon/migration/canonical/transforms.py::project_switchport_to_vlan`**
   — projects per-iface switchport state (`switchport_mode`,
   `access_vlan`, `trunk_allowed_vlans`) back into VLAN-centric

@@ -36,6 +36,7 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
+from ..._bonds import active_backup_warnings
 from ...canonical.intent import CanonicalIntent
 from .._input_shape import detect_input_shape
 from ..base import CodecBase
@@ -741,12 +742,15 @@ class ArubaAOSSCodec(CodecBase):
         and is left out under a review line (:mod:`.vlan_interfaces`);
         and one for each loopback refused because the tree holds it
         down, and each loopback address written as a host address it
-        was not, since an AOS-S loopback takes no mask."""
+        was not, since an AOS-S loopback takes no mask; and one for
+        each active-backup LAG, written as a static ``trunk``
+        (:mod:`netcanon.migration._bonds`)."""
         return [
             *account_warnings(getattr(tree, "local_users", None) or []),
             *pool_warnings(tree),
             *vlan_interface_warnings(tree),
             *loopback_warnings(tree),
+            *active_backup_warnings(getattr(tree, "lags", None) or []),
         ]
 
     # -----------------------------------------------------------------

@@ -53,6 +53,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
@@ -846,6 +847,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"        set lacp-mode "
                     f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
                 )
+                if lag.mode == ACTIVE_BACKUP:
+                    out.append(
+                        f"        # {active_backup_review(_esc(lag.name))}"
+                    )
             elif is_vlan:
                 # VLAN identification can come from either signal —
                 # canonical interface_type OR FortiGate-native

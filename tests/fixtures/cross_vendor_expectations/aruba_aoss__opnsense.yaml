@@ -537,11 +537,11 @@ per_field_expectation:
       lists round-trip via the rename mesh.  LACP modes collapse:
       Aruba's ``lacp`` / ``dt-lacp`` / ``fec`` / ``trunk`` map to
       OPNsense ``<proto>lacp</proto>`` (FreeBSD always advertises
-      actively) or ``<proto>none</proto>`` (static).  PAgP-style
-      and HP-proprietary modes have no LACP equivalent;
-      cross-pair degrades.  OPNsense codec parses ``<laggs>`` but
-      its capability matrix doesn't currently advertise
-      ``/lag/aggregate``; render is partial pending wire-up.
+      actively) or ``<proto>loadbalance</proto>`` (static).
+      PAgP-style and HP-proprietary modes have no LACP equivalent;
+      cross-pair degrades.  The OPNsense matrix classifies
+      ``/lags/lag/name`` and ``/lags/lag/members`` as supported and
+      ``/lags/lag/mode`` as lossy.
     references: [opnsense-laggs, aruba-lags]
 
   local_users:

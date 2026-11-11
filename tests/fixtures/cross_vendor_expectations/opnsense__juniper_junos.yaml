@@ -549,11 +549,16 @@ per_field_expectation:
       ``<proto>lacp</proto>`` maps to Junos
       ``aggregated-ether-options lacp active`` (default to
       ``active`` — OPNsense doesn't carry the active/passive
-      discriminator).  Junos chassis-wide ``device-count`` allocation
+      discriminator).  ``loadbalance`` / ``fec`` / ``roundrobin``
+      (and ``none``, which passes no traffic: read as static, a
+      known limitation) are written as an ``ae<N>`` with no
+      ``lacp``; ``failover`` needs no aggregate on the peer and is
+      written the same way with a ``# review:`` line and a job
+      warning.  Junos chassis-wide ``device-count`` allocation
       synthesised on render (typically equal to number of ``ae<N>``
-      interfaces).  OPNsense codec parses ``<laggs>`` but capability
-      matrix doesn't currently advertise ``/lag/aggregate``;
-      ``CanonicalLAG`` records may not populate fully.
+      interfaces).  The OPNsense matrix classifies
+      ``/lags/lag/name`` and ``/lags/lag/members`` as supported and
+      ``/lags/lag/mode`` as lossy.
     references: [opnsense-laggs, junos-lag-overview, junos-ae-example]
 
   # ── Tier 2 — local users ──

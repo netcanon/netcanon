@@ -285,6 +285,15 @@ translate it again from `show running-config` as the switch prints it.
   ⚠️ Up to 0.7.7 such a port was written `0/1/<n>` or `<m>/1/0`, and
   such a LAG `lag 0`, in a job that said `completed`.  Look for them
   in an old output.
+- **A host's active-backup bond has no form on AOS-CX.**  A RouterOS
+  `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
+  `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
+  bond and an OPNsense `failover` LAGG need no aggregate on the ports
+  they face.  AOS-CX has no such bond: the LAG is written as a static
+  aggregate (`interface lag <N>` with no `lacp mode`) with a
+  `! review:` line in its stanza, and the job carries a warning.
+  Configure the ports it faces as a static aggregate too, or re-design
+  the bond.
 - **A VLAN's name is written whole as a target; a host name or VRF
   name is not.**  The switch reads a VLAN's `name` to the end of the
   line (a committed capture prints `name VLAN 11`), so a name with a

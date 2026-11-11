@@ -458,9 +458,10 @@ per_field_expectation:
       MikroTik parser populates intent.lags from /interface bonding
       records.  cisco_iosxe render does NOT walk intent.lags or emit
       the openconfig-if-aggregate augment.  Render-side wire-up gap.
-      Flips to lossy once wired (RouterOS-side modes beyond 802.3ad —
-      active-backup, balance-rr, balance-xor, balance-tlb, balance-
-      alb, broadcast — have no Cisco EtherChannel equivalent).
+      Flips to lossy once wired (RouterOS-side active-backup,
+      balance-tlb and balance-alb have no Cisco EtherChannel
+      equivalent, and the static modes balance-rr, balance-xor and
+      broadcast lose their balancing algorithm).
     references: [oc-aggregate, lag-render-gap]
 
   local_users:

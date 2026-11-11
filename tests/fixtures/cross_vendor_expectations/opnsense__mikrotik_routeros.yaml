@@ -494,16 +494,17 @@ per_field_expectation:
       OPNsense ``<laggs>/<lagg>`` (FreeBSD lagg(4) driver: lacp /
       failover / loadbalance / roundrobin / none) ↔ RouterOS
       ``/interface bonding`` (Linux bonding modes: 802.3ad / active-
-      backup / balance-xor / balance-rr / etc.).  Mode mapping is
-      cleaner than the inverse direction because OPNsense's mode
-      set is a SUBSET of RouterOS's — only ``<proto>none</proto>``
-      has no clean RouterOS analogue (collapse to ``balance-xor``
-      with banner).  Naming convention differs (``lagg<N>`` vs
-      ``bond<N>``: the port translator keeps the number, and writes
-      ``lagg0`` as ``bond1``).  OPNsense parses
-      ``<laggs>`` but its capability matrix doesn't currently
-      advertise ``/lag/aggregate``; render is partial pending
-      wire-up on the OPNsense side.
+      backup / balance-xor / balance-rr / etc.).  Mode mapping:
+      ``lacp`` -> ``802.3ad``, ``failover`` -> ``active-backup``,
+      and the static ``loadbalance`` / ``fec`` / ``roundrobin`` ->
+      ``balance-xor``; ``<proto>none</proto>``, which passes no
+      traffic, has no clean RouterOS analogue (read as static and
+      written ``balance-xor``).  Naming convention differs
+      (``lagg<N>`` vs ``bond<N>``: the port translator keeps the
+      number, and writes ``lagg0`` as ``bond1``).  The OPNsense and
+      RouterOS matrices classify ``/lags/lag/name`` and
+      ``/lags/lag/members`` as supported and ``/lags/lag/mode`` as
+      lossy.
     references: [opnsense-laggs, mikrotik_bonding]
 
   local_users:

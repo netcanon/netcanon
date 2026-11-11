@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._naming import sanitise_hostname
 from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
@@ -927,7 +928,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     target_lag_name, "active",
                 )
                 # Normalise canonical mode strings to EOS CLI tokens.
-                if mode == "static":
+                # EOS has no active-backup bond: a static aggregate,
+                # said in a review line (netcanon.migration._bonds).
+                if mode in ("static", ACTIVE_BACKUP):
                     mode_token = "on"
                 elif mode == "passive":
                     mode_token = "passive"
@@ -936,6 +939,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"   channel-group {chan_id} mode {mode_token}"
                 )
+                if mode == ACTIVE_BACKUP:
+                    out.append(
+                        f"   ! {active_backup_review(f'Port-Channel{chan_id}')}"
+                    )
         # One MTU here: the IP MTU where the tree states no payload.
         mtu = one_mtu_written(iface)
         if mtu is not None:

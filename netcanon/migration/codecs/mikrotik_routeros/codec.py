@@ -210,6 +210,10 @@ class MikroTikRouterOSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = True
 
+    #: A bond whose peer needs no aggregate is a mode of its own here.
+    #: See ``CodecBase.active_backup_written_as``.
+    active_backup_written_as: ClassVar[str] = "itself"
+
     #: A port is found by its factory name (``find default-name=``)
     #: whatever an operator has called it.
     #: See ``CodecBase.ports_keep_a_factory_name``.
@@ -295,7 +299,11 @@ class MikroTikRouterOSCodec(CodecBase):
                 reason=(
                     "MikroTik bonding `mode=802.3ad` (LACP) has no passive "
                     "variant, so a `passive` bundle re-parses as `active` "
-                    "(audit bb47f21 T0-1, verified by round-trip probe)."
+                    "(audit bb47f21 T0-1, verified by round-trip probe).  A "
+                    "static aggregate is written `balance-xor`, so "
+                    "`balance-rr` and `broadcast` come back `balance-xor`; "
+                    "`balance-tlb` and `balance-alb` come back "
+                    "`active-backup`."
                 ),
                 severity="warn",
             ),

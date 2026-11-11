@@ -4,6 +4,7 @@
 
 Source: [OPNsense Devices manual — LAGG tab](https://docs.opnsense.org/manual/other-interfaces.html)
 Retrieved: 2026-04-30
+Source: [FreeBSD lagg(4)](https://man.freebsd.org/cgi/man.cgi?query=lagg&sektion=4)
 
 OPNsense models link aggregation via FreeBSD's ``lagg(4)`` driver:
 
@@ -27,7 +28,13 @@ OPNsense models link aggregation via FreeBSD's ``lagg(4)`` driver:
 
 The OPNsense codec parses ``<laggs>/<lagg>`` into ``CanonicalLAG``
 and reverse-links members.  ``<proto>lacp</proto>`` maps to mode
-``active``.
+``active``; ``failover``, which by default accepts traffic only on
+the active port and needs no aggregate on the peer, to
+``active-backup``; ``fec``, ``loadbalance`` and ``roundrobin``
+(static: ``loadbalance`` "does not negotiate aggregation with the
+peer", lagg(4)) to ``static``; and ``none``, which passes no
+traffic, to ``static`` as well (a known limitation: the tree has no
+value for it).
 
 ## Cisco IOS-XE
 
@@ -68,10 +75,13 @@ OPNsense -> Cisco:
   ``channel-group N mode active`` for ``lacp`` and ``mode on`` for
   the non-LACP modes (lossy semantics — Cisco static-mode is
   link-aggregation without LACP exchange, OPNsense
-  ``failover``/``loadbalance`` carry per-flow distribution rules
-  that don't translate).
+  ``loadbalance`` / ``roundrobin`` carry per-flow distribution
+  rules that don't translate).  ``failover`` needs no aggregate on
+  the peer, and IOS-XE has no such bond: its ``mode on`` carries a
+  ``! review:`` line and a job warning, and the switch's ports must
+  then be configured as that static aggregate (or the host bond
+  re-designed).
 
-WIRE-UP DISPOSITION: the OPNsense codec parses ``<laggs>`` (per
-``parse.py``) but the Cisco codec's capability matrix does not
-currently advertise ``/lag/aggregate`` paths.  Cross-pair render of
-LAGs is partial.
+WIRE-UP DISPOSITION: the OPNsense codec's capability matrix classifies
+``/lags/lag/name`` and ``/lags/lag/members`` as supported and
+``/lags/lag/mode`` as lossy.

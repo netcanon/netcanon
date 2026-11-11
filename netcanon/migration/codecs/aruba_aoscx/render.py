@@ -48,6 +48,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
+from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
 from ..._user_secrets import (
@@ -510,6 +511,10 @@ def _render_interface(
         mode = lag_mode_by_name.get(iface.name, "static")
         if mode in ("active", "passive"):
             block.append(f"    lacp mode {mode}")
+        elif mode == ACTIVE_BACKUP:
+            # No ``lacp mode`` is a static LAG; AOS-CX has no
+            # active-backup bond (netcanon.migration._bonds).
+            block.append(f"    ! {active_backup_review(iface.name)}")
 
     return block
 

@@ -521,15 +521,19 @@ per_field_expectation:
     references: [routeros-nxos-surface]
 
   "lags[].mode":
-    disposition: good
-    note: >
-      Preserved on every cell — the committed bonds are 802.3ad, which maps
-      straight onto LACP `active`.  The mikrotik_routeros matrix declares
-      `/lags/lag/mode` lossy on its own side because RouterOS's non-LACP
-      bonding modes (`active-backup`, `balance-rr`, `balance-xor`,
-      `balance-tlb`, `balance-alb`, `broadcast`) have no NX-OS EtherChannel
-      equivalent; none appears on this corpus, so the cross-pair measurement
-      is clean, but a source using one of those modes needs a re-design.
+    disposition: lossy
+    reason: >
+      `mode=802.3ad` maps straight onto LACP `active` and round-trips.  A
+      bond whose peer ports need no aggregate (`active-backup`,
+      `balance-tlb`, `balance-alb`) has no NX-OS EtherChannel form: it is
+      written as a static `channel-group <N> mode on`, with a review line
+      beside it and a warning in the job, and re-parses as `static`
+      (netcanon.migration._bonds).  The synthetic kitchen-sink's second
+      bond is `mode=active-backup`, and drifts so; the switch it faces has
+      to be configured as a static aggregate, or the bond re-designed.
+      `balance-rr`, `balance-xor` and `broadcast` are a static aggregate
+      on both sides and are written `mode on` with nothing lost but the
+      hashing.
     references: [routeros-nxos-surface]
 
   local_users:
