@@ -179,13 +179,14 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      The IANA ifType is re-derived, not carried: `ianaift:softwareLoopback`
-      (on `loopback0`) and `ianaift:ieee8023adLag` (on `port-channel1`) both
-      come back as `ianaift:ethernetCsmacd`.  The aruba_aoss matrix declares
-      `/interfaces/interface/config/type` lossy for exactly this reason — the
-      codec infers the type from the interface-name shape (bare number ->
-      ethernet, `Trk` -> port-channel, `Vlan` -> l3ipvlan), and NX-OS's
-      lowercase `loopback0` / `port-channel1` match none of those.  Cosmetic
+      The IANA ifType is re-derived, not carried: `ianaift:ieee8023adLag`
+      (on `port-channel1`) comes back as `ianaift:ethernetCsmacd`.  The
+      aruba_aoss matrix declares `/interfaces/interface/config/type` lossy
+      for exactly this reason — the codec infers the type from the
+      interface-name shape (bare number -> ethernet, `Trk` -> port-channel,
+      `Vlan` -> l3ipvlan, `loopback<N>` -> softwareLoopback), and NX-OS's
+      lowercase `port-channel1` matches none of those; `loopback0` does,
+      and comes back typed as a loopback.  Cosmetic
       for forwarding; it matters to inventory tooling that groups ports by
       type.
     references: [nxos-aoss-surface]

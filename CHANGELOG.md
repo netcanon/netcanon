@@ -1365,6 +1365,29 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-S loopback is read, and written as the switch prints it.**
+  HPE gives the command as `interface loopback <0-7>`, with a space,
+  and an address on a loopback is given with no mask; a switch prints
+  `interface loopback 0` and `ip address 10.0.0.9` under it.  The
+  parser took one word after `interface`, so it read nothing of such
+  a stanza: the loopback and its addresses were gone, with no row to
+  say so, in jobs that said `completed` onto EOS, IOS-XE, NX-OS and
+  AOS-S itself.  The renderer wrote `interface loopback1` and the
+  address with its prefix, and the port translator wrote a source's
+  `Loopback0` (a Junos `lo0`) as `loopback1`, on a claim that
+  loopback 0 is reserved -- HPE allows addresses "on lo0 to lo7" --
+  so `Loopback0` and `Loopback1` were one loopback, in a job that was
+  `partial` for it.  A loopback is now read, each address a host
+  address, and written `interface loopback <N>` with its number kept
+  and its addresses with no mask.  An address with a shorter prefix
+  is written as the host address it is on the switch, under a
+  `; review:` line, and a loopback the source holds down is refused
+  with one, since no AOS-S form is known for a loopback that is down;
+  the job's warnings say both.  A loopback above 7 has no AOS-S name, and
+  the job lists it.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_loopback_is_read.py`,
+  which sends two loopbacks onto every public codec and reads each
+  output back with the target's own parser.
 - **No number AOS-CX, OS10 or EOS counts from 1 is written onto them
   as 0.**  AOS-CX numbers a member, a slot, a port and a LAG from 1
   (HPE gives a LAG id of "1 to 256"); OS10 a port and a port channel

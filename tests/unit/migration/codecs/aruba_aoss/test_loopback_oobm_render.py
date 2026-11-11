@@ -9,8 +9,9 @@ plaintext password equal to the hash text — severe security bug).
 
 Vendor-doc grounding (verified):
 * AOS-S 16.04+ supports `interface loopback <0-7>` (Aruba Basic
-  Operation Guide, "Managing loopback interfaces").  ``lo-0`` is
-  reserved for ::1/128, so user-creatable IDs are 1-7.
+  Operation Guide, "Managing loopback interfaces"), each with
+  addresses of its own, given with no mask (see
+  ``test_a_loopback_is_read.py``).
 * AOS-S has a dedicated `oobm` top-level configuration block
   (Aruba MCG, "Out-of-Band Management").  IPv4 `ip address` and
   `ip default-gateway` go inside the block.
@@ -52,8 +53,8 @@ def test_render_loopback_emits_aos_s_form() -> None:
         )],
     )
     out = ArubaAOSSCodec().render(intent)
-    assert "interface loopback1" in out
-    assert "ip address 10.0.255.33/32" in out
+    assert "interface loopback 1\n" in out
+    assert "   ip address 10.0.255.33\n" in out
     # Loopback is always-up — no `enable` / `disable` / `routing`
     # lines should leak from the physical-port code path.
     assert "   enable" not in out
@@ -70,8 +71,8 @@ def test_render_loopback_with_ipv6() -> None:
         )],
     )
     out = ArubaAOSSCodec().render(intent)
-    assert "interface loopback2" in out
-    assert "ipv6 address 2001:db8::1/128" in out
+    assert "interface loopback 2\n" in out
+    assert "   ipv6 address 2001:db8::1\n" in out
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +249,9 @@ def test_arista_to_aruba_loopback_management_user_round_trip() -> None:
     translate_port_names(intent, src_codec, tgt_codec, rename_map=None)
     out = tgt_codec.render(intent)
 
-    # Loopback survives.
-    assert "interface loopback1" in out
-    assert "ip address 10.0.255.33/32" in out
+    # Loopback survives, with its number.
+    assert "interface loopback 0\n" in out
+    assert "   ip address 10.0.255.33\n" in out
 
     # Management1 → top-level oobm block.
     assert "oobm\n" in out

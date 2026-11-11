@@ -139,9 +139,12 @@ per_field_expectation:
       tag another unit or a VLAN with a port or an address also has.  A
       sub-interface in a VRF -- the captures' case -- is written without it,
       as every interface of a VRF is (AOS-S has none; the VRF's loss is on
-      `routing_instances`).  Every other name comes through
-      verbatim (`GigabitEthernet0/0/0/2`, `Bundle-Ether500`,
-      `Loopback0`), which are not legal AOS-S port identifiers.  The fidelity
+      `routing_instances`).  A loopback is written in the AOS-S form,
+      `interface loopback <N>`, and read back as `loopback<N>`
+      (`Loopback0` -> `loopback0`); every cell has one, so this key
+      drifts on all 12.  Every other name comes through
+      verbatim (`GigabitEthernet0/0/0/2`, `Bundle-Ether500`), which are
+      not legal AOS-S port identifiers.  The fidelity
       harness scores preservation, not target-syntax validity; port-shape
       translation is a separate step
       (`netcanon/migration/canonical/port_names.py::translate_port_names`,
@@ -224,16 +227,18 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 12 of 12 cells, and both matrices declare
+      Drifts on 6 of 12 cells, and both matrices declare
       `/interfaces/interface/config/type` lossy in their own right — two
       independent declared causes, one disposition.  aruba_aoss "does not
       declare IANA ifType; the codec infers type from interface-name shape
-      (bare number -> ethernet, 'Trk' -> port-channel, 'Vlan' -> l3ipvlan)",
-      and no IOS-XR name matches those shapes, so everything collapses to
-      `ianaift:ethernetCsmacd`: `Loopback0` and `Bundle-Ether321` both arrive
-      typed as plain ethernet.  Nothing about forwarding breaks, but any
+      (bare number -> ethernet, 'Trk' -> port-channel, 'Vlan' -> l3ipvlan,
+      'loopback<N>' -> softwareLoopback)".  A loopback is written
+      `interface loopback <N>` and comes back typed as one; a
+      `Bundle-Ether` name (and the one BVI) matches none of the shapes and
+      arrives typed as plain ethernet, which is the drift on the 6 cells
+      that hold a bundle.  Nothing about forwarding breaks, but any
       downstream consumer that filters on interface type (inventory, NMS
-      seeding, the rename modal) will mis-classify loopbacks and bundles.
+      seeding, the rename modal) will mis-classify bundles.
     references: [iosxr-aoss-surface]
 
   "interfaces[].lag_member_of":

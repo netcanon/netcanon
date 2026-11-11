@@ -45,6 +45,11 @@ from ...canonical.port_names import PortIdentity
 #: hand types either, or ``TRK1``.
 _TRUNK_RE = re.compile(r"^trk(\d+)$", re.IGNORECASE)
 
+#: Loopback: ``loopback<n>``, the name the parser gives ``interface
+#: loopback <n>``.  AOS-S has loopbacks 0 to 7; three digits is room
+#: enough for a number that is not one of them.
+_LOOPBACK_RE = re.compile(r"^loopback(\d{1,3})$", re.IGNORECASE)
+
 
 def trunk_number(name: str) -> str | None:
     """The digits of *name* if it is a trunk's, in any letter case."""
@@ -105,6 +110,13 @@ def classify_port_name(name: str) -> PortIdentity:
     if m:
         return PortIdentity(
             kind="lag", index=int(m.group(1)), original=name
+        )
+
+    # A loopback, as the parser names ``interface loopback 1``.
+    m = _LOOPBACK_RE.match(stripped)
+    if m:
+        return PortIdentity(
+            kind="loopback", index=int(m.group(1)), original=name
         )
 
     # Stacked VSF with letter-slot uplink module (must precede the
@@ -203,7 +215,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     than guessing the Aruba letter-slot mapping.
 
     Returns None for kinds AOS-S can't natively represent
-    (loopback, tunnel, breakout, hw_aggregate, mgmt) and for SVIs
+    (tunnel, breakout, hw_aggregate, mgmt), for a loopback above 7, and for SVIs
     (see :mod:`._svi_absorption` — codepath 3 of 3).
     """
     if identity.kind == "physical":
@@ -270,21 +282,19 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     # ``ArubaAOSSCodec.absorbs_svi_into_vlan``.
     if identity.kind == "svi":
         return None
-    # AOS-S DOES support loopback (verified against Aruba Basic
-    # Operation Guide for AOS-S 16.10, "Managing loopback interfaces"
-    # chapter): `interface loopback <N>` where N is 0-7.  ``lo-0`` is
-    # reserved (auto-assigned ::1/128) so user-creatable IDs are
-    # 1-7.  Cisco/Arista/Junos sources commonly use Loopback0; map
-    # to AOS-S loopback 1 (the first user-creatable slot) when the
-    # source uses 0, otherwise pass the index through if it fits.
-    # Above index 7 we can't represent — return None to drop with
-    # the standard "no native representation" warning.
+    # AOS-S has eight loopbacks, ``interface loopback <0-7>`` (Aruba
+    # Basic Operation Guide for AOS-S 16.10, "Managing loopback
+    # interfaces"), and each takes addresses of its own -- loopback 0
+    # too: HPE gives up to 32 IPv4 addresses "on lo0 to lo7", and
+    # configs the switch printed have ``interface loopback 0`` with an
+    # address the operator gave it.  (Loopback 0 also holds the
+    # switch's own 127.0.0.1, which is not printed.)  A loopback keeps
+    # its number, so Loopback0 and Loopback1 stay two loopbacks; up to
+    # 0.7.7 a 0 was written as 1, and the two were one.  Above 7 there
+    # is no AOS-S name: ``None``, and the name is listed.
     if identity.kind == "loopback":
         idx = identity.index if identity.index is not None else 0
-        # Map Loopback0 → loopback1; preserve 1..7 verbatim.
-        if idx == 0:
-            return "loopback1"
-        if 1 <= idx <= 7:
+        if 0 <= idx <= 7:
             return f"loopback{idx}"
         return None
     # AOS-S OOBM is a separate top-level configuration block (NOT a

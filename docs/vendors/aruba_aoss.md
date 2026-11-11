@@ -411,6 +411,49 @@ addresses, and nothing said so.  Guarded by
 which sends each form from each grammar through the plan path and
 reads the output as text and with the AOS-S parser.
 
+## A loopback is `interface loopback <N>`
+
+HPE gives the command as `interface loopback <0-7>`, with a space (the
+context's prompt is `lo-<N>`), and an address on a loopback is given
+with no mask: "when you configure an IP address for a loopback
+interface, you do not specify a network mask" (HP ProCurve Management
+and Configuration Guide).  Each of loopbacks 0 to 7 takes up to 32
+addresses; loopback 0, which always holds 127.0.0.1, takes addresses
+of its own.  A switch prints such a stanza so:
+
+    interface loopback 0
+       ip address 10.0.0.9
+       exit
+
+- **Read.**  Up to 0.7.7 the parser took one word after `interface`,
+  so it read nothing of that stanza: the loopback and its addresses
+  were gone, with no row to say so, in jobs that said `completed`
+  onto EOS, IOS-XE, NX-OS and AOS-S itself.  It is now `loopback<N>`
+  in the tree, each address a host address (`/32`, an IPv6 one
+  `/128`); an address written with a mask or a prefix is read as
+  written.
+- **Written.**  A loopback is written `interface loopback <N>`, its
+  addresses with no mask.  An address the tree holds with a shorter
+  prefix is written as the host address it is on the switch, under a
+  `; review:` line that says what it was, and the job's warnings say
+  it too.  Up to 0.7.7 it was written `interface loopback<N>`, the
+  address with its prefix.
+- **The number is kept.**  A source's `Loopback0` (IOS-XE, EOS, IOS
+  XR), `loopback0` (NX-OS), `loopback 0` (AOS-CX) or Junos `lo0` is
+  `loopback 0`.  Up to 0.7.7 it was written `loopback 1`, on a claim
+  that loopback 0 is reserved, so `Loopback0` and `Loopback1` were one
+  loopback, in a job that was `partial` for it.  A loopback numbered
+  above 7 has no AOS-S name: the job is `partial` and lists it.
+- **A loopback the source holds down** is refused with a review line
+  where its stanza would be, and the job's warnings say it: no HPE
+  guide read gives an AOS-S loopback a way to be down, and written, it
+  would be up, its addresses with it.
+
+Guarded by
+`tests/unit/migration/codecs/aruba_aoss/test_a_loopback_is_read.py`,
+which sends two loopbacks onto every public codec and reads each
+output back with the target's own parser.
+
 ## Lossy paths
 
 See per-codec `CapabilityMatrix.lossy` declarations in the codec

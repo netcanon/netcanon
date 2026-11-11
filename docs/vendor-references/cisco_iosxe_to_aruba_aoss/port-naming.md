@@ -31,7 +31,7 @@ the rename mesh (if engaged) maps:
 | `TenGigabitEthernet1/1/1` | `25` (uplink) — operator-curated |
 | `Port-channel1` | `Trk1` |
 | `Vlan10` | (no AOS-S SVI interface — absorbed into vlan stanza) |
-| `Loopback0` | (no AOS-S equivalent — typically dropped) |
+| `Loopback0` | `loopback 0` (`interface loopback <0-7>`; the number is kept) |
 
 Without the rename mesh, the literal `GigabitEthernet1/0/1` flows
 through to the AOS-S CLI render, which emits
@@ -42,21 +42,21 @@ AOS-S device (the `_IFACE_HEADER_RE` accepts
 ## Loopback and tunnel handling
 
 OpenConfig carries Loopback / Tunnel as first-class IANA-typed
-interfaces.  AOS-S has no analog — Tunnel doesn't exist on AOS-S
-campus switches at all, and Loopback is used rarely (chiefly for
-OSPF router-id scenarios).  The aruba_aoss render emits whatever
-canonical name was carried; if it's `Loopback0`, the resulting
-`interface Loopback0 / enable` line is rejected by the AOS-S
-device.  This is a deeper canonical-model gap (no notion of
-"this interface type doesn't exist on this vendor's hardware") and
-not specific to this codec pair.
+interfaces.  AOS-S takes `interface loopback <0-7>`, with a space,
+each with addresses given with no mask: `Loopback0` is written
+`interface loopback 0` / `ip address 10.0.0.9`, its number kept, and
+an address with a shorter prefix is written as the host address
+under a `; review:` line.  A `Loopback<N>` above 7 has no AOS-S
+name, and the job is `partial` and lists it.  Tunnel doesn't exist
+on AOS-S campus switches at all: the port translator drops it, and
+the job lists it.
 
-Disposition: lossy with reason "interface-type compatibility gap"
-when loopback / tunnel sources reach AOS-S.
+Disposition: good for a loopback numbered 0-7; lossy for a tunnel
+and for a loopback above 7.
 
 ## Disposition
 
 `interfaces[].name`: **good** through the rename mesh; **lossy**
 without it (operator hazard with Cisco-shaped names hitting AOS-S
-syntax rejection).  Loopback / Tunnel: **lossy** for the type
-mismatch.
+syntax rejection).  Loopback: **good** for `Loopback0`-`Loopback7`;
+Tunnel: **lossy** (no AOS-S form).

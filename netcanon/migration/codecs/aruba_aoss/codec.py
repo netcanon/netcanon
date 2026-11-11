@@ -46,6 +46,7 @@ from .accounts import account_warnings
 from .parse import _parse_port_list, parse_intent, without_banner_bodies
 from .render import (
     _format_port_list,
+    loopback_warnings,
     pool_warnings,
     render_intent,
     vlan_interface_warnings,
@@ -466,7 +467,8 @@ class ArubaAOSSCodec(CodecBase):
                     "AOS-S does not declare IANA ifType; the codec "
                     "infers type from interface-name shape (bare "
                     "number -> ethernet, 'Trk' -> port-channel, "
-                    "'Vlan' -> l3ipvlan)."
+                    "'Vlan' -> l3ipvlan, 'loopback<N>' -> "
+                    "softwareLoopback)."
                 ),
                 severity="warn",
             ),
@@ -736,11 +738,15 @@ class ArubaAOSSCodec(CodecBase):
         given, a pool no VLAN of the output serves
         (:mod:`.dhcp_pools`); and one for each sub-interface written as
         the VLAN of its tag and each interface that stands for a VLAN
-        and is left out under a review line (:mod:`.vlan_interfaces`)."""
+        and is left out under a review line (:mod:`.vlan_interfaces`);
+        and one for each loopback refused because the tree holds it
+        down, and each loopback address written as a host address it
+        was not, since an AOS-S loopback takes no mask."""
         return [
             *account_warnings(getattr(tree, "local_users", None) or []),
             *pool_warnings(tree),
             *vlan_interface_warnings(tree),
+            *loopback_warnings(tree),
         ]
 
     # -----------------------------------------------------------------

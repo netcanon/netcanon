@@ -271,12 +271,12 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Port-name mesh maps Junos ``ge-0/0/0`` / ``ae0`` / ``irb.100``
-      / ``lo0.0`` -> Aruba ``1`` / ``Trk1`` / VLAN-absorbed / no
-      Aruba equivalent.  Junos's speed prefix (``xe-`` = 10G,
+      / ``lo0`` -> Aruba ``1`` / ``Trk1`` / VLAN-absorbed /
+      ``loopback 0``.  Junos's speed prefix (``xe-`` = 10G,
       ``et-`` = 40/100G) drops on Aruba's bare-numeric form.
-      Junos's ``lo0`` has no first-class Aruba analogue (the
-      management VLAN serves as the device-self-IP host); render
-      emits a ``;`` comment.  A LAG keeps its number, ``ae<N>`` ->
+      AOS-S takes ``interface loopback <0-7>``, its addresses given
+      with no mask, and a loopback keeps its number.  A LAG keeps
+      its number, ``ae<N>`` ->
       ``Trk<N>`` (``ae0``, which AOS-S has no number for, is written
       ``Trk1`` by the port translator).
     references: [junos-iface-naming, aruba-port-naming]

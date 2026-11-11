@@ -12,16 +12,15 @@
 # campus L2 edge survives almost completely while everything AOS-CX gained over
 # AOS-S is dropped whole.
 #
-# The dominant structural effect is the same as on every aruba_aoscx pair: the
-# interface record list shrinks on all 7 cells, so EVERY `interfaces[].*`
-# sub-field is measured as drifted and declaring any of them `good` would
-# manufacture a false CODEC_BUG.  What differs here is WHICH records vanish —
-# no physical port is ever dropped.  The 49 lost records are 34 `lag N` bundle
-# pseudo-interfaces, 10 `loopback N` and 5 `mgmt`; 18 SVIs are renamed
-# (`vlan 101` -> `Vlan101`) rather than dropped.  Because that one cause is
-# shared, the reasons below say per key whether it ALSO fails on records that
-# survive, instead of citing the eight sibling keys as if they corroborated
-# each other.
+# The dominant structural effect: the interface record list shrinks on 5 of
+# the 7 cells.  On those the reconciler gives the record-count drift to the
+# first `interfaces[].*` key (`name`) and folds every other sub-field into
+# STRUCTURAL_ONLY; the other 2 cells compare record by record.  No physical
+# port, LAG, loopback or SVI is ever dropped: the only records lost are 5
+# `mgmt`, and 10 loopbacks (`loopback 0` -> `loopback0`) and 18 SVIs
+# (`vlan 101` -> `Vlan101`) come back renamed.  So the reasons below say per
+# key what fails on the 152 of 157 records that come back, instead of citing
+# the sibling keys as if they corroborated each other.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and a
 # full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
@@ -46,9 +45,10 @@ meta:
     hostname, VLAN IDs, VLAN names, tagged and untagged port membership, static
     routes and SNMP scalars all survive.  What does not is
     everything AOS-CX models and AOS-S does not: VRFs, VXLAN and the anycast
-    gateway are dropped whole; loopbacks disappear; jumbo MTU, IPv6 addressing
-    and a shut SVI's admin state are lost on records that otherwise survive;
-    and every local account is refused, whose password AOS-CX holds as ciphertext under its own key.
+    gateway are dropped whole; an SVI or a loopback that is shut is not
+    written, and the job says so; jumbo MTU and a LAG's description are lost
+    on records that otherwise survive; and every local account is refused,
+    whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-aoss-surface
@@ -129,48 +129,56 @@ per_field_expectation:
   "interfaces[].name":
     disposition: lossy
     reason: >
-      The interface record list shrinks on all 7 cells (9->5, 9->5, 18->11,
-      42->35, 22->17, 44->27, 13->8).  Measured by re-running the round trip and
-      diffing record by record, the 49 lost records are exactly three kinds and
-      NO physical port is among them: 34 `lag N` bundle pseudo-interfaces, 10
-      `loopback N`, and `mgmt` on 5 of 7 cells.  A further 18 SVI records are
-      renamed rather than dropped (`vlan 101` -> `Vlan101`), which the
-      name-keyed comparator sees as one record leaving and another arriving.
-      Only the loopbacks are an unambiguous loss — the bundles reappear as
-      `trunk ... trkN lacp` lines and the SVI is re-mounted from the VLAN record.
-      On a routed leaf or spine the loopback is the BGP router-id and
-      update-source, so re-author loopbacks and `mgmt` on the target explicitly.
+      The interface record list shrinks on 5 of the 7 cells (9->8, 9->8,
+      18->17, 42->41, 13->12), each by its `mgmt` port; on the other 2 (22->22,
+      44->44) `mgmt` comes back too.  Measured by re-running the round trip and
+      comparing record by record, those 5 are the only records lost: NO
+      physical port, LAG, loopback or SVI is among them.  28 come back under
+      another name, which the comparator pairs by the addresses they hold: 10
+      loopbacks (`loopback 0` -> `loopback0`, the record AOS-S reads
+      `interface loopback 0` as) and 18 SVIs (`vlan 101` -> `Vlan101`,
+      re-mounted from the VLAN record).  An SVI or a loopback that is shut on
+      AOS-CX is not written: an AOS-S VLAN cannot be disabled, and no AOS-S
+      form is known for a loopback that is down, so each is left out under a
+      `; review:` line and a warning in the job (measured on a config made
+      for it; no committed capture has one).  Re-author `mgmt` on the target.
     references: [aoscx-aoss-surface]
 
   "interfaces[].description":
     disposition: lossy
     reason: >
       Both matrices declare `/interfaces/interface/config/description` supported
-      and 96 of the 108 surviving records agree.  The 12 that do not are ALL SVI
-      records: AOS-S re-mounts the SVI from the VLAN record, so the SVI's own
-      description is replaced by the VLAN name (measured: `PROD-WEB-SVI` ->
-      `PROD-WEB`).  Physical-port descriptions survive intact.  Capture SVI
-      descriptions before migrating; port descriptions need no action.
+      and 123 of the 152 records that come back agree.  The 29 that do not are
+      of two kinds.  12 are SVI records: AOS-S re-mounts the SVI from the VLAN
+      record, so the SVI's own description is replaced by the VLAN name
+      (measured: `PROD-WEB-SVI` -> `PROD-WEB`).  17 are LAGs whose description
+      does not come back.  Physical-port and loopback descriptions survive
+      intact.  Capture SVI and LAG descriptions before migrating; port
+      descriptions need no action.
     references: [aoscx-aoss-surface]
 
   "interfaces[].enabled":
-    disposition: lossy
-    reason: >
-      Every SVI of the committed captures is up, and arrives up.  An SVI
-      that IS shut on AOS-CX (`shutdown` under `interface vlan N`) arrives
-      administratively UP on AOS-S, because the re-mounted SVI is synthesised
-      from the VLAN record and AOS-S holds no admin state for it -- in a job
-      that says `completed` (measured on a config made for it).  A fail-open.
-      Diff admin state on every SVI before committing the target config.
-      (This note once counted 16 SVIs that moved `False` -> `True`: the
-      AOS-CX parser read every VLAN interface as shut, and none of them was.)
+    disposition: good
+    note: >
+      On every record that comes back the admin state is the source's: none
+      of the 152 differs.  Every interface of the committed captures is up; a
+      port that is shut is written `disable` and read back down (measured on
+      a config made for it).  An SVI or a loopback that is shut is not
+      written at all -- an AOS-S VLAN cannot be disabled, and no AOS-S form is
+      known for a loopback that is down -- and is left out under a `; review:`
+      line and a warning in the job: the record is lost, which
+      `interfaces[].name` counts, rather than arriving up.  (This key once
+      said a shut SVI arrived up, which it did until the AOS-S renderer
+      refused it; and before that it counted 16 SVIs that moved `False` ->
+      `True`, because the AOS-CX parser read every VLAN interface as shut.)
     references: [aoscx-aoss-surface]
 
   "interfaces[].mtu":
     disposition: lossy
     reason: >
-      An independent loss, not the record-count effect: 50 of the 108 surviving
-      records disagree, and all 50 are the same transition on a physical port —
+      An independent loss, not the record-count effect: 50 of the 152 records
+      that come back disagree, and all 50 are the same transition on a
+      physical port —
       MTU `9198` arrives unset.  Every jumbo-framed uplink in the corpus silently
       reverts to the target default.  Note the aruba_aoss matrix declares NOTHING
       for `/interfaces/interface/config/mtu` — not supported, not lossy, not
@@ -183,52 +191,54 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Declared supported on both sides at `/interfaces/interface/ipv4/address/ip`
-      + `prefix-length`, and all 31 addresses on surviving records round-trip
-      intact — so this key carries NO independent failure and is lossy purely
-      because it rides a record list that lost coherence (see
-      `interfaces[].name`).  Stated that way rather than implied.  One caveat
-      from the declarations rather than an observation: aruba_aoss declares
-      `/interfaces/interface/ipv4/address/virtual-gateway-address` unsupported,
-      so an interface-mounted anycast companion would drop — no committed cell
-      exercises that mount, the VLAN-mounted twin does (see
-      `vlans[].ipv4_addresses`).
+      + `prefix-length`, and every address on a record that comes back keeps
+      its address and prefix.  What is lost is the anycast companion:
+      aruba_aoss declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported, and the AOS-CX `active-gateway ip` that 15 of the 18 SVIs
+      carry on their address does not come back -- the same 15 that
+      `vlans[].ipv4_addresses` measures on the VLAN mount.  On the 2 cells that
+      compare record by record that is the drift this key records.
     references: [aoscx-aoss-surface]
 
   "interfaces[].ipv6_addresses":
-    disposition: lossy
-    reason: >
-      An independent, total loss: the corpus carries 2 interface IPv6 addresses
-      and the target intent carries 0.  Both sit on SVI records that otherwise
-      survive, and the AOS-S VLAN render emits only an `ip address` line, so the
-      v6 address has nowhere to go even though aruba_aoss declares
-      `/interfaces/interface/ipv6/address/ip` SUPPORTED.  Any dual-stack SVI must
-      be re-addressed by hand on the target.
+    disposition: good
+    note: >
+      The corpus carries 2 interface IPv6 addresses, each on an SVI, and both
+      come back: the AOS-S VLAN render writes `ipv6 address` beside `ip
+      address`.  A loopback's IPv6 address is written too.  One case changes
+      the value, and says so: an AOS-S loopback takes a host address only, so
+      a loopback address with a shorter prefix is written as the /128 the
+      switch makes of it, under a `; review:` line and a warning in the job.
+      No committed capture has one.  (This key once said both addresses were
+      lost, which they were until the AOS-S VLAN render wrote them.)
     references: [aoscx-aoss-surface]
 
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      All 108 surviving records agree on the inferred type, so this key carries
-      no independent failure — it is lossy solely because the parent record list
-      lost coherence on all 7 cells.  Worth knowing WHY it still agrees:
       aruba_aoss declares `/interfaces/interface/config/type` lossy and infers
       the type from the name shape (bare number -> ethernet, `Trk` ->
-      port-channel, `Vlan` -> l3ipvlan), which happens to reproduce the AOS-CX
-      value on every surviving record in this corpus.  Do not read that as a
-      guarantee for names outside those three shapes.
+      port-channel, `Vlan` -> l3ipvlan, `loopback<N>` -> softwareLoopback).
+      That reproduces the AOS-CX value on the ports, SVIs and loopbacks, and
+      not on the 34 LAGs: a `lag N` record comes back under its own name,
+      which is none of those shapes, and is read as an Ethernet port.  Do not
+      read the rest as a guarantee for names outside those shapes.
     references: [aoscx-aoss-surface]
 
   "interfaces[].lag_member_of":
     disposition: lossy
     reason: >
-      44 of the 108 surviving records disagree, and every difference is the same
+      44 of the 152 records that come back disagree, all of them ports, and
+      every difference is the same
       rename: `lag 1` -> `trk1`.  The membership itself is intact — no port loses
       its bundle.  `tools/run_phase4_reconciliation.py::_canonical_lag_name`
       exists to forgive exactly this class of rename on this key, but its regex
       accepts `trk<N>` and not AOS-CX's native `lag <N>` spelling with the space,
       so the pair falls through to raw equality; and in any case the parent
-      record list drifts on all 7 cells, which forces every sub-field drifted
-      regardless of the equivalence.  Treat this as a naming-shape finding, not
+      record list drifts on 5 of the 7 cells, which forces every sub-field
+      drifted there regardless of the equivalence.  Treat this as a
+      naming-shape finding, not
       lost membership.
     references: [aoscx-aoss-surface]
 

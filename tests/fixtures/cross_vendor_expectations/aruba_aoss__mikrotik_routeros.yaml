@@ -16,8 +16,9 @@
 #     populates the canonical lists directly, but RouterOS Plane-2
 #     (bridge VLAN filtering) parsing is partial in v1 — render
 #     emits a partially populated bridge-VLAN table.
-#   * Loopback emulation: Aruba has no loopback at all; cross-pair
-#     loopback handling is poor in either direction.
+#   * Loopbacks: AOS-S has ``interface loopback <0-7>``; an AOS-S
+#     loopback is written as the RouterOS codec writes every
+#     loopback, an empty bridge holding its address.
 #   * Tier-3 RouterOS-rich plumbing (firewall / NAT / queues /
 #     wireless / scripts) is structurally absent on the source side
 #     for this direction (Aruba does not model any of these as
@@ -203,9 +204,9 @@ per_field_expectation:
       X ]`` lookup; (4) ``mtu`` is not parsed by the aruba_aoss
       codec, so RouterOS render emits no ``mtu=`` line; (5)
       ``voice_vlan`` and ``vrf`` are not populated by the
-      aruba_aoss codec; (6) Loopback is unsupported on Aruba (no
-      first-class concept), so RouterOS-side empty-bridge loopback
-      emulation has no Aruba source to cross from.  Routed-vs-L2
+      aruba_aoss codec; (6) an AOS-S ``interface loopback <N>``
+      is read as ``loopback<N>`` and written as a RouterOS empty
+      bridge holding its address.  Routed-vs-L2
       mode is encoded via ``interface_type`` inference on both
       codecs.
     references: [interface_naming, ip_addressing, switching_model]

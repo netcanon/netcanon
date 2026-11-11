@@ -18,8 +18,9 @@ VLAN SVIs are absorbed into the `vlan <id>` stanza (no separate
 `interface Vlan<N>` block on AOS-S — the `absorbs_svi_into_vlan: true`
 codec class-var captures this).
 
-There is no first-class **loopback** family on AOS-S.  Operators
-emulate loopbacks by creating an empty VLAN with an SVI address.
+AOS-S loopbacks are `interface loopback <0-7>`, with a space, each
+with addresses given with no mask; the parser reads one as
+`loopback<N>`.
 
 ## MikroTik RouterOS
 
@@ -74,11 +75,10 @@ back to the rename-mesh-chosen interface name and emits a positional
 `set` on the assumed default-name.  Operators must verify the port
 binding post-migration.
 
-Loopback emulation is **lossy** on the cross-pair: Aruba has no
-loopback at all.  Inverse direction (RouterOS source) lifts cleanly
-into a synthetic Aruba VLAN SVI via the codec's interface_type
-inference, but Aruba-side post-migration fidelity is poor — the
-operator must allocate a VLAN id for the loopback by hand.
+An AOS-S loopback is written onto RouterOS as the RouterOS codec
+writes every loopback: an empty bridge holding its address
+(`loopback 0` is the bridge `lo`).  The other direction is in
+`mikrotik_routeros_to_aruba_aoss/interface_naming.md`.
 
 ### Disposition
 
@@ -88,4 +88,4 @@ operator must allocate a VLAN id for the loopback by hand.
 | `interfaces[].default_name` | lossy (Aruba has no factory binding; RouterOS render falls back) |
 | `interfaces[].description` | good (Aruba `name "..."` <-> RouterOS `comment=`) |
 | `interfaces[].interface_type` | lossy (inferred from name shape on both codecs) |
-| Loopback first-class | unsupported on Aruba; lossy on cross-pair |
+| Loopback | lossy (an AOS-S loopback is a RouterOS empty bridge) |

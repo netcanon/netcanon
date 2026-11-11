@@ -19,7 +19,8 @@ outputs are read back with each target's own parser (every interface
 that holds the address is disabled) and, for the targets that write an
 interface as a stanza, as text: the stanza that holds the address says
 ``shutdown``, and not ``no shutdown``.  AOS-S has no form for a VLAN
-that is disabled, and refuses the unit with a review line.
+that is disabled, and none is known for a loopback that is down: it
+refuses either with a review line.
 """
 
 from __future__ import annotations
@@ -55,9 +56,9 @@ _SOURCES = {
 }
 
 #: The pairs whose output holds the address on no interface, each with
-#: its reason: AOS-S refuses a disabled VLAN interface (and fuses
-#: ``lo0`` and ``lo0.1`` onto one loopback, which the job says); IOS XR
-#: and VyOS write no address for a Junos ``irb`` unit, up or down.
+#: its reason: AOS-S refuses a disabled VLAN interface and a disabled
+#: loopback; IOS XR and VyOS write no address for a Junos ``irb`` unit,
+#: up or down.
 #: Compared for equality with what is measured.
 _HOLDS_NO_ADDRESS = {
     ("irb unit", "aruba_aoss"),
@@ -248,3 +249,19 @@ class TestAossRefusesIt:
         out = aoss_render.render_intent(self._tree(enabled=True))
         assert f"   ip address {_ADDR}/24" in out.splitlines()
         assert "; review:" not in out
+
+    def test_a_disabled_loopback_is_refused_too(self) -> None:
+        """``lo0`` and its unit 1 are loopbacks 0 and 1, both down."""
+        job = _job(_SOURCES["lo0 device"][0], "aruba_aoss")
+        out = job.rendered or ""
+        why = [
+            f"interface loopback{n} is disabled, and no AOS-S form is known "
+            f"for a loopback that is down; not written"
+            for n in (0, 1)
+        ]
+        assert [line for line in out.splitlines() if "; review:" in line] == [
+            f"; review: {w}" for w in why
+        ]
+        assert _ADDR not in out
+        assert not [line for line in out.splitlines() if line.startswith("interface loopback")]
+        assert [w for w in job.warnings if "loopback" in w] == why

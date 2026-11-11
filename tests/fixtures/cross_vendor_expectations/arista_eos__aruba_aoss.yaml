@@ -195,9 +195,9 @@ per_field_expectation:
       (3) ``vrf`` field carries Arista's per-interface VRF
       membership but Aruba has no VRF concept, so the field
       drops with the rest of the VRF surface;
-      (4) Arista's ``Loopback<N>`` and ``Vxlan1`` interfaces
-      have no Aruba render path — Loopback drops silently;
-      Vxlan drops with the VXLAN banner.
+      (4) Arista's ``Vxlan1`` interface has no Aruba render
+      path and drops with the VXLAN banner; ``Loopback<N>`` is
+      AOS-S ``interface loopback <N>`` (0-7).
       Membership is reprojected via project_switchport_to_vlan
       so VLAN-centric Aruba render has tagged/untagged port
       lists derived from Arista's per-port switchport state.
@@ -462,8 +462,8 @@ per_field_expectation:
 #     Operators MUST re-key all users.
 #
 #   * The interface-naming surface is medium-confidence: vendor
-#     docs are clear but Arista's Loopback / Vxlan interfaces
-#     have no Aruba equivalent and silently drop.
+#     docs are clear but Arista's Vxlan interface has no Aruba
+#     equivalent and drops (with the VXLAN banner).
 #
 #   * The MTU surface is a known wire-up gap on the aruba_aoss
 #     codec — Arista's ``mtu 9214`` jumbo-frame settings drop
