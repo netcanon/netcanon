@@ -1039,11 +1039,12 @@ class TestANameLeftAsItWas:
 # 3d. A name left as it was that is the target's own
 # ---------------------------------------------------------------------------
 
-#: An old IOS router.  ``Ethernet0`` is a 10 Mb/s port, which the
+#: An old IOS router.  ``Ethernet1`` is a 10 Mb/s port, which the
 #: IOS-XE classifier does not read -- and EOS calls a port that.
-_IOS_ETHERNET_0 = "\n".join([
+#: (``Ethernet0`` is no longer one: EOS counts its ports from 1.)
+_IOS_ETHERNET_1 = "\n".join([
     "!", "version 15.2", "hostname r1", "!",
-    "interface Ethernet0", " ip address 10.2.0.1 255.255.255.0", "!",
+    "interface Ethernet1", " ip address 10.2.0.1 255.255.255.0", "!",
     "end", "",
 ])
 
@@ -1200,17 +1201,17 @@ class TestANameTheTargetWritesItself:
         assert job.untranslated_ports == ["Vlan20"] and job.status == PARTIAL
 
     def test_never_a_hardware_port(self) -> None:
-        """``Ethernet0`` of an IOS router, which EOS reads as a port
+        """``Ethernet1`` of an IOS router, which EOS reads as a port
         and writes back as it is.  Which port of another device a
         port is, is what a declared device answers; no reading of a
         name does."""
         eos = get_codec("arista_eos")
-        read = eos.classify_port_name("Ethernet0")
-        assert (read.kind, eos.format_port_identity(read)) == ("physical", "Ethernet0")
-        job = _checked("cisco_iosxe_cli", "arista_eos", _IOS_ETHERNET_0)
-        assert "interface Ethernet0\n" in job.rendered
-        assert job.source_ports == ["Ethernet0"]
-        assert job.untranslated_ports == ["Ethernet0"] and job.status == PARTIAL
+        read = eos.classify_port_name("Ethernet1")
+        assert (read.kind, eos.format_port_identity(read)) == ("physical", "Ethernet1")
+        job = _checked("cisco_iosxe_cli", "arista_eos", _IOS_ETHERNET_1)
+        assert "interface Ethernet1\n" in job.rendered
+        assert job.source_ports == ["Ethernet1"]
+        assert job.untranslated_ports == ["Ethernet1"] and job.status == PARTIAL
 
     def test_never_from_free_text_names(self) -> None:
         """A RouterOS VLAN interface called ``vlan100`` that carries
@@ -1255,7 +1256,7 @@ class TestANameTheTargetWritesItself:
             ("Port-channel1", {"lag"}, "aruba_aoss", "arista_eos", "Port-Channel1", False),
             ("Vlan10", {"svi"}, "aruba_aoss", "dell_os10", "vlan10", False),
             # A hardware port, however the target reads it.
-            ("Ethernet0", {"physical"}, "cisco_iosxe_cli", "arista_eos", "Ethernet0", False),
+            ("Ethernet1", {"physical"}, "cisco_iosxe_cli", "arista_eos", "Ethernet1", False),
             ("mgmt0", {"mgmt"}, "aruba_aoss", "cisco_nxos", "mgmt0", False),
             # Two things under the name, or nothing.
             ("Vlan10", {"svi", "loopback"}, "aruba_aoss", "arista_eos", "Vlan10", False),
@@ -1865,7 +1866,13 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # and the job is `partial` for them before any name is checked.
     # And the EVPN leaf's `Loopback2`, the VTEP source beside
     # `Loopback0`, was `lo2` onto Junos (+1 logical name dropped).
-    "cisco_iosxe_cli": (8, 0, 0, 1, 3, 19),
+    # And from (8, 0, 0, 1, 3, 19): AOS-CX, OS10 and EOS count a
+    # port from 1, and a port 0 is written as port 1 there, so a port
+    # 0 beside port 1 of the same module is two ports on one name
+    # (+4).  The old IOS router's `Ethernet0`, left as the source has
+    # it, had shared its name onto EOS with a port written `Ethernet0`,
+    # and is now only left (-1 several, +1 left).
+    "cisco_iosxe_cli": (12, 0, 0, 1, 4, 18),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     # And onto RouterOS a sub-interface is a VLAN interface on its
@@ -1879,7 +1886,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # that path alone; the validation report passes it now, and its
     # two TenGigE ports on `port1` and its `BVI500`, left as the
     # source has it, hold it (+1 several).
-    "cisco_iosxr": (4, 0, 13, 1, 1, 4),
+    # And from (4, 0, 13, 1, 1, 4): AOS-CX, OS10 and EOS count a
+    # port from 1, and port 0 is written as port 1 there
+    # (`GigabitEthernet0/0/0/0` is `1/1/1`, `ethernet1/1/1`,
+    # `Ethernet1`, as `GigabitEthernet0/0/0/1` is): port 0 beside port
+    # 1 of one card is two ports on one name (+14).
+    "cisco_iosxr": (18, 0, 13, 1, 1, 4),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
@@ -1903,7 +1915,14 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # unsupported: the EVPN leaf onto VyOS had been `partial` for
     # that path alone; its `fxp0`, which VyOS has no name for,
     # holds it (+1 hardware port dropped).
-    "juniper_junos": (0, 0, 9, 0, 5, 4),
+    # And from (0, 0, 9, 0, 5, 4): AOS-CX, OS10 and EOS count a
+    # port and a LAG from 1, and a port 0 and `ae0` are written as 1
+    # there (`ge-0/0/0` is `1/1/1`, `ethernet1/1/1`, `Ethernet1`, as
+    # `ge-0/0/1` is).  `ge-0/0/0` beside `ge-0/0/1`,
+    # or `ae0` beside `ae1`, is two names on one (+4), and three jobs
+    # that listed a name left as the source has it list one such pair
+    # as well (-3 left, +3 several).
+    "juniper_junos": (4, 0, 9, 0, 2, 7),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -1930,8 +1949,15 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # (-1 several, +1 left); onto VyOS it had been `partial` for its
     # VLANs, the validation report passes it now, and `igc0`, left as
     # the source has it, holds it (+1 left).
-    "opnsense": (4, 0, 0, 0, 25, 0),
-    "vyos": (17, 0, 0, 0, 0, 0),
+    # And from (4, 0, 0, 0, 25, 0): AOS-CX, OS10 and EOS count a port
+    # from 1, and port 0 is written as port 1 there (`igb0` is
+    # `1/1/1`, `ethernet1/1/1`, `Ethernet1`), beside port 1 (+5).
+    "opnsense": (9, 0, 0, 0, 25, 0),
+    # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
+    # is written `Ethernet1` there, as `eth1` is: two ports on one name
+    # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
+    # that were `partial` already.
+    "vyos": (26, 0, 0, 0, 0, 0),
 }
 
 #: Names the translator left as the source config has them that a
@@ -1998,8 +2024,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 72, 5, 65, 50]
-        assert sum(by_reason) == 232
+        assert by_reason == [76, 0, 72, 5, 63, 52]
+        assert sum(by_reason) == 268
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

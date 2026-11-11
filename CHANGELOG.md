@@ -1349,6 +1349,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **No number AOS-CX, OS10 or EOS counts from 1 is written onto them
+  as 0.**  AOS-CX numbers a member, a slot, a port and a LAG from 1
+  (HPE gives a LAG id of "1 to 256"); OS10 a port and a port channel
+  (1 to 128), and its node is 1, since it does not stack, with one
+  management port, `mgmt1/1/1`; EOS a port, a breakout lane and a
+  port channel (Arista: "Values range from 1 through 2000").  A Junos
+  FPC, port and `ae` number, an IOS XR slot, an IOS-XE router's slot
+  and a VyOS or OPNsense port are numbered from 0.  With no devices
+  declared, `ge-0/0/2` was written `0/1/2` onto AOS-CX and
+  `ethernet0/1/2` onto OS10, `ge-0/0/0` `Ethernet0` onto EOS, `ae0`
+  `lag 0`, `port-channel0` and `Port-Channel0`, a stack member 2 onto
+  OS10 `ethernet2/1/<n>`, and an IOS XR management port onto OS10
+  `mgmt0/1/0` -- names those switches do not have, in jobs that said
+  `completed`.  Such a number is now written as 1 (`1/1/2`,
+  `ethernet1/1/2`, `Ethernet1`, `lag 1`), the node of OS10 is always
+  1, and its management port is `mgmt1/1/1`.  A port or LAG numbered
+  0 beside the same one numbered 1 then has one name, and the job is
+  `partial` and lists the two; an entry in the port map settles it.
+  Guarded by `tests/unit/migration/test_a_number_counted_from_1.py`,
+  which also reads every committed capture of the other codecs for a
+  name the three would be given numbered from 0.
 - **A disabled Junos unit is down on every target that writes it.**  An `irb` unit
   bound to a VLAN (`set vlans v10 l3-interface irb.10`) was folded onto
   the VLAN's record, which has no state of its own, so `set interfaces
