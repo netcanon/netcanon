@@ -401,6 +401,9 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # ``unsupported``.
         "aruba_aoss": {
             "/interfaces/interface/vrrp-groups/group",
+            # Lossy: a routed sub-interface is written as the VLAN
+            # of its tag, tagged on its port (AOS-S routes on a VLAN).
+            "/interfaces/interface/dot1q-vlan",
         },
         # Wave B — see commit feat(fortigate_cli): wire VRRP groups.
         "fortigate_cli": {

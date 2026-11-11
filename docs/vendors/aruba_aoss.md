@@ -70,9 +70,11 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   after the last pool.  A VLAN serves a pool where its stanza holds an
   address of the pool's network and stands for the pool's interface
   (`Vlan<N>`, the interface its address is taken from, or a name that
-  encodes the VLAN's id, such as a Junos `irb.<N>`).  A pool on any
-  other interface -- a routed port, a bridge, a FortiGate VLAN
-  interface, an OPNsense zone's port -- is written with a `; review:`
+  encodes the VLAN's id, such as a Junos `irb.<N>`); a routed
+  sub-interface or a VLAN interface is written as its VLAN, and its
+  pools with it ([A sub-interface is the VLAN of its tag](#a-sub-interface-is-the-vlan-of-its-tag)).
+  A pool on any other interface -- a routed port, a bridge, an
+  OPNsense zone's port -- is written with a `; review:`
   line, and the switch serves it only to clients a DHCP relay
   forwards to it.  HPE: the switch discards a pool with no network
   and range, so such a pool is not written and a review line says so;
@@ -81,6 +83,9 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   lines as that takes.  A lease is written in whole minutes, and one
   longer than the 99 days of `DD` is not written.  Each review line
   is a warning of the job too
+- Routed sub-interfaces and VLAN interfaces of other vendors, each
+  written as the VLAN it stands for, by the tree's own VLAN id; see
+  [A sub-interface is the VLAN of its tag](#a-sub-interface-is-the-vlan-of-its-tag)
 - Local users — one manager and one operator account, in the AOS-S
   forms (`sha1`, `sha256`, `plaintext`), and as a source the
   `aaa authentication local-user` accounts beside them; see
@@ -270,6 +275,64 @@ Known limitations, still open:
   at privilege level 1, the safe side, and the groups `manager` and
   `operator` are such groups.  Re-check its rights on the target.
 
+## A sub-interface is the VLAN of its tag
+
+AOS-S routes on a VLAN: an address is a line of a `vlan <id>` stanza,
+and a port is a member of a VLAN, tagged or untagged.  It has no form
+for an interface that is one unit of a port.  Two kinds of interface
+in another vendor's config stand for a VLAN, and each is written as
+that VLAN, by the VLAN id the tree holds -- never by a number in the
+interface's name:
+
+- **A routed sub-interface**, an 802.1Q tag on one port (IOS-XE and
+  IOS XR `encapsulation dot1Q <tag>`, Junos `unit <n> vlan-id <tag>`,
+  a VyOS `vif`, a FortiOS, OPNsense or RouterOS VLAN interface on a
+  port), is written as `vlan <tag>` with `tagged <port>`, its IPv4 and
+  IPv6 addresses and its VRRP groups: on AOS-S, the frames with that
+  tag on that port, routed with that address.  A port the output tags
+  in a VLAN and lists untagged in none is taken out of VLAN 1 (`no
+  untagged`), as every such port is.  One thing differs, and a warning
+  of the job says it: a VLAN of AOS-S is the switch's, so a port
+  tagged in the same VLAN later is in the same network, where a
+  sub-interface is its port's alone.
+- **A VLAN interface its parser links to its VLAN** (on RouterOS and
+  OPNsense, among others) is written as the VLAN of that record.  On
+  RouterOS a name is free text, and `vlan10` may carry VLAN 20; up to
+  0.7.7 its address was written into VLAN 10, or nowhere.
+
+Either is renamed `Vlan<id>` in the whole tree before it is written,
+so the VLAN's stanza takes the DHCP pools on it (`dhcp-server`) and
+its VRRP groups, and a route out of it is written `vlan <id>`.  One in
+a VRF is written without it, as every interface of a VRF is: AOS-S has
+none.  A sub-interface's name and description are not written: its
+VLAN is written with no `name` line, and the AOS-S parser reads the
+VLAN's empty name back as the description of `Vlan<tag>`.
+
+What AOS-S cannot be given so is left out, under a `; review:` line
+where its stanza would be and a warning of the job, and no VLAN takes
+its addresses: a sub-interface with two tags, one that takes its
+port's untagged frames, one that is disabled, one of VLAN 1 (the
+switch's default VLAN, which every port is in), one whose VLAN the
+config also has as a network of its own (a VLAN with a port or an
+address) or as another sub-interface, one on no port AOS-S can tag
+(a VLAN, a loopback, another unit, or a name with a space, a comma
+or a quote in it: a port list is written without quotes, and a
+FortiOS or RouterOS name is free text);
+a VLAN interface that is disabled or that more than one VLAN names;
+and either where another interface already stands for its VLAN.  A
+route out of one that is left out is not written either, and its own
+review line says so.
+
+`/interfaces/interface/dot1q-vlan` is declared lossy at severity
+`error`, so a job with a routed sub-interface is `partial`;
+`dot1q-native` and `dot1q-inner-vlan` are unsupported.  Up to 0.7.7 a
+sub-interface was written `interface <port>.<unit>`, a line AOS-S has
+no form for, or -- where its name ended in its tag -- in a VLAN stanza
+that did not tag its port.  Guarded by
+`tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`,
+which sends each form from each source through the plan path and reads
+the output as text and with the AOS-S parser.
+
 ## Lossy paths
 
 See per-codec `CapabilityMatrix.lossy` declarations in the codec
@@ -292,11 +355,16 @@ surface.
 - **`/interfaces/interface/dhcp-client`** — AOS-S spells a DHCP
   client `ip address dhcp-bootp` in a VLAN, which the codec neither
   reads nor writes: the interface is written without one.
+- **`/interfaces/interface/dot1q-vlan`** — a routed sub-interface is
+  written as the VLAN of its tag, tagged on its port; its name and
+  description are not, and a VLAN of AOS-S is the switch's, not the
+  port's.  See [A sub-interface is the VLAN of its tag](#a-sub-interface-is-the-vlan-of-its-tag).
 
-Each is severity `warn`: the job says so and stays `completed`.  A
-field of a record AOS-S does not write (a VRF, a DHCP pool, a VXLAN
-VNI, a virtual gateway's MAC) is declared `unsupported` with its
-record.
+Each but `/interfaces/interface/dot1q-vlan` is severity `warn`: the
+job says so and stays `completed`.  `dot1q-vlan` is severity
+`error`, so a job with a routed sub-interface is `partial`.  A field
+of a record AOS-S does not write (a VRF, a VXLAN VNI, a virtual
+gateway's MAC) is declared `unsupported` with its record.
 
 ## What we don't do
 

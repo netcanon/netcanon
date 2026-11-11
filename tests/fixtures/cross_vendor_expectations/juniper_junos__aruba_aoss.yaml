@@ -281,11 +281,19 @@ per_field_expectation:
     references: [junos-iface-naming, aruba-port-naming]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Junos's ``set interfaces <name> description "<text>"`` maps to
+    disposition: lossy
+    reason: >
+      A port's ``set interfaces <name> description "<text>"`` maps to
       Aruba's ``name "<text>"`` directive (per-interface
-      description).  Both quote values with whitespace.
+      description); both quote values with whitespace.  An ``irb``
+      unit the VLAN names as its ``l3-interface`` is written into that
+      VLAN's stanza, and an AOS-S VLAN has one name, its own: the
+      unit's description is not written, and the AOS-S parser reads
+      the VLAN's name back as the description of the VLAN's
+      interface.  The text that comes back is plausible, so the loss
+      does not look like one; re-apply such descriptions from the
+      source where they carry circuit or tenant identifiers.
+    references: [junos-evpn-irb-example, aruba-vlans]
 
   interfaces[].enabled:
     disposition: good
@@ -336,14 +344,20 @@ per_field_expectation:
     references: [junos-family-inet6, aruba-ip-addressing]
 
   interfaces[].switchport_mode:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos's ``family ethernet-switching interface-mode {access |
       trunk}`` maps to Aruba's VLAN-centric port-membership lists.
       Aruba's render path is VLAN-centric, so the canonical
       switchport-mode field is consumed by
       ``project_vlan_to_switchport`` to derive the per-VLAN tagged
-      / untagged lists.
+      / untagged lists.  A routed port is not: AOS-S has no
+      sub-interface, so each ``unit <n> vlan-id <tag>`` of the port
+      is written as VLAN ``<tag>`` with the unit's address and the
+      port tagged in it (``/interfaces/interface/dot1q-vlan``, lossy
+      at error level, so the job is partial), and the AOS-S parser
+      reads a port tagged in a VLAN as a trunk.
+    references: [junos-iface-fundamentals, aruba-vlans]
 
   interfaces[].access_vlan:
     disposition: good

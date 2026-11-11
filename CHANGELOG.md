@@ -1349,6 +1349,57 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An interface that stands for a VLAN is written onto AOS-S as that
+  VLAN, by the tree's own id.**  AOS-S routes on a VLAN and has no form
+  for an interface that is one unit of a port, and the renderer read a
+  VLAN's id from an interface's NAME.  A routed sub-interface (IOS-XE
+  and IOS XR `encapsulation dot1Q`, Junos `unit <n> vlan-id`, a VyOS
+  `vif`, a FortiOS, OPNsense or RouterOS VLAN interface on a port) came
+  out as `interface <port>.<unit>`, a line AOS-S has no form for, or --
+  where its name happened to end in its tag -- inside a VLAN stanza
+  that did not tag its port; and a VLAN interface was read by the
+  digits of its name, so a RouterOS `vlan10` that carries VLAN 20 had
+  its address written into VLAN 10, or nowhere.  A sub-interface is now
+  written as `vlan <tag>` with `tagged <port>`, its IPv4 and IPv6
+  addresses and its VRRP groups, and its port, tagged in a VLAN and
+  untagged in none, is taken out of VLAN 1; a VLAN interface its parser
+  links to its VLAN is written as that VLAN, by the record's id.
+  Either is `Vlan<id>` in the whole tree before the render, so a DHCP
+  pool on it is served by its VLAN (a pool on a FortiGate VLAN
+  interface was served only to relayed clients) and a route out of it
+  is `vlan <id>`.  What AOS-S cannot be given so is left out under a
+  `; review:` line and a warning: a sub-interface with two tags, one
+  that takes its port's untagged frames, one that is disabled, one of
+  VLAN 1, one whose VLAN the config also has as a network of its own
+  or as another sub-interface, one on no port AOS-S can tag (a VLAN,
+  a loopback, another unit, or a name with a space, a comma or a
+  quote in it: an AOS-S port list is written without quotes); a VLAN
+  interface that is disabled or that two VLANs name; and either where
+  another interface already stands for its VLAN.  One in a VRF is
+  written without it, as every interface of a VRF is.  A
+  sub-interface's name and description are not written.
+  `/interfaces/interface/dot1q-vlan` is declared lossy at severity
+  `error` on AOS-S (it was unsupported), so a job with a routed
+  sub-interface is `partial`, and a warning says that a VLAN of AOS-S
+  is the switch's where a sub-interface is its port's alone.  Guarded
+  by
+  `tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`.
+- **The cross-mesh audit compares a record with the record it came
+  back as.**  Phase 1 compares two lists of records one record at a
+  time, and paired them by their sorted order: a record that came back
+  under another name -- an AOS-S output writes a routed sub-interface
+  as the VLAN of its tag, read back as `Vlan<tag>` -- moved every
+  record after it, and fields drifted on records that had come back
+  whole.  A record is now paired with the record of its own identity
+  (an interface's name), a record left over on both sides with the
+  left-over record that holds the same addresses, and only what is
+  still left over by its order (`_paired_by_identity` in
+  `tools/run_full_mesh.py`).  Measured so, six fields of the NX-OS to
+  OS10 and OS10 to AOS-S expectations are good where they were declared
+  lossy; on Junos to AOS-S the description of an `irb` unit (the VLAN's
+  name comes back in its place) and the switchport mode of a routed
+  port whose units are written as VLANs (read back as a trunk) are
+  declared lossy.
 - **An output for AOS-S writes the switch's own DHCP server.**  AOS-S
   16.x switches serve DHCP themselves (HPE, ArubaOS-Switch Management
   and Configuration Guide, "DHCPv4 server"), and the parser reads
@@ -1371,8 +1422,8 @@ timestamp if your timezone matters for an audit.
   range); a pool that states no range, or one end of one, is written
   the addresses it hands out less the output's own, in as many `range`
   lines as that takes; a pool on an interface no VLAN stanza of the
-  output stands for -- a routed port, a bridge, a FortiGate VLAN
-  interface, an OPNsense zone's port -- is served only to clients a
+  output stands for -- a routed port, a bridge, an OPNsense zone's
+  port -- is served only to clients a
   DHCP relay forwards to it; a gateway or DNS server that is not IPv4,
   DNS servers past eight, and a domain that cannot stand between
   AOS-S's quotes are not written; a lease is written in whole minutes,

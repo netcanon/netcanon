@@ -100,6 +100,7 @@ from __future__ import annotations
 
 import collections
 import re
+import types
 from pathlib import Path
 from typing import Any
 
@@ -248,6 +249,24 @@ WRITES_NO_LAG_MEMBERS = frozenset({"cisco_iosxe"})
 #: OPNsense lagg's, which OPNsense assigns to no zone).  Compared for
 #: equality with what typed configs show (:data:`_LAG_IN_A_LIST`).
 LAG_MEMBERS_WITH_NO_RECORD: frozenset[str] = frozenset()
+
+#: Targets that write a routed sub-interface as the VLAN of its tag,
+#: tagged on the port it is a unit of: AOS-S routes on a VLAN and has
+#: no sub-interface.  A tagged membership of the output that a source
+#: sub-interface accounts for -- its tag, on its port -- is no
+#: membership any VLAN or switchport of the source states, and is
+#: counted apart.  Compared for equality with the targets on which
+#: one is counted.
+SUB_INTERFACE_AS_ITS_VLAN = frozenset({"aruba_aoss"})
+
+#: Source codec -> those memberships, over every committed capture
+#: onto those targets.  Compared for EQUALITY with what is measured:
+#: a sub-interface that is newly written, or newly refused, moves it.
+AS_THE_VLAN_OF_ITS_TAG: dict[str, int] = {
+    "cisco_iosxr": 4, "fortigate_cli": 4, "juniper_junos": 5,
+    "mikrotik_routeros": 1, "opnsense": 10, "vyos": 1,
+}
+_AS_ITS_VLAN = "a sub-interface, as the VLAN of its tag"
 
 
 # ---------------------------------------------------------------------------
@@ -631,11 +650,24 @@ def _in_a_line(name: str, text: str) -> bool:
 TARGETS_DEFAULT = "untagged by the target's own default"
 
 
+def _as_the_vlan_of_its_tag(tree: Any, job: Any, key: Any) -> set[tuple[int, str]]:
+    """(tag, port) of each sub-interface of *tree*, by the name its
+    port has in *job*'s output (:func:`judge`'s *key*): the port its
+    config names, or the name in front of its unit."""
+    out: set[tuple[int, str]] = set()
+    for iface in tree.interfaces:
+        parent = iface.vlan_parent or (iface.name.rsplit(".", 1)[0] if "." in iface.name else "")
+        if iface.dot1q_vlan is not None and parent and parent not in job.port_drops:
+            out.add((iface.dot1q_vlan, key(job.port_renames.get(parent, parent))))
+    return out
+
+
 def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
     """What became of every membership the source tree of *raw* holds,
     in *job*'s output.  Counts, and a sentence for each thing that may
     not be."""
-    src = read_tree(source.parse(raw))
+    tree = source.parse(raw)
+    src = read_tree(tree)
     universe = src.universe()
     want = src.memberships(universe)
     fold = not target.port_names_case_sensitive
@@ -710,6 +742,7 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
                 why = "nothing on the job or in the output says so"
             wrong.append(f"VLAN {vid} {mode} on {port!r} ({final!r}) is not in the output: {why}")
     every_final = {key(job.port_renames.get(port, port)) for port in src.every if port not in dropped}
+    as_its_vlan = _as_the_vlan_of_its_tag(tree, job, key) if target.name in SUB_INTERFACE_AS_ITS_VLAN else set()
     for (vid, port, mode), name in sorted(have.items()):
         if (vid, port, mode) not in matched:
             if mode == "u" and (vid, port) in by_default:
@@ -722,6 +755,11 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
                 # whose source declares no VLAN 1: what "every VLAN"
                 # says.  Pinned, cell by cell.
                 tally[_OF_EVERY_VLAN] += 1
+                continue
+            if mode == "t" and (vid, port) in as_its_vlan:
+                # A routed sub-interface, written as the VLAN of its
+                # tag, tagged on its port.  Pinned, by source codec.
+                tally[_AS_ITS_VLAN] += 1
                 continue
             tally["gained"] += 1
             wrong.append(f"VLAN {vid} {mode} on {name!r} is in the output and in no source membership")
@@ -837,6 +875,17 @@ def test_what_a_trunk_of_every_vlan_has_in_vlan_1_is_pinned(every_job: dict) -> 
         for (_source, label, target), verdict in every_job.items() if verdict["tally"][_OF_EVERY_VLAN]
     }
     assert made == EVERY_VLAN_IN_VLAN_1
+
+
+def test_a_sub_interface_as_its_vlan_is_pinned(every_job: dict) -> None:
+    made: collections.Counter[str] = collections.Counter()
+    targets: set[str] = set()
+    for (source, _label, target), verdict in every_job.items():
+        if verdict["tally"][_AS_ITS_VLAN]:
+            made[source] += verdict["tally"][_AS_ITS_VLAN]
+            targets.add(target)
+    assert dict(made) == AS_THE_VLAN_OF_ITS_TAG
+    assert targets == set(SUB_INTERFACE_AS_ITS_VLAN)
 
 
 def test_what_a_stanza_says_is_as_pinned(every_job: dict) -> None:
@@ -1040,6 +1089,41 @@ interface Ethernet2
 !
 end
 """
+
+
+_SUB_INTERFACE = (
+    "hostname r1\n"
+    "interface GigabitEthernet0/1\n no shutdown\n!\n"
+    "interface GigabitEthernet0/1.{tag}\n encapsulation dot1Q {tag}\n"
+    " ip address 192.0.2.1 255.255.255.0\n!\n"
+    "end\n"
+)
+
+
+def test_a_sub_interface_as_its_vlan_is_counted_apart() -> None:
+    """An IOS-XE routed sub-interface of tag 100 onto AOS-S is VLAN 100,
+    tagged on its port: counted apart, and nothing is wrong.  Judged
+    against a source whose sub-interface has another tag, the same
+    output gains a membership; and on a target that is not in
+    :data:`SUB_INTERFACE_AS_ITS_VLAN` the same line is no source's."""
+    source, target = get_codec("cisco_iosxe_cli"), get_codec("aruba_aoss")
+    text = _SUB_INTERFACE.format(tag=100)
+    job = _run("cisco_iosxe_cli", "aruba_aoss", text)
+    port = job.port_renames["GigabitEthernet0/1"]
+    assert f"vlan 100\n   tagged {port}\n" in job.rendered, job.rendered
+    verdict = judge(source, target, text, job)
+    assert verdict["wrong"] == [] and verdict["tally"][_AS_ITS_VLAN] == 1
+    gained = f"VLAN 100 t on {port!r} is in the output and in no source membership"
+    verdict = judge(source, target, _SUB_INTERFACE.format(tag=200), job)
+    assert verdict["wrong"] == [gained] and _AS_ITS_VLAN not in verdict["tally"]
+    # The same job, judged for a target of another name that reads
+    # its output the same way.
+    other = types.SimpleNamespace(
+        name="not_aruba_aoss", parse=target.parse,
+        port_names_case_sensitive=target.port_names_case_sensitive,
+    )
+    verdict = judge(source, other, text, job)
+    assert gained in verdict["wrong"] and _AS_ITS_VLAN not in verdict["tally"]
 
 
 class TestTheCheckItself:

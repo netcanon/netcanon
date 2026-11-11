@@ -2775,8 +2775,10 @@ class TestSubInterfaces:
         ``1.54`` -- which is no name of an AOS-S port: the platform
         writes a tagged routed interface as a VLAN.  The plan says
         where each went, and the job is not complete: the validation
-        report lists the tag AOS-S cannot carry.  (The units used to
-        be given one and the same name, and three of them dropped.)"""
+        report lists the tag as lossy at error level, since AOS-S
+        writes a routed sub-interface as the VLAN of its tag.  (The
+        units used to be given one and the same name, and three of
+        them dropped.)"""
         job = run_plan_with_models(
             get_codec("juniper_junos"), AOSS, _JUNOS_UNITS,
             _profile("juniper_junos/EX4300-48T"),
@@ -2789,7 +2791,7 @@ class TestSubInterfaces:
         }
         assert plan.displaced == [] and job.port_drops == []
         assert "/interfaces/interface/dot1q-vlan" in {
-            entry.path for entry in job.validation.unsupported_paths
+            entry.path for entry in job.validation.lossy_paths
         }
         assert job.status == MigrationJobStatus.partial
 

@@ -81,6 +81,7 @@ import json
 import sys
 import time
 import traceback
+from collections import deque
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -219,20 +220,95 @@ def _relativize_tb(tb: str) -> str:
     return tb.replace(root + "\\", "").replace(root + "/", "").replace(root, "")
 
 
+def _identity(rec: dict[str, Any], id_keys: list[str]) -> str:
+    """The identity a record is sorted and paired by: the first of
+    *id_keys* that holds a value, or the whole record serialised."""
+    for k in id_keys:
+        v = rec.get(k)
+        if v is not None and v != "":
+            return str(v)
+    # Fallback — JSON-serialise the whole record for a stable order.
+    return json.dumps(rec, sort_keys=True, default=str)
+
+
 def _normalise_records(items: list[dict[str, Any]], id_keys: list[str]) -> list[dict[str, Any]]:
     """Sort a list of dict records by the first available identity key
     so set-equality comparison is order-independent.
 
     Mirrors the sort logic used by ``test_real_captures.py::_compare``.
     """
-    def _key(rec: dict[str, Any]) -> str:
-        for k in id_keys:
-            v = rec.get(k)
-            if v is not None and v != "":
-                return str(v)
-        # Fallback — JSON-serialise the whole record for a stable order.
-        return json.dumps(rec, sort_keys=True, default=str)
-    return sorted(items, key=_key)
+    return sorted(items, key=lambda rec: _identity(rec, id_keys))
+
+
+def _addresses(rec: dict[str, Any]) -> tuple[str, ...]:
+    """What a record keeps when it comes back under another name: the
+    addresses it holds (``ip/prefix_length``, IPv4 and IPv6), sorted.
+    Empty for a record that holds none, or a list whose records have no
+    address fields."""
+    held: list[str] = []
+    for field in ("ipv4_addresses", "ipv6_addresses"):
+        for addr in rec.get(field) or ():
+            if isinstance(addr, dict) and addr.get("ip"):
+                held.append(f"{addr.get('ip')}/{addr.get('prefix_length')}")
+    return tuple(sorted(held))
+
+
+def _paired_by_identity(
+    src: list[dict[str, Any]], tgt: list[dict[str, Any]], id_keys: list[str],
+) -> list[tuple[int, dict[str, Any], dict[str, Any]]]:
+    """Pair the records of two sorted lists of one length, each source
+    record with the first target record of its identity
+    (:func:`_identity`) that is not yet paired.  A record left over on
+    both sides -- one that came back under another name -- is paired
+    with the left-over record that holds the same addresses
+    (:func:`_addresses`), and the records still left over are paired in
+    their sorted order.
+
+    Pairing by position alone compared every record after a renamed one
+    with its neighbour: an AOS-S output writes a routed sub-interface as
+    the VLAN of its tag, the target parser reads it back as
+    ``Vlan<tag>``, which sorts elsewhere, and every interface in between
+    drifted in its admin state and addresses on a cell where each came
+    back whole.  Pairing the renamed records by their sorted order alone
+    did the same among them: a Junos ``irb`` unit and three tagged units
+    came back as four ``Vlan<id>`` records, whose ids sort in another
+    order than the source names, and the ``irb`` unit's addresses were
+    compared with a sub-interface's.  A rename does not change the
+    addresses a record holds.
+
+    Args:
+        src: The source records, sorted by :func:`_normalise_records`.
+        tgt: The target records, sorted the same way; as many as *src*.
+        id_keys: The list's identity keys (:data:`_LIST_ID_KEYS`).
+
+    Returns:
+        ``(index of the source record in src, source record, target
+        record)`` for every source record, in the order of *src*.
+    """
+    waiting: dict[str, deque[int]] = {}
+    for j, rec in enumerate(tgt):
+        waiting.setdefault(_identity(rec, id_keys), deque()).append(j)
+    partner: dict[int, int] = {}
+    for i, rec in enumerate(src):
+        queue = waiting.get(_identity(rec, id_keys))
+        if queue:
+            partner[i] = queue.popleft()
+    taken = set(partner.values())
+    by_addresses: dict[tuple[str, ...], deque[int]] = {}
+    for j, rec in enumerate(tgt):
+        if j not in taken and _addresses(rec):
+            by_addresses.setdefault(_addresses(rec), deque()).append(j)
+    for i, rec in enumerate(src):
+        if i not in partner:
+            queue = by_addresses.get(_addresses(rec)) if _addresses(rec) else None
+            if queue:
+                partner[i] = queue.popleft()
+    taken = set(partner.values())
+    left_over = iter(j for j in range(len(tgt)) if j not in taken)
+    for i in range(len(src)):
+        if i not in partner:
+            partner[i] = next(left_over)
+    return [(i, src[i], tgt[partner[i]]) for i in range(len(src))]
 
 
 # Per-list-field identity keys (the "natural" key by which two records
@@ -635,7 +711,7 @@ def _list_drift_summary(
         per_record: dict[str, Any] = {}
         norm_src = _normalise_records(src, id_keys)
         norm_tgt = _normalise_records(tgt, id_keys)
-        for i, (s, t) in enumerate(zip(norm_src, norm_tgt, strict=False)):
+        for i, s, t in _paired_by_identity(norm_src, norm_tgt, id_keys):
             if s != t:
                 diff_fields = sorted(set(s.keys()) | set(t.keys()))
                 diffs: dict[str, Any] = {}

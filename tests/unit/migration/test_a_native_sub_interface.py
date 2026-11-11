@@ -272,11 +272,14 @@ def test_the_targets_that_state_it_are_the_codecs_that_say_so() -> None:
 def test_every_target_states_it_or_says_it(source: str, target: str) -> None:
     job = _run(source, target)
     text = job.rendered or ""
-    # Never as a switchport's native VLAN, on any target.
+    # Never as a switchport's native VLAN, on any target.  A comment
+    # states nothing: the AOS-S review line names the sub-interface
+    # (`0/1.100`) and the untagged frames it is not written for.
     assert not _says_a_switchport_native(
         "\n".join(
             line for line in text.splitlines()
             if not re.search(r"dot1Q 100 native|native-vlan-id 100", line)
+            and not re.match(r"[ \t]*[;!#]", line)
         )
     ), text
     if target in _STATES:

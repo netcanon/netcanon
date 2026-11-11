@@ -21,9 +21,11 @@ These tests pin the correct behaviour:
 * Cisco-style routed sub-interfaces (``Ethernet1.10`` with an IP) do
   NOT absorb their IP into ``vlan 10`` — that's a sub-interface, not
   an SVI.
-* OPNsense-style ``vlanN.M`` and Junos-style ``irb.N`` and
-  FortiGate-style ``portN.M`` continue to absorb correctly (these
-  ARE the SVIs on those vendors).
+* OPNsense-style ``vlanN.M`` and Junos-style ``irb.N`` continue to
+  absorb correctly (these ARE the SVIs on those vendors).
+* A FortiGate VLAN interface on a port is a sub-interface of the port
+  (its tag, its parent): it is the VLAN of its TAG, tagged on its
+  port, whatever its name ends in -- a FortiOS name is free text.
 """
 
 from __future__ import annotations
@@ -226,21 +228,29 @@ def test_aruba_junos_irb_dotted_form_still_absorbs() -> None:
     assert "ip address 172.16.100.3/24" in _vlan_block(out, 100)
 
 
-def test_aruba_fortigate_port_dotted_form_still_absorbs() -> None:
-    """Regression guard: FortiGate ``port1.10`` IS the SVI for vlan 10
-    on that vendor — it must continue to absorb.
+def test_aruba_fortigate_vlan_on_a_port_is_the_vlan_of_its_tag() -> None:
+    """A FortiGate VLAN interface on a port, as its parser makes it
+    (``port1.10``: tag 20 on ``port1``), is VLAN 20 tagged on that
+    port, with its address.  Its name is free text on FortiOS: read by
+    its name, as it was, the address went to VLAN 10 and the port was
+    tagged in no VLAN.
     """
     intent = CanonicalIntent(
         vlans=[CanonicalVlan(id=10, name="V10")],
-        interfaces=[CanonicalInterface(
-            name="port1.10",
-            ipv4_addresses=[CanonicalIPv4Address(
-                ip="10.0.10.1", prefix_length=24,
-            )],
-        )],
+        interfaces=[
+            CanonicalInterface(name="port1"),
+            CanonicalInterface(
+                name="port1.10", dot1q_vlan=20, vlan_parent="port1",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.10.1", prefix_length=24,
+                )],
+            ),
+        ],
     )
     out = ArubaAOSSCodec().render(intent)
-    assert "ip address 10.0.10.1/24" in _vlan_block(out, 10)
+    assert _vlan_block(out, 20) == "vlan 20\n   tagged port1\n   ip address 10.0.10.1/24\n   exit"
+    assert "10.0.10.1" not in _vlan_block(out, 10)
+    assert "port1.10" not in out
 
 
 # ---------------------------------------------------------------------------

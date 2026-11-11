@@ -150,7 +150,14 @@ end
 #: Targets that have no form for a sub-interface's tag (its
 #: ``/interfaces/interface/dot1q-vlan`` is unsupported there).  Typed
 #: by hand, and compared with what the jobs report.
-_NO_FORM_FOR_THE_TAG = {"aruba_aoscx", "aruba_aoss", "cisco_iosxe", "dell_os10"}
+_NO_FORM_FOR_THE_TAG = {"aruba_aoscx", "cisco_iosxe", "dell_os10"}
+
+#: Targets that route on a VLAN and have no sub-interface: each is
+#: written as the VLAN of its tag, tagged on its port, and the job is
+#: ``partial`` (its ``dot1q-vlan`` is lossy at error level there: such a
+#: VLAN is the switch's, not the port's).  Typed by hand, and compared
+#: with what the jobs report.
+_A_VLAN_OF_ITS_TAG = {"aruba_aoss"}
 
 
 def _job(target: str, text: str = _ON_PORTS, port_rename_map: dict | None = None):
@@ -253,22 +260,42 @@ class TestOntoAnotherVendor:
         )
 
     def test_where_the_target_has_no_form_for_the_tag(self) -> None:
-        reported = set()
+        reported, a_vlan = set(), set()
         for target in list_public_codecs():
             job = _job(target)
             paths = {u.path for u in job.validation.unsupported_paths}
             if "/interfaces/interface/dot1q-vlan" in paths:
                 reported.add(target)
                 assert job.status == MigrationJobStatus.partial, target
+            if any(
+                p.path == "/interfaces/interface/dot1q-vlan" and p.severity == "error"
+                for p in job.validation.lossy_paths
+            ):
+                a_vlan.add(target)
+                assert job.status == MigrationJobStatus.partial, target
         assert reported == _NO_FORM_FOR_THE_TAG
+        assert a_vlan == _A_VLAN_OF_ITS_TAG
 
     def test_every_other_target_says_completed(self) -> None:
         """Each was ``partial``: ``gn-mgmt`` was a name nobody
         decided, left as it was in another vendor's config."""
-        for target in set(list_public_codecs()) - _NO_FORM_FOR_THE_TAG:
+        for target in set(list_public_codecs()) - _NO_FORM_FOR_THE_TAG - _A_VLAN_OF_ITS_TAG:
             job = _job(target)
             assert job.status == MigrationJobStatus.completed, (target, job.error)
             assert job.untranslated_ports == [], target
+
+    def test_aoss_writes_each_as_the_vlan_of_its_tag(self) -> None:
+        """AOS-S routes on a VLAN: each is VLAN <tag>, tagged on its
+        port, with its address -- in the text, and read back."""
+        job = _job("aruba_aoss")
+        renames = job.port_renames
+        back = get_codec("aruba_aoss").parse(job.rendered)
+        tagged = {v.id: [p.lower() for p in v.tagged_ports] for v in back.vlans}
+        on = {a.ip: i.name for i in back.interfaces for a in i.ipv4_addresses}
+        for tag, port, ip in ((11, "port3", "10.11.0.1"), (10, "port2", "10.10.0.1")):
+            assert tagged[tag] == [renames[port].lower()]
+            assert on[ip] == f"Vlan{tag}"
+            assert f"vlan {tag}\n   tagged {renames[port]}\n   ip address {ip}/24\n" in job.rendered
 
 
 class TestBetweenTwoFortiOSConfigs:

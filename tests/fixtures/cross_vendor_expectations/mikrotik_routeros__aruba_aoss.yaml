@@ -204,7 +204,12 @@ per_field_expectation:
       may produce partially populated port lists when the
       RouterOS source uses Plane 2 for switching.  SVI addressing
       round-trips good (/interface vlan + /ip address -> Aruba
-      ``vlan <id> / ip address X/N`` with absorption).
+      ``vlan <id> / ip address X/N`` with absorption).  An
+      ``/interface vlan`` the parser reads as a sub-interface of its
+      port (no VLAN record names it) is written as the VLAN of its
+      ``vlan-id``, tagged on that port, and comes back as a VLAN
+      record the source did not have, beside VLAN 1, which the port
+      leaves (``no untagged``).
     references: [vlans, switching_model]
 
   static_routes:

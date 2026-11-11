@@ -130,11 +130,19 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   interfaces[].enabled:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on every cell where the records are compared one by
+      one.
+      On a cell where the whole `interfaces` list drifted at once
+      (records added or dropped) the reconciler attributes that single
+      structural event to one owner sub-field rather than counting it
+      against every sibling, so this field shows no loss of its own on
+      this pair.
+      The mesh pairs a record with the record of the same name before
+      it compares them; until it did, one renamed or dropped interface
+      shifted every record after it, and this field drifted on cells
+      where nothing about it had changed.
     references: [os10-aoss-surface]
 
   interfaces[].interface_type:
@@ -148,19 +156,35 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   interfaces[].ipv4_addresses:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on every cell where the records are compared one by
+      one.
+      On a cell where the whole `interfaces` list drifted at once
+      (records added or dropped) the reconciler attributes that single
+      structural event to one owner sub-field rather than counting it
+      against every sibling, so this field shows no loss of its own on
+      this pair.
+      The mesh pairs a record with the record of the same name before
+      it compares them; until it did, one renamed or dropped interface
+      shifted every record after it, and this field drifted on cells
+      where nothing about it had changed.
     references: [os10-aoss-surface]
 
   interfaces[].ipv6_addresses:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved, address and prefix length, on every cell that holds
+      one and where the records are compared one by one.
+      On a cell where the whole `interfaces` list drifted at once
+      (records added or dropped) the reconciler attributes that single
+      structural event to one owner sub-field rather than counting it
+      against every sibling, so this field shows no loss of its own on
+      this pair.
+      The mesh pairs a record with the record of the same name before
+      it compares them; until it did, one renamed or dropped interface
+      shifted every record after it, and this field drifted on cells
+      where nothing about it had changed.
     references: [os10-aoss-surface]
 
   interfaces[].lag_member_of:
