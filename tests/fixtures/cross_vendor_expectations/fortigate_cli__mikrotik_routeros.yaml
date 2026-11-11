@@ -301,7 +301,9 @@ per_field_expectation:
       to RouterOS ``mode=802.3ad`` because RouterOS does not
       distinguish active vs passive LACP.  FortiOS ``lacp-mode
       static`` maps to RouterOS ``mode=balance-xor`` as the closest
-      static-load-distribution analogue (with banner).  Members
+      static-load-distribution analogue (with banner).  A
+      redundant interface (``set type redundant``), one member at a
+      time, is written ``mode=active-backup``.  Members
       preserve via the rename mesh applied to each member name.
       Naming differs (``agg1`` vs ``bond1``); rename mesh
       canonicalises.

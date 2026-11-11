@@ -256,8 +256,9 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
 - **A host's active-backup bond has no form on EOS.**  A RouterOS
   `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
   `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
-  bond and an OPNsense `failover` LAGG need no aggregate on the ports
-  they face.  EOS has no such bond: the LAG is written as a static
+  bond, an OPNsense `failover` LAGG and a FortiOS redundant interface
+  need no aggregate on the ports they face.
+  EOS has no such bond: the LAG is written as a static
   aggregate (`channel-group <N> mode on`) with a `! review:` line
   beside it, and the job carries a warning.  Configure the ports it
   faces as a static aggregate too, or re-design the bond.

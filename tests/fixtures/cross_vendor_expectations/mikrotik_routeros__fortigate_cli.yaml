@@ -295,13 +295,12 @@ per_field_expectation:
       / set lacp-mode``).  Mode mapping has cliffs:
       ``mode=802.3ad`` -> ``lacp-mode active`` (RouterOS does not
       distinguish active vs passive LACP, so the FortiGate side
-      defaults to active).  ``mode=active-backup`` has no FortiOS
-      aggregate analogue (closest is FortiOS interface redundancy
-      ``set type redundant`` which the FortiGate codec does not
-      emit via the LAG path); it is written ``lacp-mode static``
-      with a ``# review:`` line and a job warning, and so are
-      ``balance-tlb`` and ``balance-alb``, which also need no
-      aggregate on the peer.  ``mode=balance-rr / balance-xor /
+      defaults to active).  ``mode=active-backup``,
+      ``balance-tlb`` and ``balance-alb`` need no aggregate on the
+      peer and are written as a FortiOS redundant interface (``set
+      type redundant``), which sends through one member at a time:
+      the balancing of ``balance-tlb`` and ``balance-alb`` is lost.
+      ``mode=balance-rr / balance-xor /
       broadcast`` are static aggregates, written ``lacp-mode
       static``, losing the load-distribution semantic.  Members
       preserve via the rename mesh applied to

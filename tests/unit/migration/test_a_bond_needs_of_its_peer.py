@@ -29,6 +29,11 @@ here too, never by the codec's parser:
   received through the active port"; ``loadbalance`` "is a static setup
   and does not negotiate aggregation with the peer"; OPNsense lists
   ``fec`` as the same.
+* Fortinet, FortiOS Administration Guide, "Aggregation and
+  redundancy": "In a redundant interface, traffic only goes over one
+  interface at any time" (``set type redundant``); an aggregate is
+  802.3ad, its ``lacp-mode`` one of ``static``, ``passive`` and
+  ``active``.
 
 A switch has no bond that needs nothing of its peer: it writes such a
 LAG as a static aggregate, with a review line beside it (IOS XR, which
@@ -85,8 +90,37 @@ FREEBSD = {
 #: What the tree holds for each need (netcanon.migration._bonds).
 CANONICAL = {LACP: "active", AGGREGATE: "static", NOTHING: ACTIVE_BACKUP}
 
+#: FortiOS: an aggregate by its ``lacp-mode``, and a redundant interface.
+FORTIOS = {
+    "active": LACP,
+    "passive": LACP,
+    "static": AGGREGATE,
+    "redundant": NOTHING,
+}
+
+#: Each target's name for LAG 1, typed here: a FortiOS LAG's name is
+#: the operator's own, which no translator reads, so a FortiOS source
+#: is sent with an entry that gives it this name.
+LAG_ONE = {
+    "arista_eos": "Port-Channel1",
+    "aruba_aoscx": "lag 1",
+    "aruba_aoss": "Trk1",
+    "cisco_iosxe_cli": "Port-channel1",
+    "cisco_iosxr": "Bundle-Ether1",
+    "cisco_nxos": "port-channel1",
+    "dell_os10": "port-channel1",
+    "juniper_junos": "ae1",
+    "mikrotik_routeros": "bond1",
+    "opnsense": "lagg1",
+    "vyos": "bond1",
+}
+
+#: A source word the tree keeps as it is, not as the value its need
+#: reads as: a FortiOS passive aggregate is canonical ``passive``.
+KEPT = {("fortigate_cli", "passive"): "passive"}
+
 #: The targets that have a bond needing nothing of its peer.
-HOSTS = frozenset({"mikrotik_routeros", "vyos", "opnsense"})
+HOSTS = frozenset({"mikrotik_routeros", "vyos", "opnsense", "fortigate_cli"})
 
 #: The target that writes no LAG at all (its matrix says so).
 WRITES_NO_LAG = frozenset({"cisco_iosxe"})
@@ -155,6 +189,31 @@ def _opnsense(word: str) -> str:
     )
 
 
+def _fortigate(word: str) -> str:
+    kind = (
+        "        set type redundant\n" if word == "redundant"
+        else f"        set type aggregate\n        set lacp-mode {word}\n"
+    )
+    return (
+        "config system global\n"
+        '    set hostname "fw1"\n'
+        "end\n"
+        "config system interface\n"
+        '    edit "port4"\n'
+        "        set type physical\n"
+        "    next\n"
+        '    edit "port5"\n'
+        "        set type physical\n"
+        "    next\n"
+        '    edit "bond1"\n'
+        "        set ip 10.0.0.1 255.255.255.0\n"
+        f"{kind}"
+        '        set member "port4" "port5"\n'
+        "    next\n"
+        "end\n"
+    )
+
+
 def _iosxe(word: str) -> str:
     return (
         "hostname sw1\n"
@@ -179,6 +238,7 @@ SOURCES = [
     *[("vyos", w, _vyos(w), need) for w, need in VYOS.items()],
     ("vyos", None, _vyos(None), VYOS[VYOS_DEFAULT]),
     *[("opnsense", w, _opnsense(w), need) for w, need in FREEBSD.items()],
+    *[("fortigate_cli", w, _fortigate(w), need) for w, need in FORTIOS.items()],
     ("cisco_iosxe_cli", "on", _iosxe("on"), AGGREGATE),
     ("cisco_iosxe_cli", "active", _iosxe("active"), LACP),
 ]
@@ -199,6 +259,8 @@ _JUNOS_MEMBER_OF = re.compile(r"(?m)^set interfaces \S+ ether-options 802\.3ad (
 _JUNOS_LACP = re.compile(
     r"(?m)^set interfaces (ae\d+) aggregated-ether-options lacp (?:active|passive)[ \t]*$",
 )
+_FORTI_EDIT = re.compile(r"(?ms)^[ \t]*edit \S+[ \t]*$(.*?)^[ \t]*next[ \t]*$")
+_FORTI_TYPE = re.compile(r"(?m)^[ \t]*set type (aggregate|redundant)[ \t]*$")
 _FORTI_LACP_MODE = re.compile(r"(?m)^[ \t]*set lacp-mode (\S+)[ \t]*$")
 _ROUTEROS_BOND = re.compile(r"(?m)^(?:/interface bonding )?add\b(?=.*\bslaves=)(.*)$")
 _ROUTEROS_MODE = re.compile(r"\bmode=(\S+)")
@@ -219,6 +281,22 @@ def _aoscx(text: str) -> list[str]:
             inside, lacp = True, False
         elif inside and re.match(r"[ \t]+lacp mode (?:active|passive)[ \t]*$", line):
             lacp = True
+    return needs
+
+
+def _fortios(text: str) -> list[str]:
+    needs = []
+    for body in _FORTI_EDIT.findall(text):
+        kind = _FORTI_TYPE.search(body)
+        if kind is None:
+            continue
+        if kind.group(1) == "redundant":
+            needs.append(NOTHING)
+            continue
+        lacp = _FORTI_LACP_MODE.search(body)
+        # An aggregate the renderer gives no ``lacp-mode`` is read as
+        # nothing this test knows, and fails it.
+        needs.append(FORTIOS.get(lacp.group(1) if lacp else "", "unread"))
     return needs
 
 
@@ -254,7 +332,7 @@ def peer_needs(target: str, text: str) -> list[str]:
         lacp = set(_JUNOS_LACP.findall(text))
         return [LACP if ae in lacp else AGGREGATE for ae in sorted(set(_JUNOS_MEMBER_OF.findall(text)))]
     if target == "fortigate_cli":
-        return [AGGREGATE if w == "static" else LACP for w in _FORTI_LACP_MODE.findall(text)]
+        return _fortios(text)
     if target == "mikrotik_routeros":
         out = []
         for rest in _ROUTEROS_BOND.findall(text):
@@ -276,8 +354,12 @@ def check(source, target: str) -> None:
     source asks, or -- for a bond that needs nothing, on a target that
     has none -- is a static aggregate that says so."""
     codec, word, text, need = source
+    entries = (
+        {"bond1": LAG_ONE[target]}
+        if codec == "fortigate_cli" and target != codec else {}
+    )
     job = run_plan_with_checked_names(
-        get_codec(codec), get_codec(target), text, port_rename_map={},
+        get_codec(codec), get_codec(target), text, port_rename_map=entries,
     )
     out = job.rendered or ""
     read = peer_needs(target, out)
@@ -309,7 +391,8 @@ def test_every_public_codec_has_a_reader_or_writes_no_lag():
 def test_the_parser_reads_what_the_bond_needs(source):
     codec, word, text, need = source
     tree = get_codec(codec).parse(text)
-    assert [lag.mode for lag in tree.lags] == [CANONICAL[need]], (codec, word)
+    expected = KEPT.get((codec, word), CANONICAL[need])
+    assert [lag.mode for lag in tree.lags] == [expected], (codec, word)
 
 
 @pytest.mark.parametrize("target", _TARGETS)
@@ -399,6 +482,13 @@ def test_a_reader_is_not_its_own_oracle():
     ) == [AGGREGATE]
     assert peer_needs("arista_eos", "interface Ethernet1\n   channel-group 1 mode on\n") == [AGGREGATE]
     assert peer_needs("aruba_aoscx", "interface lag 1\n    no shutdown\n!\n") == [AGGREGATE]
+    assert peer_needs(
+        "fortigate_cli", '    edit "r1"\n        set type redundant\n    next\n',
+    ) == [NOTHING]
+    assert peer_needs(
+        "fortigate_cli",
+        '    edit "a1"\n        set type aggregate\n        set lacp-mode static\n    next\n',
+    ) == [AGGREGATE]
     assert peer_needs(
         "aruba_aoscx", "interface lag 1\n    lacp mode active\n!\n",
     ) == [LACP]

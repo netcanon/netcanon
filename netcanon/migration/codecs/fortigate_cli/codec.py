@@ -190,6 +190,10 @@ class FortiGateCLICodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = True
 
+    #: A bond whose peer needs no aggregate is a redundant interface
+    #: here.  See ``CodecBase.active_backup_written_as``.
+    active_backup_written_as: ClassVar[str] = "itself"
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="fortigate_cli",
         vendor_id="fortigate",

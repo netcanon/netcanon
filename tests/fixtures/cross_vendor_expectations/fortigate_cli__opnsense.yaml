@@ -580,6 +580,8 @@ per_field_expectation:
       FreeBSD driver always advertises actively); FortiGate
       ``static`` -> OPNsense ``<proto>loadbalance</proto>``.
       Cross-pair degrades the active/passive distinction silently.
+      A redundant interface (``set type redundant``), one member at
+      a time, is written ``<proto>failover</proto>``.
       The OPNsense matrix classifies ``/lags/lag/name`` and
       ``/lags/lag/members`` as supported and ``/lags/lag/mode`` as
       lossy.

@@ -496,8 +496,9 @@ translate it again from `show running-config` as the device prints it.
 - **A host's active-backup bond has no form on IOS-XE** (CLI codec).
   A RouterOS `active-backup`, `balance-tlb` or `balance-alb` bond, a
   VyOS `active-backup`, `transmit-load-balance` or
-  `adaptive-load-balance` bond and an OPNsense `failover` LAGG need no
-  aggregate on the ports they face.  IOS-XE has no such bond: the LAG
+  `adaptive-load-balance` bond, an OPNsense `failover` LAGG and a
+  FortiOS redundant interface need no aggregate on the ports they face.
+  IOS-XE has no such bond: the LAG
   is written as a static aggregate (`channel-group <N> mode on`) with a
   `! review:` line beside it, and the job carries a warning.  Configure
   the ports it faces as a static aggregate too, or re-design the bond.

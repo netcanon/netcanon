@@ -318,8 +318,9 @@ translate it again from `show running-config` as the switch prints it.
 - **A host's active-backup bond has no form on NX-OS.**  A RouterOS
   `active-backup`, `balance-tlb` or `balance-alb` bond, a VyOS
   `active-backup`, `transmit-load-balance` or `adaptive-load-balance`
-  bond and an OPNsense `failover` LAGG need no aggregate on the ports
-  they face.  NX-OS has no such bond: the LAG is written as a static
+  bond, an OPNsense `failover` LAGG and a FortiOS redundant interface
+  need no aggregate on the ports they face.
+  NX-OS has no such bond: the LAG is written as a static
   aggregate (`channel-group <N> mode on`) with a `! review:` line
   beside it, and the job carries a warning.  Configure the ports it
   faces as a static aggregate too, or re-design the bond.

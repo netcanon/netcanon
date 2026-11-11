@@ -11,23 +11,28 @@ aggregate of its own, or nothing at all.  The tree holds four values:
                     every member, and the peer's ports grouped as an
                     aggregate of their own (Cisco ``mode on``).
 ``active-backup``   A bond that needs no aggregate on its peer: Linux
-                    ``active-backup`` and FreeBSD ``failover``, which
-                    send through one port at a time, and Linux
-                    ``balance-tlb`` and ``balance-alb``, which balance
-                    what they send without the switch's help.
+                    ``active-backup``, FreeBSD ``failover`` and a
+                    FortiOS redundant interface, which send through
+                    one port at a time, and Linux ``balance-tlb`` and
+                    ``balance-alb``, which balance what they send
+                    without the switch's help.
 ==================  ==================================================
 
 Every switch parser reads ``static`` from the platform's static aggregate:
 ``channel-group ... mode on``, an AOS-S ``trunk``, an AOS-CX ``interface
-lag`` with no ``lacp mode``, a Junos ``ae`` with no ``lacp``, a FortiOS
-``lacp-mode static``.  The hosts that bond ports have both kinds, and the
+lag`` with no ``lacp mode``, a Junos ``ae`` with no ``lacp``.  The hosts
+that bond ports have both kinds, and the
 kernel documentation says which is which: "The active-backup, balance-tlb
 and balance-alb modes do not require any specific configuration of the
 switch", while balance-rr, balance-xor and broadcast "generally require
 that the switch have the appropriate ports grouped together" (Linux
 bonding, Switch Configuration).  FreeBSD's ``failover`` sends through one
 port and by default accepts what arrives on that port only; its
-``loadbalance`` and ``fec`` are "a static setup" (lagg(4)).
+``loadbalance`` and ``fec`` are "a static setup" (lagg(4)).  FortiOS has
+both as well: an aggregate's ``lacp-mode static``, and a redundant
+interface (``set type redundant``), in which "traffic only goes over one
+interface at any time" (FortiOS Administration Guide, "Aggregation and
+redundancy").
 
 Up to 2026-11 the RouterOS, VyOS and OPNsense parsers read the two kinds
 as one value, ``static``, and their renderers wrote that value as a bond
@@ -41,8 +46,9 @@ The rule
 A parser reads a bond that needs no aggregate on its peer as
 ``active-backup``, and every other bond without LACP as ``static``.  A
 renderer writes ``static`` as its platform's static aggregate
-(RouterOS ``balance-xor``, VyOS ``xor-hash``, OPNsense ``loadbalance``)
-and ``active-backup`` as its own form of it where it has one
+(RouterOS ``balance-xor``, VyOS ``xor-hash``, OPNsense ``loadbalance``,
+FortiOS ``lacp-mode static``) and ``active-backup`` as its own form of
+it where it has one (FortiOS: a redundant interface)
 (:attr:`~netcanon.migration.codecs.base.CodecBase.active_backup_written_as`).
 A switch has no bond of that kind: it writes the LAG as a static
 aggregate, which its peer then has to be configured as, with a review
