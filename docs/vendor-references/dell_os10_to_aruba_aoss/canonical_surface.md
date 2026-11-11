@@ -27,8 +27,8 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 |---|---|
 | `good` | 14 |
 | `lossy` | 19 |
-| `unsupported` | 7 |
-| `not_applicable` | 6 |
+| `unsupported` | 6 |
+| `not_applicable` | 7 |
 
 ## Per-field measurement
 
@@ -38,7 +38,7 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 |---|---|---|---|---|
 | `anycast_gateway_mac` | unsupported | 0 | 0 | 1 |
 | `apply_groups` | good | 0 | 0 | 1 |
-| `dhcp_servers` | unsupported | 0 | 0 | 1 |
+| `dhcp_servers` | not_applicable | 0 | 0 | 1 |
 | `dns_servers` | not_applicable | 0 | 0 | 1 |
 | `domain` | unsupported | 0 | 0 | 1 |
 | `evpn_type5_routes` | not_applicable | 0 | 0 | 1 |
@@ -90,12 +90,6 @@ Across the 1 cell, 14 source interface records produce 14 re-parsed records — 
 Drifted on 0 of 1 cells (preserved on 0, both sides empty on 1).
 
 > System-wide anycast-gateway MAC parses-and-ignores in v1.  Schema exists on CanonicalIntent; wire-up scheduled for v0.2.0 Wave C.
-
-### `dhcp_servers` — unsupported
-
-Drifted on 0 of 1 cells (preserved on 0, both sides empty on 1).
-
-> Render emits no DHCP server pool; intent.dhcp_servers are dropped on migration.
 
 ### `domain` — unsupported
 

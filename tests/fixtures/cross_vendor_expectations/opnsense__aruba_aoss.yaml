@@ -13,8 +13,9 @@
 #   * Switching state: not_applicable here (OPNsense source never
 #     populates it); was unsupported on the forward direction
 #     (Aruba carried it, OPNsense couldn't render).
-#   * DHCP server pools: lossy here (OPNsense has them, Aruba can't
-#     accept); was not_applicable on the forward direction.
+#   * DHCP server pools: lossy here (the pools are written, and an
+#     OPNsense zone is most often a port, which no VLAN stanza of the
+#     output serves).
 #   * Hash formats: still lossy in both directions.
 
 meta:
@@ -442,16 +443,17 @@ per_field_expectation:
       OPNsense source populates ``CanonicalIntent.dhcp_servers``
       with one record per zone interface carrying a ``<dhcpd>``
       block (interface, range, gateway, dns_servers, lease_time,
-      domain_name).  Aruba target has no destination for these
-      pools — the aruba_aoss render writes no pool and declares
-      ``/dhcp-servers/pool`` unsupported (AOS-S has a DHCP server of
-      its own, ``dhcp-server pool``, which the aruba_aoss parser
-      reads).  Cross-pair render drops the pool config and emits a
-      comment block describing what was lost.  Operator-driven
-      redesign: configure each pool on the switch by hand, or deploy
-      an external DHCP server and configure ``ip helper-address`` on
-      the Aruba VLAN SVIs (canonical schema lacks a helper-address
-      field today).
+      domain_name), and the aruba_aoss render writes each as AOS-S's
+      own ``dhcp-server pool``, with ``dhcp-server enable`` last.
+      What is lost is where it is served: AOS-S serves a pool on a
+      VLAN whose stanza states ``dhcp-server`` and holds an address
+      of the pool's network, and an OPNsense zone is most often a
+      port, for which the output has no VLAN stanza.  Such a pool is
+      written with a ``; review:`` line, and the switch serves it
+      only to clients a DHCP relay forwards to it.  The alternative
+      is an external DHCP server and ``ip helper-address`` on the
+      Aruba VLAN SVIs (canonical schema lacks a helper-address field
+      today).
     references: [opnsense-dhcp, aruba-dhcp-relay]
 
   snmp:

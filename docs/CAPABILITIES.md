@@ -413,7 +413,8 @@ text").
 | `/interfaces/interface/config/vrf` | Lossy (warn) | AOS-S has no VRF.  A management port that lands on `oobm` is written in the out-of-band context, which HPE documents as a management plane apart from the data plane, so the port stays apart as its management VRF kept it; any other interface is written without its VRF. |
 | `/interfaces/interface/config/mtu` | Lossy (warn) | AOS-S sets the frame size of a VLAN (`jumbo`) or of the whole switch, not of a port: an interface's MTU is not written. |
 | `/interfaces/interface/dhcp-client` | Lossy (warn) | AOS-S spells a DHCP client `ip address dhcp-bootp` in a VLAN, which the codec neither reads nor writes: the interface is written without one. |
-| Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/routing-instances/instance/*`, `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, VRF, VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
+| `/dhcp-servers/pool` | Supported | The switch's own DHCP server (HPE, ArubaOS-Switch Management and Configuration Guide, "DHCPv4 server"): a `dhcp-server pool` stanza for each pool after the static routes, as a 2930F prints one, `dhcp-server` in the stanza of the VLAN that serves it, and `dhcp-server enable` last.  A VLAN serves a pool where its stanza holds an address of the pool's network and stands for the pool's interface (`Vlan<N>`, or a name that encodes the VLAN's id, such as a Junos `irb.<N>`); a pool on any other interface is written with a `; review:` line, and the switch serves it only to clients a DHCP relay forwards to it.  What AOS-S cannot be given as the tree has it -- a pool with no network or range, which the switch discards; a pool that states no whole range, given the addresses it hands out less the output's own; a lease not in whole minutes or past 99 days; a gateway or DNS server that is not IPv4, DNS servers past eight; a domain that cannot stand between AOS-S's quotes -- is a `; review:` line and a warning of the job.  The parser reads the stanzas back.  ⚠️ Up to 0.7.7 a pool was written only as a `;` comment, and the path was declared unsupported.  See [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md). |
+| Fields of records the codec does not write: `/routing-instances/instance/*`, `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VRF, VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
@@ -1189,18 +1190,14 @@ in rendered output find every such site.
   The secret is not decoded (Cisco type 7 could be, and is not), and the
   job still says `completed`: the review line is where it is said.
 
-* **Aruba AOS-S DHCP comment block**
-  ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
-  AOS-S runs a DHCP server of its own (`dhcp-server pool`,
-  `dhcp-server enable`), which the parser reads, but the renderer
-  writes no pool.  When canonical carries DHCP pools, it emits a
-  header comment block:
+* **Aruba AOS-S DHCP pool review lines**
+  ([`aruba_aoss/dhcp_pools.py`](../netcanon/migration/codecs/aruba_aoss/dhcp_pools.py)).
+  A pool is written as a `dhcp-server pool` stanza, and what AOS-S
+  cannot be given as the tree has it is a `; review:` line in it (or
+  in place of it, for a pool the switch would discard) and a warning
+  of the job.  A pool no VLAN of the output serves:
 
-      ; DHCP pools of the source, not written here.  AOS-S
-      ; has a DHCP server of its own (dhcp-server pool,
-      ; dhcp-server enable): configure each pool by hand.
-
-  …followed by one summary comment line per pool.
+      ; review: the source serves this pool on port1.10; AOS-S serves a pool on a VLAN whose stanza states dhcp-server and holds an address of its network, and this output has no VLAN stanza for port1.10: it serves only clients a DHCP relay forwards to it
 
 * **Aruba AOS-S OOBM IPv6**.  AOS-S has documented `oobm` IPv4
   syntax but unverified IPv6 syntax; the renderer emits the IPv6
@@ -2963,8 +2960,12 @@ matter; the matrix is honest about both.
   server discards (neither a network and a range nor a static
   binding) an `incomplete:` row; a second range or router, a static
   binding, an option and a setting of the server are rows too.  As a
-  target, AOS-S writes no pool: source pools surface as a comment
-  block, not as `dhcp-server pool` syntax.
+  target, a pool is written as a `dhcp-server pool` stanza, served by
+  the VLAN whose stanza holds an address of its network; a pool on an
+  interface no VLAN stanza of the output stands for (a routed port, a
+  bridge, a FortiGate VLAN interface, an OPNsense zone's port) is
+  served only to clients a DHCP relay forwards to it, and a review
+  line says so.
 * **An IOS-XE pool is one run of addresses on one interface in the
   tree.**  An IOS-XE pool can hand out several runs of addresses (an
   exclusion in the middle of its network) and its subnet can be on

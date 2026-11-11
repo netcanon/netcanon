@@ -14,9 +14,9 @@
 #   * Mask format (Cisco dotted-decimal vs Aruba CIDR).
 #   * Hash formats (Cisco type-9 scrypt vs Aruba sha1 / sha256;
 #     not cross-compatible).
-#   * Feature surface (Cisco supports VRF / BGP / EIGRP / DHCP-server
-#     pools; Aruba AOS-S has no VRF concept, and the codec writes no
-#     DHCP pool).
+#   * Feature surface (Cisco supports VRF / BGP / EIGRP; Aruba AOS-S
+#     has no VRF concept).  DHCP server pools are written as AOS-S's
+#     own ``dhcp-server pool``.
 
 meta:
   source_vendor: cisco_iosxe_cli
@@ -24,8 +24,8 @@ meta:
   primary_use_case: >
     Campus refresh from Cisco Catalyst (IOS-XE 15.x / 16.x / 17.x) to
     Aruba ProCurve / AOS-S (2930F / 2930M / 3810 / 5400R).  L2 and
-    basic-L3 features land cleanly; Cisco-only L3 surface
-    (VRF, BGP, IS-IS, EIGRP, DHCP server pools) drops on the
+    basic-L3 features land cleanly, DHCP server pools among them;
+    Cisco-only L3 surface (VRF, BGP, IS-IS, EIGRP) drops on the
     Aruba target.
   certainty: medium
   references:
@@ -232,15 +232,19 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Cisco's ``ip dhcp pool <name>`` syntax populates
-      CanonicalDHCPPool records on parse.  The aruba_aoss render
-      writes no pool (``/dhcp-servers/pool`` is unsupported): AOS-S
-      has a DHCP server of its own (``dhcp-server pool``, which the
-      aruba_aoss parser reads), but the Cisco -> Aruba render emits a
-      comment for each pool describing what was lost, not a stanza.
-      Configure each pool on the switch by hand.
+      CanonicalDHCPPool records on parse, and the aruba_aoss render
+      writes AOS-S's own server: a ``dhcp-server pool`` stanza after
+      the VLANs (``default-router``, ``dns-server``, ``domain-name``,
+      ``lease DD:HH:MM``, ``network``, ``range``), ``dhcp-server`` in
+      the stanza of the VLAN that serves it, and ``dhcp-server
+      enable`` last; the committed pool reads back whole.  AOS-S
+      serves a pool only on a VLAN whose stanza holds an address of
+      its network, so a pool of a routed port's subnet is written
+      with a ``; review:`` line and served only to clients a DHCP
+      relay forwards to it.
     references: [dhcp_relay_versus_pool]
 
   snmp:

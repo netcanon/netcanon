@@ -1882,7 +1882,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     "cisco_iosxr": (4, 0, 13, 1, 1, 4),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
-    "fortigate_cli": (0, 0, 0, 0, 0, 11),
+    # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
+    # `/dhcp-servers/pool` is supported there.  Onto AOS-S the job of
+    # a capture with one pool had been `partial` for that path alone;
+    # the validation report passes it now, and the names it listed
+    # before, unchanged, hold it (+1 several).
+    "fortigate_cli": (0, 0, 0, 0, 0, 12),
     # From (0, 0, 7, 0, 5, 7): no record is made for a bare `irb`
     # or `st0` that no line configures, so it is no longer a name
     # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
@@ -1911,7 +1916,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # other vendor has a form for it; onto AOS-CX, IOS-XE CLI, NX-OS
     # and OS10 it had been a loopback or a `VirtualPortGroup0`, and
     # is dropped and listed beside the names left (4 jobs, 4 -> 5).
-    "mikrotik_routeros": (0, 0, 0, 0, 20, 8),
+    # And from (0, 0, 0, 0, 20, 8): AOS-S writes a DHCP pool, and
+    # `/dhcp-servers/pool` is supported there.  Onto AOS-S the job of
+    # a capture with one pool had been `partial` for that path alone;
+    # the validation report passes it now, and the two names it left
+    # as the source has them, listed before as well, hold it (+1 left).
+    "mikrotik_routeros": (0, 0, 0, 0, 21, 8),
     # From (4, 0, 0, 0, 23, 1): a VLAN device on a port is a
     # sub-interface of it, so the supergate capture's five devices on
     # `ixl0` are `TenGigE0/0/0/0.10` and the like onto IOS-XR, and
@@ -1988,8 +1998,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 72, 5, 64, 49]
-        assert sum(by_reason) == 230
+        assert by_reason == [40, 0, 72, 5, 65, 50]
+        assert sum(by_reason) == 232
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

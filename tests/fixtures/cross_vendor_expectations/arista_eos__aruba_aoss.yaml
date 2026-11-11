@@ -249,17 +249,19 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
+    disposition: good
+    note: >
       The arista_eos parser reads EOS's DHCP server (``dhcp server``
       and its ``subnet`` blocks; of the committed inputs only the
-      synthetic kitchen sink has one, and it is dropped on this target;
-      every real capture is empty on both sides).  The aruba_aoss
-      render writes no pool: AOS-S has a DHCP server
-      of its own (``dhcp-server pool``, which the aruba_aoss parser
-      reads), but an output for AOS-S has a comment for each pool,
-      not a stanza, and ``/dhcp-servers/pool`` is declared
-      unsupported.  Configure each pool on the switch by hand.
+      synthetic kitchen sink has one, and every real capture is empty
+      on both sides), and the aruba_aoss render writes AOS-S's own
+      server: a ``dhcp-server pool`` stanza after the VLANs,
+      ``dhcp-server`` in the stanza of the VLAN that serves it, and
+      ``dhcp-server enable`` last.  The kitchen sink's pool, on a
+      ``Vlan`` SVI, reads back whole.  AOS-S serves a pool only on a
+      VLAN whose stanza holds an address of its network, so a pool
+      on a routed port is written with a ``; review:`` line and
+      served only to clients a DHCP relay forwards to it.
 
   snmp:
     disposition: lossy

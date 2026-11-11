@@ -9,8 +9,10 @@ Vendor coverage:
                           pool` it names and the `/ip dhcp-server
                           network` that holds its range, read once the
                           whole config has been)
-    * aruba_aoss        - render-only (emits a comment block; AOS-S
-                          doesn't implement DHCP server)
+    * aruba_aoss        - parse + render (`dhcp-server pool`, a VLAN's
+                          `dhcp-server` line and `dhcp-server enable`;
+                          ``codecs/aruba_aoss/test_dhcp_pool_target.py``
+                          holds the rest)
 """
 
 from __future__ import annotations
@@ -477,12 +479,12 @@ add name=dhcp_pool1 ranges=10.0.0.100-10.0.0.199
 
 
 # ---------------------------------------------------------------------------
-# Aruba AOS-S — DHCP server not supported; emits a comment block
+# Aruba AOS-S — the switch's own DHCP server
 # ---------------------------------------------------------------------------
 
 
 class TestArubaDHCPRender:
-    def test_dhcp_pool_emits_comment_not_silently_dropped(self):
+    def test_dhcp_pool_round_trips(self):
         intent = CanonicalIntent(
             source_vendor="test", source_format="test",
             dhcp_servers=[CanonicalDHCPPool(
@@ -492,21 +494,23 @@ class TestArubaDHCPRender:
                 end_ip="10.0.0.199",
             )],
         )
-        out = ArubaAOSSCodec().render(intent)
-        # Human reviewer needs to see this can't translate.
-        assert "; DHCP pools" in out
-        assert "AOS-S" in out
-        # Key facts preserved in the comment for the reviewer.
-        assert "10.0.0.0/24" in out
-        assert "10.0.0.1" in out
+        c = ArubaAOSSCodec()
+        out = c.render(intent)
+        lines = out.splitlines()
+        assert 'dhcp-server pool "pool-1"' in lines
+        assert lines[-1] == "dhcp-server enable"
+        (pool,) = c.parse(out).dhcp_servers
+        assert (pool.network, pool.start_ip, pool.end_ip, pool.gateway) == (
+            "10.0.0.0/24", "10.0.0.100", "10.0.0.199", "10.0.0.1",
+        )
 
-    def test_no_dhcp_pools_no_comment(self):
+    def test_no_dhcp_pools_no_server(self):
         intent = CanonicalIntent(
             source_vendor="test", source_format="test",
             dhcp_servers=[],
         )
         out = ArubaAOSSCodec().render(intent)
-        assert "DHCP pools" not in out
+        assert "dhcp-server" not in out
 
 
 # ---------------------------------------------------------------------------

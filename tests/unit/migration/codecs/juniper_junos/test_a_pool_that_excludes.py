@@ -297,7 +297,10 @@ _EXCLUDED = [
 ]
 
 #: The targets whose own parser reads a pool back from the output.
-_READ_BACK = {"arista_eos", "cisco_iosxe_cli", "fortigate_cli", "juniper_junos", "mikrotik_routeros"}
+_READ_BACK = {
+    "arista_eos", "aruba_aoss", "cisco_iosxe_cli", "fortigate_cli", "juniper_junos",
+    "mikrotik_routeros",
+}
 
 
 @pytest.mark.parametrize("target", sorted(list_public_codecs()))

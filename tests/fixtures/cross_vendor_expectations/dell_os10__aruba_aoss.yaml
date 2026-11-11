@@ -67,15 +67,13 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
-      AOS-S renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no DHCP server pool;
-      intent.dhcp_servers are dropped on migration. Measured over 1
-      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. AOS-S writes a ``dhcp-server pool`` for each
+      pool it is given; re-author it on the target rather than assume
+      there was nothing there.
     references: [os10-aoss-surface]
 
   dns_servers:

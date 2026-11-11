@@ -30,7 +30,7 @@ ProCurve estate).  Asymmetry shows up in two places:
 | `vlans.md` | RouterOS two-plane model (Plane-1 / Plane-2) -> Aruba VLAN-centric.  Plane-2 wire-up partial in v1; `name` conflated with L3 interface name. |
 | `switching_model.md` | Philosophy mismatch — RouterOS L3-by-default vs Aruba L2-by-default.  Tier-3 plumbing (firewall / NAT / queues / wireless) is the dominant lossy path. |
 | `static_routes.md` | RouterOS CIDR -> Aruba CIDR / dotted-mask.  Per-VRF (`routing-table=`) drops; blackhole flag drops; interface-as-gateway drops. |
-| `dhcp.md` | RouterOS three-section DHCP form joins on parse; Aruba target drops the pool entirely (the codec writes no `dhcp-server pool`). |
+| `dhcp.md` | RouterOS three-section DHCP form joins on parse; the Aruba target writes a `dhcp-server pool`, served on a VLAN whose stanza holds its network (an update at the top supersedes the body). |
 | `snmp.md` | v1/v2c access-keyword mapping (RouterOS flags -> Aruba Operator/Manager).  v3 USM auth/priv overlap; AES-256 -> AES-128 downgrade with banner. |
 | `local_users.md` | RouterOS named groups (full/write/read) -> Aruba two-role.  Password-export gap dominates — Aruba render emits empty SHA-1 hash. |
 | `lags.md` | RouterOS `bond<N>` (`802.3ad` / `balance-xor` / etc.) -> Aruba `Trk<N>`.  Non-LACP bonding modes collapse to static `trunk` with banner. |

@@ -10,14 +10,16 @@ Extracted from ``codec.py`` during the parse/render split per the
 
 Emission order mirrors what AOS-S's own ``show running-config`` puts
 on the wire so device round-trips diff cleanly: hostname, DNS, SNTP,
-SNMP, RADIUS, a comment block for DHCP pools, local users, LAG trunks,
-VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** — a
+SNMP, RADIUS, local users, LAG trunks,
+VLAN stanzas (with absorbed SVI L3, a ``dhcp-server`` line in a VLAN
+that serves a pool, + nested **VRRP groups** — a
 global ``router vrrp`` enable then ``vrrp vrid N / virtual-ip-address
 X / owner|priority / preempt / enable / exit`` inside the VLAN stanza),
 physical interface stanzas (none for a port that would say ``enable``
 alone and that a VLAN's list or a ``trunk`` line of the output gives
 back when it is read: the device prints none either), static routes /
-default-gateway.
+default-gateway, then the DHCP server's pools and ``dhcp-server
+enable`` (:mod:`.dhcp_pools`).
 Multi-VIP cross-vendor sources drop secondaries with ``; review:``
 comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
 modes (HSRP / CARP) emit review comments and skip.
@@ -72,9 +74,16 @@ from ..._radius_secrets import (
 )
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
-from ...canonical.transforms import _natural_port_sort_key, trunk_untagged_vlan
+from ...canonical.transforms import (
+    _natural_port_sort_key,
+    synthesize_svis_from_vlan_l3,
+    trunk_untagged_vlan,
+)
+from ...limits import ticked
+from .._dhcp_pools import OwnAddresses
 from ..base import RenderError
 from .accounts import account_lines
+from .dhcp_pools import Rendered, Stanza, render_pools
 from .parse import _lists_read_from, _members_read_from
 from .port_names import one_spelling, trunk_number
 
@@ -576,6 +585,109 @@ def _natives_not_carried(tree: CanonicalIntent) -> dict[int, dict[str, bool]]:
 # ---------------------------------------------------------------------------
 
 
+def _svi_indexes(tree: CanonicalIntent) -> tuple[dict[str, Any], dict[int, Any]]:
+    """The interfaces a VLAN stanza can take its addresses from: those
+    whose name begins ``vlan``, by name; and by VLAN id, those whose
+    name encodes one (:func:`_vlan_iface_id`) and that hold an IPv4
+    address and no VRF."""
+    vlan_ifaces_by_name = {
+        iface.name: iface for iface in tree.interfaces
+        if iface.name.lower().startswith("vlan")
+    }
+    # Pre-index VLAN-id-encoding interfaces so the SVI-IP lookup
+    # below is O(1) per VLAN.  Covers Cisco-style ``Vlan10``, OPNsense
+    # ``vlan0.10`` (the ``<if>`` element value the parser carries
+    # through verbatim from the ``<optN>`` zone), FortiGate
+    # ``port1.10`` dotted form, and any other interface whose name
+    # encodes a VLAN id via :func:`_vlan_iface_id`.  Used to recover
+    # SVI L3 from cross-vendor sources that keep VLAN-id and
+    # SVI-L3 on separate canonical objects (Finding 4 in
+    # ``user_smoke_findings.md`` — OPNsense supergate fixture).
+    iface_by_vlan_id: dict[int, Any] = {}
+    for iface in tree.interfaces:
+        vid = _vlan_iface_id(iface.name)
+        if vid is not None and iface.ipv4_addresses:
+            # VRF-bound IRB / SVI interfaces are NOT absorbable.
+            # AOS-S's ``vlan N { ip address ... }`` stanza has no VRF
+            # concept — collapsing a VRF-bound IRB into the vlan
+            # block would silently strip the routing-instance
+            # binding.  The Junos parser preserves these IRBs as
+            # standalone interfaces (see ``juniper_junos/parse.py``
+            # step 3 — IRBs with VRF bindings are NOT folded onto
+            # their CanonicalVlan); the Aruba renderer must respect
+            # that decision.  Surfaced by the Phase 4 mesh's
+            # batfish_evpntype5_router1 fixture, where TENANT-A and
+            # TENANT-B VRFs each carry irb.<vid> instances whose
+            # IPs were ghosting onto sibling VLAN blocks.
+            if iface.vrf:
+                continue
+            # First match wins — multiple SVIs for the same VLAN id
+            # is a malformed canonical and shouldn't happen in
+            # practice; we'd rather emit one SVI line than zero.
+            iface_by_vlan_id.setdefault(vid, iface)
+    return vlan_ifaces_by_name, iface_by_vlan_id
+
+
+def _stanza_ipv4(
+    vlan: Any, by_name: dict[str, Any], by_id: dict[int, Any],
+) -> tuple[list[Any], Any]:
+    """The IPv4 addresses a VLAN's stanza writes, and the interface
+    they are taken from (``None`` where they are the VLAN's own): the
+    VLAN's, or else those of its ``Vlan<N>`` interface, or else those
+    of the interface whose name encodes its id."""
+    if vlan.ipv4_addresses:
+        return list(vlan.ipv4_addresses), None
+    for iface in (by_name.get(f"Vlan{vlan.id}"), by_id.get(vlan.id)):
+        if iface is not None and iface.ipv4_addresses:
+            return list(iface.ipv4_addresses), iface
+    return [], None
+
+
+def _dhcp(
+    tree: CanonicalIntent, by_name: dict[str, Any], by_id: dict[int, Any],
+) -> Rendered:
+    """The output's DHCP server (:func:`.dhcp_pools.render_pools`), for
+    the VLAN stanzas it writes and the addresses its interfaces hold.
+
+    A VLAN's stanza stands for ``Vlan<id>``, for the interface its
+    addresses are taken from, and for a pool's interface whose name
+    encodes the VLAN's id (:func:`_vlan_iface_id`: a Junos ``irb.10``,
+    whose address the Junos parser puts on VLAN 10 itself) -- the same
+    names whose addresses the stanza writes.  Whether the stanza serves
+    the pool is then a matter of its subnets."""
+    if not tree.dhcp_servers:
+        return Rendered()
+    encoded: dict[int, set[str]] = {}
+    for pool in ticked(tree.dhcp_servers):
+        vid = _vlan_iface_id(pool.interface) if pool.interface else None
+        if vid is not None:
+            encoded.setdefault(vid, set()).add(pool.interface.lower())
+    stanzas: list[Stanza] = []
+    for index, vlan in enumerate(ticked(tree.vlans)):
+        addrs, taken_from = _stanza_ipv4(vlan, by_name, by_id)
+        subnets: list[ipaddress.IPv4Network] = []
+        for addr in addrs:
+            try:
+                subnets.append(ipaddress.IPv4Network(f"{addr.ip}/{addr.prefix_length}", strict=False))
+            except ValueError:
+                continue
+        names = {f"vlan{vlan.id}", *encoded.get(vlan.id, ())}
+        if taken_from is not None:
+            names.add(taken_from.name.lower())
+        stanzas.append(Stanza(index, vlan.id, tuple(subnets), frozenset(names)))
+    own = OwnAddresses([*tree.interfaces, *synthesize_svis_from_vlan_l3(tree)])
+    return render_pools(tree.dhcp_servers, stanzas, own)
+
+
+def pool_warnings(tree: Any) -> list[str]:
+    """A warning for each review line of the output's DHCP server, read
+    from the same function the renderer writes it with (:func:`_dhcp`)."""
+    if not isinstance(tree, CanonicalIntent):
+        return []
+    by_name, by_id = _svi_indexes(tree)
+    return _dhcp(tree, by_name, by_id).warnings
+
+
 def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` to AOS-S ``show running-
     config`` text.
@@ -761,23 +873,6 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"acct-port {server.acct_port}"
             )
 
-    # DHCP pools.  AOS-S runs a DHCP server of its own (``dhcp-server
-    # pool`` / ``dhcp-server enable``, which the parser reads), but this
-    # renderer writes no pool: each is a comment, so that what the
-    # source served is not dropped in silence, and is configured by
-    # hand -- on the switch, or on another server.
-    if tree.dhcp_servers:
-        lines.append("; DHCP pools of the source, not written here.  AOS-S")
-        lines.append("; has a DHCP server of its own (dhcp-server pool,")
-        lines.append("; dhcp-server enable): configure each pool by hand.")
-        for pool in tree.dhcp_servers:
-            summary = (
-                f";   network={pool.network or '?'} "
-                f"gw={pool.gateway or '?'} "
-                f"range={pool.start_ip}-{pool.end_ip}"
-            )
-            lines.append(summary)
-
     # Local users (Tier 2).  AOS-S holds one manager and one operator
     # account (`accounts`): the first user of each role it can take is
     # written, and every other user is a ``review:`` comment that says
@@ -816,41 +911,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # VLANs — the architecturally interesting part.  AOS-S's
     # VLAN-centric port membership is our canonical model's
     # natural form, so this is a direct projection.
-    vlan_ifaces_by_name = {
-        iface.name: iface for iface in tree.interfaces
-        if iface.name.lower().startswith("vlan")
-    }
-    # Pre-index VLAN-id-encoding interfaces so the SVI-IP lookup
-    # below is O(1) per VLAN.  Covers Cisco-style ``Vlan10``, OPNsense
-    # ``vlan0.10`` (the ``<if>`` element value the parser carries
-    # through verbatim from the ``<optN>`` zone), FortiGate
-    # ``port1.10`` dotted form, and any other interface whose name
-    # encodes a VLAN id via :func:`_vlan_iface_id`.  Used to recover
-    # SVI L3 from cross-vendor sources that keep VLAN-id and
-    # SVI-L3 on separate canonical objects (Finding 4 in
-    # ``user_smoke_findings.md`` — OPNsense supergate fixture).
-    iface_by_vlan_id: dict[int, Any] = {}
-    for iface in tree.interfaces:
-        vid = _vlan_iface_id(iface.name)
-        if vid is not None and iface.ipv4_addresses:
-            # VRF-bound IRB / SVI interfaces are NOT absorbable.
-            # AOS-S's ``vlan N { ip address ... }`` stanza has no VRF
-            # concept — collapsing a VRF-bound IRB into the vlan
-            # block would silently strip the routing-instance
-            # binding.  The Junos parser preserves these IRBs as
-            # standalone interfaces (see ``juniper_junos/parse.py``
-            # step 3 — IRBs with VRF bindings are NOT folded onto
-            # their CanonicalVlan); the Aruba renderer must respect
-            # that decision.  Surfaced by the Phase 4 mesh's
-            # batfish_evpntype5_router1 fixture, where TENANT-A and
-            # TENANT-B VRFs each carry irb.<vid> instances whose
-            # IPs were ghosting onto sibling VLAN blocks.
-            if iface.vrf:
-                continue
-            # First match wins — multiple SVIs for the same VLAN id
-            # is a malformed canonical and shouldn't happen in
-            # practice; we'd rather emit one SVI line than zero.
-            iface_by_vlan_id.setdefault(vid, iface)
+    vlan_ifaces_by_name, iface_by_vlan_id = _svi_indexes(tree)
+    # The switch's DHCP server, decided before the VLAN stanzas: a
+    # VLAN that serves a pool states ``dhcp-server`` in its stanza.
+    dhcp = _dhcp(tree, vlan_ifaces_by_name, iface_by_vlan_id)
     # Track which interfaces were absorbed so the per-iface emission
     # loop skips them (otherwise we'd emit `interface vlan0.10` after
     # the L3 was already rolled into `vlan 10`).
@@ -910,7 +974,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             given_back.update(_given_back(tagged, tagged_in_1))
         lines.extend(_said_of(1))
         lines.append("   exit")
-    for vlan in tree.vlans:
+    for index, vlan in enumerate(tree.vlans):
         opens_at = len(lines)
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
@@ -943,19 +1007,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         #      via :func:`_vlan_iface_id` (OPNsense ``vlan0.10``,
         #      FortiGate ``port1.10``, generic ``vlan10``).
         # Honour whichever has data so all three input shapes render
-        # identically.  The corresponding sibling iface is skipped
-        # further down the interface emission loop.
-        addrs = list(vlan.ipv4_addresses)
+        # identically (:func:`_stanza_ipv4`).  The corresponding
+        # sibling iface is skipped further down the interface emission
+        # loop.
         svi_iface = vlan_ifaces_by_name.get(f"Vlan{vlan.id}")
-        if not addrs and svi_iface is not None:
-            addrs = list(svi_iface.ipv4_addresses)
-            if addrs:
-                absorbed_iface_names.add(svi_iface.name)
         id_match = iface_by_vlan_id.get(vlan.id)
-        if not addrs and id_match is not None:
-            addrs = list(id_match.ipv4_addresses)
-            if addrs:
-                absorbed_iface_names.add(id_match.name)
+        addrs, taken_from = _stanza_ipv4(vlan, vlan_ifaces_by_name, iface_by_vlan_id)
+        if taken_from is not None:
+            absorbed_iface_names.add(taken_from.name)
         for addr in addrs:
             lines.append(
                 f"   ip address {addr.ip}/{addr.prefix_length}"
@@ -976,6 +1035,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 lines.append(
                     f"   ipv6 address {addr.ip}/{addr.prefix_length}{suffix}"
                 )
+        # The switch's DHCP server serves on this VLAN: after its
+        # addresses, as the switch prints it (:mod:`.dhcp_pools`).
+        if index in dhcp.serving:
+            lines.append("   dhcp-server")
         # VRRP groups — emit nested ``ip vrrp vrid N`` sub-blocks
         # (Wave B v0.2.0).  AOS-S only mounts VRRP inside ``vlan N``
         # blocks; the canonical model attaches groups to a sibling
@@ -1239,6 +1302,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # says why there is none (:func:`_route_line`).
     for route in tree.static_routes:
         lines.append(_route_line(route))
+
+    # The switch's DHCP server: its pools after every VLAN, and
+    # ``dhcp-server enable`` after the last pool, since the switch
+    # refuses to change a pool while the server is enabled.
+    lines.extend(dhcp.lines)
 
     return "\n".join(lines) + "\n"
 

@@ -31,7 +31,7 @@ CLI lineage but diverge on:
 | `vrf_unsupported.md` | Cisco VRFs parse-and-ignore on Cisco codec; Aruba AOS-S has no VRF concept. |
 | `routing_protocols_unsupported.md` | BGP / OSPF / EIGRP — all parse-and-ignore on both codecs. |
 | `radius.md` | RADIUS host + auth/acct ports round-trip; a key written as typed migrates, a `key 7` / `key 6` is refused (re-enter it). |
-| `dhcp_relay_versus_pool.md` | Cisco's `ip dhcp pool` server config has no Aruba target (the codec writes no `dhcp-server pool`). |
+| `dhcp_relay_versus_pool.md` | Cisco's `ip dhcp pool` server config, written as AOS-S's own `dhcp-server pool` (an update at the top supersedes the body). |
 | `spanning_tree.md` | Cisco PVST+ / rapid-pvst vs Aruba MSTP; canonical field not modelled, Tier 3. |
 
 Retrieved 2026-04-30 to 2026-05-01.

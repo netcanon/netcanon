@@ -615,9 +615,9 @@ def test_each_probe_holds_its_paths(probe: str) -> None:
 
 
 def test_the_check_sees_a_path_that_is_not_written() -> None:
-    """AOS-S writes no DHCP pool: told that every path is supported, the
+    """VyOS writes no DHCP pool: told that every path is supported, the
     check names the pool and its fields."""
-    missing = _not_written("aruba_aoss", "dhcp_pool", classify=lambda _p: "supported")
+    missing = _not_written("vyos", "dhcp_pool", classify=lambda _p: "supported")
     assert set(missing) == set(PROBES["dhcp_pool"][1])
 
 
@@ -628,7 +628,7 @@ def test_the_check_does_not_name_a_path_that_is_written() -> None:
 
 
 def test_the_check_asks_nothing_of_a_path_not_called_supported() -> None:
-    assert _not_written("aruba_aoss", "dhcp_pool", classify=lambda _p: "unsupported") == []
+    assert _not_written("vyos", "dhcp_pool", classify=lambda _p: "unsupported") == []
 
 
 # --- a field of a record that is not written --------------------------------

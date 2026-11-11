@@ -377,8 +377,8 @@ per_field_expectation:
       OpenConfig has no fully-baked DHCP server model in widely-
       deployed Cisco IOS-XE versions; the cisco_iosxe parser
       doesn't attempt to read DHCP XML, so there is nothing for the
-      target to lose.  The aruba_aoss render writes no pool either
-      (``/dhcp-servers/pool`` unsupported; a comment for each pool).
+      target to lose.  The aruba_aoss render writes a ``dhcp-server
+      pool`` for each pool it is given.
 
   snmp:
     disposition: not_applicable

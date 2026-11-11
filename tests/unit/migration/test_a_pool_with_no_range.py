@@ -19,9 +19,10 @@ until it is moved:
 
 * :data:`TOLD` -- the target is written the addresses: the pool reads
   back with a run of its network's hosts, from the end it states, that
-  holds none of the output's own addresses; a ``review`` line and a
-  warning of the job say so.  A pool that can be given no range reads
-  back as no pool, with a review line and a warning.
+  holds none of the output's own addresses; a ``review`` line says so,
+  and the job has a warning for each review line.  A pool that can be
+  given no range reads back as no pool, with a review line and a
+  warning.
 * :data:`NATIVE` -- the platform itself hands out the network of a pool
   with no range, so the pool reads back with its network and nothing
   else need be said.
@@ -74,11 +75,14 @@ CASES: dict[str, dict[str, str]] = {
 #: server with no ``ip-range``; RouterOS's ``ranges`` is "( mandatory
 #: )"; OPNsense will not save a zone with no range; Arista states
 #: nothing a subnet with no ``range`` hands out; Junos's reference of
-#: ``range`` does not say what a range with one end is).  A pool with
-#: neither a range nor a network is not written on IOS-XE and Junos,
-#: where a pool hands out the addresses of its network.
+#: ``range`` does not say what a range with one end is; HPE: AOS-S
+#: discards a pool with no network and range).  A pool with neither a
+#: range nor a network is not written on IOS-XE and Junos, where a pool
+#: hands out the addresses of its network.  The AOS-S output also says
+#: that no VLAN of it serves the pool's interface, ``port2``.
 TOLD = {
-    *((name, case) for name in ("arista_eos", "fortigate_cli", "mikrotik_routeros", "opnsense")
+    *((name, case)
+      for name in ("arista_eos", "aruba_aoss", "fortigate_cli", "mikrotik_routeros", "opnsense")
       for case in ("no range", "one end", "no network")),
     ("juniper_junos", "one end"), ("juniper_junos", "no network"),
     ("cisco_iosxe_cli", "no network"),
@@ -93,8 +97,7 @@ NATIVE = {("cisco_iosxe_cli", "no range"), ("cisco_iosxe_cli", "one end"),
 
 #: The renderer writes no DHCP pool; the matrix says so.
 NO_POOLS = {
-    "aruba_aoscx", "aruba_aoss", "cisco_iosxe", "cisco_iosxr", "cisco_nxos",
-    "dell_os10", "vyos",
+    "aruba_aoscx", "cisco_iosxe", "cisco_iosxr", "cisco_nxos", "dell_os10", "vyos",
 }
 
 #: Not established, or not mended, with the shape each is measured as
@@ -145,8 +148,11 @@ def _told_faults(measured: _Measured) -> list[str]:
     faults = []
     if not measured.review_lines:
         faults.append("no review line")
-    if len(measured.warnings) != 1:
-        faults.append(f"{len(measured.warnings)} DHCP warnings, not one")
+    if len(measured.warnings) != len(measured.review_lines):
+        faults.append(
+            f"{len(measured.warnings)} DHCP warnings for "
+            f"{len(measured.review_lines)} review lines",
+        )
     if measured.case == "no network":
         if measured.pools:
             faults.append("a pool that can be given no range is read back")
@@ -289,7 +295,7 @@ class TestEachCheckFailsOnItsDefect:
              "the range is not of the network's hosts"),
             ({"pools": []}, "0 pools read back"),
             ({"pools": [("", "192.0.2.2", "192.0.2.254")]}, "its network is not read back"),
-            ({"warnings": []}, "0 DHCP warnings, not one"),
+            ({"warnings": []}, "0 DHCP warnings for 1 review lines"),
             ({"text": "config system dhcp server\nend\n"}, "no review line"),
             ({"case": "one end", "pools": [("192.0.2.0/24", "192.0.2.2", "192.0.2.254")]},
              "the stated end is not kept"),

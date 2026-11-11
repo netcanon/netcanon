@@ -1349,6 +1349,42 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An output for AOS-S writes the switch's own DHCP server.**  AOS-S
+  16.x switches serve DHCP themselves (HPE, ArubaOS-Switch Management
+  and Configuration Guide, "DHCPv4 server"), and the parser reads
+  their pools; an output for AOS-S still had a comment for each pool,
+  and the job listed the pool as unsupported.  Each pool is now written
+  as the switch prints one (a committed 2930F capture): `dhcp-server
+  pool "pool-<N>"` after the static routes, with `default-router`,
+  `dns-server`, `domain-name`, `lease DD:HH:MM` or `infinite` (none for
+  the default of one day), `network <address> <mask>` and its `range`
+  lines; `dhcp-server` in the stanza of the VLAN that serves it; and
+  `dhcp-server enable` after the last pool (the server "Defaults to
+  disabled").  A VLAN serves a pool where its stanza holds an address
+  of the pool's network and stands for the pool's interface
+  (`Vlan<N>`, the interface its address is taken from, or a name that
+  encodes the VLAN's id, such as a Junos `irb.<N>`), which is what the
+  parser reads a pool's interface from.  What AOS-S cannot be given as
+  the tree has it is a `; review:` line and a warning of the job, from
+  one function: a pool with no network, or with a range outside it, is
+  not written (HPE: the switch discards a pool with no network and
+  range); a pool that states no range, or one end of one, is written
+  the addresses it hands out less the output's own, in as many `range`
+  lines as that takes; a pool on an interface no VLAN stanza of the
+  output stands for -- a routed port, a bridge, a FortiGate VLAN
+  interface, an OPNsense zone's port -- is served only to clients a
+  DHCP relay forwards to it; a gateway or DNS server that is not IPv4,
+  DNS servers past eight, and a domain that cannot stand between
+  AOS-S's quotes are not written; a lease is written in whole minutes,
+  and one longer than the 99 days of `DD` is not written.  A pool's
+  second range or router, its static bindings and its options are, as
+  before, rows of the sections not translated, onto every target.  The
+  capability matrix declares `/dhcp-servers/pool` supported.  Onto
+  AOS-S the pools of EOS and IOS-XE come back whole over the committed
+  inputs; those of FortiOS, Junos, RouterOS and OPNsense are lossy, for
+  where a pool is served (and, from Junos, for a range the source does
+  not state).  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_dhcp_pool_target.py`.
 - **What a Junos DHCP pool excludes is taken out of the range the
   tree holds, and said.**  A Junos address-assignment pool can
   exclude addresses from what it hands out (`excluded-address <ip>`
@@ -6041,12 +6077,6 @@ timestamp if your timezone matters for an audit.
   says the release's own is not established.  An
   OPNsense zone whose DHCP is present but not enabled is read as a
   pool, and RouterOS writes its server `disabled=no`.
-- **AOS-S writes no DHCP pool.**  A pool is read from an AOS-S config
-  (see "Fixed"), but an output for AOS-S has a comment for each pool,
-  not a `dhcp-server pool` stanza, and the job lists the pool as
-  unsupported.  A pool's second range or router, its static bindings
-  and its options are rows of the sections not translated, onto every
-  target.
 - **An IOS-XE pool is one run of addresses on one interface in the
   tree.**  An IOS-XE pool can hand out several runs of addresses (an
   exclusion in the middle of its network) and its subnet can be on more

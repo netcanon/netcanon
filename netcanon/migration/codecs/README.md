@@ -87,6 +87,11 @@ netcanon/migration/codecs/<vendor>/
 │                       # `dhcp server [vrf]` / `subnet` grammar and
 │                       # an interface's `dhcp server ipv4`, which
 │                       # says where a subnet is served;
+│                       # (aruba_aoss) the writer of the switch's own
+│                       # `dhcp-server pool` stanzas, `dhcp-server` in
+│                       # the VLAN that serves a pool and `dhcp-server
+│                       # enable`, a review line for each it cannot
+│                       # write;
 │                       # (juniper_junos) the writer of an address-
 │                       # assignment pool and its dhcp-local-server
 │                       # group, a whole range for a pool that states
@@ -1254,7 +1259,7 @@ the policy locally:
   network (Junos and Cisco IOS say so; a /31 or /32 is all of it), and
   one that states one end hands out from that end to the network's
   edge; a target that takes no pool without a range (FortiOS, RouterOS,
-  OPNsense, EOS) is written that span, less the addresses the output gives
+  OPNsense, EOS, AOS-S) is written that span, less the addresses the output gives
   its own interfaces (`OwnAddresses`), and so is a Junos pool that states
   one end of its range.  `what_it_hands_out(pool, own)`
   returns `None` for a pool that states its whole range, a `Handed`
