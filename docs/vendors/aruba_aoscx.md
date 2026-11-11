@@ -276,6 +276,15 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **A member, slot, port or LAG numbered 0 at the source is written
+  as 1 here.**  AOS-CX counts each from 1 (HPE gives a LAG id of "1 to
+  256").  With no devices declared, a Junos `ge-0/0/2` is `1/1/2` and
+  `ae0` is `lag 1`.  A port 0 beside a port 1 (`ge-0/0/0` and
+  `ge-0/0/1`), or `ae0` beside `ae1`, is then one name: the job is
+  `partial` and lists both, and an entry in the port map settles it.
+  ⚠️ Up to 0.7.7 such a port was written `0/1/<n>` or `<m>/1/0`, and
+  such a LAG `lag 0`, in a job that said `completed`.  Look for them
+  in an old output.
 - **A VLAN's name is written whole as a target; a host name or VRF
   name is not.**  The switch reads a VLAN's `name` to the end of the
   line (a committed capture prints `name VLAN 11`), so a name with a

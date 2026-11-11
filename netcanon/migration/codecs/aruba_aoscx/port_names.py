@@ -110,17 +110,28 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     re-emit the space-separated ``<keyword> <index>`` form.  ``mgmt`` is
     the constant OOBM port name.
 
+    AOS-CX counts a member, a slot, a port and a LAG from 1
+    (:func:`vsf_switch_port_name` refuses a member or a port below 1;
+    HPE's link-aggregation guides give a LAG id of "1 to 256"), so a
+    number of 0 -- a Junos FPC 0, port 0 or ``ae0``, an IOS XR slot 0,
+    an IOS-XE router's slot 0 -- is written as 1, as a slot of 0
+    already was.  A port of member 0 beside the same port of member 1
+    then has one name, which the run reports as two source names on
+    one name of the output (the job is ``partial``).  Up to 0.7.7 such
+    a port was written ``0/1/<n>`` or ``<m>/1/0``, and such a LAG
+    ``lag 0``: names no AOS-CX switch has, in jobs that said
+    ``completed``.
+
     Returns ``None`` for kinds AOS-CX has no native v1 representation for
     (``breakout`` / ``tunnel`` / ``hw_aggregate`` / ``unknown``) — the
     orchestrator leaves the name verbatim and emits a review warning.
     """
     if identity.kind == "physical":
-        member = identity.stack if identity.stack is not None else 1
-        return f"{member}/{identity.module or 1}/{identity.port or 0}"
+        return f"{identity.stack or 1}/{identity.module or 1}/{identity.port or 1}"
     if identity.kind == "svi":
         return f"vlan {identity.index if identity.index is not None else 1}"
     if identity.kind == "lag":
-        return f"lag {identity.index if identity.index is not None else 1}"
+        return f"lag {identity.index or 1}"
     if identity.kind == "loopback":
         return f"loopback {identity.index if identity.index is not None else 0}"
     if identity.kind == "vtep":

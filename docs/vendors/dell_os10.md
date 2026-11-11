@@ -127,6 +127,19 @@ properly rather than falling through to `unknown`.  The chassis-level
 `interface breakout 1/1/1 map 100g-1x` lines that *declare* the split
 are not ports and do not become interfaces.
 
+OS10 does not stack: as a target, the node is always 1, and a port and
+a port channel count from 1 (a port channel is 1 to 128).  Translated
+from another vendor with no devices declared, a stack member, an FPC or
+a slot is not the node (a Junos `ge-2/0/5` is `ethernet1/1/5`), a port
+0 or LAG 0 is written as 1, and a management port is `mgmt1/1/1`,
+whatever the source numbers it.  Two source ports that end on one name
+(a port 0 beside a port 1, or the same port of two stack members) make
+the job `partial`, with both listed: an entry in the port map settles
+it.  ⚠️ Up to 0.7.7 such ports were written `ethernet0/1/<n>`,
+`ethernet2/1/<n>` or `ethernet1/1/0`, a LAG 0 `port-channel0`, and a
+management port `mgmt1/1/0` or `mgmt0/1/0` -- names OS10 does not
+have -- in jobs that said `completed`.
+
 ## What we don't do
 
 Declared `unsupported` — the loss is reported, never silent:

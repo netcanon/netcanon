@@ -6,6 +6,7 @@ Sources:
 - Juniper: https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html (retrieved 2026-05-01)
 - Juniper: https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html (retrieved 2026-05-01)
 - Arista: https://www.arista.com/en/um-eos/eos-port-channels (retrieved 2026-05-01)
+- Arista: https://www.arista.com/en/um-eos/eos-port-channels-and-lacp (retrieved 2026-11-11)
 
 Citation ids: `junos-lag-overview`, `junos-ae-example`,
 `arista-port-channels`.
@@ -55,16 +56,20 @@ the member interface as `channel-group <N> mode <active | passive |
 on>`.  LACP mode is per-member (not per-LAG); active/passive must
 agree across members.
 
-Naming: `Port-Channel<N>`, **one-based** typically (`Port-Channel1`,
-`Port-Channel2`, ...) — though `Port-Channel0` is technically valid.
+Naming: `Port-Channel<N>`, counted from 1: a channel group's number
+"Values range from 1 through 2000" (Arista, EOS User Manual, Port
+Channels and LACP).  There is no `Port-Channel0`.
 
 ## Mapping notes
 
-- **Index translation.** Junos `ae0` <-> Arista `Port-Channel1` is
-  the documented default convention (zero-based -> one-based).
-  Some operators prefer index-preserving (`ae5` -> `Port-Channel5`);
-  the codec exposes a per-pane override.  Default rename mesh
-  applies the +1 offset.
+- **Index translation.** The number is kept: `ae5` is
+  `Port-Channel5`.  `ae0`, which EOS has no number for, is written
+  `Port-Channel1`, so a Junos `ae0` beside `ae1` is two LAGs on one
+  name: the job is `partial` and lists both, and an entry in the port
+  map (`{"ae0": "Port-Channel10"}`) settles it.  There is no +1
+  offset.  The bare pipeline (`run_plan`, which the demo and the
+  cross-mesh audit use) translates no port names, and writes `ae0`'s
+  members as `channel-group 0`.
 - **LACP mode.** Junos's per-LAG `aggregated-ether-options lacp
   {active|passive}` collapses onto the per-member
   `channel-group N mode {active|passive}` directives in Arista —

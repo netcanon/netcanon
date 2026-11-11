@@ -74,7 +74,11 @@ Three ways, because each has a blind spot of its own.
 1. The target's parser.  It reads its own defaults: what it says is
    there may be a line that is not.
 2. The text, by a reader this module owns for each of the seven
-   grammars that put a VLAN on a port.  The two readings must agree.
+   grammars that put a VLAN on a port.  The two readings must agree,
+   but on a name the job lists two source ports on (``fused_ports``):
+   that is two stanzas of one name, which a switch reads as one (a
+   later list replaces an earlier one) and the reader here reads
+   whole, and the job has said what is wrong with it.
 3. The text again, asking no grammar: a port that has a VLAN and that
    the job reports under a name has that name in a line.  Held on
    every target but one (:data:`NAME_STANDS_IN_A_RANGE`) -- the six
@@ -690,7 +694,11 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
         by_default = {(vid, key(port)) for vid, port in text.by_default}
         by_text = {(vid, key(port), mode) for (vid, port, mode) in text.memberships(universe)}
         _READ["by_text"] += len(by_text)
+        fused = {key(name) for name in job.fused_ports}
         for vid, port, mode in sorted(set(have) ^ by_text):
+            if port in fused:
+                tally["two stanzas of one name"] += 1
+                continue
             where = "the parser" if (vid, port, mode) in have else "the text"
             wrong.append(f"VLAN {vid} {mode} on {port!r}: only {where} reads it")
             tally["readings disagree"] += 1
@@ -1196,10 +1204,9 @@ class TestTheCheckItself:
         assert any("on 'Ethernet0/9' is in the output and in no source membership" in w for w in wrong)
         assert any(f"its name '{self.E1}' is in no line" in w for w in wrong)
 
-    def test_a_parser_that_reads_a_missing_line(self, job: Any) -> None:
-        """A parser reads its own defaults.  One that gives a port with
-        no VLAN line the VLAN the source had would make the lost line
-        read as kept: the text says otherwise."""
+    def _filling_parser(self) -> Any:
+        """The NX-OS parser, and the access VLAN 10 on the first port
+        whatever its stanza says."""
         real = get_codec("cisco_nxos")
         first = self.E1
 
@@ -1214,10 +1221,29 @@ class TestTheCheckItself:
                         iface.switchport_mode, iface.access_vlan = "access", 10
                 return tree
 
+        return Fills()
+
+    def test_a_parser_that_reads_a_missing_line(self, job: Any) -> None:
+        """A parser reads its own defaults.  One that gives a port with
+        no VLAN line the VLAN the source had would make the lost line
+        read as kept: the text says otherwise."""
         job.rendered = job.rendered.replace("  switchport access vlan 10\n", "")
-        verdict = self._judge(job, Fills())
+        verdict = self._judge(job, self._filling_parser())
         assert verdict["tally"]["kept"] == 3, "the stand-in parser did not fill the line in"
         assert len(verdict["wrong"]) == 1 and verdict["wrong"][0].endswith("only the parser reads it")
+
+    def test_two_readings_of_a_fused_name_are_set_apart(self, job: Any) -> None:
+        """...but not where the job lists two source ports on the name:
+        two stanzas of one name read one way by a switch and another by
+        the text, and the job has said so.  Only that name is set apart
+        (the test above is the same output with nothing listed)."""
+        job.rendered = job.rendered.replace("  switchport access vlan 10\n", "")
+        job.status = MigrationJobStatus.partial
+        job.fused_ports = {self.E1: ["Ethernet1", "Ethernet9"]}
+        verdict = self._judge(job, self._filling_parser())
+        assert verdict["wrong"] == []
+        assert verdict["tally"]["two stanzas of one name"] == 1
+        assert verdict["tally"]["listed by the job"] == 1
 
     def test_a_port_the_job_lists_is_set_apart(self, job: Any) -> None:
         job.rendered = job.rendered.replace("  switchport access vlan 10\n", "")

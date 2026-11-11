@@ -177,6 +177,16 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     will get collisions they'll resolve manually via the rename modal
     — the auto-heuristic surfaces the collisions rather than
     silently overlaying.
+
+    EOS counts a port, a lane and a port channel from 1
+    (:func:`fixed_switch_port_name` refuses a port below 1; Arista's
+    manual gives a channel group id that "Values range from 1 through
+    2000"), so a number of 0 -- a Junos port 0 or ``ae0``, a VyOS
+    ``bond0`` -- is written as 1.  Port 0 beside port 1 then has one
+    name, which the run reports as two source names on one name of the
+    output (the job is ``partial``).  Up to 0.7.7 such a port was
+    written ``Ethernet0`` and such a LAG ``Port-Channel0``, names no EOS
+    switch has, in jobs that said ``completed``.
     """
     kind = identity.kind
     if kind == "physical":
@@ -185,7 +195,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         n = identity.port if identity.port is not None else identity.module
         if n is None:
             return None
-        return f"Ethernet{n}"
+        return f"Ethernet{n or 1}"
     if kind == "breakout":
         # 2-part form.  Parent index is the ``port`` or extracted from
         # ``breakout_parent`` (e.g. ``FortyGigabitEthernet1/1/1`` →
@@ -209,7 +219,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
                 parent_port = int(m.group(1))
         if parent_port is None:
             return None
-        return f"Ethernet{parent_port}/{lane}"
+        return f"Ethernet{parent_port or 1}/{lane or 1}"
     if kind == "mgmt":
         n = identity.port or identity.module or 1
         return f"Management{n}"
@@ -217,7 +227,7 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         n = identity.index
         if n is None:
             return None
-        return f"Port-Channel{n}"
+        return f"Port-Channel{n or 1}"
     if kind == "svi":
         n = identity.index
         if n is None:

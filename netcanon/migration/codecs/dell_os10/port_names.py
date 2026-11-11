@@ -188,10 +188,19 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     an inbound Cisco ``TenGigabitEthernet`` and an inbound
     ``GigabitEthernet`` both format as ``ethernet<n>/<s>/<p>``.
 
-    A cross-vendor identity carrying only ``module`` / ``port`` (an NX-OS
-    ``Ethernet1/1``, say) defaults the node segment to ``1`` — OS10 names
-    always carry three segments, so there is no two-segment form to fall
-    back to.
+    The node is always ``1``: OS10 names always carry three segments,
+    and OS10 has no stacking (:func:`os10_port_name`), so no OS10 switch
+    has a node other than 1.  A port and a ``port-channel`` are counted
+    from 1 (Dell's guides give a port-channel id of "1 to 128"), so a
+    number of 0 is written as 1, as a slot of 0 already was; and the
+    management port is OS10's one, ``mgmt1/1/1``.  A port of another
+    stack member, or of member 0, beside the same port of member 1 then
+    has one name, which the run reports as two source names on one name
+    of the output (the job is ``partial``).  Up to 0.7.7 such a port was
+    written ``ethernet0/1/<n>``, ``ethernet2/1/<n>`` or
+    ``ethernet1/1/0``, a LAG ``port-channel0`` and a management port
+    ``mgmt1/1/0`` or ``mgmt0/1/0``: names no OS10 switch has, in jobs
+    that said ``completed``.
 
     Returns ``None`` for kinds OS10 has no native v1 representation for
     (``breakout`` / ``tunnel`` / ``vtep`` / ``hw_aggregate`` /
@@ -204,18 +213,14 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     parent port is not broken out would emit config the device rejects.
     """
     if identity.kind == "physical":
-        node = identity.stack if identity.stack is not None else 1
-        return f"ethernet{node}/{identity.module or 1}/{identity.port or 0}"
+        return f"ethernet1/{identity.module or 1}/{identity.port or 1}"
     if identity.kind == "mgmt":
-        # OS10's out-of-band port is conventionally mgmt1/1/1; honour a
-        # source identity that carried real coordinates, else emit the
-        # convention.
-        node = identity.stack if identity.stack is not None else 1
-        slot = identity.module if identity.module is not None else 1
-        port = identity.port if identity.port is not None else 1
-        return f"mgmt{node}/{slot}/{port}"
+        # OS10 has one out-of-band port, mgmt1/1/1.  The coordinates of
+        # another vendor's management port are not OS10's: an IOS XR
+        # ``MgmtEth0/RP0/CPU0/0`` was written ``mgmt0/1/0``.
+        return "mgmt1/1/1"
     if identity.kind == "lag":
-        return f"port-channel{identity.index if identity.index is not None else 1}"
+        return f"port-channel{identity.index or 1}"
     if identity.kind == "svi":
         return f"vlan{identity.index if identity.index is not None else 1}"
     if identity.kind == "loopback":

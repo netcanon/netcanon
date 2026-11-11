@@ -318,7 +318,7 @@ per_field_expectation:
 
   interfaces[].lag_member_of:
     disposition: good
-    note: "Junos 'set interfaces X ether-options 802.3ad ae<N>' (or 'gigether-options 802.3ad ae<N>') populates CanonicalInterface.lag_member_of. Arista render emits 'channel-group <N+1> mode <active|passive>' on the member interface (zero-based -> one-based index translation)."
+    note: "Junos 'set interfaces X ether-options 802.3ad ae<N>' (or 'gigether-options 802.3ad ae<N>') populates CanonicalInterface.lag_member_of. Arista render emits 'channel-group <N> mode <active|passive>' on the member interface; the port translator keeps the number, and writes ae0, which EOS has no number for, as 1."
     references: [junos-lag-overview, arista-port-channels]
 
   interfaces[].dhcp_client:
@@ -401,7 +401,7 @@ per_field_expectation:
 
   lags:
     disposition: lossy
-    reason: "Vendor-correct LAG rename — Junos 'ae<N>' maps to Arista 'Port-Channel<N+1>' (zero-based -> one-based; default rename mesh) per the documented port-name mesh.  The comparator flags the lag.name string mismatch as drift even though members + LACP mode + min-links round-trip cleanly.  LACP mode (active/passive/static) preserved: Junos 'aggregated-ether-options lacp active' on the LAG -> Arista 'channel-group N mode active' on each member.  Min-links preserved.  Junos's chassis-wide 'aggregated-devices ethernet device-count' has no Arista parallel and drops on render (Arista provisions LAGs on demand)."
+    reason: "LAG rename — Junos 'ae<N>' maps to Arista 'Port-Channel<N>' (the number is kept; the port translator writes ae0, which EOS has no number for, as Port-Channel1).  The comparator flags the lag.name string mismatch as drift even though members + LACP mode + min-links round-trip cleanly.  LACP mode (active/passive/static) preserved: Junos 'aggregated-ether-options lacp active' on the LAG -> Arista 'channel-group N mode active' on each member.  Min-links preserved.  Junos's chassis-wide 'aggregated-devices ethernet device-count' has no Arista parallel and drops on render (Arista provisions LAGs on demand)."
     references: [junos-lag-overview, junos-ae-example, arista-port-channels]
 
   # ── Tier 2 — local users ──
@@ -559,7 +559,7 @@ per_field_expectation:
 #     SSH-public-key authentication, qualified-next-hop) are medium-
 #     confidence — vendor docs are clear and codec policy is documented,
 #     but the cross-vendor render involves decisions (super-user ->
-#     privilege 15, ae<N> -> Port-Channel<N+1>, group flattening,
+#     privilege 15, ae0 -> Port-Channel1, group flattening,
 #     virtual-router -> vrf-without-RT) that operators may want to
 #     override.
 #

@@ -651,6 +651,10 @@ class TestPortNames:
         the fourth segment tells them apart.  Each must reach a DIFFERENT
         name on every other platform -- 39 ports of the one hardware capture
         in the corpus used to collapse onto a single name.
+
+        But one: EOS, AOS-CX and OS10 count a port from 1, and port 0 is
+        written as port 1 there, which the run reports as two source names
+        on one name of the output (``test_a_number_counted_from_1.py``).
         """
         from netcanon.migration.codecs.registry import get_codec
 
@@ -663,8 +667,12 @@ class TestPortNames:
                 )
                 for n in names
             ]
-            assert len(set(out)) == len(names), (
-                f"{target}: {len(names)} XR ports collapsed to "
+            apart = names
+            if target in ("arista_eos", "aruba_aoscx", "dell_os10"):
+                assert out[0] == out[1], (target, out[0], out[1])
+                out, apart = out[1:], names[1:]
+            assert len(set(out)) == len(apart), (
+                f"{target}: {len(apart)} XR ports collapsed to "
                 f"{len(set(out))} names"
             )
 

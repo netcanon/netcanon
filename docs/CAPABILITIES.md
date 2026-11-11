@@ -1569,7 +1569,7 @@ What still says `completed`, and is yours to check:
 * **A Junos next hop that names a unit keeps the old name across
   vendors.**  `next-hop ge-0/0/0.0` onto EOS is `ip route
   10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
-  `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
+  `Ethernet1` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
   RouterOS and VyOS).  With devices declared the plan lists the
   route (`stale_next_hops`); without, nothing does.
 * **Two spellings the target reads as one name.**  IOS-XE onto Junos

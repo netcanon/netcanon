@@ -244,6 +244,15 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
 
 ## Common gotchas
 
+- **A port, lane or port channel numbered 0 at the source is written
+  as 1 here.**  EOS counts each from 1 (a channel group's number
+  "Values range from 1 through 2000", in Arista's manual).  With no
+  devices declared, a Junos `ge-0/0/0` and a VyOS `eth0` are
+  `Ethernet1`, and `ae0` and `bond0` are `Port-Channel1`.  Beside the
+  same name numbered 1, that is one name: the job is `partial` and
+  lists both, and an entry in the port map settles it.  ⚠️ Up to 0.7.7
+  such a name was written `Ethernet0` or `Port-Channel0`, in a job that
+  said `completed`.  Look for them in an old output.
 - **A RADIUS `key 7` is carried to EOS only.**  EOS prints a RADIUS
   key in its own form, `key 7 <blob>`.  It is written back as it was
   onto EOS; onto any other target the server is written with no key,
