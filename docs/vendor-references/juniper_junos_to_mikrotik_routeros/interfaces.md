@@ -66,10 +66,14 @@ interface.  IPv6 link-local addresses are auto-detected from prefix
 
 ## Cross-vendor mapping
 
-* Names: speed-encoded Junos prefix vs flat RouterOS name.  Port-
-  rename mesh maps `ge-0/0/0` -> `ether1` / `etherN` based on slot
-  ordering; 10G+ ports may need operator override (`xe-` / `et-`
-  -> `sfp-sfpplus<N>`).
+* Names: speed-encoded Junos prefix vs flat RouterOS name.  The port
+  translator keeps the port number of a port on FPC 0 or 1 and drops
+  the FPC and PIC (`ge-0/0/5` and `ge-1/0/5` are both `ether5`,
+  `xe-0/0/1` is `sfp-sfpplus1`); a port on another FPC gets a number
+  of its own (`ge-2/0/3` is `ether1003`).  It writes a port 0 as
+  `ether0` or `sfp-sfpplus0`, which RouterOS does not have.  Two
+  ports on one name make the job `partial`; an entry in the port
+  map settles that, and places a port 0.
 * `description` -> `comment=`: free-form, both quote whitespace.
 * `enabled` -> `disabled=`: inverted boolean; Junos `set ... disable`
   vs `delete ... disable` -> RouterOS `disabled=yes` vs `disabled=no`.

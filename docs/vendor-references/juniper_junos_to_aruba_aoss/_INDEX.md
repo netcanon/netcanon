@@ -29,12 +29,12 @@ render path.
 | Topic | Summary |
 |---|---|
 | `vlans.md` | Junos `set vlans NAME vlan-id N` + per-interface `family ethernet-switching vlan members` -> Aruba VLAN-centric `untagged 1-24` / `tagged ...` + absorbed SVI. |
-| `port_naming.md` | Junos `ge-0/0/0` / `ae0` / `irb.100` -> Aruba `1` / `Trk1` / VLAN-absorbed (default rename mesh).  Speed hint and loopback drop. |
+| `port_naming.md` | Junos `ge-0/0/3` / `ae5` / `irb.100` -> Aruba `1/3` / `Trk5` / VLAN-absorbed (default rename mesh; a number is kept, and a 0 is written as 1).  Speed hint and loopback drop. |
 | `ip_addressing.md` | CIDR -> CIDR; v6 link-local discriminator preserved; Junos `irb` units transpose to VLAN-absorbed SVI on Aruba. |
 | `static_routes.md` | Junos `set routing-options static route X/N next-hop Y` -> Aruba `ip route X/N Y`.  Per-VRF / qualified-next-hop / IPv6 lossy. |
 | `snmp.md` | v1/v2c communities + trap-group flatten; v3 USM Junos-only auth/priv variants collapse + passphrase re-key required. |
 | `local_users.md` | Junos `class super-user` / `operator` / `read-only` -> Aruba `manager` / `operator`; `$1$/$5$/$6$` hashes Aruba-incompatible. |
-| `lags.md` | Junos `ae<N>` -> Aruba `Trk<N+1>`; LACP active/passive collapse to `lacp` keyword. |
+| `lags.md` | Junos `ae<N>` -> Aruba `Trk<N>` (the number is kept; `ae0` is written `Trk1`); LACP active/passive collapse to `lacp` keyword. |
 | `system_services.md` | Hostname / DNS round-trip; NTP protocol distinction; domain / syslog / timezone drop on Aruba target (codec parse gap). |
 | `radius.md` | Junos `set system radius-server <host> secret` -> Aruba `radius-server host <ip> key`.  Shared secret cross-decrypt impossible. |
 | `vrf_unsupported.md` | Junos `set routing-instances` actively populated; Aruba has no VRF concept (active drop on render). |

@@ -276,8 +276,9 @@ per_field_expectation:
       ``et-`` = 40/100G) drops on Aruba's bare-numeric form.
       Junos's ``lo0`` has no first-class Aruba analogue (the
       management VLAN serves as the device-self-IP host); render
-      emits a ``;`` comment.  LAG index translates ``ae<N>`` ->
-      ``Trk<N+1>`` (zero-based -> one-based).
+      emits a ``;`` comment.  A LAG keeps its number, ``ae<N>`` ->
+      ``Trk<N>`` (``ae0``, which AOS-S has no number for, is written
+      ``Trk1`` by the port translator).
     references: [junos-iface-naming, aruba-port-naming]
 
   interfaces[].description:
@@ -406,7 +407,7 @@ per_field_expectation:
     note: >
       Junos's ``set interfaces <name> ether-options 802.3ad ae<N>``
       populates ``CanonicalInterface.lag_member_of``; Aruba render
-      emits a ``trunk <port-list> trk<N+1> lacp`` line with the
+      emits a ``trunk <port-list> trk<N> lacp`` line with the
       members reconstructed from the back-pointer list.
     references: [junos-lag-overview, aruba-lags]
 
@@ -596,8 +597,9 @@ per_field_expectation:
   lags:
     disposition: lossy
     reason: >
-      Junos ``ae<N>`` -> Aruba ``Trk<N+1>`` (zero-based ->
-      one-based; codec render maps ``ae0`` -> ``Trk1``).  LACP
+      Junos ``ae<N>`` -> Aruba ``Trk<N>`` (the number is kept; the
+      port translator writes ``ae0`` as ``Trk1``, and the bare
+      pipeline writes it ``trk0``).  LACP
       ``active`` / ``passive`` collapse to a single Aruba ``lacp``
       keyword (Aruba does not distinguish active/passive at the
       trunk-type level).  Static (no ``lacp`` block on Junos) ->
@@ -827,7 +829,7 @@ per_field_expectation:
 #     surfaces are medium-confidence — vendor docs are clear and
 #     codec policy is documented, but cross-vendor render involves
 #     decisions (super-user/operator/read-only -> manager/operator,
-#     ae<N> -> Trk<N+1>, group flattening) that operators may want
+#     ae<N> -> Trk<N>, group flattening) that operators may want
 #     to override.
 #
 # Deferred items (lossy with reason="deferred" or codec-side

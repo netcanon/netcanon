@@ -62,9 +62,13 @@ in supported[].  Render is partial pending wire-up.
 
 ### name
 
-OPNsense ``lagg0`` ↔ RouterOS ``bond1`` — different naming
-conventions (FreeBSD zero-based, RouterOS one-based).  Port-rename
-mesh canonicalises.
+OPNsense ``lagg<N>`` ↔ RouterOS ``bond<N>`` — different naming
+conventions (FreeBSD zero-based, RouterOS one-based).  The port
+translator keeps the number (``lagg5`` is ``bond5``) and writes
+``lagg0`` as ``bond1``, so ``lagg0`` beside ``lagg1`` is two LAGs on
+one name: the job is ``partial`` and lists both.  There is no +1
+offset.  The bare pipeline (``run_plan``) translates no port names,
+and writes the source's name (``name=lagg0``).
 
 ### members
 

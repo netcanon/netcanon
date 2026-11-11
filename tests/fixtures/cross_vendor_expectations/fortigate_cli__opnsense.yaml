@@ -396,8 +396,9 @@ per_field_expectation:
       in a comma-separated ``<members>`` element under
       ``<laggif>laggN</laggif>``.  Both codecs round-trip the
       back-pointer but the LAG name itself differs (``agg1`` versus
-      ``lagg0``); port-rename mesh canonicalises (operator-named ↔
-      zero-based FreeBSD lagg(N)).
+      ``lagg<N>``): the port translator cannot read an operator's
+      name, so the job lists ``agg1``, and an entry in the port map
+      places it.
     references: [fgt-lags, opn-laggs]
 
   interfaces[].dhcp_client:

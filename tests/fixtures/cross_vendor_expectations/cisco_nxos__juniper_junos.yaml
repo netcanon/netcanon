@@ -151,8 +151,8 @@ per_field_expectation:
     disposition: good
     note: >
       Names are carried verbatim by design -- the cross-mesh audit scores name
-      STABILITY; native translation (`Ethernet1/1` -> `xe-0/0/0`) belongs to
-      the orchestrator's port-rename layer, which this path does not engage.
+      STABILITY; native translation belongs to the orchestrator's port-rename
+      layer, which this path does not engage.
       No name drift on either cell where the row set is stable.
     references: [nxos-junos-surface]
 

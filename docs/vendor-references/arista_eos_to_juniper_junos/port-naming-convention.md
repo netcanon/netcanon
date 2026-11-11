@@ -45,8 +45,10 @@ Logical:
   unknown speeds, which may understate 10G/25G/100G ports — the
   operator typically adjusts via the per-pane port-rename surface.
 - **Slot/PIC/port synthesis.** Arista's flat `Ethernet1` maps to
-  Junos `ge-0/0/0` by default (FPC 0, PIC 0, port 0-indexed).  The
-  port number maps 1-indexed → 0-indexed (`Ethernet1` → port 0).
+  Junos `ge-0/0/1` by default (FPC 0, PIC 0).  The port translator
+  keeps the port number, so `Ethernet1` to `Ethernet48` become
+  `ge-0/0/1` to `ge-0/0/48`, not `ge-0/0/0` to `ge-0/0/47`; an entry
+  in the port map renumbers them.
 - **LAG naming.** `Port-Channel10` ↔ `ae10`.  Both use a sequential
   index; the canonical mapping is straightforward.
 - **SVI naming.** `Vlan100` (Arista L3 SVI) ↔ `irb.100` (Junos

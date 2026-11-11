@@ -29,7 +29,7 @@ The asymmetry shapes the cross-pair:
 | Topic | Summary |
 |---|---|
 | `system_services.md` | Hostname / DNS / NTP / timezone / syslog mapping; Junos `set system <X>` -> RouterOS `/system <X>`.  Domain attribute scope mismatch (Junos identity vs RouterOS DNS resolver). |
-| `interfaces.md` | Junos media-prefix names (`ge-0/0/0`) -> RouterOS flat names (`ether1`); per-unit family addressing -> top-level `/ip address` / `/ipv6 address`; loopback / management semantics lossy. |
+| `interfaces.md` | Junos media-prefix names (`ge-0/0/1`) -> RouterOS flat names (`ether1`); per-unit family addressing -> top-level `/ip address` / `/ipv6 address`; loopback / management semantics lossy. |
 | `vlans.md` | Junos named VLANs + per-interface `family ethernet-switching` -> RouterOS two-plane VLAN model (`/interface vlan` Plane 1 + `/interface bridge vlan` Plane 2); SVI absorption round-trips. |
 | `static_routes.md` | Junos `set routing-options static route X/N next-hop Y` -> RouterOS `/ip route add dst-address=X/N gateway=Y`.  Per-VRF routes flatten; preference / metric drift. |
 | `snmp_aaa.md` | v1/v2c clean; v3 USM algorithm overlap MD5/SHA1/SHA256 + DES/AES; engineID-salted passphrases never cross-portable; multi-target trap-host drops to first on RouterOS render. |

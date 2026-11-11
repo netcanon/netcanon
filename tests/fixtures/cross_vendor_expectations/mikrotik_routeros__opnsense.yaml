@@ -418,8 +418,8 @@ per_field_expectation:
       RouterOS ``/interface bonding name=bond1 slaves=ether3,ether4``
       back-points each member to ``bond1``.  OPNsense ``<laggs>/
       <lagg>/<members>opt3,opt4</members>`` carries the back-pointer
-      with different LAG and member names (``bond1`` ↔ ``lagg0``);
-      port-rename mesh canonicalises.
+      with different LAG and member names (``bond1`` ↔ ``lagg1``:
+      the port translator keeps the number).
     references: [opnsense-laggs]
 
   interfaces[].dhcp_client:
@@ -587,7 +587,7 @@ per_field_expectation:
       collapses RouterOS-rich modes: ``broadcast``, ``balance-tlb``,
       ``balance-alb`` have no FreeBSD lagg equivalent and degrade
       with banner.  Naming convention differs (``bond1`` vs
-      ``lagg0``); port-rename mesh canonicalises.  OPNsense codec
+      ``lagg1``: the port translator keeps the number).  OPNsense codec
       parses ``<laggs>`` but its capability matrix doesn't currently
       advertise ``/lag/aggregate``; render is partial pending
       wire-up.  LACP-specific extras (system-priority, key, port-

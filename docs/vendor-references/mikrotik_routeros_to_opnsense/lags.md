@@ -75,9 +75,10 @@ in supported[].  Render is partial pending wire-up.
 
 ### name
 
-RouterOS ``bond1`` ↔ OPNsense ``lagg0`` — different naming
-conventions (RouterOS one-based, FreeBSD zero-based).  Port-rename
-mesh canonicalises.
+RouterOS ``bond<N>`` ↔ OPNsense ``lagg<N>`` — different naming
+conventions (RouterOS one-based, FreeBSD zero-based).  The port
+translator keeps the number: ``bond1`` is ``lagg1``, not ``lagg0``.
+An entry in the port map renumbers it.
 
 ### members
 

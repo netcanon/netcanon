@@ -1201,6 +1201,22 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **The vendor reference pages and expectation YAMLs say what the
+  port translator does with a number.**  Many said a LAG or a port
+  numbered from 0 on one platform was shifted by one on another:
+  Junos `ae<N>` written as AOS-S `Trk<N+1>`, AOS-S `Trk1` as Junos
+  `ae0`, Arista `Ethernet1` and RouterOS `ether1` as Junos
+  `ge-0/0/0`, and OPNsense `lagg0` and `Trk1`, or `Port-Channel1`,
+  "canonicalised" into each other by the rename mesh.  No path does
+  that.  The port translator keeps the number (`ae5` is `Trk5`,
+  `Trk1` is `ae1`, `Ethernet1` is `ge-0/0/1`), and where the target
+  has no 0 it writes a 0 as 1 (`ae0` is `Trk1`, `lagg0` is
+  `Port-Channel1`), so a 0 beside a 1 is one name and the job is
+  `partial`; the bare pipeline, which the demo and the cross-mesh
+  audit use, translates no names.  The pages now say so, and that an
+  entry in the port map renumbers.  Two YAML notes lose an NX-OS
+  example the translator does not produce.  No disposition changes,
+  so no audit artefact moves.
 - **A demo bundle no longer becomes the repository's "Latest"
   release.**  `demo-publish.yml` published each bundle's draft with
   GitHub's default, which marks it Latest, so the next demo publish

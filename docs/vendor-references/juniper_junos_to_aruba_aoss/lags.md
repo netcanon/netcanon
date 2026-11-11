@@ -47,9 +47,13 @@ Canonical `CanonicalLAG(name, members, mode)`.
 
 Junos -> Aruba specifics (per the Junos codec's parse-side state):
 
-* `name`: Junos `ae0` -> Aruba `Trk1` (zero-based -> one-based
-  default mapping; codec render maps `ae<N>` -> `Trk<N+1>`).
-  Operators may override via the port-rename surface.
+* `name`: Junos `ae<N>` -> Aruba `Trk<N>`.  The port translator keeps
+  the number (`ae5` is `Trk5`); `ae0`, which AOS-S has no number for,
+  is written `Trk1`, so `ae0` beside `ae1` is two LAGs on one name:
+  the job is `partial` and lists both, and an entry in the port map
+  settles it.  There is no +1 offset.  The bare pipeline (`run_plan`,
+  which the demo and the cross-mesh audit use) translates no port
+  names, and writes `ae0`'s members as `trunk <ports> trk0`.
 * `members`: the juniper_junos codec parses LAG membership via the
   per-member `ether-options 802.3ad ae<N>` line and stores the
   back-pointer on `CanonicalInterface.lag_member_of`.  Aruba render

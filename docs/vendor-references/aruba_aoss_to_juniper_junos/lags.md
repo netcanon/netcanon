@@ -60,11 +60,10 @@ The canonical model is `CanonicalLAG(name, members, mode)`.
 
 Aruba -> Junos specifics:
 
-* `name`: Aruba `Trk1` -> Junos `ae0` (zero-based default mapping).
-  Junos's per-LAG numeric index is independent of the Aruba `Trk<N>`
-  suffix; the codec render maps `Trk1` -> `ae0`, `Trk2` -> `ae1`,
-  preserving sequential ordering.  Operators may override via the
-  port-rename surface.
+* `name`: Aruba `Trk<N>` -> Junos `ae<N>`.  The port translator, and
+  the Junos renderer on the bare pipeline, keep the number: `Trk1` is
+  `ae1`, `Trk2` is `ae2`.  There is no -1 offset, and `ae0` is used
+  only where an entry in the port map names it (`{"Trk1": "ae0"}`).
 * `members`: list of Aruba member ports (e.g. `1-4`) expands to four
   canonical port records on parse via `_parse_port_list`; Junos
   render emits `set interfaces <renamed> ether-options 802.3ad ae<N>`

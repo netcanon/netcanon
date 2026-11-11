@@ -71,11 +71,13 @@ Plus the back-pointer on each member interface:
 
 Aruba -> OPNsense:
 
-- `lags[].name`: **lossy** — Aruba `Trk1` ↔ OPNsense `lagg0`.  The
-  port-rename mesh handles the conversion via the codec's
-  port-naming delegates.  Aruba's one-based numbering versus
-  FreeBSD's zero-based numbering means a literal `Trk1` does not
-  match `lagg1` — operators expect `Trk1` ↔ `lagg0`.
+- `lags[].name`: **lossy** — Aruba `Trk<N>` ↔ OPNsense `lagg<N>`.
+  Aruba numbers from 1 and FreeBSD from 0, and the port translator
+  keeps the number: `Trk1` is `lagg1`, not `lagg0`.  An entry in the
+  port map renumbers it (`{"Trk1": "lagg0"}`).  The bare pipeline
+  (`run_plan`, which the demo and the cross-mesh audit use)
+  translates no port names, and the OPNsense renderer writes the
+  source's name (`<laggif>trk1</laggif>`).
 - `lags[].members`: **lossy** — Aruba's bare-numeric port list
   (`23-24`) maps to OPNsense's BSD device names (`em22,em23`) via
   the rename mesh.  Aruba's range-syntax expansion (`23-24` → two
@@ -86,7 +88,7 @@ Aruba -> OPNsense:
   / Cisco-equivalent variants; mode degrades.
 - `interfaces[].lag_member_of`: **lossy** — both codecs round-trip
   the back-pointer but the LAG name itself differs (`Trk1` versus
-  `lagg0`).
+  `lagg1`).
 - The OPNsense codec capability matrix does not currently advertise
   `/lag/aggregate` in its supported set; render is partial pending
   wire-up.

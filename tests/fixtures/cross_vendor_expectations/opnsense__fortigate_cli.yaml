@@ -554,8 +554,9 @@ per_field_expectation:
     disposition: lossy
     reason: >
       OPNsense ``lagg<N>`` (FreeBSD lagg(4) driver, zero-based) ↔
-      FortiGate operator-named aggregates.  The rename mesh handles
-      ``lagg0`` ↔ FortiGate ``agg1`` (or any operator-chosen name).
+      FortiGate operator-named aggregates.  The port translator
+      writes ``LAG<N>``, keeping the number and writing ``lagg0`` as
+      ``LAG1``; any other name (``agg1``) is an entry in the port map.
       Members preserve via the rename mesh applied to each member
       name (OPNsense BSD ``em2`` -> FortiGate ``port3``).  Comma-
       separated string on OPNsense becomes space-separated quoted

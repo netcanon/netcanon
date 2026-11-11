@@ -123,7 +123,7 @@ per_field_expectation:
 
   interfaces[].name:
     disposition: lossy
-    reason: "Port-name mesh maps Ethernet1 -> ge-0/0/0 etc; semantic preserved but speed prefix is lost (Arista names carry no speed hint, Junos render defaults to 'ge-' which understates 10G/25G/100G ports). Operators override via the per-pane port-rename surface for non-default mappings."
+    reason: "Port-name mesh maps Ethernet1 -> ge-0/0/1 etc (the port number is kept); semantic preserved but speed prefix is lost (Arista names carry no speed hint, Junos render defaults to 'ge-' which understates 10G/25G/100G ports). Operators override via the per-pane port-rename surface for non-default mappings."
     references: [arista-ethernet-ports, junos-iface-naming]
 
   interfaces[].description:

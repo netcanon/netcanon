@@ -51,9 +51,14 @@ interface Port-Channel10
 
 Canonical fields (`CanonicalLAG`).
 
-- `lags[].name`: **lossy** — OPNsense `lagg0` ↔ Arista
-  `Port-Channel1`.  Zero-based ↔ one-based numbering plus
-  textual-prefix swap; port-rename mesh canonicalises.
+- `lags[].name`: **lossy** — OPNsense `lagg<N>` ↔ Arista
+  `Port-Channel<N>`, a textual-prefix swap.  The port translator
+  keeps the number (`lagg5` is `Port-Channel5`); `lagg0`, which EOS
+  has no number for, is written `Port-Channel1`, so `lagg0` beside
+  `lagg1` is two LAGs on one name: the job is `partial` and lists
+  both, and an entry in the port map settles it.  There is no +1
+  offset.  The bare pipeline (`run_plan`) translates no port names,
+  and writes `lagg0` as `Port-Channel0`.
 - `lags[].members`: **lossy** — OPNsense BSD device names
   (`em2`, `igb1`, …) versus Arista `Ethernet<N>`; rename mesh
   translates.

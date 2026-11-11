@@ -153,8 +153,11 @@ class CanonicalInterface(BaseModel):
 
 Reverse direction (see also `../juniper_junos_to_fortigate_cli/interfaces.md`):
 
-- **name** — `lossy`.  Junos slashes need sanitisation on FortiOS
-  (rename mesh maps `ge-0/0/0` -> `port1` typically).
+- **name** — `lossy`.  Junos slashes need sanitisation on FortiOS.
+  The port translator keeps the port number (`port5` is `ge-0/0/5`,
+  on FPC 0 and PIC 0); a name an operator chose, such as an
+  aggregate's `agg1`, is left as it is and listed, and an entry in
+  the port map places it.
 - **description** — `lossy`.  Junos longer strings truncate at 25
   chars on FortiOS render.
 - **ipv4_addresses** — `lossy`.  Junos's stacked `set address` lines

@@ -340,8 +340,9 @@ per_field_expectation:
       ``lagg<N>`` on each member.  Arista's ``channel-group N
       mode active`` declaration applies the back-pointer as
       ``Port-Channel<N>``.  Both round-trip the back-pointer but
-      the LAG name itself differs (zero-based ``lagg0`` ↔ one-
-      based ``Port-Channel1``); port-rename mesh canonicalises.
+      the LAG name itself differs (``lagg<N>`` ↔ ``Port-Channel<N>``:
+      the port translator keeps the number, and writes ``lagg0`` as
+      ``Port-Channel1``).
     references: [opnsense-laggs, arista-lacp-cg]
 
   interfaces[].dhcp_client:
@@ -483,8 +484,10 @@ per_field_expectation:
     disposition: lossy
     reason: >
       OPNsense ``lagg<N>`` (FreeBSD lagg(4) driver, zero-based) ↔
-      Arista ``Port-Channel<N>`` (capital-C, one-based), so
-      ``lagg0`` ↔ ``Port-Channel1`` via the port-rename mesh.
+      Arista ``Port-Channel<N>`` (capital-C, one-based).  The port
+      translator keeps the number and writes ``lagg0`` as
+      ``Port-Channel1``; the bare pipeline writes it
+      ``Port-Channel0``.
       Member lists round-trip via the rename mesh.  LACP modes:
       OPNsense ``<proto>lacp</proto>`` ↔ Arista ``mode active``
       (FreeBSD always advertises actively, so passive LACP is

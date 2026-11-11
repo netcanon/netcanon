@@ -87,9 +87,12 @@ class CanonicalLAG(BaseModel):
 ```
 
 - **name** — `lossy`.  FortiGate operator-named (`agg1`,
-  `LAG_INTERNAL`) -> Junos integer-keyed (`ae0`).  The FortiGate
-  source string preserves in canonical; Junos render assigns an
-  `ae<N>` integer (operator override via rename mesh recommended).
+  `LAG_INTERNAL`) -> Junos integer-keyed (`ae<N>`).  The FortiGate
+  source string preserves in canonical; the Junos renderer takes the
+  name's trailing number (`agg1` is `ae1`) and numbers a name that
+  has none in order.  The port translator cannot read an operator's
+  name, so the job is `partial` and lists it; an entry in the port
+  map (`{"agg1": "ae0"}`) settles it.
 - **members** — `good` after rename mesh.  FortiGate member names
   (`port2`, `port3`) map to Junos forms (`ge-0/0/2`, `ge-0/0/3`).
 - **mode** — `good`.  `active` / `passive` / `static` all preserve.

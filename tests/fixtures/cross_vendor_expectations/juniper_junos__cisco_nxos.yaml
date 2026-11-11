@@ -129,8 +129,8 @@ per_field_expectation:
     reason: >
       No interface is lost.  Names are carried verbatim by design -- the
       cross-mesh audit scores name STABILITY; native translation
-      (`xe-0/0/0` -> `Ethernet1/1`) belongs to the orchestrator's
-      port-rename layer, which this path does not engage.  Preserved on 10
+      belongs to the orchestrator's port-rename layer, which this path
+      does not engage.  Preserved on 10
       of 11 cells, including `irb.<vid>` units and `fxp0`.  On
       `saidvandeklundert_snmpv3_junos172` the list GAINS a record (49 -> 50):
       the Junos parser folds the address of `irb.698` onto VLAN 698 and keeps

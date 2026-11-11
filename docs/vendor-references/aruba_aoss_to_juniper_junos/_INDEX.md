@@ -25,7 +25,7 @@ through the canonical model despite the syntactic gap.
 | Topic | Summary |
 |---|---|
 | `vlans.md` | Aruba VLAN-centric `untagged 1-24 / ip address X/N` -> Junos `set vlans NAME vlan-id N` + per-interface `family ethernet-switching vlan members`.  Name sanitisation (underscore -> hyphen). |
-| `port_naming.md` | Aruba bare-numeric `1` / `A1` / `1/1` / `Trk1` -> Junos `ge-0/0/0` / `ae0` (default rename mesh).  Speed hint defaults to `ge-`. |
+| `port_naming.md` | Aruba bare-numeric `1` / `1/1` / `Trk1` -> Junos `ge-0/0/1` / `ge-1/0/1` / `ae1` (default rename mesh; a number is kept); `A1` is left for the port map.  Speed hint defaults to `ge-`. |
 | `ip_addressing.md` | CIDR -> CIDR; v6 link-local discriminator preserved; SVI absorption -> Junos `irb` synthesis. |
 | `static_routes.md` | Aruba CIDR + dotted-mask + `ip default-gateway` -> Junos `set routing-options static route X/N next-hop Y`. |
 | `snmp.md` | v1/v2c quoted-community + Operator/Manager mapping; v3 USM passphrases NOT cross-compatible (engineID-derived salt). |
