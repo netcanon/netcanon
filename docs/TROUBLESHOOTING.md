@@ -803,9 +803,8 @@ such name with the source names on it, for example
 `port_rename: multiple source ports map to ...` line for each.  It
 happens where the target's names cannot tell the two apart: an
 AOS-S uplink-module port beside the access port of the same number,
-ports numbered from 0 onto a platform that numbers from 1, two
-aggregates numbered from 0, `Loopback0` and `Loopback1` onto AOS-S,
-which writes both `loopback1`.
+ports numbered from 0 onto a platform that numbers from 1, or two
+aggregates numbered from 0.
 
 *To settle it:* give all but one of the names a target of its own,
 or drop it.  In the rename modal the rows carry the collision mark

@@ -208,8 +208,9 @@ per_field_expectation:
       target render emits via the port-rename mesh, mapping Cisco
       shape to AOS-S bare-numeric / letter-port form.  Without the
       rename mesh, literal Cisco names reach AOS-S CLI and a real
-      device rejects the syntax.  Loopback / Tunnel sources are
-      lossy (AOS-S has no equivalent interface type).  Bare-name
+      device rejects the syntax.  A ``Loopback<N>`` is AOS-S
+      ``interface loopback <N>`` (0-7); a Tunnel is lossy (AOS-S
+      has no tunnel interface).  Bare-name
       stub interfaces with no L3 / VLAN / description content (e.g.
       `GigabitEthernet0/0/4` carrying nothing other than its name)
       are elided by AOS-S render — there is no AOS-S equivalent

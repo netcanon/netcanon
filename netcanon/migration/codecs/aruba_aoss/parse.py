@@ -531,6 +531,29 @@ _PORT_LIST_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: ``interface loopback 1``: a loopback, as the switch prints it, with a
+#: space (HPE, "Managing loopback interfaces": ``interface loopback
+#: <0-7>``; the context's prompt is ``lo-1``).  :data:`_IFACE_HEADER_RE`
+#: takes one word and read none of it.  ``interface loopback1`` is read
+#: the same.  The record is ``loopback1``: a port name is one word.
+_LOOPBACK_HEADER_RE = re.compile(
+    r"^interface[ \t]+loopback[ \t]*(\d+)[ \t]*$", re.IGNORECASE,
+)
+
+#: An address on a loopback, given with no mask: "when you configure an
+#: IP address for a loopback interface, you do not specify a network
+#: mask" (HPE, "Configuring a loopback interface"), and the switch
+#: prints it so (``ip address 10.1.1.1``).  The mask is
+#: 255.255.255.255.  An IPv6 address on a loopback is given with no
+#: prefix either.  Read only in a loopback's stanza
+#: (:func:`_read_a_host_address`).
+_IP_ADDR_HOST_RE = re.compile(
+    r"^ip[ \t]+address[ \t]+(\d+\.\d+\.\d+\.\d+)$", re.IGNORECASE,
+)
+_IPV6_ADDR_HOST_RE = re.compile(
+    r"^ipv6[ \t]+address[ \t]+([0-9A-Fa-f]*:[0-9A-Fa-f:.]*)$", re.IGNORECASE,
+)
+
 #: A line that enters a context the top of the config reads nothing
 #: of.  It still ends the context that was open.  (``vlan N``,
 #: ``interface X``, ``oobm`` and ``dhcp-server pool <name>`` end it as
@@ -623,6 +646,7 @@ _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _DHCP_POOL_HEADER_RE,
     _DHCP_SERVER_LINE_RE,
     _VLAN_HEADER_RE,
+    _LOOPBACK_HEADER_RE,
     _PORT_LIST_HEADER_RE,
     _IFACE_HEADER_RE,
 )
@@ -1039,6 +1063,9 @@ def _infer_iface_type(name: str) -> str:
         return "ianaift:ieee8023adLag"
     if lower.startswith("vlan"):
         return "ianaift:l3ipvlan"
+    if re.fullmatch(r"loopback\d+", lower):
+        # The record ``interface loopback <N>`` makes.
+        return "ianaift:softwareLoopback"
     return "ianaift:ethernetCsmacd"
 
 
@@ -1328,12 +1355,38 @@ def _fresh_record(name: str) -> CanonicalInterface:
     return CanonicalInterface(name=name, enabled=True, interface_type=_infer_iface_type(name))
 
 
+def _read_a_host_address(iface: CanonicalInterface, stripped: str) -> bool:
+    """Read *stripped*, a line of a loopback's stanza, into *iface* if it
+    is an address given with no mask (:data:`_IP_ADDR_HOST_RE`): a host
+    address, /32 or /128.  An address with a mask or a prefix is read
+    as it is written, by the lines every interface reads.
+
+    Returns:
+        Whether the line was such an address.
+    """
+    v4 = _IP_ADDR_HOST_RE.match(stripped)
+    if v4:
+        iface.ipv4_addresses.append(CanonicalIPv4Address(ip=v4.group(1), prefix_length=32))
+        return True
+    v6 = _IPV6_ADDR_HOST_RE.match(stripped)
+    if v6:
+        try:
+            iface.ipv6_addresses.append(CanonicalIPv6Address(
+                ip=v6.group(1), prefix_length=128, scope="global",
+            ))
+        except ValueError:
+            pass
+        return True
+    return False
+
+
 def _parse_interface_stanza(
     lines: list[str],
     start: int,
     iface_name: str,
     into: CanonicalInterface | None = None,
     vlan_lines: list[re.Match[str]] | None = None,
+    loopback: bool = False,
 ) -> tuple[CanonicalInterface, int]:
     """Parse an ``interface X`` stanza starting at *start*.
 
@@ -1352,6 +1405,8 @@ def _parse_interface_stanza(
             records, which the caller holds; the caller applies them
             once the stanza is read (:class:`_Memberships`).  ``None``
             reads them and keeps nothing.
+        loopback: The stanza is a loopback's, whose addresses are given
+            with no mask (:func:`_read_a_host_address`).
 
     Returns the parsed :class:`CanonicalInterface` and the index of
     the first line AFTER the stanza's ``exit``.
@@ -1392,6 +1447,10 @@ def _parse_interface_stanza(
 
         if stripped == "disable":
             iface.enabled = False
+            i += 1
+            continue
+
+        if loopback and _read_a_host_address(iface, stripped):
             i += 1
             continue
 
@@ -2690,9 +2749,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i += 1
             continue
 
-        im = _IFACE_HEADER_RE.match(stripped_line) or _PORT_LIST_HEADER_RE.match(stripped_line)
+        loopback = _LOOPBACK_HEADER_RE.match(stripped_line)
+        im = (
+            loopback
+            or _IFACE_HEADER_RE.match(stripped_line)
+            or _PORT_LIST_HEADER_RE.match(stripped_line)
+        )
         if im:
-            iface_name = one_spelling(im.group(1).strip('"'))
+            # ``interface loopback 1`` is the loopback ``loopback1``.
+            iface_name = (
+                f"loopback{loopback.group(1)}" if loopback
+                else one_spelling(im.group(1).strip('"'))
+            )
             # ``interface 1-4`` or ``interface 1,3``: a context for the
             # ports the header names, and no record named after the
             # list.  Its VLAN lines are each port's; anything else it
@@ -2705,6 +2773,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             vlan_lines: list[re.Match[str]] = []
             iface, next_i = _parse_interface_stanza(
                 lines, i + 1, iface_name, into=earlier, vlan_lines=vlan_lines,
+                loopback=loopback is not None,
             )
             if several:
                 if iface != _fresh_record(iface_name):

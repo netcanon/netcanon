@@ -39,8 +39,9 @@ or modular chassis (`interface A1`, `interface A4`).
 LAGs use `Trk<N>` (`interface Trk1`).  VLAN SVIs are absorbed into
 the `vlan <id>` stanza (no separate `interface Vlan<N>` block on
 AOS-S — the `absorbs_svi_into_vlan: true` codec class-var captures
-this).  No first-class loopback family — operators emulate via an
-empty VLAN with an SVI address.
+this).  Loopbacks are `interface loopback <0-7>`, with a space, each
+with addresses given with no mask (Aruba Basic Operation Guide,
+"Managing loopback interfaces").
 
 Interfaces carry an operator-friendly `name "..."` attribute that
 populates `CanonicalInterface.description` on parse (Aruba's bare
@@ -72,11 +73,13 @@ The `default_name` discriminator (RouterOS factory binding) is
 meaningless to Aruba and drops on cross-vendor render — Aruba does
 not have factory-default-name semantics.
 
-Loopback emulation lifts cleanly: RouterOS empty-bridge with `/ip
-address` populates `CanonicalInterface` with `interface_type` =
-`softwareLoopback` via codec inference; Aruba target render
-synthesises a placeholder VLAN id for the loopback SVI (with a
-banner directing the operator to choose an unused VLAN id).
+RouterOS 7's own loopback, `lo`, is AOS-S `interface loopback 0`,
+its address written with no mask.  An empty bridge used as a
+loopback is a bridge to the parser (its type is `bridge`, and the
+classifier reads no port in a name like `lo0`), and AOS-S has no form
+for a bridge: the name is left as it is, written `interface lo0`
+with its address, and the job is `partial` and lists it, for an
+entry in the port map to settle.
 
 ### Disposition
 
@@ -86,4 +89,4 @@ banner directing the operator to choose an unused VLAN id).
 | `interfaces[].default_name` | not_applicable on Aruba target (Aruba has no factory binding) |
 | `interfaces[].description` | good (RouterOS `comment=` <-> Aruba `name "..."`) |
 | `interfaces[].interface_type` | lossy (inferred from name shape on both codecs) |
-| Loopback emulation | lossy (empty-bridge -> synthetic VLAN; operator must pick VLAN id) |
+| Loopback | good for RouterOS 7 `lo` -> `loopback 0`; an empty-bridge loopback is left under its name and holds the job (`partial`) |

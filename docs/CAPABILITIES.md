@@ -424,7 +424,7 @@ text").
 | `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
 | `/routing/static-route/vrf` | Unsupported | AOS-S has no VRF (HPE's routing guide names none): a route in a VRF is left out under a `; review:` line rather than written into the switch's one table. |
 | `/routing/static-route/interface` | Lossy (error) | AOS-S takes an address, `vlan <id>`, `reject` or `blackhole` as a next hop.  A route to `Null0` is written `blackhole` and one out a VLAN interface `vlan <id>`; a route out any other interface is left out under a `; review:` line.  The job is `partial` for any route that names an interface, since the matrix reads the field and not its value. |
-| `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
+| `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan, `loopback<N>` → softwareLoopback). |
 | `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's passphrase and AOS-S derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmpv3 user` line, and the `snmpv3 group` binding drops with it) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from AOS-S itself; re-key the v3 user on the target. |
@@ -1364,8 +1364,7 @@ capability matrix has no path for:
   of two interfaces is written as one.  Aruba AOS-S `1/1` and the
   uplink-module port `1/A1` are both `Ethernet1` on EOS; VyOS `eth0`
   and `eth1` are both `port1` on FortiOS, which numbers from 1; Junos
-  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; IOS-XE
-  `Loopback0` and `Loopback1` are both `loopback1` on AOS-S.
+  `ae0` and `ae1` are both `Port-channel1` on IOS-XE.
   Any two names count — a LAG or a loopback as much as a port —
   and they are compared as each platform tells interfaces apart
   (`Trk1` and `trk1` are one port on AOS-S; `DMZ` and `dmz` are two

@@ -264,8 +264,9 @@ per_field_expectation:
       records.
       aruba_aoss says why in its own matrix: it does not declare IANA ifType
       and infers the type from interface-name shape (bare number -> ethernet,
-      `Trk` -> port-channel, `Vlan` -> l3ipvlan).  No VyOS netdev name matches
-      the `Trk` or `Vlan` shapes, so every record falls through to ethernet.
+      `Trk` -> port-channel, `Vlan` -> l3ipvlan, `loopback<N>` ->
+      softwareLoopback).  No VyOS netdev name matches the `Trk`, `Vlan` or
+      `loopback<N>` shapes, so every record falls through to ethernet.
       That makes the gained value WRONG on three `kitchen_sink.conf` records:
       `lo` (a loopback), `dum0` (a dummy netdev) and `bond0` (a bundle) all
       come back declared `ianaift:ethernetCsmacd`.  A migration report that

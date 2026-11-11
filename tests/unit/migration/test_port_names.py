@@ -247,12 +247,12 @@ class TestCiscoToAruba:
         """AOS-S 16.04+ DOES support `interface loopback <0-7>` per
         the Aruba Basic Operation Guide ("Managing loopback
         interfaces" chapter).  Loopback0 from a source vendor maps
-        to AOS-S `loopback1` (lo-0 is reserved for the auto-assigned
-        ::1/128 IPv6 loopback so user-creatable IDs start at 1)."""
+        to AOS-S `loopback0`: loopback 0 takes addresses of its own,
+        and a loopback keeps its number."""
         src = CiscoIOSXECLICodec()
         tgt = ArubaAOSSCodec()
         ident = src.classify_port_name("Loopback0")
-        assert tgt.format_port_identity(ident) == "loopback1"
+        assert tgt.format_port_identity(ident) == "loopback0"
 
     def test_loopback_indices_above_seven_return_none(self):
         """AOS-S only supports loopback 0-7; higher indices have
@@ -386,7 +386,7 @@ class TestSviAbsorption:
         assert not any("Vlan100" in w for w in result.warnings)
         # Loopback maps cleanly (AOS-S supports loopback) — no warning.
         assert not any("Loopback0" in w for w in result.warnings)
-        assert result.applied.get("Loopback0") == "loopback1"
+        assert result.applied.get("Loopback0") == "loopback0"
         # Tunnel still warns (AOS-S has no tunnel concept) — regression
         # coverage for "we didn't accidentally silence everything".
         assert any("Tunnel99" in w and "tunnel" in w for w in result.warnings)
@@ -671,18 +671,17 @@ class TestOrchestrator:
 
         # Interfaces — physical ones rewritten; Vlan10 stays verbatim
         # (SVI has no AOS-S port-name form — the Aruba renderer handles
-        # VLAN L3 via the VLAN stanza itself).  Loopback0 NOW
-        # translates cleanly to AOS-S `loopback1` (16.04+ supports
-        # `interface loopback <N>`); previously it was passed through
-        # as a warn-and-leave-verbatim case.
+        # VLAN L3 via the VLAN stanza itself).  Loopback0 is AOS-S
+        # `loopback0` (16.04+ supports `interface loopback <0-7>`, and
+        # loopback 0 takes addresses of its own).
         names = [i.name for i in intent.interfaces]
         assert "1/1" in names
         assert "1/2" in names
         assert "1/3" in names
         # Vlan10 stays verbatim.
         assert "Vlan10" in names
-        # Loopback0 → loopback1 (Aruba representation).
-        assert "loopback1" in names
+        # Loopback0 → loopback0: the number is kept.
+        assert "loopback0" in names
         assert "Loopback0" not in names
 
         # VLAN port lists rewritten consistently.
@@ -741,12 +740,12 @@ class TestOrchestrator:
         transform(intent)
         assert intent.interfaces[0].name == "1/1"
         assert "GigabitEthernet1/0/1" in result.applied
-        # Loopback0 maps cleanly to AOS-S `loopback1` — no warning,
+        # Loopback0 maps cleanly to AOS-S `loopback0` — no warning,
         # not auto-dropped.  SVI Vlan10 suppressed because Aruba
         # absorbs SVI into VLAN stanza.
         assert not any("Loopback0" in w for w in result.warnings)
         assert "Loopback0" not in result.dropped
-        assert result.applied.get("Loopback0") == "loopback1"
+        assert result.applied.get("Loopback0") == "loopback0"
 
 
 class TestAutoDropUnmappable:

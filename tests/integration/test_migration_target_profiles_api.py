@@ -179,10 +179,10 @@ class TestPlanWithRenameMap:
         assert "GigabitEthernet1/0/1" in body["port_renames"]
         assert body["port_renames"]["GigabitEthernet1/0/1"] == "1/1"
         assert body["port_renames"]["Port-channel1"] == "Trk1"
-        # Loopback0 maps cleanly to AOS-S `loopback1` (16.04+
-        # supports `interface loopback <N>`); auto-heuristic produces
-        # the rewrite, no warning needed.
-        assert body["port_renames"]["Loopback0"] == "loopback1"
+        # Loopback0 is AOS-S `loopback0` (16.04+ supports `interface
+        # loopback <0-7>`, and a loopback keeps its number);
+        # auto-heuristic produces the rewrite, no warning needed.
+        assert body["port_renames"]["Loopback0"] == "loopback0"
 
     def test_plan_with_explicit_rename_map_wins_over_auto(
         self, client: TestClient,

@@ -60,9 +60,9 @@ per-pane port-rename mesh:
 * Arista `Ethernet1/1` -> Aruba `1/1` (stack form).
 * Arista `Port-Channel1` -> Aruba `Trk1` (capital-C drops; codec
   helper strips the prefix and emits the Aruba `Trk<N>` form).
-* Arista `Loopback0` / `Vlan100` -> Aruba does not model
-  loopbacks; SVIs absorb into the VLAN stanza (no separate
-  `interface Vlan100` directive on Aruba).
+* Arista `Loopback0` -> Aruba `interface loopback 0` (the number
+  is kept; see below).  `Vlan100` -> SVIs absorb into the VLAN
+  stanza (no separate `interface Vlan100` directive on Aruba).
 
 Speed-hint inference:
 
@@ -74,10 +74,15 @@ Speed-hint inference:
 
 Loopback and Vxlan interface types:
 
-* Arista's `Loopback0` (router-id / VTEP) has no Aruba equivalent
-  on the `aruba_aoss` codec — Aruba does support loopback
-  interfaces in firmware but the codec does not advertise the
-  path; Aruba render drops `Loopback<N>` records.
+* Arista's `Loopback0` (router-id / VTEP) is AOS-S `interface
+  loopback 0`.  AOS-S takes `interface loopback <0-7>`, with a
+  space, each with up to 32 addresses given with no mask (HPE:
+  "when you configure an IP address for a loopback interface, you
+  do not specify a network mask").  An address with a prefix
+  shorter than a host's is written as the host address under a
+  `; review:` line; a `Loopback<N>` above 7 has no AOS-S name, and
+  the job is `partial` and lists it.  Up to 0.7.7 `Loopback0` was
+  written `loopback1`, with the address in CIDR form.
 * Arista's `Vxlan1` (VTEP) drops with the rest of the VXLAN
   surface — see `vxlan_unsupported.md`.
 
@@ -85,10 +90,10 @@ The Arista synthetic kitchen-sink uses Ethernet1-7,
 Port-Channel10, Port-Channel20, Loopback0, Management1, Vlan100,
 Vlan200, Vxlan1 — exercising all the canonical interface
 shapes.  The bare `Ethernet<N>` and `Port-Channel<N>` forms
-rename to Aruba's bare-numeric / `Trk<N>` cleanly; loopback and
-vxlan drop.
+rename to Aruba's bare-numeric / `Trk<N>` cleanly; `Loopback0`
+is `loopback 0`; vxlan drops.
 
 Disposition: **good** for `Ethernet<N>` -> bare-numeric (no
-speed-loss); **lossy** for `Port-Channel<N>` -> `Trk<N>`
-capitalisation flip; **unsupported** for `Loopback<N>` /
-`Vxlan<N>` (Aruba target has no render path).
+speed-loss) and for `Loopback<N>` (0-7) -> `loopback <N>`;
+**lossy** for `Port-Channel<N>` -> `Trk<N>` capitalisation flip;
+**unsupported** for `Vxlan<N>` (Aruba target has no render path).

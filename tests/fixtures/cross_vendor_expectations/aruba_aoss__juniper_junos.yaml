@@ -256,9 +256,10 @@ per_field_expectation:
       Speed hint defaults to ``ge-`` (gigabit) since AOS-S carries
       no speed prefix; 10G / 25G / 100G ports require operator
       override via the per-pane port-rename surface (typically
-      ``xe-`` / ``mge-`` / ``et-``).  Aruba has no first-class
-      loopback construct; Junos's ``lo0.0`` does not arise from
-      Aruba parse.
+      ``xe-`` / ``mge-`` / ``et-``).  An AOS-S ``interface
+      loopback <N>`` is read as ``loopback<N>``; through the port
+      translator ``loopback0`` is ``lo0``, and a second loopback,
+      which Junos has no global form for, is dropped and listed.
       The audit's own path translates no name, and there the names
       are carried verbatim: preserved on 6 of the 7 cells, each of
       which populates interfaces.  On

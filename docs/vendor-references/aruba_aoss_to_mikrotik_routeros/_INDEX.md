@@ -19,7 +19,7 @@ L3-by-default).
 | Topic | Summary |
 |---|---|
 | `system_services.md` | Hostname (Aruba quoted -> RouterOS bare) / DNS (priority -> comma-list) / SNTP-vs-NTP / minute-offset timezone -> tz-database name. |
-| `interface_naming.md` | Aruba bare-numeric / `Trk<N>` -> RouterOS `etherN` / `bond<N>`.  Loopback emulation (Aruba VLAN-SVI vs RouterOS empty-bridge). |
+| `interface_naming.md` | Aruba bare-numeric / `Trk<N>` -> RouterOS `etherN` / `bond<N>`.  An AOS-S `interface loopback <N>` is a RouterOS empty bridge. |
 | `ip_addressing.md` | CIDR <-> CIDR; v6 link-local discriminator preserved. |
 | `vlans.md` | Aruba VLAN-centric -> RouterOS two-plane model (`/interface vlan` for L3 + bridge-VLAN filtering for L2).  Plane-2 wire-up partial in v1. |
 | `switching_model.md` | Philosophy mismatch — Aruba L2-by-default vs RouterOS L3-by-default.  L2 features (DHCP-snooping, ARP-protect, BPDU-guard) drop on cross-pair. |

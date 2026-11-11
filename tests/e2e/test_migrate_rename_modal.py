@@ -159,14 +159,15 @@ class TestRenameModalDrop:
     def test_a_loopback_is_renamed_not_dropped(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
-        # ``Loopback0`` is given the first loopback an operator can
-        # create on AOS-S and is rendered with its address; the job
-        # drops nothing for this config.  (That the source name is not
-        # in the output says nothing: no AOS-S output has it.)
+        # ``Loopback0`` is AOS-S loopback 0 (a loopback keeps its
+        # number) and is rendered with its address, which AOS-S takes
+        # with no mask; the job drops nothing for this config.  (That
+        # the source name is not in the output says nothing: no AOS-S
+        # output has it.)
         output = page.locator('[data-testid="migrate-output"]')
         rendered = (output.text_content() or "").splitlines()
-        assert "interface loopback1" in rendered
-        assert "   ip address 1.1.1.1/32" in rendered
+        assert "interface loopback 0" in rendered
+        assert "   ip address 1.1.1.1" in rendered
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         # Its row says so.  (A section with nothing to attend to
         # starts folded, so the row is read, not looked for on screen.)
@@ -175,7 +176,7 @@ class TestRenameModalDrop:
         assert "has-auto-drop" not in (row.get_attribute("class") or "").split()
         expect(
             page.locator('[data-testid="migrate-rename-auto-Loopback0"]')
-        ).to_have_text("loopback1")
+        ).to_have_text("loopback0")
         expect(
             page.locator('[data-testid="migrate-rename-drop-Loopback0"]')
         ).to_have_text("drop")
@@ -197,7 +198,7 @@ class TestRenameModalDrop:
         mp.submit_and_wait()
         output = page.locator('[data-testid="migrate-output"]')
         rendered = output.text_content() or ""
-        assert "interface loopback1" in rendered.splitlines()
+        assert "interface loopback 0" in rendered.splitlines()
         assert "tunnel" not in rendered.lower() and "10.9.9.1" not in rendered
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         row = page.locator('[data-testid="migrate-rename-row-Tunnel0"]')

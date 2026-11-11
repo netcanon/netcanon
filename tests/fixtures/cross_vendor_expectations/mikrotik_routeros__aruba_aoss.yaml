@@ -179,10 +179,10 @@ per_field_expectation:
       ``default_name`` discriminator is meaningless to Aruba and
       drops on cross-vendor render; (3) ``interface_type`` is
       lossy by both codecs' capability matrices (inferred from
-      the name shape on both); (4) Loopback emulation (RouterOS
-      empty-bridge with /ip address) lifts only awkwardly to
-      Aruba's VLAN-SVI form — Aruba has no first-class loopback,
-      so the codec must allocate a placeholder VLAN id; (5)
+      the name shape on both); (4) a RouterOS loopback: RouterOS
+      7's own ``lo`` is AOS-S ``interface loopback 0``; an empty
+      bridge used as one is a bridge, which AOS-S has no form for,
+      so its name is left as it is and the job is ``partial``; (5)
       ``mtu`` is not parsed by the aruba_aoss codec on its own
       side, so the field drops on Aruba render; (6) ``vrf`` is
       structurally absent on Aruba target.

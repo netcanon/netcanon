@@ -151,7 +151,8 @@ per_field_expectation:
       The anchor renders but the value does not survive the round
       trip. AOS-S does not declare IANA ifType; the codec infers type
       from interface-name shape (bare number -> ethernet, 'Trk' ->
-      port-channel, 'Vlan' -> l3ipvlan). Measured over 1 cell: drifted
+      port-channel, 'Vlan' -> l3ipvlan, 'loopback<N>' ->
+      softwareLoopback). Measured over 1 cell: drifted
       on 1, preserved on 0, both sides empty on 0.
     references: [os10-aoss-surface]
 

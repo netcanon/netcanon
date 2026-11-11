@@ -62,9 +62,12 @@ per-pane port-rename mesh:
   10G prefix is dropped).
 * Junos `ae<N>` -> Aruba `Trk<N>` (the number is kept; `ae0` is
   written `Trk1`).
-* Junos `lo0.0` -> no Aruba equivalent; AOS-S has no first-class
-  loopback construct (the management VLAN serves as the
-  device-self-IP host).  The codec render emits a `;` comment.
+* Junos `lo0` (its unit 0) -> Aruba `interface loopback 0`, and
+  `lo0.<N>` -> `interface loopback <N>`, up to 7: AOS-S takes
+  `interface loopback <0-7>`, its addresses given with no mask.  A
+  loopback the source holds down is refused with a review line (no
+  AOS-S form is known for one).  Up to 0.7.7 `lo0` and `lo0.1` were
+  both written `loopback1`.
 * Junos `irb.100` -> Aruba VLAN-absorbed SVI.  The canonical model
   records the IRB addresses on `CanonicalVlan.ipv4_addresses` (via
   the `l3-interface irb.<id>` link); Aruba render emits the `ip
@@ -91,5 +94,5 @@ LAG name index:
   `Trk1`, so `ae0` beside `ae1` is two LAGs on one name (the job is
   `partial`).
 
-Disposition: **lossy** for the speed hint, sub-interface tagging,
-and loopback (no Aruba equivalent).
+Disposition: **lossy** for the speed hint and sub-interface
+tagging; **good** for a loopback numbered 0-7.

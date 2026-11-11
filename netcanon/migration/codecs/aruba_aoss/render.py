@@ -217,6 +217,84 @@ def _as_the_device_writes(name: str) -> str:
     return name if number is None else f"Trk{number}"
 
 
+#: A loopback as a parsed tree names it: ``loopback1`` (this codec's
+#: parser), ``Loopback0`` (IOS-XE, EOS, IOS XR), ``loopback 0``
+#: (AOS-CX).
+_LOOPBACK_NAME_RE = re.compile(r"loopback ?(\d+)", re.IGNORECASE)
+
+
+def _stanza_name(name: str) -> str:
+    """The name the ``interface`` line of *name*'s stanza gives it.
+
+    A loopback's is ``loopback <N>``, with a space: HPE gives the
+    command as ``interface loopback <0-7>``, and the switch prints it
+    so.  Any other name is :func:`_as_the_device_writes`'s.  (Only a
+    stanza's header has the space: a name with one in it would not
+    stand in a port list.)
+    """
+    loopback = _LOOPBACK_NAME_RE.fullmatch(name)
+    if loopback:
+        return f"loopback {loopback.group(1)}"
+    return _as_the_device_writes(name)
+
+
+def _a_disabled_loopback(iface: Any) -> str | None:
+    """The sentence that refuses *iface*, a loopback the tree holds
+    disabled, or None for one that is up.
+
+    No HPE guide read gives an AOS-S loopback a way to be down: its
+    ``lo-<N>`` context is shown taking addresses and ``ip ospf`` (HP
+    ProCurve Management and Configuration Guide, "Configuring a
+    loopback interface"), and this renderer has never written
+    ``enable`` or ``disable`` there.  Written, a loopback the source
+    holds down would be up, and its addresses with it; it is not
+    written, and the output says so where its stanza would be.
+    """
+    if iface.enabled:
+        return None
+    return (
+        f"interface {iface.name} is disabled, and no AOS-S form is known "
+        f"for a loopback that is down; not written"
+    )
+
+
+def _loopback_addresses(iface: Any) -> tuple[list[str], list[str]]:
+    """The address lines of a loopback's stanza, and a warning for each
+    address written otherwise than the tree holds it.
+
+    HPE: "when you configure an IP address for a loopback interface,
+    you do not specify a network mask".  The address is a host address
+    (255.255.255.255), and the switch prints it with no mask
+    (``ip address 10.1.1.1``).  An IPv6 address on a loopback is given
+    with no prefix either.  An address the tree holds with a shorter
+    prefix is written as the host address it is on the switch, under a
+    review line that says what it was.  A link-local address is
+    written as it was before this was known.
+    """
+    lines: list[str] = []
+    warnings: list[str] = []
+
+    def host(ip: str, prefix: int, full: int) -> None:
+        if prefix != full:
+            said = (
+                f"{ip}/{prefix} is written as a host address: an AOS-S "
+                f"loopback takes no mask"
+            )
+            lines.append(f"   ; review: {said}")
+            warnings.append(f"{iface.name}: {said}")
+
+    for addr in iface.ipv4_addresses:
+        host(addr.ip, addr.prefix_length, 32)
+        lines.append(f"   ip address {addr.ip}")
+    for v6 in iface.ipv6_addresses:
+        if v6.scope == "link-local":
+            lines.append(f"   ipv6 address {v6.ip}/{v6.prefix_length} link-local")
+            continue
+        host(v6.ip, v6.prefix_length, 128)
+        lines.append(f"   ipv6 address {v6.ip}")
+    return lines, warnings
+
+
 def _lag_mode_to_aos_type(mode: str) -> str:
     """Canonical LAG mode -> AOS-S ``trunk`` line's type field."""
     return _MODE_TO_AOS_TRUNK_TYPE.get(mode, "lacp")
@@ -644,6 +722,22 @@ def pool_warnings(tree: Any) -> list[str]:
     prepared = prepare_vlan_interfaces(tree)
     by_name, by_id = _svi_indexes(prepared.tree, prepared.not_a_vlan)
     return _dhcp(prepared.tree, by_name, by_id, prepared.not_a_vlan).warnings
+
+
+def loopback_warnings(tree: Any) -> list[str]:
+    """A warning for each loopback refused because it is disabled
+    (:func:`_a_disabled_loopback`) and each loopback address written as
+    a host address it was not (:func:`_loopback_addresses`), read from
+    the functions the renderer writes the lines with, on the tree it
+    writes."""
+    if not isinstance(tree, CanonicalIntent):
+        return []
+    found: list[str] = []
+    for iface in prepare_vlan_interfaces(tree).tree.interfaces:
+        if _LOOPBACK_NAME_RE.fullmatch(iface.name):
+            refused = _a_disabled_loopback(iface)
+            found.extend([refused] if refused else _loopback_addresses(iface)[1])
+    return found
 
 
 def vlan_interface_warnings(tree: Any) -> list[str]:
@@ -1211,7 +1305,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     seen_names: dict[str, list[Any]] = {}
     name_order: list[str] = []
     for iface in physical_ifaces:
-        header = _as_the_device_writes(iface.name)
+        header = _stanza_name(iface.name)
         if header not in seen_names:
             seen_names[header] = []
             name_order.append(header)
@@ -1234,12 +1328,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     rendered_names: set[str] = set()
     for iface in physical_ifaces:
         lname = iface.name.lower()
-        if _as_the_device_writes(iface.name) in rendered_names:
+        if _stanza_name(iface.name) in rendered_names:
             # Duplicate canonical name maps to the same Aruba port —
             # already flagged in the comment block above; skip the
             # stanza so AOS-S doesn't see two ``interface <name>``.
             continue
-        rendered_names.add(_as_the_device_writes(iface.name))
+        rendered_names.add(_stanza_name(iface.name))
         # A stanza that would say ``enable`` and nothing else is not
         # written for a port that a ``trunk`` line or a VLAN's list of
         # this output gives back to the parser (``given_back``).  The
@@ -1259,15 +1353,19 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             and one_spelling(iface.name) in given_back
         ):
             continue
-        # Loopback interfaces use AOS-S `interface loopback <N>`
-        # syntax; the rest of the body (ip address, ipv6 address,
-        # description) is identical to the physical-port form.
-        # See Aruba Basic Operation Guide for AOS-S 16.10,
-        # "Managing loopback interfaces" chapter.
-        if lname.startswith("loopback"):
-            lines.append(f"interface {iface.name}")
-        else:
-            lines.append(f"interface {_as_the_device_writes(iface.name)}")
+        # A loopback is ``interface loopback <N>``, with a space, and
+        # its addresses are given with no mask (:func:`_stanza_name`,
+        # :func:`_loopback_addresses`).  See Aruba Basic Operation
+        # Guide for AOS-S 16.10, "Managing loopback interfaces".  One
+        # the tree holds disabled is refused (:func:`_a_disabled_loopback`).
+        refused = (
+            _a_disabled_loopback(iface)
+            if _LOOPBACK_NAME_RE.fullmatch(iface.name) else None
+        )
+        if refused:
+            lines.append(f"; review: {refused}")
+            continue
+        lines.append(f"interface {_stanza_name(iface.name)}")
         if iface.description:
             lines.append(f'   name "{_esc(iface.description)}"')
         # Skip enable/disable + routing markers on logical
@@ -1278,7 +1376,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 lines.append("   enable")
             else:
                 lines.append("   disable")
-        if iface.ipv4_addresses or iface.ipv6_addresses:
+        if _LOOPBACK_NAME_RE.fullmatch(iface.name):
+            lines.extend(_loopback_addresses(iface)[0])
+        elif iface.ipv4_addresses or iface.ipv6_addresses:
             if not is_logical:
                 lines.append("   routing")
             for addr in iface.ipv4_addresses:
