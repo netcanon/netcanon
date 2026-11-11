@@ -411,7 +411,8 @@ per_field_expectation:
       ``CanonicalInterface.lag_member_of`` back-pointer is set on
       each member via the FortiGate parser's member-list resolution.
       Junos render emits ``set interfaces port2 ether-options 802.3ad
-      ae0`` (after the rename mesh maps ``agg1`` -> ``ae0``).
+      ae1``: the renderer takes the number of ``agg1``.  The port
+      translator cannot read an operator's name, and lists it.
     references: [fortios-lags, junos-lag-overview]
 
   interfaces[].dhcp_client:

@@ -143,7 +143,8 @@ parent ``<laggif>``.  RouterOS
 back-pointer in a different shape (``slaves=`` parameter on the
 parent rather than ``<members>`` element).  Both codecs round-trip
 the back-pointer; LAG name and member identities differ
-(``lagg0`` ↔ ``bond1``); port-rename mesh canonicalises.
+(``lagg<N>`` ↔ ``bond<N>``: the port translator keeps the number,
+and writes ``lagg0`` as ``bond1``).
 
 ### vrf
 

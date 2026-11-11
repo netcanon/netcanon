@@ -25,7 +25,7 @@ loss on three surfaces:
 | Topic | Summary |
 |---|---|
 | [`system_services.md`](system_services.md) | Hostname / DNS / NTP / syslog / clock / domain — FortiOS DNS cap (3) doesn't bottleneck Junos's unbounded list; timezone format mismatch (FortiOS numeric index vs Olson zoneinfo) requires operator-curated lookup. |
-| [`interfaces.md`](interfaces.md) | FortiGate flat namespace (`port1`, `agg1.100`) -> Junos media-prefix (`ge-0/0/0`).  Port-rename mesh required.  IP / MTU / IPv6 round-trip with documented secondary-IP and link-local-scope drift. |
+| [`interfaces.md`](interfaces.md) | FortiGate flat namespace (`port1`, `agg1.100`) -> Junos media-prefix (`ge-0/0/1`).  Port-rename mesh required.  IP / MTU / IPv6 round-trip with documented secondary-IP and link-local-scope drift. |
 | [`vlans.md`](vlans.md) | FortiGate child-interface VLAN model -> Junos first-class `vlans` object.  Port-membership is a hard model gap (FortiGate parent-interface model has no canonical port list per VLAN). |
 | [`static_routes.md`](static_routes.md) | FortiOS dotted-mask + outgoing-interface -> Junos CIDR + qualified-next-hop.  Default-VRF round-trips; per-VRF unsupported (FortiGate source codec does not parse `set vrf <id>`, so `CanonicalStaticRoute.vrf` is never populated from this source and there is no VRF to carry — the Junos target would render `set routing-instances X routing-options static route ...` if one were present). |
 | [`snmp_aaa.md`](snmp_aaa.md) | FortiGate `config system snmp / config user radius` -> Junos `set snmp / set system radius-server`.  Multi-community drops to scalar; v3 USM passphrases not cross-compatible (FortiOS ENC vs Junos $9$). |

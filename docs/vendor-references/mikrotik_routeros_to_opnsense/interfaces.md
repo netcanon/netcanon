@@ -164,7 +164,7 @@ back-points each member to ``bond1``.  OPNsense ``<laggs>/<lagg>/
 <members>igb2,igb3</members>`` carries the back-pointer in a
 comma-separated string under ``<members>``.  Both codecs round-trip
 the back-pointer but the LAG name itself differs (``bond1`` ↔
-``lagg0``); port-rename mesh canonicalises.
+``lagg1``: the port translator keeps the number).
 
 ### vrf
 

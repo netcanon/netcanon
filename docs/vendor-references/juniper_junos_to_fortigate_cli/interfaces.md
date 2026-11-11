@@ -95,7 +95,12 @@ Notable FortiOS specifics:
 Canonical surface (`CanonicalInterface`).
 
 - **name** — `lossy`.  Junos slashes are illegal in FortiGate edit
-  IDs; the rename mesh sanitises (`ge-0/0/0` -> `port1` typically).
+  IDs; for a port on FPC 0 or 1 the port translator writes
+  `port<n>`, keeping the port number and dropping the FPC and PIC
+  (`ge-0/0/5` and `ge-1/0/5` are both `port5`), and writes a port 0
+  as `port1`; a port on another FPC keeps its numbers (`ge-2/0/3` is
+  `port-2-0-3`).  Two ports on one name make the job `partial`, and
+  an entry in the port map settles it.
   Junos per-unit form (`ge-0/0/1 unit 100`) materialises in canonical
   as a child interface (e.g. `ge-0/0/1.100`); FortiGate render
   writes it as a `type vlan` child with the unit's `vlan-id` as `set

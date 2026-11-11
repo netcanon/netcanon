@@ -374,7 +374,7 @@ per_field_expectation:
       lists by NIC name in a comma-separated ``<members>`` element
       under ``<laggif>laggN</laggif>``.  Both codecs round-trip
       the back-pointer but the LAG name itself differs (``Trk1``
-      versus ``lagg0``); port-rename mesh canonicalises.
+      versus ``lagg1``: the port translator keeps the number).
     references: [opnsense-laggs, aruba-lags]
 
   interfaces[].dhcp_client:
@@ -532,7 +532,8 @@ per_field_expectation:
     reason: >
       Aruba ``Trk<N>`` ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4)
       driver naming).  Aruba is one-based, FreeBSD is zero-based,
-      so ``Trk1`` ↔ ``lagg0`` via the port-rename mesh.  Member
+      and the port translator keeps the number: ``Trk1`` is
+      ``lagg1``, not ``lagg0``.  Member
       lists round-trip via the rename mesh.  LACP modes collapse:
       Aruba's ``lacp`` / ``dt-lacp`` / ``fec`` / ``trunk`` map to
       OPNsense ``<proto>lacp</proto>`` (FreeBSD always advertises

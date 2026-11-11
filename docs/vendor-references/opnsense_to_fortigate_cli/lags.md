@@ -53,9 +53,11 @@ name, members, lacp_mode
 ```
 
 - **lossy** — Aggregate naming collision: OPNsense FreeBSD `lagg<N>`
-  (zero-based) versus FortiGate operator-named aggregates requires
-  the rename mesh.  `lagg0` ↔ FortiGate `agg1` (or any operator-
-  chosen name) is operator-driven.
+  (zero-based) versus FortiGate operator-named aggregates.  The port
+  translator writes `LAG<N>`, keeping the number (`lagg5` is `LAG5`)
+  and writing `lagg0` as `LAG1`, so `lagg0` beside `lagg1` is two
+  aggregates on one name (the job is `partial`).  Any other name
+  (`agg1`, or any operator-chosen one) is an entry in the port map.
 - Members preserve via the rename mesh applied to each member name
   (OPNsense BSD `em2` -> FortiGate `port3`).  Comma-separated string
   on OPNsense becomes space-separated quoted on FortiOS — both codecs

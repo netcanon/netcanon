@@ -391,8 +391,8 @@ per_field_expectation:
       block carries member lists by NIC name in a comma-separated
       ``<members>`` element under ``<laggif>laggN</laggif>``.
       Both codecs round-trip the back-pointer but the LAG name
-      itself differs (``Port-Channel10`` versus ``lagg0``);
-      port-rename mesh canonicalises (one-based ↔ zero-based).
+      itself differs (``Port-Channel10`` versus ``lagg10``: the port
+      translator keeps the number).
     references: [opnsense-laggs, arista-lacp-cg]
 
   interfaces[].dhcp_client:
@@ -554,8 +554,9 @@ per_field_expectation:
     reason: >
       Arista ``Port-Channel<N>`` (capital-C, one-based) ↔
       OPNsense ``lagg<N>`` (FreeBSD lagg(4) driver naming, zero-
-      based), so ``Port-Channel1`` ↔ ``lagg0`` via the port-
-      rename mesh.  Member lists round-trip via the rename mesh.
+      based).  The port translator keeps the number:
+      ``Port-Channel1`` is ``lagg1``, not ``lagg0``.  Member lists
+      round-trip via the rename mesh.
       LACP modes collapse: Arista active / passive both render as
       OPNsense ``<proto>lacp</proto>`` (FreeBSD always advertises
       actively).  Arista static mode (``on``) maps to OPNsense

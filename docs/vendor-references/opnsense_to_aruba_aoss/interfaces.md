@@ -103,7 +103,8 @@ OPNsense -> Aruba:
 - `interfaces[].lag_member_of`: **lossy** — OPNsense
   `<laggs>/<lagg>/<members>` membership maps to Aruba's `trunk
   <ports> trk<N> <mode>` declaration.  Both round-trip the back-
-  pointer but the LAG name itself differs (`lagg0` ↔ `Trk1`).
+  pointer but the LAG name itself differs (`lagg<N>` ↔ `Trk<N>`; see
+  `lags.md`).
 - `interfaces[].dhcp_client`: **lossy** — OPNsense
   `<ipaddr>dhcp</ipaddr>` is common on the WAN zone; Aruba accepts
   `ip address dhcp` on a routed port but neither codec wires

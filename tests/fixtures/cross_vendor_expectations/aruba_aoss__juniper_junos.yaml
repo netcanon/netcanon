@@ -249,8 +249,10 @@ per_field_expectation:
   interfaces[].name:
     disposition: lossy
     reason: >
-      Port-name mesh maps Aruba bare-numeric ``1`` / ``A1`` / ``1/1``
-      / ``Trk1`` -> Junos ``ge-0/0/0`` / ``ae0`` / ``irb.<id>``.
+      Port-name mesh maps Aruba bare-numeric ``1`` / ``1/1`` / ``Trk1``
+      -> Junos ``ge-0/0/1`` / ``ge-1/0/1`` / ``ae1`` (the number is
+      kept; ``A1`` is left for the port map), and an SVI to
+      ``irb.<id>``.
       Speed hint defaults to ``ge-`` (gigabit) since AOS-S carries
       no speed prefix; 10G / 25G / 100G ports require operator
       override via the per-pane port-rename surface (typically
@@ -560,9 +562,9 @@ per_field_expectation:
   lags:
     disposition: lossy
     reason: >
-      Aruba ``Trk<N>`` -> Junos ``ae<N-1>`` (one-based -> zero-based
-      index translation; codec render maps ``Trk1`` -> ``ae0``,
-      preserving sequential ordering).  LACP active mode round-trips
+      Aruba ``Trk<N>`` -> Junos ``ae<N>`` (the number is kept, by the
+      port translator and by the Junos renderer on the bare pipeline:
+      ``Trk1`` is ``ae1``).  LACP active mode round-trips
       cleanly; Aruba's ``static`` -> Junos "no LACP" (membership
       without ``aggregated-ether-options lacp``).  Aruba's
       ``dt-lacp`` (multi-chassis) collapses to ``active`` with a
@@ -756,7 +758,7 @@ per_field_expectation:
 #     LAG-name index translation surfaces are medium-confidence:
 #     vendor docs are clear but cross-vendor render involves codec
 #     policy decisions (Operator/Manager -> read-only/read-write,
-#     manager/operator -> class super-user/operator, Trk<N> -> ae<N-1>)
+#     manager/operator -> class super-user/operator, Trk<N> -> ae<N>)
 #     that operators may want to override.
 #
 # Deferred items (codec-side wire-up gaps surface as not_applicable

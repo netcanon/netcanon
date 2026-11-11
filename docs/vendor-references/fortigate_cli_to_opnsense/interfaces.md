@@ -175,8 +175,10 @@ FortiGate -> OPNsense:
   aggregate / set member "port1" "port2"` declared on the parent;
   members back-point to the aggregate name in canonical.  OPNsense
   `<laggs>/<lagg>` carries `<members>` and the parent shows up as
-  `lagg<N>`.  Aggregate names differ (`agg1` ↔ `lagg0`) and the
-  zero-vs-one-based numbering requires the rename mesh.
+  `lagg<N>`.  Aggregate names differ (`agg1` ↔ `lagg<N>`): the port
+  translator cannot read an operator's name, so `agg1` is left as it
+  is and the job is `partial` and lists it; an entry in the port map
+  places it.
 - `dhcp_client`: **lossy** — FortiGate `set mode dhcp` (rare on
   routed ports; common on the WAN edit when the ISP gives DHCP) ↔
   OPNsense `<ipaddr>dhcp</ipaddr>`.  Neither codec currently wires

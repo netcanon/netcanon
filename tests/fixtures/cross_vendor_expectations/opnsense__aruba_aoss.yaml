@@ -336,8 +336,8 @@ per_field_expectation:
       ``lagg<N>`` on each member.  Aruba's ``trunk <ports> trk<N>
       <mode>`` declaration applies the back-pointer as ``Trk<N>``.
       Both round-trip the back-pointer but the LAG name itself
-      differs; port-rename mesh canonicalises (zero-based ↔
-      one-based).
+      differs; the port translator keeps the number and writes
+      ``lagg0`` as ``Trk1``.
     references: [opnsense-laggs, aruba-lags]
 
   interfaces[].dhcp_client:
@@ -481,9 +481,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       OPNsense ``lagg<N>`` (FreeBSD lagg(4) driver, zero-based) ↔
-      Aruba ``Trk<N>`` (one-based), so ``lagg0`` ↔ ``Trk1`` via
-      the port-rename mesh.  Member lists round-trip via the
-      rename mesh.  LACP modes: OPNsense ``<proto>lacp</proto>`` ↔
+      Aruba ``Trk<N>`` (one-based).  The port translator keeps the
+      number and writes ``lagg0`` as ``Trk1`` (``lagg0`` beside
+      ``lagg1`` is then one name, and the job is ``partial``); the
+      bare pipeline writes ``lagg0`` as ``trk0``.  Member lists
+      round-trip via the rename mesh.  LACP modes: OPNsense ``<proto>lacp</proto>`` ↔
       Aruba ``lacp``; OPNsense ``<proto>none</proto>`` ↔ Aruba
       ``trunk`` (static).  OPNsense's failover / loadbalance /
       roundrobin protos have no Aruba LACP equivalent and collapse

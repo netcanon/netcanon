@@ -78,11 +78,13 @@ than Junos's per-unit family model.
   this slot/port" but lossy if the operator was using the name as
   documentation.  Per-pane port-rename surface lets the operator
   override.
-- **Slot/PIC/port collapse.** `ge-0/0/0` -> `Ethernet1` (FPC 0, PIC 0,
-  port 0 -> 1-indexed `Ethernet1`).  Multi-FPC chassis (Junos
-  `ge-1/0/0` from the second FPC) typically map to Arista
-  `Ethernet1/1` modular form; default rename mesh handles the
-  common single-chassis case.
+- **Slot/PIC/port collapse.** `ge-0/0/<n>` -> `Ethernet<n>`: the port
+  translator keeps the port number and drops the FPC and PIC
+  (`ge-0/0/5` and `ge-1/0/5` are both `Ethernet5`).  Port 0, which
+  EOS has no number for, is written `Ethernet1`, so `ge-0/0/0` beside
+  `ge-0/0/1` is two ports on one name.  Either way the job is
+  `partial` and lists the names, and an entry in the port map
+  settles them.
 - **Per-unit -> flat collapse.** Junos's `unit 0` round-trips as the
   parent Arista interface's primary IP.  `unit 1+` (extra
   sub-interfaces with independent families) have no clean Arista

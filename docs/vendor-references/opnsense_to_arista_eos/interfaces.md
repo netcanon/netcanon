@@ -111,8 +111,9 @@ Canonical fields covered (`CanonicalInterface`).
   back-points to `lagg<N>` on each member; Arista
   `channel-group N mode active` declares the back-pointer as
   `Port-Channel<N>`.  Both round-trip the back-pointer but the
-  LAG name itself differs (zero-based `lagg0` ↔ one-based
-  `Port-Channel1`); port-rename mesh canonicalises.
+  LAG name itself differs (`lagg<N>` ↔ `Port-Channel<N>`: the port
+  translator keeps the number, and writes `lagg0` as
+  `Port-Channel1`; see `lags.md`).
 - `dhcp_client`: **lossy** — OPNsense `<ipaddr>dhcp</ipaddr>`
   (common on the WAN zone) ↔ Arista `ip address dhcp`.  Neither
   codec currently wires `dhcp_client` through.

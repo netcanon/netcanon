@@ -340,7 +340,8 @@ per_field_expectation:
       member to its parent ``<laggif>`` name.  RouterOS ``/interface
       bonding name=bond1 slaves=ether3,ether4`` carries the back-
       pointer in a different shape; LAG name and member identities
-      differ (``lagg0`` ↔ ``bond1``); port-rename mesh canonicalises.
+      differ (``lagg<N>`` ↔ ``bond<N>``: the port translator keeps the
+      number, and writes ``lagg0`` as ``bond1``).
     references: [opnsense-laggs]
 
   interfaces[].dhcp_client:
@@ -497,8 +498,9 @@ per_field_expectation:
       cleaner than the inverse direction because OPNsense's mode
       set is a SUBSET of RouterOS's — only ``<proto>none</proto>``
       has no clean RouterOS analogue (collapse to ``balance-xor``
-      with banner).  Naming convention differs (``lagg0`` vs
-      ``bond1``); port-rename mesh canonicalises.  OPNsense parses
+      with banner).  Naming convention differs (``lagg<N>`` vs
+      ``bond<N>``: the port translator keeps the number, and writes
+      ``lagg0`` as ``bond1``).  OPNsense parses
       ``<laggs>`` but its capability matrix doesn't currently
       advertise ``/lag/aggregate``; render is partial pending
       wire-up on the OPNsense side.

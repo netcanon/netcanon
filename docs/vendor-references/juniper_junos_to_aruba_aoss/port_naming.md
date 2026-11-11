@@ -51,10 +51,17 @@ The canonical model carries `CanonicalInterface.name` as the
 vendor-native string.  Cross-vendor translation depends on the
 per-pane port-rename mesh:
 
-* Junos `ge-0/0/0` -> Aruba `1` (default).
-* Junos `xe-0/0/0` -> Aruba `1` (Aruba carries no speed hint, so the
+* Junos `ge-<fpc>/0/<n>` -> Aruba `<fpc>/<n>`: the port translator
+  writes the FPC as the stack member and keeps the port number
+  (`ge-0/0/3` is `1/3`, `ge-2/0/3` is `2/3`).  AOS-S numbers both from
+  1, so FPC 0 is member 1 and port 0 is port 1: `ge-0/0/0` beside
+  `ge-0/0/1`, or `ge-0/0/3` beside `ge-1/0/3`, is two ports on one
+  name, and the job is `partial` and lists both.  An entry in the
+  port map settles it.
+* Junos `xe-0/0/4` -> Aruba `1/4` (Aruba carries no speed hint, so the
   10G prefix is dropped).
-* Junos `ae0` -> Aruba `Trk1` (LAG index translates).
+* Junos `ae<N>` -> Aruba `Trk<N>` (the number is kept; `ae0` is
+  written `Trk1`).
 * Junos `lo0.0` -> no Aruba equivalent; AOS-S has no first-class
   loopback construct (the management VLAN serves as the
   device-self-IP host).  The codec render emits a `;` comment.
@@ -79,9 +86,10 @@ Speed-hint inference:
 
 LAG name index:
 
-* Junos `ae0` -> Aruba `Trk1` (Junos zero-based, Aruba one-based).
-  Codec render maps `ae<N>` -> `Trk<N+1>` to preserve sequential
-  ordering.
+* Junos `ae<N>` -> Aruba `Trk<N>` (Junos zero-based, Aruba one-based).
+  The number is kept; there is no +1 offset.  `ae0` is written
+  `Trk1`, so `ae0` beside `ae1` is two LAGs on one name (the job is
+  `partial`).
 
 Disposition: **lossy** for the speed hint, sub-interface tagging,
 and loopback (no Aruba equivalent).

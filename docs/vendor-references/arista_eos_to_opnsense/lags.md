@@ -82,9 +82,13 @@ Plus the back-pointer on each member interface:
 `CanonicalInterface.lag_member_of`.
 
 - `lags[].name`: **lossy** — Arista `Port-Channel10` ↔ OPNsense
-  `lagg0`.  Arista is one-based and uses a textual prefix;
-  FreeBSD is zero-based.  Port-rename mesh handles
-  canonicalisation via the codec's port-naming delegates.
+  `lagg10`.  Arista is one-based and uses a textual prefix;
+  FreeBSD is zero-based.  The port translator keeps the number, so
+  `Port-Channel1` is `lagg1`, not `lagg0`; an entry in the port map
+  renumbers it.  The bare pipeline (`run_plan`, which the demo and
+  the cross-mesh audit use) translates no port names, and the
+  OPNsense renderer writes the source's name
+  (`<laggif>Port-Channel1</laggif>`).
 - `lags[].members`: **lossy** — Arista members are
   `Ethernet<N>` device names; OPNsense members are BSD device
   names (`em2`, `igb1`, …).  Rename mesh translates.
@@ -94,7 +98,7 @@ Plus the back-pointer on each member interface:
   Passive variant does not survive.
 - `interfaces[].lag_member_of`: **lossy** — both codecs
   round-trip the back-pointer but the LAG name itself differs
-  (`Port-Channel10` versus `lagg0`).
+  (`Port-Channel10` versus `lagg10`).
 - The OPNsense codec capability matrix does not currently
   advertise `/lag/aggregate` in its supported set; render is
   partial pending wire-up.

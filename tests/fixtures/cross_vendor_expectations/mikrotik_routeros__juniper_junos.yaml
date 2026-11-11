@@ -329,8 +329,8 @@ per_field_expectation:
       ``ae0`` / ``irb`` / ``lo0``) carry the same speed semantic
       but use different naming conventions.  The port-rename mesh
       handles the cross-vendor mapping (default ``ether<N>`` ->
-      ``ge-0/0/<N-1>``; ``sfp-sfpplus<N>`` -> ``xe-`` / ``et-`` /
-      ``mge-`` based on speed hint).  Operators override via the
+      ``ge-0/0/<N>``, the number kept; ``sfp-sfpplus<N>`` -> ``xe-``
+      / ``et-`` / ``mge-`` based on speed hint).  Operators override via the
       per-pane port-rename surface.  RouterOS bridge interfaces
       (``bridge1``) have no Junos analogue — codec policy renders
       as `irb` parent or as a regular interface.

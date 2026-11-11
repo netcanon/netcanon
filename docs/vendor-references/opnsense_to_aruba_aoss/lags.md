@@ -55,10 +55,13 @@ Plus `CanonicalInterface.lag_member_of` back-pointer.
 
 OPNsense -> Aruba:
 
-- `lags[].name`: **lossy** — OPNsense `lagg0` ↔ Aruba `Trk1`.
-  Zero-based vs one-based numbering means a literal name does NOT
-  match — operators expect `lagg0` ↔ `Trk1`.  The port-rename
-  mesh handles the conversion.
+- `lags[].name`: **lossy** — OPNsense `lagg<N>` ↔ Aruba `Trk<N>`.  The
+  port translator keeps the number (`lagg5` is `Trk5`); `lagg0`,
+  which AOS-S has no number for, is written `Trk1`, so `lagg0` beside
+  `lagg1` is two LAGs on one name: the job is `partial` and lists
+  both, and an entry in the port map settles it.  There is no +1
+  offset.  The bare pipeline (`run_plan`) translates no port names,
+  and writes `lagg0`'s members as `trunk <ports> trk0`.
 - `lags[].members`: **lossy** — OPNsense's BSD device names map to
   Aruba's bare-numeric / letter-uplink form via the rename mesh.
 - `lags[].mode`: **lossy** — OPNsense `proto=lacp` →

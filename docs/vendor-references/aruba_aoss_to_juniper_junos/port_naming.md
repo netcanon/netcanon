@@ -58,11 +58,15 @@ The canonical model carries `CanonicalInterface.name` as the
 vendor-native string.  Cross-vendor translation depends on the
 per-pane port-rename mesh:
 
-* Aruba `1` -> Junos `ge-0/0/0` (standalone-switch default;
-  operator-overridable).
-* Aruba `A1` -> Junos `ge-0/0/0` (5400R chassis default).
-* Aruba `1/1` -> Junos `ge-0/0/0` (2930M stack default).
-* Aruba `Trk1` -> Junos `ae0` (LAG index translates).
+* Aruba `1` -> Junos `ge-0/0/1`: the port translator keeps the port
+  number, so a 24-port switch's ports become `ge-0/0/1` to
+  `ge-0/0/24`, not `ge-0/0/0` to `ge-0/0/23`.  An entry in the port
+  map renumbers them.
+* Aruba `1/7` -> Junos `ge-1/0/7` (the stack member is the FPC).
+* Aruba `A1` -> no Junos name: the translator does not place a module
+  letter, so the name is left as it is, and the job is `partial` and
+  lists it; an entry in the port map places it.
+* Aruba `Trk1` -> Junos `ae1` (the number is kept).
 
 Speed-hint inference:
 
