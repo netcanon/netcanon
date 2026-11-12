@@ -319,9 +319,9 @@ per_field_expectation:
       re-parse then reads metric 0 and interface "254".  Routes that carry a
       real gateway round-trip exactly (`ip route 0.0.0.0/0 port1
       198.51.100.1`).  Re-author discard routes by hand and re-check
-      administrative distance on every migrated route.  Both matrices declare
-      `/routing/static-route/vrf` unsupported, so a per-VRF route would be
-      dropped as well; no committed cell exercises that.
+      administrative distance on every migrated route.  fortigate_cli
+      declares `/routing/static-route/vrf` unsupported, so no route arrives
+      with a VRF; no committed cell exercises that.
     references: [fgt-aoscx-surface]
 
   "routing_instances[].name":

@@ -353,11 +353,10 @@ per_field_expectation:
       Preserved on both cells that populate it (`canu_csm17_spine001_ipv6_vrf`
       and the synthetic kitchen sink).  Destination, next hop and the
       administrative distance all survive — `ip route 10.99.0.0 255.255.0.0
-      <next-hop> 200` re-parses to the same record.  One caveat that is a
-      source-side gap rather than a pair loss: AOS-CX declares
-      `/routing/static-route/vrf` unsupported, so a VRF-scoped static route
-      never leaves the source at all, and `/routing/static-route/description`
-      is declared lossy on both sides.
+      <next-hop> 200` re-parses to the same record.  Both sides declare
+      `/routing/static-route/vrf` supported, so a route of a VRF crosses as
+      `ip route vrf <name> ...` (no committed cell has one), and
+      `/routing/static-route/description` is declared lossy on both sides.
     references: [aoscx-iosxecli-surface]
 
   "routing_instances[].name":

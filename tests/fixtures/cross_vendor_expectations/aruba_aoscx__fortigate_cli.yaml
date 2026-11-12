@@ -397,9 +397,10 @@ per_field_expectation:
       Preserved on both cells that populate it (3 routes total), including a
       non-default metric — `10.99.0.0/16` at metric 200 on the kitchen sink
       round-trips exactly.  Both matrices declare `/routing/static-route`
-      supported.  One caveat that this corpus does not exercise: both sides
-      declare `/routing/static-route/vrf` unsupported, so a VRF-bound static
-      route would lose its binding; no committed cell has one.
+      supported.  One caveat that this corpus does not exercise: aruba_aoscx
+      reads a route's VRF (`ip route ... vrf <name>`), and fortigate_cli
+      declares `/routing/static-route/vrf` unsupported, so such a route is
+      written into the global table, its VRF lost; no committed cell has one.
     references: [aoscx-fortigate-surface]
 
   "routing_instances[].name":

@@ -28,7 +28,10 @@ IPv4 Distributed Anycast Gateway.
 - VLANs — ID, name, tagged/untagged port lists (VLAN-centric
   projection from the per-interface `switchport` form), and an
   address held on the VLAN record (see Common gotchas)
-- Static routes — default VRF **and** per-VRF (`ip route … vrf X`)
+- Static routes — default VRF **and** per-VRF (`ip route` under
+  `vrf context <name>`); a `vrf <name>` after a route's next hop
+  names the next hop's VRF, and such a route is left out and counted
+  (see Common gotchas)
 - LAGs (`port-channel<N>` reconciled with cross-vendor names like
   `ae<N>` / `Port-channel<N>` / `trk<N>`); `port-channel<N>.<M>` is a
   sub-interface of the LAG, read as an interface and not as a LAG of

@@ -345,9 +345,10 @@ per_field_expectation:
       destination, gateway AND metric identical after the round-trip (the
       metric-200 backup route on the kitchen-sink cell included).  Both
       matrices declare `/routing/static-route` supported.  One caveat that
-      does not affect this corpus: both sides declare `/routing/static-route/vrf`
-      unsupported, so a per-VRF static route would lose its VRF binding —
-      no committed cell exercises one.
+      does not affect this corpus: aruba_aoscx reads a route's VRF
+      (`ip route ... vrf <name>`), and mikrotik_routeros declares
+      `/routing/static-route/vrf` unsupported, so such a route is written
+      into the main table, its VRF lost — no committed cell exercises one.
     references: [aoscx-routeros-surface]
 
   "routing_instances[].name":
