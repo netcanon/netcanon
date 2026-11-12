@@ -525,12 +525,12 @@ per_field_expectation:
       Default-table IPv4 routes round-trip cleanly: RouterOS
       ``/ip route add dst-address=X/N gateway=Y`` -> Junos
       ``set routing-options static route X/N next-hop Y``.
-      An IPv6 route of ``/ipv6 route`` is written the same way;
-      up to 0.7.7 the RouterOS parser read no ``/ipv6 route``
-      section, and such a route was lost with nothing said.
-      Juniper's own examples put an IPv6 static route under
-      ``routing-options rib inet6.0``, which the Junos renderer
-      does not yet write.
+      An IPv6 route of ``/ipv6 route`` is written ``set
+      routing-options rib inet6.0 static route X/N next-hop Y``,
+      where Junos holds an IPv6 static route; up to 0.7.7 the
+      RouterOS parser read no ``/ipv6 route`` section, and such a
+      route was lost with nothing said, and the Junos renderer
+      wrote an IPv6 route under ``routing-options static``.
       A route whose ``gateway=`` is an interface alone
       (``gateway=ether1``) is the route's interface, and is not
       written: the Junos renderer writes ``next-hop <gateway>`` only

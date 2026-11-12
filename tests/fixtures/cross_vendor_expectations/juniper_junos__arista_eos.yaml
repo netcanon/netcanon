@@ -363,7 +363,7 @@ per_field_expectation:
 
   static_routes:
     disposition: lossy
-    reason: "Default-VRF static routes round-trip cleanly (Junos CIDR -> Arista CIDR; preference preserved). Junos's 'qualified-next-hop' block (multiple alternate next-hops with per-NH preference under one prefix) flattens to multiple 'ip route' lines on Arista — lossy on the structural grouping but lossless on the next-hop set. Per-VRF routes ('set routing-instances X routing-options static') map to Arista 'ip route vrf X'. IPv6 static routes (Junos 'rib inet6.0 static') parse-and-ignore today — CanonicalStaticRoute is IPv4-shaped (deferred)."
+    reason: "Default-VRF static routes round-trip cleanly (Junos CIDR -> Arista CIDR; preference preserved). Junos's 'qualified-next-hop' block (multiple alternate next-hops with per-NH preference under one prefix) flattens to multiple 'ip route' lines on Arista — lossy on the structural grouping but lossless on the next-hop set. Per-VRF routes ('set routing-instances X routing-options static') map to Arista 'ip route vrf X'. IPv6 static routes (Junos 'rib inet6.0 static', and '<instance>.inet6.0' in a routing instance) map to Arista 'ipv6 route' (up to 0.7.7 no 'rib' line was read, and such a route was lost with nothing said); a static route of another table is left out of the Junos source with a row that counts them."
     references: [junos-static-routing, arista-routing-cg]
 
   # ── Tier 2 — DHCP server ──
@@ -577,9 +577,6 @@ per_field_expectation:
 #     `reason: "deferred"` per AGENTS.md guidance for unconfident fields.
 #
 # Other lossy items not tagged "deferred" but worth noting:
-#
-#   * IPv6 static routes — CanonicalStaticRoute is IPv4-shaped today;
-#     Junos's 'rib inet6.0 static' parses-and-ignores.  Schema gap.
 #
 #   * SSH-public-key authentication on Junos — does not fit the
 #     hash-shaped CanonicalLocalUser.hashed_password field.  Schema

@@ -729,14 +729,20 @@ class TestARouteOutASpacedInterface:
     @pytest.mark.parametrize(
         ("line", "next_hop"),
         [
-            ("ip route 0.0.0.0 0.0.0.0 Dialer 10.0.0.1", "route 0.0.0.0/0 next-hop 10.0.0.1"),
-            ("ipv6 route ::/0 Dialer 2001:db8::1", "route ::/0 next-hop 2001:db8::1"),
+            (
+                "ip route 0.0.0.0 0.0.0.0 Dialer 10.0.0.1",
+                "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1",
+            ),
+            (
+                "ipv6 route ::/0 Dialer 2001:db8::1",
+                "set routing-options rib inet6.0 static route ::/0 next-hop 2001:db8::1",
+            ),
         ],
     )
     def test_the_gateway_reaches_the_output(self, line: str, next_hop: str) -> None:
-        """Onto Junos, which writes a route by its next hop; and this
-        codec's own output has the line as it was."""
-        next_hop = "set routing-options static " + next_hop
+        """Onto Junos, which writes a route by its next hop (an IPv6
+        one under ``rib inet6.0``); and this codec's own output has the
+        line as it was."""
         text = "hostname r1\n!\n" + line + "\n!\nend\n"
         assert next_hop in _job("cisco_iosxe_cli", text, "juniper_junos").rendered.splitlines()
         assert line in _job("cisco_iosxe_cli", text, "cisco_iosxe_cli").rendered.splitlines()

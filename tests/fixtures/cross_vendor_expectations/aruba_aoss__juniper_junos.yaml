@@ -767,6 +767,5 @@ per_field_expectation:
 #
 #   * MTU / voice_vlan / domain / syslog / timezone — aruba_aoss
 #     codec parse path does not cover these directives today.
-#   * IPv6 static routes — CanonicalStaticRoute is IPv4-shaped today.
 #   * Per-VRF static routes — CanonicalStaticRoute.vrf exists; the
 #     gap is aruba_aoss has no per-VRF static-route parse/render.

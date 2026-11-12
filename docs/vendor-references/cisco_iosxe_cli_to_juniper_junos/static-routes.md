@@ -1,5 +1,8 @@
 # Static routes: Cisco IOS-XE versus Juniper Junos
 
+<!-- junos-rib-inet6 -->
+> **Update 2026-11-12 — an IPv6 static route is written under `rib inet6.0`.**  Up to 0.7.7 the Junos render wrote an IPv6 static route under `routing-options static`, as an IPv4 route is.  Junos holds an IPv6 static route in `inet6.0`, `set routing-options rib inet6.0 static route ...` ([Juniper, Example: Configuring IPv6 Static Routes](https://www.juniper.net/documentation/en_US/junos12.3/topics/example/policy-ipv6-static-routes.html)), and in a routing instance in `<instance>.inet6.0` ("In a routing instance, the routing table name must include the routing instance name", [Juniper, rib (Routing Options)](https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/ref/statement/rib-edit-routing-options.html)).  The render now writes it there, and the Junos parser reads it back.
+
 How global and per-VRF static routes are declared.
 
 Sources:

@@ -1,5 +1,8 @@
 # Static routes: Juniper Junos versus MikroTik RouterOS
 
+<!-- junos-rib-inet6 -->
+> **Update 2026-11-12 — an IPv6 static route of `rib inet6.0` is read.**  Junos holds an IPv6 static route in `inet6.0`, `set routing-options rib inet6.0 static route ...` ([Juniper, Example: Configuring IPv6 Static Routes](https://www.juniper.net/documentation/en_US/junos12.3/topics/example/policy-ipv6-static-routes.html)), and in a routing instance in `<instance>.inet6.0` ("In a routing instance, the routing table name must include the routing instance name", [Juniper, rib (Routing Options)](https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/ref/statement/rib-edit-routing-options.html)).  Up to 0.7.7 the Junos parser read no `rib` line, and such a route was lost on every target, with nothing said, whatever the body below says of it.  A static route of `rib inet.0` and `rib inet6.0`, and of the instance's own two tables, is now read as one of `static` is; a static route of any other table is left out, and one row counts them.  The body's `set routing-options static route ::/0 ...` is not where Junos holds an IPv6 route.
+
 <!-- ipv6-route-section -->
 > **Update 2026-11-12 — an IPv6 route is written into `/ipv6 route`.**  Up to 0.7.7 the RouterOS render wrote every route, the IPv6 ones included, as an `add` of `/ip route`, the menu of the IPv4 routes ([MikroTik, IP Routing](https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing): "To add or remove routes /ip(ipv6) route menus should be used").  Each route is now written into the section of its family, and the RouterOS parser reads both.  What the body below says of an IPv6 route onto RouterOS was written before that.
 
