@@ -190,12 +190,19 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 4 of 4 cells — routed-interface addressing is the most
+      Preserved on 3 of 4 cells — routed-interface addressing is the most
       reliable surface on this pair, and the reason the migration is worth
       doing at all.  aruba_aoscx declares
       `/interfaces/interface/ipv4/address/virtual-gateway-mac` lossy, but no
       committed cell puts an anycast gateway on a routed port, so that
-      declaration is not exercised here.
+      declaration is not exercised here.  On the fourth, the synthetic
+      kitchen sink, `agg1` and `port4` carry VLAN interfaces, which are
+      sub-interfaces on AOS-CX: HPE gives such
+      an interface no address of its own, so the AOS-CX render writes the
+      address in a `! review:` line of its stanza instead, and the job is
+      `partial` (`/interfaces/interface/address-beside-sub-interfaces`,
+      declared unsupported).  The reconciler
+      reads that declaration, so the cell is not a codec bug.
     references: [fgt-aoscx-surface]
 
   "interfaces[].interface_type":

@@ -118,6 +118,13 @@ _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "AOS-S has no sub-interface (`/interfaces/interface/dot1q-vlan`): "
+        "a port's own address is written on the port, and its "
+        "sub-interfaces as VLANs of the switch, so that nothing is beside "
+        "it.",
+        ("/interfaces/interface/address-beside-sub-interfaces",),
+    ),
+    (
         "AOS-S spells a DHCP client `ip address dhcp-bootp` in a VLAN, "
         "which this codec neither reads nor writes: the interface is "
         "written without a DHCP client.",

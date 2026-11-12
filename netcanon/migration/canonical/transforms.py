@@ -375,6 +375,26 @@ def trunk_untagged_vlan(
     return native
 
 
+def ports_with_sub_interfaces(intent: CanonicalIntent) -> frozenset[str]:
+    """The interfaces of *intent* that another is a sub-interface of by
+    its name: ``Ethernet1`` beside ``Ethernet1.10``, ``1/1/1`` beside
+    ``1/1/1.201``, ``lag 1`` beside ``lag 1.201``.
+
+    One rule for the walker, which lists an address of such an
+    interface's own (``/interfaces/interface/address-beside-sub-interfaces``),
+    and for a renderer that does not write one (AOS-CX): read off the
+    names alone, so that the validation and the output say the same on
+    any names, a target's own or another vendor's.
+    """
+    names = {iface.name for iface in intent.interfaces}
+    ports: set[str] = set()
+    for iface in intent.interfaces:
+        port, dot, unit = iface.name.rpartition(".")
+        if dot and unit.isascii() and unit.isdigit() and port in names:
+            ports.add(port)
+    return frozenset(ports)
+
+
 def _carried_untagged(
     iface: CanonicalInterface, every: frozenset[int] | None,
 ) -> int | None:

@@ -12,7 +12,14 @@ static routes, and interface stanzas with description / admin-state /
 mtu, the L2 switchport surface (``no routing`` + ``vlan access`` / ``vlan
 trunk``) for physical + LAG ports, IPv4 (CIDR) / ``vrf attach`` / IPv6
 for routed ports, LAG membership (``lag N``), and ``lacp mode`` on the
-``interface lag N`` stanzas.
+``interface lag N`` stanzas.  A routed sub-interface of a port or an L3
+LAG (``interface 1/1/1.201``, ``interface lag 1.201``) is written with
+its 802.1Q tag, ``encapsulation dot1q <VLAN-ID>``; the port or LAG it
+rides on is written with no address of its own, which HPE does not take
+there, and a ``! review:`` line that gives the source's.  Which interface
+has sub-interfaces is read off the names, by the rule the validation
+uses (``canonical.transforms.ports_with_sub_interfaces``), so the job
+and the output say the same on another vendor's names too.
 
 Phase 4 adds the ``interface vxlan 1`` VTEP — the L2 VLAN↔VNI bindings
 (``vni <VNI>`` / nested ``vlan <VLAN>``) plus the switch-level ``source
@@ -65,7 +72,7 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
-from ...canonical.transforms import synthesize_svis_from_vlan_l3
+from ...canonical.transforms import ports_with_sub_interfaces, synthesize_svis_from_vlan_l3
 from .._helpers import (
     TRUNK_ALL,
     TRUNK_NONE,
@@ -177,9 +184,12 @@ def render_intent(tree: CanonicalIntent) -> str:
     )
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     stated = native_vlan_stated(tree.interfaces)
+    # The interfaces another is a sub-interface of, which HPE gives
+    # no address of their own: by the validation's rule.
+    carriers = ports_with_sub_interfaces(tree)
     for iface in _sort_interfaces([*tree.interfaces, *synth_svis]):
         lines.extend(_render_interface(
-            iface, lag_mode_by_name, tree.anycast_gateway_mac, stated,
+            iface, lag_mode_by_name, tree.anycast_gateway_mac, stated, carriers,
         ))
 
     # ── VTEP (interface vxlan 1) — Phase 4 VXLAN-EVPN ──
@@ -195,6 +205,46 @@ def _is_ipv4(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _address_lines(iface, anycast_mac: str) -> list[str]:
+    """The ``ip address`` and ``ipv6 address`` lines of a routed
+    interface, each IPv4 address with its active gateway."""
+    lines: list[str] = []
+    for addr in iface.ipv4_addresses:
+        line = f"    ip address {addr.ip}/{addr.prefix_length}"
+        if addr.is_secondary:
+            line += " secondary"
+        lines.append(line)
+        # ── Active-gateway anycast (Phase 3) ── the per-SVI VIP +
+        # the chassis-wide MAC; AOS-CX emits both under the SVI.
+        if addr.virtual_gateway_address:
+            if anycast_mac:
+                lines.append(f"    active-gateway ip mac {anycast_mac}")
+            lines.append(f"    active-gateway ip {addr.virtual_gateway_address}")
+    for addr in iface.ipv6_addresses:
+        lines.append(f"    ipv6 address {addr.ip}/{addr.prefix_length}")
+    return lines
+
+
+def _carrier_review(iface) -> str:
+    """The review line of a port or LAG that has sub-interfaces and an
+    address of its own.
+
+    HPE's sub-interface guide for AOS-CX says an L3 interface that has
+    sub-interfaces takes no IP address configuration, so the address is
+    not written, and the line gives what the source had.  The job says
+    so too: the validation lists
+    ``/interfaces/interface/address-beside-sub-interfaces``.
+    """
+    addresses = [f"{a.ip}/{a.prefix_length}" for a in iface.ipv4_addresses]
+    addresses += [f"{a.ip}/{a.prefix_length}" for a in iface.ipv6_addresses]
+    return (
+        f"review: the source gives {iface.name} the address "
+        f"{', '.join(addresses)} beside its sub-interfaces; AOS-CX takes no "
+        "address on a port or LAG that has sub-interfaces, so none is "
+        "written here -- put it on a sub-interface or on another port"
+    )
 
 
 def _render_vxlan(tree: CanonicalIntent) -> list[str]:
@@ -388,10 +438,17 @@ def _render_static_route(route) -> str:
 
 
 def _render_interface(
-    iface, lag_mode_by_name: dict, anycast_mac: str = "", stated: frozenset[str] = frozenset(),
+    iface,
+    lag_mode_by_name: dict,
+    anycast_mac: str = "",
+    stated: frozenset[str] = frozenset(),
+    carriers: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Render one interface stanza.  *stated*: the interfaces that have a
     native VLAN in some record (:func:`.._helpers.native_vlan_stated`).
+    *carriers*: the interfaces another is a sub-interface of
+    (``ports_with_sub_interfaces``), which are written with no address
+    (:func:`_carrier_review`).
 
     Switchport handling is kind-aware: only physical / LAG ports take the
     L2 ``no routing`` + ``vlan access`` / ``vlan trunk`` surface.  A
@@ -475,6 +532,10 @@ def _render_interface(
                     )
     else:
         # ── L3 (routed) — vrf bind precedes the address ──
+        # A sub-interface's tag first, as in HPE's example
+        # (``interface 1/1/1.201``, ``encapsulation dot1q 10``).
+        if iface.dot1q_vlan is not None and _port_names.is_a_sub_interface(iface.name):
+            block.append(f"    encapsulation dot1q {iface.dot1q_vlan}")
         if iface.vrf:
             block.append(f"    vrf attach {iface.vrf}")
         # The IP MTU is a setting of its own on AOS-CX, 1500 unless
@@ -483,21 +544,10 @@ def _render_interface(
         ip_mtu = ip_mtu_written("aruba_aoscx", iface)
         if ip_mtu is not None:
             block.append(f"    ip mtu {ip_mtu}")
-        for addr in iface.ipv4_addresses:
-            line = f"    ip address {addr.ip}/{addr.prefix_length}"
-            if addr.is_secondary:
-                line += " secondary"
-            block.append(line)
-            # ── Active-gateway anycast (Phase 3) ── the per-SVI VIP +
-            # the chassis-wide MAC; AOS-CX emits both under the SVI.
-            if addr.virtual_gateway_address:
-                if anycast_mac:
-                    block.append(f"    active-gateway ip mac {anycast_mac}")
-                block.append(
-                    f"    active-gateway ip {addr.virtual_gateway_address}"
-                )
-        for addr in iface.ipv6_addresses:
-            block.append(f"    ipv6 address {addr.ip}/{addr.prefix_length}")
+        if iface.name in carriers and (iface.ipv4_addresses or iface.ipv6_addresses):
+            block.append(f"    ! {_carrier_review(iface)}")
+        else:
+            block.extend(_address_lines(iface, anycast_mac))
 
     # ── LAG membership (``lag N`` on the member port) ──
     if iface.lag_member_of:

@@ -201,8 +201,8 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: lossy
     reason: >
-      Drifts on 2 of 6 cells, 14 record-cells in the aggregate, and the
-      failing population is specific: EOS SVIs that carry `ip address
+      Drifts on 3 of 7 cells, 16 record-cells in the aggregate, in two
+      populations.  The first is EOS SVIs that carry `ip address
       virtual` with NO primary interface address.  Round-tripping the EVPN
       leaf fixtures shows the render emitting `active-gateway ip <vip>` and
       `active-gateway ip mac <mac>` correctly but writing the primary line
@@ -211,7 +211,13 @@ per_field_expectation:
       preserve them intact (the kitchen-sink `Vlan100` keeps 10.100.0.1/24),
       which is why this is `lossy` and not a total drop.  Assign primary SVI
       addresses on the AOS-CX side before cutover; the anycast VIP alone
-      will not give you a working gateway.
+      will not give you a working gateway.  The second (2 record-cells, one
+      cell) is a routed port that has sub-interfaces: HPE gives such
+      an interface no address of its own, so the AOS-CX render writes the
+      address in a `! review:` line of its stanza instead, and the job is
+      `partial` (`/interfaces/interface/address-beside-sub-interfaces`,
+      declared unsupported).
+      Put the address on a sub-interface or another port.
     references: [arista-aoscx-surface]
 
   "interfaces[].interface_type":

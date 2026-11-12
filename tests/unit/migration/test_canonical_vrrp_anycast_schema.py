@@ -433,11 +433,13 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # graduated (supported / lossy) paths, verified against the
         # explicit capability lists.
         # AOS-CX: VARP active-gateway (ipv4 anycast VIP + the chassis MAC)
-        # graduated; VRRP / IPv6-anycast / per-VRF static / routed
-        # sub-interface stay unsupported.
+        # and routed sub-interface dot1q (`encapsulation dot1q <id>`)
+        # graduated; VRRP / IPv6-anycast / per-VRF static stay
+        # unsupported.
         "aruba_aoscx": {
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/anycast-gateway-mac",
+            "/interfaces/interface/dot1q-vlan",
         },
         # IOS-XR: per-VRF static routes + routed sub-interface dot1q
         # graduated (v0.1.5 GAP-7); VRRP / anycast stay unsupported.

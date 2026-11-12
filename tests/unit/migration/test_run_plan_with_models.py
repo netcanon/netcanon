@@ -3106,8 +3106,7 @@ class TestSubInterfaces:
         """One grammar on both sides: a unit is written as the tree
         holds it.  The same two units have followed, and nothing is
         asked.  (The AOS-CX one states no tag here.  One that does is
-        a job its validation holds, since the AOS-CX renderer writes no
-        sub-interface's tag yet: ``test_an_aoscx_sub_interface_states_its_tag.py``.)"""
+        written with it: ``test_an_aoscx_sub_interface_states_its_tag.py``.)"""
         ios, aoscx = get_codec("cisco_iosxe_cli"), get_codec("aruba_aoscx")
         for codec, text, source, target, unit in (
             (ios, _IOS_UNIT_WITH_NO_TAG, "cisco_iosxe/C9300-24P", "cisco_iosxe/C9300-48P",

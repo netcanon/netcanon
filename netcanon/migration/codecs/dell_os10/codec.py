@@ -156,6 +156,10 @@ class DellOS10Codec(CodecBase):
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
             "/interfaces/interface/config/vrf",
+            # A port's own address beside its sub-interfaces is written on
+            # the port and read back there (the sub-interfaces themselves
+            # are not modelled: `/interfaces/interface/dot1q-vlan`).
+            "/interfaces/interface/address-beside-sub-interfaces",
             # Interfaces — L2 switchport + LAG membership
             "/interfaces/interface/switchport-mode",
             "/interfaces/interface/access-vlan",

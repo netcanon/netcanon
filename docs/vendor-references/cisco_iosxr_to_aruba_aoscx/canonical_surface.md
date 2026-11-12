@@ -1,5 +1,8 @@
 # IOS-XR → AOS-CX: measured canonical surface
 
+<!-- an-address-beside-sub-interfaces -->
+> **Update 2026-11-12 — a port's own address beside its sub-interfaces is not written.**  HPE gives a port or an L3 LAG that has sub-interfaces no address of its own.  The AOS-CX render now writes such an address in a `! review:` line of the port's stanza instead, and the job is `partial` (`/interfaces/interface/address-beside-sub-interfaces`, declared unsupported); it also writes each sub-interface's tag (`encapsulation dot1q <id>`), which it wrote for none up to 0.7.7.  Measured after the change: on the synthetic kitchen sink the address of `GigabitEthernet0/0/0/1` is not written, and the reconciler reads the declaration (`EXPECTED_UNSUPPORTED`, not a codec bug); `interfaces[].ipv4_addresses` is preserved on 11 of 12 cells.  The tables below are from before it.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/cisco_iosxr__aruba_aoscx.yaml`.
 

@@ -193,9 +193,10 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: lossy
     reason: >
-      A narrow, well-understood degradation: preserved on 9 cells and
-      drifting on exactly one (`ksator_labmgmt_qfx10k2_junos173.set`), where
-      6 `irb.<vlan>` records are affected.  On every one of those the IP,
+      Preserved on 8 cells and drifting on two.  On one
+      (`ksator_labmgmt_qfx10k2_junos173.set`), 6
+      `irb.<vlan>` records show a narrow, well-understood degradation: on
+      every one of those the IP,
       prefix length AND the anycast `virtual_gateway_address` all survive —
       only the per-address `virtual_gateway_mac` is blanked.  aruba_aoscx
       declares `/interfaces/interface/ipv4/address/virtual-gateway-mac`
@@ -205,7 +206,12 @@ per_field_expectation:
       both sides of every cell, because juniper_junos declares
       `/anycast-gateway-mac` unsupported as a source — so the MAC is not
       relocated, it is gone.  Re-author the switch-wide anycast MAC on the
-      target if the SVIs are meant to share one.
+      target if the SVIs are meant to share one.  On that cell and the
+      other, one record each is an interface that has units beside it: HPE gives such
+      an interface no address of its own, so the AOS-CX render writes the
+      address in a `! review:` line of its stanza instead, and the job is
+      `partial` (`/interfaces/interface/address-beside-sub-interfaces`,
+      declared unsupported).
     references: [junos-aoscx-surface]
 
   "interfaces[].ipv6_addresses":

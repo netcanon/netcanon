@@ -17,6 +17,16 @@ sub-interface was a second record of the LAG, its address on the LAG
 itself (``interface Port-Channel1`` with the address, on EOS), in jobs
 that said ``completed``.
 
+Onto AOS-CX the renderer wrote no tag either: a sub-interface came out
+with its address and no ``encapsulation dot1q``, which the job listed.
+It writes the tag now.  A port or a LAG that has sub-interfaces is
+written with no address of its own, since HPE's sub-interface guide
+says an L3 interface with sub-interfaces takes none, and a ``! review:``
+line gives the source's; the validation lists
+``/interfaces/interface/address-beside-sub-interfaces`` and the job is
+``partial``.  Every committed capture is sent onto AOS-CX and its
+output read as text for both.
+
 The source is HPE's example, typed by hand.  Each output is read as text
 by a reader of the test's own per target, since a target's parser can
 read a VLAN interface back where the output wrote a sub-interface
@@ -27,14 +37,17 @@ check is handed the defect it is for.
 
 from __future__ import annotations
 
+import functools
 import re
 
 import pytest
 
+from netcanon.migration.canonical import xpath_walker
 from netcanon.migration.codecs.aruba_aoscx import parse as aoscx_parse
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
+from tests.unit.migration.test_vlan_members_reach_the_output import CAPTURES
 
 pytestmark = pytest.mark.unit
 
@@ -55,6 +68,7 @@ SOURCE = (
 #: write the NUMBER as the tag -- which none may.
 WRITES_THE_TAG: dict[str, tuple[str, str]] = {
     "arista_eos": ("   encapsulation dot1q vlan 10\n", "encapsulation dot1q vlan 201"),
+    "aruba_aoscx": ("    encapsulation dot1q 10\n", "encapsulation dot1q 201"),
     "cisco_iosxe_cli": (" encapsulation dot1Q 10\n", "encapsulation dot1Q 201"),
     "cisco_iosxr": (" encapsulation dot1q 10\n", "encapsulation dot1q 201"),
     "cisco_nxos": ("  encapsulation dot1q 10\n", "encapsulation dot1q 201"),
@@ -72,7 +86,7 @@ WRITES_THE_TAG: dict[str, tuple[str, str]] = {
 #: port without a map and is held for that, before any tag; its own
 #: tests send a sub-interface after a mapped port
 #: (``tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py``).
-HOLDS_THE_JOB = {"aruba_aoscx", "cisco_iosxe", "dell_os10"}
+HOLDS_THE_JOB = {"cisco_iosxe", "dell_os10"}
 
 #: The warning a unit that went after its port with no tag is given.
 NO_TAG = "with no 802.1Q tag"
@@ -141,9 +155,6 @@ def test_each_target_that_has_a_form_writes_it(target: str) -> None:
 
 @pytest.mark.parametrize("target", sorted(HOLDS_THE_JOB))
 def test_a_target_with_no_form_holds_the_job(target: str) -> None:
-    """AOS-CX itself among them: its renderer writes the sub-interface
-    and its address and no ``encapsulation dot1q`` yet, and the job
-    says so."""
     job = _job(target)
     assert job.status == MigrationJobStatus.partial
     assert TAG in [u.path for u in job.validation.unsupported_paths]
@@ -301,3 +312,159 @@ def test_the_output_check_sees_the_number_as_the_tag() -> None:
     job = _job("vyos")
     job.rendered = job.rendered.replace("vif 10 {", "vif 201 {")
     assert output_problems("vyos", job) != []
+
+
+# -- A port that has sub-interfaces holds no address ---------------------
+
+CARRIER = "/interfaces/interface/address-beside-sub-interfaces"
+
+#: A routed EOS port with an address of its own and a tagged
+#: sub-interface, typed by hand: EOS takes both.
+CARRIER_SOURCE = (
+    "hostname r1\n!\n"
+    "interface Ethernet1\n   no switchport\n   ip address 192.0.2.1/24\n!\n"
+    "interface Ethernet1.10\n   encapsulation dot1q vlan 10\n   ip address 198.51.100.1/24\n!\n"
+)
+
+#: The name of an AOS-CX sub-interface of a port or a LAG, read by the
+#: test itself: the port or LAG, and the number.
+_SUB_INTERFACE = re.compile(r"^(\d+/\d+/\d+|lag \d+)\.(\d+)$")
+
+
+def _stanzas(text: str) -> dict[str, list[str]]:
+    """Each ``interface`` header of AOS-CX *text*, by the name it
+    opens, with the indented lines under it."""
+    stanzas: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in text.splitlines():
+        if line.startswith("interface "):
+            current = stanzas.setdefault(line[len("interface "):].strip(), [])
+        elif line.startswith(" ") and current is not None:
+            current.append(line.strip())
+        else:
+            current = None
+    return stanzas
+
+
+def carrier_problems(text: str) -> list[str]:
+    """A port or LAG of the AOS-CX output *text* that holds an address
+    line beside a sub-interface of its own."""
+    stanzas = _stanzas(text)
+    problems = []
+    for name in stanzas:
+        m = _SUB_INTERFACE.match(name)
+        if m is None:
+            continue
+        held = [
+            line for line in stanzas.get(m.group(1), [])
+            if line.startswith(("ip address ", "ipv6 address "))
+        ]
+        if held:
+            problems.append(f"{m.group(1)} holds {len(held)} address line(s) beside {name}")
+    return problems
+
+
+def tag_problems(text: str) -> list[str]:
+    """A sub-interface of the AOS-CX output *text* that holds no
+    ``encapsulation dot1q`` line, or more than one."""
+    return [
+        f"{name} has {n} encapsulation lines"
+        for name, lines in _stanzas(text).items()
+        if _SUB_INTERFACE.match(name)
+        and (n := sum(line.startswith("encapsulation dot1q ") for line in lines)) != 1
+    ]
+
+
+def _eos_job(target: str, text: str = CARRIER_SOURCE) -> MigrationJob:
+    return run_plan_with_checked_names(
+        get_codec("arista_eos"), get_codec(target), text, port_rename_map={},
+    )
+
+
+def test_a_port_with_sub_interfaces_is_written_with_no_address() -> None:
+    job = _eos_job("aruba_aoscx")
+    out = job.rendered or ""
+    stanzas = _stanzas(out)
+    assert job.status == MigrationJobStatus.partial
+    assert CARRIER in [u.path for u in job.validation.unsupported_paths]
+    assert carrier_problems(out) == []
+    assert tag_problems(out) == []
+    assert stanzas["1/1/1.10"] == [
+        "no shutdown", "encapsulation dot1q 10", "ip address 198.51.100.1/24",
+    ]
+    review = [line for line in stanzas["1/1/1"] if line.startswith("! review:")]
+    assert len(review) == 1 and "192.0.2.1/24" in review[0], stanzas["1/1/1"]
+
+
+def test_onto_a_target_that_takes_both_the_job_is_completed() -> None:
+    """The path is AOS-CX's alone: IOS-XE keeps the port's address."""
+    job = _eos_job("cisco_iosxe_cli")
+    assert job.status == MigrationJobStatus.completed, job.error
+    assert " ip address 192.0.2.1 255.255.255.0" in (job.rendered or "").splitlines()
+
+
+def test_a_port_with_no_address_of_its_own_says_nothing() -> None:
+    """HPE's example onto AOS-CX itself: no review line, no listed path."""
+    job = _job("aruba_aoscx")
+    assert job.status == MigrationJobStatus.completed, job.error
+    assert "! review:" not in (job.rendered or "")
+
+
+@functools.cache
+def _onto_aoscx() -> list[tuple[str, MigrationJob]]:
+    """Every committed capture onto AOS-CX, with no port map."""
+    return [
+        (rel, run_plan_with_checked_names(
+            get_codec(codec), get_codec("aruba_aoscx"),
+            path.read_text(encoding="utf-8"), port_rename_map={},
+        ))
+        for codec, rel, path in CAPTURES
+    ]
+
+
+def test_no_capture_onto_aoscx_gives_a_carrier_an_address() -> None:
+    found = {rel: p for rel, job in _onto_aoscx() if (p := carrier_problems(job.rendered or ""))}
+    assert found == {}
+    # The check was asked of outputs that have sub-interfaces.
+    assert sum(
+        any(_SUB_INTERFACE.match(n) for n in _stanzas(job.rendered or "")) for _rel, job in _onto_aoscx()
+    ) > 0
+
+
+def test_every_carrier_left_without_its_address_holds_the_job() -> None:
+    """A review line of the carrier's in the output, and the job lists
+    the path: the renderer and the validation say the same."""
+    said = {
+        rel: (job.status.value, CARRIER in [u.path for u in job.validation.unsupported_paths])
+        for rel, job in _onto_aoscx()
+        if "beside its sub-interfaces" in (job.rendered or "")
+    }
+    assert said and all(v == ("partial", True) for v in said.values()), said
+
+
+def test_a_completed_job_onto_aoscx_writes_every_tag() -> None:
+    found = {
+        rel: p for rel, job in _onto_aoscx()
+        if job.status == MigrationJobStatus.completed and (p := tag_problems(job.rendered or ""))
+    }
+    assert found == {}
+
+
+def test_the_carrier_check_sees_an_address_written() -> None:
+    out = _eos_job("aruba_aoscx").rendered or ""
+    broken = out.replace("interface 1/1/1\n", "interface 1/1/1\n    ip address 192.0.2.1/24\n", 1)
+    assert carrier_problems(broken) != []
+
+
+def test_the_tag_check_sees_the_tag_left_out() -> None:
+    out = _eos_job("aruba_aoscx").rendered or ""
+    assert tag_problems(out.replace("    encapsulation dot1q 10\n", "")) != []
+
+
+def test_the_job_check_sees_the_path_not_walked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the walker not asking, the job onto AOS-CX says
+    ``completed`` over a port left without its address."""
+    monkeypatch.setattr(xpath_walker, "ports_with_sub_interfaces", lambda _intent: frozenset())
+    job = _eos_job("aruba_aoscx")
+    assert job.status == MigrationJobStatus.completed
+    assert "beside its sub-interfaces" in (job.rendered or "")

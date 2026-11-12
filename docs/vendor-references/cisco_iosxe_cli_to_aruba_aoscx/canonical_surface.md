@@ -35,16 +35,21 @@ campus access/aggregation switch.
 
 The realistic migration is therefore the Catalyst subset: a campus closet or
 small-aggregation Catalyst replaced by an AOS-CX switch carrying the same VLAN
-database, SVI addressing, uplink LAGs, local users and SNMP. The router-only
-surface is not written by this codec and shows up as declared drops:
+database, SVI addressing, uplink LAGs, local users and SNMP. Most of the
+router-only surface is not written by this codec:
 `/interfaces/interface/tunnel-type` (GRE / IPsec) is declared **lossy** by
-`aruba_aoscx`, `/interfaces/interface/dot1q-vlan` (routed
-`GigabitEthernet2/0/4.223415`-style sub-interfaces) is declared **unsupported**,
-and both were measured drifting. (AOS-CX has routed sub-interfaces, HPE's
-`interface 1/1/1.201` with `encapsulation dot1q 10`, and the parser reads their
-tag; the renderer writes none yet.) Neither is a YAML key on this pair, but a
-planner migrating an ISR/CSR rather than a Catalyst should read them as a
-warning that this is the wrong pair for that box.
+`aruba_aoscx` and was measured drifting. Routed sub-interfaces
+(`GigabitEthernet2/0/4.223415`-style) are written: AOS-CX has them, HPE's
+`interface 1/1/1.201` with `encapsulation dot1q 10`, and the renderer writes
+each one's tag (up to 0.7.7 it wrote none, and
+`/interfaces/interface/dot1q-vlan` was declared unsupported and measured
+drifting). A unit numbered above 4,094 goes by its tag, and the port the
+sub-interfaces ride on is given no address of its own: HPE takes none there,
+so the address is in a `! review:` line and the job is `partial`
+(`/interfaces/interface/address-beside-sub-interfaces`, unsupported). None of
+these is a YAML key on this pair, but a planner migrating an ISR/CSR rather
+than a Catalyst should read them as a warning that this is the wrong pair for
+that box.
 
 ## The structural finding: one root cause, four symptoms
 

@@ -1365,6 +1365,45 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX output states each sub-interface's tag, and gives the
+  port it rides on no address of its own.**  The parser read
+  `encapsulation dot1q <VLAN-ID>` under an AOS-CX sub-interface
+  (`interface 1/1/1.201`, `interface lag 1.201`), and the renderer
+  wrote none: onto AOS-CX, from AOS-CX itself as from another vendor,
+  the output had the sub-interface with its address and no tag, and
+  the job was `partial`, its validation listing
+  `/interfaces/interface/dot1q-vlan`.  The renderer writes the tag
+  first in the stanza, and the path is supported.  HPE numbers a
+  sub-interface 1 to 4,094 (`largest_unit`): from another vendor a
+  unit numbered above that goes by its tag
+  (`GigabitEthernet0/0/1.4095` with `encapsulation dot1Q 11` is
+  `1/1/1.11`), and one with no tag is listed and holds the job, as
+  onto Junos above 16,384.  HPE's guide gives a port or an L3 LAG
+  that has sub-interfaces no address of its own, and an EOS or IOS-XE
+  routed port has one beside its units: written as it stood, that
+  address was in a stanza the switch does not take, in jobs that
+  listed only the tag.  It is not written now.  A `! review:` line in
+  the port's stanza gives it, and the job is `partial`, its
+  validation listing
+  `/interfaces/interface/address-beside-sub-interfaces`.  The walker
+  yields that path for an interface another is a sub-interface of by
+  its name, by the one rule the renderer reads
+  (`ports_with_sub_interfaces` in `canonical/transforms.py`), so the
+  job and the output agree on any vendor's names.  AOS-S, which
+  writes the port's address on the port and each sub-interface as a
+  VLAN of the switch, declares the path a drop it reports; FortiOS
+  and OS10, whose matrices are lists, name it supported.  The
+  cross-mesh harness reads that declaration as it reads the anycast
+  one: the mesh records the source's interfaces with sub-interfaces
+  on each cell (`sub_interface_ports`), and an address dropped whole
+  from one of them, onto a target that declares the path, is
+  expected and not a codec bug.  Over the
+  committed captures every output onto AOS-CX that has a
+  sub-interface changes, and no job's status does.  Guarded by
+  `tests/unit/migration/test_an_aoscx_sub_interface_states_its_tag.py`,
+  which reads each output as text, every committed capture onto
+  AOS-CX among them, and makes the walker miss the path to see the
+  job check fail; and by `test_a_unit_the_target_cannot_number.py`.
 - **An AOS-CX LAG's sub-interface is a sub-interface, not a second
   record of the LAG.**  HPE documents sub-interfaces of an L3 LAG
   (`interface lag 1.201`).  The parser read that header as `lag 1`,

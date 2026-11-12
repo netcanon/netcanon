@@ -184,6 +184,12 @@ class ArubaAOSCXCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: HPE's ``interface`` command for a sub-interface (AOS-CX
+    #: Fundamentals Guide, sub-interface chapter, 6300/6400 and the
+    #: 8100, 83xx and 10000 series) numbers it 1 to 4094.  See
+    #: ``CodecBase.largest_unit``.
+    largest_unit: ClassVar[int | None] = 4094
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="aruba_aoscx",
         vendor_id="aruba_aoscx",
@@ -192,6 +198,7 @@ class ArubaAOSCXCodec(CodecBase):
         supported=[
             "/interfaces/interface/config/ip-mtu",  # an IP MTU of its own: `ip mtu`
             "/interfaces/interface/config/ip-mtu-beside-mtu",  # `ip mtu` beside the interface MTU
+            "/interfaces/interface/dot1q-vlan",  # a sub-interface's `encapsulation dot1q <VLAN-ID>`
             # System
             "/system/hostname",
             # Interfaces — name + basic L3 (Phase 1)
@@ -533,16 +540,14 @@ class ArubaAOSCXCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
+                path="/interfaces/interface/address-beside-sub-interfaces",
                 reason=(
-                    "AOS-CX has routed sub-interfaces (`interface "
-                    "1/1/1.201` with `encapsulation dot1q 10`, HPE, on the "
-                    "6300/6400 from 10.08 and the 8100, 83xx and 10000 "
-                    "series), and the parser reads the tag; this codec's "
-                    "renderer does not write it yet.  So a tag onto "
-                    "AOS-CX, from another vendor or from AOS-CX itself, is "
-                    "reported as a drop: the output has the sub-interface "
-                    "with its address and no `encapsulation dot1q`."
+                    "HPE's sub-interface guide for AOS-CX says an L3 "
+                    "interface that has sub-interfaces takes no IP address "
+                    "configuration.  So the address a source gives a port "
+                    "or a LAG beside its sub-interfaces is not written: "
+                    "the stanza gives it in a `! review:` line, and it is "
+                    "reported as a drop."
                 ),
             ),
             UnsupportedPath(
@@ -551,10 +556,10 @@ class ArubaAOSCXCodec(CodecBase):
                     "Which routed sub-interface takes the untagged frames of "
                     "its port (IOS-XE `encapsulation dot1Q N native`, Junos "
                     "`native-vlan-id N` with the unit of that `vlan-id`): HPE "
-                    "documents no such form for an AOS-CX sub-interface, and "
-                    "this codec writes no sub-interface's tag (see "
-                    "`/interfaces/interface/dot1q-vlan`).  Declared so that "
-                    "it is reported as a drop."
+                    "documents no such form for an AOS-CX sub-interface, "
+                    "whose `encapsulation dot1q <VLAN-ID>` states one tag.  "
+                    "The sub-interface is written with its tag, and which "
+                    "takes the untagged frames is reported as a drop."
                 ),
             ),
             UnsupportedPath(

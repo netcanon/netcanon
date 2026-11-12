@@ -30,7 +30,7 @@ import functools
 import pytest
 
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
-from netcanon.models.migration import MigrationJob
+from netcanon.models.migration import MigrationJob, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
 
 pytestmark = pytest.mark.unit
@@ -266,6 +266,11 @@ def test_a_unit_of_a_lag_is_a_vif_of_its_bond(source: str) -> None:
 #: membership, and its parser reads none back.
 WRITES_NO_LAG = {"cisco_iosxe"}
 
+#: Targets that give a port or a LAG with sub-interfaces no address of
+#: its own (HPE, for AOS-CX): there the bond's address is not written,
+#: a ``review:`` line gives it, and the job is ``partial``.
+NO_ADDRESS_BESIDE_UNITS = {"aruba_aoscx"}
+
 @functools.cache
 def _from_vyos(form: str, target: str, parse=None) -> MigrationJob:
     return run_plan_with_checked_names(
@@ -276,7 +281,8 @@ def _from_vyos(form: str, target: str, parse=None) -> MigrationJob:
 def _losses(job: MigrationJob, target: str) -> list[str]:
     """What the target's own parser does not find in the output: the
     bond's members on one LAG, the bond's address, and the unit's on an
-    interface of its own."""
+    interface of its own.  Onto a target in ``NO_ADDRESS_BESIDE_UNITS``
+    the bond's address is on no interface, and said instead."""
     tree = get_codec(target).parse(job.rendered or "")
     lost: list[str] = []
     holding = {
@@ -284,6 +290,14 @@ def _losses(job: MigrationJob, target: str) -> list[str]:
         for ip in ("10.0.0.1", "10.0.10.1")
     }
     for ip, names in holding.items():
+        if ip == "10.0.0.1" and target in NO_ADDRESS_BESIDE_UNITS:
+            said = any(
+                "review:" in line and f"{ip}/24" in line
+                for line in (job.rendered or "").splitlines()
+            )
+            if names or not said or job.status != MigrationJobStatus.partial:
+                lost.append(f"{ip} on {names}, said: {said}, {job.status.value}")
+            continue
         if len(names) != 1:
             lost.append(f"{ip} on {names}")
     if holding["10.0.0.1"] and holding["10.0.0.1"] == holding["10.0.10.1"]:
@@ -298,7 +312,8 @@ def _losses(job: MigrationJob, target: str) -> list[str]:
 def test_the_bond_and_its_unit_reach_every_target(form: str, target: str) -> None:
     """Onto AOS-CX too: its output says ``interface lag 0.10``, which
     its parser read as ``lag 0`` up to 0.7.7, so that the LAG carried
-    both addresses."""
+    both addresses.  (The LAG's own address is not written there, and
+    is said: ``NO_ADDRESS_BESIDE_UNITS``.)"""
     assert _losses(_from_vyos(form, target), target) == []
 
 
