@@ -1955,7 +1955,8 @@ def next_hop_elsewhere_rows(head: str, count: int, form: str) -> list[str]:
 
     A route of one VRF whose next hop is looked up in another (IOS
     ``global`` and ``nexthop-vrf``, NX-OS ``vrf <name>`` after the next
-    hop, EOS ``egress-vrf``, IOS XR ``<prefix> vrf <name>``) is a
+    hop, EOS ``egress-vrf``, IOS XR ``<prefix> vrf <name>``, VyOS
+    ``next-hop <address> vrf <name>``) is a
     route the tree has no form for: a canonical route has one VRF.
     Read as a route of its own VRF, it was written into that VRF on
     every target, its next hop looked up where it is not, in a job

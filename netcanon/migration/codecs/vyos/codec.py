@@ -261,8 +261,10 @@ class VyOSCodec(CodecBase):
             "/interfaces/interface/ipv6/address/scope",   # re-inferred from the fe80::/10 prefix on parse
             "/interfaces/interface/dhcp-client",
             "/interfaces/interface/dhcp-client-v6",
-            # Static routes (default VRF)
+            # Static routes, of the global table and of a VRF
+            # (`vrf name <X> { protocols { static { route ... } } }`)
             "/routing/static-route",
+            "/routing/static-route/vrf",
             # ── Phase 2: local users (`system login user`) ──
             "/local-users/user/name",
             "/local-users/user/hashed-password",
@@ -699,19 +701,6 @@ class VyOSCodec(CodecBase):
                     "VyOS has no top-level VLAN database; 802.1Q VLANs are "
                     "modelled as `vif <vid>` sub-interfaces (rendered as "
                     "`ethN.<vid>` CanonicalInterfaces), which ARE supported."
-                ),
-            ),
-            # VRF: the `vrf name <X>` instances + per-interface binding
-            # ARE supported (Phase 3); the per-VRF static-route table
-            # (`vrf name <X> { protocols static route ... }`) stays
-            # deferred past the Phase-3 wire-up.
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "VyOS per-VRF static routes (`vrf name <X> { protocols "
-                    "static route ... }`) are deferred past the Phase-3 VRF "
-                    "wire-up; the `vrf name` instances + per-interface "
-                    "binding ARE supported."
                 ),
             ),
             # ── Phase 5: VXLAN — the L2 VNI binding IS supported; the EVPN

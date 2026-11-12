@@ -8,10 +8,12 @@ Emits the supported subset: the ``interfaces`` tree (ethernet /
 loopback / dummy / bonding blocks with ``address`` / ``description`` /
 ``disable`` / ``mtu`` / per-interface ``vrf``, plus nested ``vif`` VLAN
 sub-interfaces and the bonding ``mode`` / ``member`` lines), the
-``protocols static`` route tree, the ``service { snmp { ... } }`` block
+``protocols static`` route tree of the global table, the ``service {
+snmp { ... } }`` block
 (v1/v2c community + location / contact + v3 USM users), the ``system``
 block (``host-name`` + ``login`` local users + ``ntp`` servers), the
-``vrf { name <X> { table <N> } }`` routing instances, the ``interfaces
+``vrf { name <X> { protocols { static { ... } } table <N> } }``
+routing instances with the routes of each, the ``interfaces
 vxlan vxlanN`` netdevs (one VNI each — ``vni`` / source / ``group`` /
 ``remote`` / ``port``), and the ``// vyos-config-version`` trailer every
 ``config.boot`` carries.
@@ -117,7 +119,9 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.extend(vxlan_lines)
         lines.append("}")
 
-    static_lines = _render_static(tree.static_routes)
+    static_lines = _render_static(
+        [r for r in tree.static_routes if not r.vrf]
+    )
     if static_lines:
         lines.append("protocols {")
         lines.extend(static_lines)
@@ -141,9 +145,9 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.extend(_render_ntp(tree.ntp_servers))
     lines.append("}")
 
-    # ``vrf { name <X> { table <N> } }`` — the last top-level node
-    # (alphabetical), emitted after ``system``.
-    lines.extend(_render_vrf(tree.routing_instances))
+    # ``vrf { name <X> { protocols { static ... } table <N> } }`` —
+    # the last top-level node (alphabetical), emitted after ``system``.
+    lines.extend(_render_vrf(tree.routing_instances, tree.static_routes))
 
     # Trailer — every config.boot ends with the component-version stamp.
     lines.append("// Warning: Do not remove the following line.")
@@ -445,27 +449,33 @@ def _render_ntp(servers: list) -> list[str]:
     return out
 
 
-def _render_static(routes: list) -> list[str]:
+def _render_static(routes: list, depth: int = 1) -> list[str]:
     """Render the ``static { }`` block body (nested under ``protocols``).
 
     Each route emits ``route <CIDR> { next-hop <gw> { distance <N> } }``
     (``route6`` for IPv6 destinations).  Sorted by destination so the
     output is stable (the round-trip compares by destination anyway).
+
+    Args:
+        routes: The routes of one table.
+        depth: How many levels deep ``static`` is: 1 under the top
+            ``protocols``, 3 under ``vrf / name <X> / protocols``.
     """
     usable = [r for r in routes if r.destination and (r.gateway or r.interface)]
     if not usable:
         return []
-    lines = ["    static {"]
+    pad = "    " * depth
+    lines = [f"{pad}static {{"]
     for r in sorted(usable, key=lambda x: x.destination):
         kw = "route6" if ":" in r.destination else "route"
         nexthop = r.gateway or r.interface
-        lines.append(f"        {kw} {r.destination} {{")
-        lines.append(f"            next-hop {nexthop} {{")
+        lines.append(f"{pad}    {kw} {r.destination} {{")
+        lines.append(f"{pad}        next-hop {nexthop} {{")
         if r.metric:
-            lines.append(f"                distance {r.metric}")
-        lines.append("            }")
-        lines.append("        }")
-    lines.append("    }")
+            lines.append(f"{pad}            distance {r.metric}")
+        lines.append(f"{pad}        }}")
+        lines.append(f"{pad}    }}")
+    lines.append(f"{pad}}}")
     return lines
 
 
@@ -627,23 +637,46 @@ def _render_service(snmp, source_vendor: str = "") -> list[str]:
     return ["service {", "    snmp {", *body, "    }", "}"]
 
 
-def _render_vrf(instances: list) -> list[str]:
+def _render_vrf(instances: list, routes: list = ()) -> list[str]:
     """Render the top-level ``vrf { }`` block.
 
-    Each routing-instance emits ``name <X> { table <N> }``; the numeric
-    ``table`` id is SYNTHESISED (``100 + sort-index``) because the
-    canonical :class:`CanonicalRoutingInstance` carries no table number
-    (declared lossy ``/routing-instances/instance/table``).  Instances
-    are sorted by name for stable, deterministic output (the round-trip
-    does not normalise ``routing_instances`` order, and the synthesised
-    id must be reproducible).
+    Each routing-instance emits ``name <X> { protocols { static { ...
+    } } table <N> }``, the routes of the VRF in VyOS's own form for
+    them (``set vrf name <name> protocols static ...``, VyOS, "VRF").
+    The numeric ``table`` id is SYNTHESISED (``100 + sort-index``)
+    because the canonical :class:`CanonicalRoutingInstance` carries no
+    table number (declared lossy ``/routing-instances/instance/table``).
+    Instances are sorted by name for stable, deterministic output (the
+    round-trip does not normalise ``routing_instances`` order, and the
+    synthesised id must be reproducible).
+
+    A VRF a route names and no instance declares (a VRF the source
+    platform has without a line for it: OS10 ``management``, AOS-CX
+    ``mgmt``) is written after the declared ones, so that the route
+    has a VRF to be in and the declared VRFs keep the table ids they
+    had.
+
+    Args:
+        instances: The tree's routing instances.
+        routes: The tree's static routes; those of a VRF are written
+            in its block.
     """
-    usable = [ri for ri in instances if ri.name]
-    if not usable:
+    declared = sorted({ri.name for ri in instances if ri.name})
+    by_vrf: dict[str, list] = {}
+    for route in routes:
+        if route.vrf:
+            by_vrf.setdefault(route.vrf, []).append(route)
+    named = sorted(set(by_vrf) - set(declared))
+    if not declared and not named:
         return []
     out = ["vrf {"]
-    for idx, ri in enumerate(sorted(usable, key=lambda x: x.name)):
-        out.append(f"    name {ri.name} {{")
+    for idx, name in enumerate([*declared, *named]):
+        out.append(f"    name {name} {{")
+        static = _render_static(by_vrf.get(name, []), depth=3)
+        if static:
+            out.append("        protocols {")
+            out.extend(static)
+            out.append("        }")
         out.append(f"        table {100 + idx}")
         out.append("    }")
     out.append("}")

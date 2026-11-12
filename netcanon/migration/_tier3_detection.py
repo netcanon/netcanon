@@ -574,7 +574,8 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             server that is not enabled, a FortiOS DHCP server of
             ``status disable``, or a RouterOS ``/ip dhcp-server`` of
             ``disabled=yes``) or ``"disabled-route"`` (a RouterOS
-            ``/ip route`` of ``disabled=yes``) or ``"distance-255"``
+            ``/ip route`` of ``disabled=yes``, or a VyOS ``next-hop``
+            held ``disable``) or ``"distance-255"``
             (an IOS-XE ``ip route`` of administrative distance 255,
             which IOS does not install) or ``"incomplete"`` (an AOS-S
             DHCP pool the server discards) or ``"disabled-subnet"``
