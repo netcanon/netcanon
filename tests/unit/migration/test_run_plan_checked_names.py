@@ -25,9 +25,10 @@ run.  Three things are read here.
 * **The rendered output** of every job that is still ``completed``,
   read back with the target's own parser (``read_back``): no interface
   of the output carries the addresses of two source interfaces, no
-  interface of the source that has an address is missing from it, and
-  the translator's own warnings name no interface it left under a
-  foreign name.  That oracle asks nothing of the function it
+  port of the output carries interfaces of two source ports (a unit
+  of one beside the other), no interface of the source that has an
+  address is missing from it, and the translator's own warnings name
+  no interface it left under a foreign name.  That oracle asks nothing of the function it
   guards, nor of the list of names that function groups: it works
   from addresses, which the translator does not touch, from the
   source config parsed again, from the warning lines, and -- for
@@ -163,6 +164,24 @@ def _configured(tree) -> set[str]:
     return names
 
 
+#: The types of a VLAN's own interface, which rides on no port.
+_VLAN_INTERFACE_TYPES = ("ianaift:l3ipvlan", "ianaift:l2vlan")
+
+
+def _rides_on(iface) -> str:
+    """The port *iface* rides on, read here by hand: a VLAN's own
+    interface rides on none and is its own; a sub-interface whose
+    config states its port rides on that port; one named
+    ``<port>.<digits>`` on the port; anything else is a port of its
+    own."""
+    if iface.interface_type in _VLAN_INTERFACE_TYPES:
+        return iface.name
+    if iface.dot1q_vlan is not None and iface.vlan_parent and iface.vlan_parent != iface.name:
+        return iface.vlan_parent
+    port, dot, unit = iface.name.rpartition(".")
+    return port if dot and port and unit.isdigit() else iface.name
+
+
 def _in_text(ip: str, text: str) -> bool:
     """*ip* stands in *text* as an address of its own, not as the
     front of a longer one."""
@@ -246,6 +265,16 @@ def read_back(
 
     * An interface of the output that carries addresses of two
       source interfaces: two interfaces were written as one.
+    * A port of the output that interfaces of two source ports ride
+      on (:func:`_rides_on`, on both sides), each interface holding
+      the addresses of one, and one of them a UNIT of its source port:
+      a unit of port 1 on the port port 0 is written as -- port 1's
+      VLAN on port 0, though the unit has a name of its own.  Two
+      interfaces that are units of no source port may ride on one port
+      of the output: that is how a target writes them (an IOS XR
+      ``Loopback0`` and ``Loopback123`` are ``lo0.0`` and ``lo0.123``
+      on Junos).  (An interface that holds the addresses of two is
+      said by the rule above, and not again here.)
     * An interface of the source that has an address and is not in
       the output -- a hardware port, a loopback, a tunnel, a hardware
       switch: any -- unless the job lists it in ``port_drops`` and an
@@ -278,12 +307,25 @@ def read_back(
     # instances is nobody's.
     owner = {ip: names[0] for ip, names in holders.items() if len(names) == 1}
 
+    port_of = {iface.name: _rides_on(iface) for iface in before.interfaces}
     complaints: list[str] = []
+    riders: dict[str, set[str]] = {}
+    with_a_unit: set[str] = set()
     for iface in after.interfaces:
         sources = sorted({owner[ip] for ip in _addresses(iface) if ip in owner})
         if len(sources) > 1:
             complaints.append(
                 f"{iface.name!r} in the output carries the addresses of {sources}"
+            )
+        elif sources:
+            on = _rides_on(iface)
+            riders.setdefault(on, set()).add(port_of[sources[0]])
+            if port_of[sources[0]] != sources[0]:
+                with_a_unit.add(on)
+    for port, ports in sorted(riders.items()):
+        if len(ports) > 1 and port in with_a_unit:
+            complaints.append(
+                f"{port!r} in the output carries interfaces of the ports {sorted(ports)}"
             )
 
     read = {ip for iface in after.interfaces for ip in _addresses(iface)}
@@ -507,6 +549,36 @@ vlan 20
 # ---------------------------------------------------------------------------
 
 
+_XR_P0, _XR_P1 = "GigabitEthernet0/0/0/0", "GigabitEthernet0/0/0/1"
+
+#: An IOS XR port 0 with an address, and a unit of port 1 that has no
+#: line for its port.  IOS XR counts ports from 0; a target that counts
+#: from 1 writes ports 0 and 1 of a card as one port, and the unit of
+#: port 1 on it.
+_IOSXR_UNIT_OF_PORT_1 = "\n".join([
+    "hostname r1",
+    f"interface {_XR_P0}", " ipv4 address 10.1.0.1 255.255.255.0", "!",
+    f"interface {_XR_P1}.100",
+    " ipv4 address 10.1.100.1 255.255.255.0", " encapsulation dot1q 100", "!",
+    "end", "",
+])
+
+#: Units of ports 0 and 1, and no line for either port.
+_IOSXR_UNITS_OF_TWO_PORTS = "\n".join([
+    "hostname r1",
+    f"interface {_XR_P0}.100",
+    " ipv4 address 10.1.100.1 255.255.255.0", " encapsulation dot1q 100", "!",
+    f"interface {_XR_P1}.200",
+    " ipv4 address 10.1.200.1 255.255.255.0", " encapsulation dot1q 200", "!",
+    "end", "",
+])
+
+#: Two units of port 0, and no line for it: one port.
+_IOSXR_UNITS_OF_ONE_PORT = _IOSXR_UNITS_OF_TWO_PORTS.replace(
+    f"interface {_XR_P1}.200", f"interface {_XR_P0}.200",
+)
+
+
 class TestTwoNamesOnOneName:
     def test_two_hardware_ports(self) -> None:
         job = _checked("aruba_aoss", "arista_eos", _AOSS_TWO_PORTS)
@@ -602,6 +674,101 @@ class TestTwoNamesOnOneName:
         assert job.port_renames["gigabitethernet1/0/1"] == "Ethernet1"
         assert job.port_renames["GigabitEthernet1/0/1"] == "Ethernet1"
         assert (job.status, job.fused_ports) == (COMPLETED, {})
+
+
+class TestAUnitIsOnItsPort:
+    """A unit is on its port, whether or not the config has a line
+    for the port.  The translator writes a unit of port 1 as a unit of
+    the name it gives port 1 -- on a target that counts ports from 1,
+    the name it gives port 0 as well -- and the job said ``completed``
+    with port 1's VLAN on port 0: no name of the config was port 1's,
+    so no two names of the config shared one."""
+
+    @pytest.mark.parametrize(
+        ("target_name", "on"),
+        [
+            ("arista_eos", "Ethernet1"),
+            ("aruba_aoscx", "1/1/1"),
+            ("aruba_aoss", "1/1"),
+            ("dell_os10", "ethernet1/1/1"),
+            ("fortigate_cli", "port1"),
+            ("mikrotik_routeros", "ether1"),
+        ],
+    )
+    def test_onto_a_target_that_counts_from_1(self, target_name: str, on: str) -> None:
+        job = _checked("cisco_iosxr", target_name, _IOSXR_UNIT_OF_PORT_1)
+        assert job.status == PARTIAL
+        assert job.fused_ports == {on: [_XR_P0, _XR_P1]}
+        assert "both devices" in job.error
+
+    @pytest.mark.parametrize(
+        "target_name", ["cisco_iosxe_cli", "cisco_nxos", "juniper_junos", "opnsense"],
+    )
+    def test_onto_a_target_that_counts_from_0(self, target_name: str) -> None:
+        job = _checked("cisco_iosxr", target_name, _IOSXR_UNIT_OF_PORT_1)
+        assert (job.status, job.fused_ports) == (COMPLETED, {})
+
+    @pytest.mark.parametrize(
+        "entries",
+        [{_XR_P1: "Ethernet2"}, {f"{_XR_P1}.100": "Ethernet2.100"}],
+        ids=["the port", "the unit"],
+    )
+    def test_an_entry_settles_it(self, entries: dict[str, str]) -> None:
+        """An entry for the port the config has no line for, or for
+        its unit, puts the unit on a port of its own."""
+        job = _checked("cisco_iosxr", "arista_eos", _IOSXR_UNIT_OF_PORT_1, entries)
+        assert (job.status, job.fused_ports, job.error) == (COMPLETED, {}, None)
+        assert job.port_renames[f"{_XR_P1}.100"] == "Ethernet2.100"
+
+    def test_units_of_two_ports_with_no_lines(self) -> None:
+        job = _checked("cisco_iosxr", "arista_eos", _IOSXR_UNITS_OF_TWO_PORTS)
+        assert job.status == PARTIAL
+        assert job.fused_ports == {"Ethernet1": [_XR_P0, _XR_P1]}
+        assert _unchecked("cisco_iosxr", "arista_eos", _IOSXR_UNITS_OF_TWO_PORTS).status == (
+            COMPLETED
+        )
+
+    def test_units_of_one_port_are_on_one_port(self) -> None:
+        job = _checked("cisco_iosxr", "arista_eos", _IOSXR_UNITS_OF_ONE_PORT)
+        assert (job.status, job.fused_ports) == (COMPLETED, {})
+
+    def test_it_is_the_check_that_says_so(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Without the ports its units imply, the job says
+        ``completed``: the check is what holds it."""
+        monkeypatch.setattr(migration_pipeline, "_ports_units_are_on", lambda *a, **k: {})
+        job = _checked("cisco_iosxr", "arista_eos", _IOSXR_UNIT_OF_PORT_1)
+        assert (job.status, job.fused_ports) == (COMPLETED, {})
+
+    def test_the_ports_its_units_imply(self) -> None:
+        implied = migration_pipeline._ports_units_are_on
+        renames = {_XR_P0: "Ethernet1", f"{_XR_P1}.100": "Ethernet1.100"}
+        assert implied([_XR_P0, f"{_XR_P1}.100"], renames, [], False) == {_XR_P1: "Ethernet1"}
+        # A port the config names is not implied by its unit.
+        assert implied([_XR_P1, f"{_XR_P1}.100"], renames, [], False) == {}
+        # Nor by a unit that was dropped.
+        assert implied([f"{_XR_P1}.100"], renames, [f"{_XR_P1}.100"], False) == {}
+        # A unit 0 written as its port names no port of the output.
+        assert implied(["ge-0/0/1.0"], {"ge-0/0/1.0": "Ethernet1"}, [], False) == {}
+        # The port is the one the config states, where it states one:
+        # an OPNsense ``vlan0.10`` whose ``<if>`` is ``igb0`` is on
+        # ``igb0``, which the config names.
+        renames = {"igb0": "Ethernet1", "vlan0.10": "Ethernet1.10"}
+        assert implied(["igb0", "vlan0.10"], renames, [], False, {"vlan0.10": "igb0"}) == {}
+        assert implied(["igb0", "vlan0.10"], renames, [], False) == {"vlan0": "Ethernet1"}
+        # Given the source codec, only a port of a kind that carries
+        # units: a Junos ``irb.100`` is a VLAN interface, on OPNsense
+        # ``vlan0.100``, and ``vlan0`` is no port.
+        junos = get_codec("juniper_junos")
+        renames = {"irb.100": "vlan0.100", "ge-0/0/1.7": "igb1.7"}
+        assert implied(["irb.100", "ge-0/0/1.7"], renames, [], False, source=junos) == {
+            "ge-0/0/1": "igb1",
+        }
+        assert implied(["irb.100"], renames, [], False) == {"irb": "vlan0"}
+        # Names compare as the source's do.
+        names = ["GigabitEthernet1/0/1", "gigabitethernet1/0/1.10"]
+        renames = {"gigabitethernet1/0/1.10": "Ethernet1.10"}
+        assert implied(names, renames, [], True) == {}
+        assert implied(names, renames, [], False) == {"gigabitethernet1/0/1": "Ethernet1"}
 
 
 # ---------------------------------------------------------------------------
@@ -1589,6 +1756,51 @@ class TestTheReadBackItself:
             get_codec("juniper_junos"), get_codec("arista_eos"),
             _JUNOS_TWO_VLAN_INTERFACES, job, {},
         ) == ["'Vlan100' in the output carries the addresses of ['irb.100', 'vlan.100']"]
+
+    def test_a_unit_on_another_ports_port(self) -> None:
+        job = _unchecked("cisco_iosxr", "arista_eos", _IOSXR_UNIT_OF_PORT_1)
+        assert job.status == COMPLETED
+        assert read_back(
+            get_codec("cisco_iosxr"), get_codec("arista_eos"), _IOSXR_UNIT_OF_PORT_1, job, {},
+        ) == [f"'Ethernet1' in the output carries interfaces of the ports {[_XR_P0, _XR_P1]}"]
+
+    def test_interfaces_that_are_on_one_port_by_their_config_are_fine(self) -> None:
+        """Two units of one port, and a RouterOS VLAN interface that
+        rides on the port whose own address is beside it: each pair
+        rides on one source port."""
+        job = _unchecked("cisco_iosxr", "arista_eos", _IOSXR_UNITS_OF_ONE_PORT)
+        assert read_back(
+            get_codec("cisco_iosxr"), get_codec("arista_eos"), _IOSXR_UNITS_OF_ONE_PORT,
+            job, {},
+        ) == []
+        text = "\n".join([
+            "/interface vlan", "add interface=ether3 name=gn-mgmt vlan-id=11",
+            "/ip address", "add address=10.1.3.1/24 interface=ether3",
+            "add address=10.1.11.1/24 interface=gn-mgmt", "",
+        ])
+        job = _unchecked("mikrotik_routeros", "arista_eos", text)
+        assert job.port_renames["gn-mgmt"] == "Ethernet3.11"
+        assert read_back(
+            get_codec("mikrotik_routeros"), get_codec("arista_eos"), text, job, {},
+        ) == []
+
+    def test_two_interfaces_on_one_port_of_the_output_by_its_own_form(self) -> None:
+        """Junos writes a loopback as a unit of ``lo0``: two IOS XR
+        loopbacks, the second sent to ``lo0.123``, are two interfaces
+        on one port of the output, and neither is a unit of a port of
+        the source."""
+        text = "\n".join([
+            "hostname r1",
+            "interface Loopback0", " ipv4 address 10.255.0.1 255.255.255.255", "!",
+            "interface Loopback123", " ipv4 address 10.255.0.123 255.255.255.255", "!",
+            "end", "",
+        ])
+        entries = {"Loopback123": "lo0.123"}
+        job = _unchecked("cisco_iosxr", "juniper_junos", text, entries)
+        assert "set interfaces lo0 unit 123 family inet address 10.255.0.123/32" in job.rendered
+        assert read_back(
+            get_codec("cisco_iosxr"), get_codec("juniper_junos"), text, job, entries,
+        ) == []
 
     def test_a_port_that_is_not_in_the_output(self) -> None:
         job = _unchecked("cisco_nxos", "cisco_iosxe_cli", _NXOS_MGMT)

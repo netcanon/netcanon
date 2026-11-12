@@ -1401,6 +1401,35 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface is on its port, whether or not the config has a
+  line for the port.**  The translator writes a unit of a port as a
+  unit of the name it gives the port, and the check that no two
+  names of the config end on one name looked only at the names the
+  config has.  An IOS XR unit of port 1 with no line for port 1 itself,
+  beside an address on port 0, came out onto EOS, AOS-CX, OS10,
+  AOS-S, FortiOS and RouterOS -- which count ports from 1 and write
+  ports 0 and 1 of a card as one port -- as a unit of port 0's port:
+  port 1's VLAN on port 0, in a job that said `completed`.  With both
+  devices declared the port was not paired, and the unit was given
+  that name and held the job as a name of no inventory.  The ports a
+  config's units imply are now counted with its names: with no
+  devices the job is `partial` and lists the two ports in
+  `fused_ports`; with devices the port is paired and its unit follows
+  it (`Ethernet2.100`), an entry that sends another port there is two
+  ports on one name in the plan, and a port whose units were all
+  dropped is reported as dropped.  The port a unit rides on is the
+  one its config states, where it states one: an OPNsense `vlan0.10`
+  whose `<if>` is `igb0` is on `igb0`, not on a `vlan0`.  With no
+  devices, a port is counted only where the source's classifier reads
+  it as one that carries units (a physical port, a breakout lane, an
+  aggregate): a Junos `irb.100` is a VLAN interface, not a unit of a
+  port.  No job of a committed input moves.  The read-back of every
+  job over the committed inputs now also fails an output port that
+  carries a unit of one source port beside an interface of another
+  (`tests/unit/migration/test_run_plan_checked_names.py`), and the
+  wrapper of the jobs with devices counts a unit's port by hand
+  (`tests/unit/migration/test_run_plan_with_models.py`).
+
 - **A typed password reaches IOS-XE as it was typed.**  An EOS
   `secret 0 <password>`, and a typed password from AOS-S or VyOS,
   was written onto IOS-XE as `secret 0` followed by the value with
@@ -1413,6 +1442,7 @@ timestamp if your timezone matters for an audit.
   account was in no output and no job.  It is read as an account
   with no password, which every target writes as a review line in
   its place, as it does for EOS's own `nopassword`.
+
 - **An NX-OS or EOS interface header names one interface, or none.**
   Both platforms take a type and its number written apart where a
   name goes (`interface ethernet 2/1`, `interface ethernet 1`), and a

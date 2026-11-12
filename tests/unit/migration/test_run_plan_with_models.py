@@ -131,17 +131,65 @@ def _shared_final_names(source, target, raw_text: str, job: MigrationJob) -> dic
     }
 
 
+#: The types of a VLAN's own interface, which rides on no port.
+_VLAN_INTERFACE_TYPES = ("ianaift:l3ipvlan", "ianaift:l2vlan")
+
+
+def _rides_on(iface) -> str:
+    """The port *iface* rides on, read here by hand: a VLAN's own
+    interface rides on none and is its own; a sub-interface whose
+    config states its port rides on that port; one named
+    ``<port>.<digits>`` on the port; anything else is a port of its
+    own."""
+    if iface.interface_type in _VLAN_INTERFACE_TYPES:
+        return iface.name
+    if iface.dot1q_vlan is not None and iface.vlan_parent and iface.vlan_parent != iface.name:
+        return iface.vlan_parent
+    port, dot, unit = iface.name.rpartition(".")
+    return port if dot and port and unit.isdigit() else iface.name
+
+
 def _ended(source, target, raw_text: str, job: MigrationJob) -> dict[str, set[str]]:
     """Each name of the output, as the target compares names, with
-    the source names that ended on it, as the source compares them."""
+    the source names that ended on it, as the source compares them.
+
+    A unit is on its port whether or not the config has a line for
+    the port: a port with no name of its own here ends on the port
+    of its unit's new name (``TenGigE0/0/0/1.100`` written as
+    ``Ethernet2.100`` puts ``TenGigE0/0/0/1`` on ``Ethernet2``)."""
+    tree = source.parse(raw_text)
+    names = collect_port_names(tree)
     dropped = set(job.port_drops)
     ended: dict[str, set[str]] = {}
-    for name in collect_port_names(source.parse(raw_text)):
+    for name in names:
         if name in dropped:
             continue
         final = job.port_renames.get(name, name)
         ended.setdefault(_same(target, final), set()).add(_same(source, name))
+    have = {_same(source, name) for name in names}
+    for iface in tree.interfaces:
+        port = _rides_on(iface)
+        if iface.name in dropped or port == iface.name or _same(source, port) in have:
+            continue
+        on, dot, unit = job.port_renames.get(iface.name, iface.name).rpartition(".")
+        if dot and on and unit.isdigit():
+            ended.setdefault(_same(target, on), set()).add(_same(source, port))
     return ended
+
+
+def _dropped_by_the_job(source, raw_text: str, job: MigrationJob, port: str) -> bool:
+    """Whether the job dropped *port*: by its name, or -- where the
+    config has no line for the port -- by dropping every unit on it."""
+    tree = source.parse(raw_text)
+    if port in job.port_drops:
+        return True
+    if _same(source, port) in {_same(source, name) for name in collect_port_names(tree)}:
+        return False
+    units = [
+        iface.name for iface in tree.interfaces
+        if iface.name != port and _same(source, _rides_on(iface)) == _same(source, port)
+    ]
+    return bool(units) and all(name in job.port_drops for name in units)
 
 
 def _logical_names_shared(source, target, raw_text: str, job: MigrationJob) -> dict[str, list[str]]:
@@ -512,7 +560,8 @@ def run_plan_with_models(
     * a job with a fused target, or with a port nobody decided, is
       not ``completed``;
     * what the plan says happened to an unplaced port is what the
-      job's drop list says happened to it;
+      job's drop list says happened to it, or to every unit on it
+      where the config has no line for the port;
     * read from the RENDERED OUTPUT, parsed again: every interface
       that can be recognised by its address is on the port the job
       says, and on a port at all (:func:`_not_where_the_job_says`);
@@ -617,7 +666,7 @@ def run_plan_with_models(
         )
         assert undecided == [], f"dropped and nobody decided, in a completed job: {undecided}"
     for port in plan.used_unplaced:
-        assert port.dropped == (port.source in job.port_drops), (
+        assert port.dropped == _dropped_by_the_job(source, raw_text, job, port.source), (
             f"{port.source}: dropped is not what the job did"
         )
         assert bool(port.landed) == (not port.dropped), (
@@ -2761,8 +2810,85 @@ _JUNOS_UNIT_OF = {
 }
 
 
+def _standalone(vendor: str, model: str) -> Inventory:
+    return compile_deployment(
+        Deployment(vendor=vendor, mode="standalone", members=[MemberSpec(model=model)]),
+        REGISTRY,
+    )
+
+
+_NCS540 = "N540-24Z8Q2C-SYS"
+
+#: An NCS 540 whose port 0 has an address and whose port 1 has only a
+#: unit: the config has no line for port 1 itself.
+_IOSXR_UNIT_OF_PORT_1 = "\n".join([
+    "hostname r1",
+    "interface TenGigE0/0/0/0",
+    " ipv4 address 10.1.0.1 255.255.255.0",
+    "!",
+    "interface TenGigE0/0/0/1.100",
+    " ipv4 address 10.1.100.1 255.255.255.0",
+    " encapsulation dot1q 100",
+    "!",
+    "end", "",
+])
+
+
 class TestSubInterfaces:
     """``ge-0/0/0.54`` is a port of no inventory; its parent is."""
+
+    def test_a_unit_whose_port_has_no_line_follows_the_pairing(self) -> None:
+        """IOS XR to EOS.  Port 1 has no line of its own, only its
+        unit: the port is paired all the same, and the unit is a
+        sub-interface of the port it was paired with.  It was given
+        the name the shape of its name gives, ``Ethernet1.100`` --
+        port 1's VLAN on the port port 0 was paired with -- and held
+        the job as a name of no inventory."""
+        eos = get_codec("arista_eos")
+        job = run_plan_with_models(
+            get_codec("cisco_iosxr"), eos, _IOSXR_UNIT_OF_PORT_1,
+            _standalone("cisco_iosxr", _NCS540), _profile("arista_eos/DCS-7050SX-64"),
+        )
+        plan = job.port_mapping_plan
+        paired = {pairing.source: pairing.target for pairing in plan.used_pairings}
+        assert paired == {"TenGigE0/0/0/0": "Ethernet1", "TenGigE0/0/0/1": "Ethernet2"}
+        assert plan.sub_interfaces == {"TenGigE0/0/0/1.100": "Ethernet2.100"}
+        assert plan.off_inventory == [] and job.port_drops == []
+        assert job.status == MigrationJobStatus.completed, job.error
+        tags = {iface.name: iface.dot1q_vlan for iface in eos.parse(job.rendered).interfaces}
+        assert tags["Ethernet2.100"] == 100
+        assert "Ethernet1.100" not in tags
+
+    def test_an_entry_that_sends_a_port_where_a_unit_is_shares_it(self) -> None:
+        """Port 0 sent to the port port 1 is paired with: port 1's
+        unit is on that port, and the plan says the two ports share
+        it, though the config has no line for port 1."""
+        job = run_plan_with_models(
+            get_codec("cisco_iosxr"), get_codec("arista_eos"), _IOSXR_UNIT_OF_PORT_1,
+            _standalone("cisco_iosxr", _NCS540), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"TenGigE0/0/0/0": "Ethernet2"}, expect_fused=True,
+        )
+        assert job.port_mapping_plan.fused == {
+            "Ethernet2": ["TenGigE0/0/0/0", "TenGigE0/0/0/1"],
+        }
+        assert job.status == MigrationJobStatus.partial
+
+    def test_a_port_with_no_line_is_reported_as_its_units_went(self) -> None:
+        """Onto an 8201, where neither port has a place and nobody
+        decided: port 1 went as its unit went, dropped -- the plan
+        does not say it was kept under its own name."""
+        xr = get_codec("cisco_iosxr")
+        job = run_plan_with_models(
+            xr, xr, _IOSXR_UNIT_OF_PORT_1,
+            _standalone("cisco_iosxr", _NCS540), _standalone("cisco_iosxr", "8201-SYS"),
+        )
+        plan = job.port_mapping_plan
+        assert [(p.source, p.dropped, p.landed) for p in plan.used_unplaced] == [
+            ("TenGigE0/0/0/0", True, ""), ("TenGigE0/0/0/1", True, ""),
+        ]
+        assert plan.sub_interfaces == {"TenGigE0/0/0/1.100": None}
+        assert "TenGigE0/0/0/1.100" in job.port_drops
+        assert job.status == MigrationJobStatus.partial
 
     def test_between_two_configs_of_one_codec_a_unit_follows_its_port(self) -> None:
         """With the same model declared on both sides each unit keeps
@@ -7080,6 +7206,39 @@ class TestTheWrapperAppliesEveryCheck:
             run_plan_with_models(
                 mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
                 port_rename_map={"ether1": "WAN", "ether2": "WAN"}, expect_fused=True,
+            )
+
+    def test_a_unit_on_a_port_the_plan_does_not_say_is_shared(self, monkeypatch) -> None:
+        """A port the config has no line for is on the port of its
+        unit's new name: the wrapper counts it there, though no name
+        of the config is the port's own."""
+        def spoils(job: MigrationJob) -> None:
+            job.port_mapping_plan.fused = {}
+
+        self._engine_that(spoils, monkeypatch)
+        with pytest.raises(AssertionError, match="fused targets are not the output's"):
+            run_plan_with_models(
+                get_codec("cisco_iosxr"), get_codec("arista_eos"), _IOSXR_UNIT_OF_PORT_1,
+                _standalone("cisco_iosxr", _NCS540), _profile("arista_eos/DCS-7050SX-64"),
+                port_rename_map={"TenGigE0/0/0/0": "Ethernet2"}, expect_fused=True,
+            )
+
+    def test_a_port_with_no_line_the_plan_says_was_kept(self, monkeypatch) -> None:
+        """The job dropped every unit of a port the config has no line
+        for: a plan that says the port was kept is not what the job
+        did, though the port's own name is in no drop list."""
+        def spoils(job: MigrationJob) -> None:
+            (port,) = [
+                p for p in job.port_mapping_plan.unplaced if p.source == "TenGigE0/0/0/1"
+            ]
+            port.dropped, port.landed = False, port.source
+
+        self._engine_that(spoils, monkeypatch)
+        xr = get_codec("cisco_iosxr")
+        with pytest.raises(AssertionError, match="dropped is not what the job did"):
+            run_plan_with_models(
+                xr, xr, _IOSXR_UNIT_OF_PORT_1,
+                _standalone("cisco_iosxr", _NCS540), _standalone("cisco_iosxr", "8201-SYS"),
             )
 
     def test_a_fusion_a_test_expects_and_the_job_does_not_have(self) -> None:

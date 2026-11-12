@@ -1074,12 +1074,23 @@ tests use these exclusively — never CSS classes or element structure.  See
   or Apply is held on a job the server called `completed` until the
   operator breaks something to free it -- under a port plan it was,
   for a Junos `lo0` and `lo0.0`, both `Loopback0`, until the rule
-  read both accounts.
+  read both accounts.  **And a unit is on its port whether or not
+  the config has a line for the port**: the names the condition
+  read were the config's, and an IOS XR unit of port 1 with no line
+  for port 1, beside an address on port 0, came out onto every
+  target that counts ports from 1 as a unit of port 0's port, in a
+  job that said `completed` -- no name of the config was port 1's.
+  The ports a config's units imply are counted with its names on both
+  paths (`_ports_units_are_on`, `_with_the_ports_of_units`), and a
+  unit's port is the one its config states where it states one (an
+  OPNsense `vlan0.10` is on its `<if>`, not on a `vlan0`).
   The guard does not ask the function it guards, nor take its list
   of names: it reads the rendered output back with the target's
   parser and finds interfaces BY ADDRESS — no interface of a
   `completed` job carries the addresses of two source interfaces,
-  and no interface that has an address is missing — and reads the
+  no port of it carries a unit of one source port beside an
+  interface of another, and no interface that has an address is
+  missing — and reads the
   translator's own warnings for a name the source config configures
   that was left under a foreign name, over every committed capture
   onto every codec.  Which names left are the target's own it
