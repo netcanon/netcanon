@@ -83,8 +83,8 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | dell_os10/dellgeos_S5212F-TOR1-Universal.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR2-Universal.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| fortigate/kevinguenay_fgt_70g_branch.conf | WARN 17/21 | WARN 15/21 | WARN 15/21 | WARN 20/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 |
-| fortigate/kevinguenay_fgt_vm_hub.conf | WARN 17/21 | WARN 15/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 |
+| fortigate/kevinguenay_fgt_70g_branch.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 17/21 |
+| fortigate/kevinguenay_fgt_vm_hub.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 |
 | fortigate/user_contrib_fg100e_fos7213.conf | WARN 17/21 | WARN 13/21 | WARN 15/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 15/21 |
 | junos/batfish_evpntype5_router1_junos2541.set | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | junos/batfish_l3vpn_pe1_junos2541.set | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
@@ -6511,33 +6511,30 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 700, "name": "MANAGEMENT", "description": "", "tagged_ports": [], "untagged_ports": ["port-channel10"], "ipv4_addresses": [{"ip": "10.0.0.123", "prefix_length": 24, "is_secondary": false, "... | [] | all 19 vlans dropped |
 | lags | DRIFT | [{"name": "port-channel10", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → arista_eos  (WARN 17/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → arista_eos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "LO_BGP", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.25.0.100", "prefix_length": 32, "virtua... | count drift: 21 → 12 (interfaces) |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → aruba_aoscx  (WARN 15/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → aruba_aoscx  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:i... |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "distance", "metric": 254, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '10.100.0.0/16'}": {"interface": {"source": "", "target": "distance"}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → aruba_aoss  (WARN 15/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → aruba_aoss  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "LAG_INTERNAL", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": []... | count drift: 21 → 10 (interfaces) |
 | vlans | DRIFT | [] | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 100, "name": "", "description": "", "tagged_ports": ["LAG_INTERNAL"], "untagged_por... | 3 vlans appeared in target (parser bug?) |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [{"interface": "", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604800, "dom... | {"dhcp_servers[0] {'network': '10.255.1.0/24'}": {"interface": {"source": "fortilink", "target": ""}}} |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [{"name": "trk1", "members": ["a", "b", "port1", "port2"], "mode": "active"}] | count drift: 2 → 1 (lags) |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
@@ -6549,17 +6546,15 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | hostname | UNSUPPORTED (by design) | FGT-70G-BRANCH |  | hostname: 'FGT-70G-BRANCH' → '' |
 | dns_servers | UNSUPPORTED (by design) | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | {"interfaces[3] {'name': 'VL_100'}": {"dot1q_vlan": {"source": 100, "target": null}, "vlan_parent": {"source": "LAG_INTERNAL", "target": null}}, "interfaces[4] {'name': 'VL_101'}": {"dot1q_vlan": {... |
-| static_routes | UNSUPPORTED (by design) | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | dhcp_servers | UNSUPPORTED (by design) | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | UNSUPPORTED (by design) | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | UNSUPPORTED (by design) | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → cisco_iosxe_cli  (WARN 17/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → cisco_iosxe_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "LO_BGP", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.25.0.100", "prefix_length"... | count drift: 21 → 8 (interfaces) |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
@@ -6573,33 +6568,30 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → cisco_nxos  (WARN 16/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → cisco_nxos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:i... |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "254", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '10.100.0.0/16'}": {"interface": {"source": "", "target": "254"}, "metric": {"source": 254, "target": 0}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → dell_os10  (WARN 15/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:i... |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "254", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '10.100.0.0/16'}": {"interface": {"source": "", "target": "254"}, "metric": {"source": 254, "target": 0}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → juniper_junos  (WARN 17/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → juniper_junos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "LO_BGP", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:softwareLoopback", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.25.0.100", "pre... | count drift: 21 → 12 (interfaces) |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [{"name": "ae0", "members": ["a", "b"], "mode": "active"}, {"name": "ae1", "members": ["port1", "port2"], "mode": "active"}] | {"lags[0] {'name': 'LAG_INTERNAL'}": {"members": {"source": ["port1", "port2"], "target": ["a", "b"]}, "name": {"source": "LAG_INTERNAL", "target": "ae0"}}, "lags[1] {'name': 'fortilink'}": {"membe... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
@@ -6610,40 +6602,36 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "review: tunnel endpoint placeholder -- set local-address/remote-address", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, ... | {"interfaces[0] {'name': 'HUB1-O1'}": {"description": {"source": "", "target": "review: tunnel endpoint placeholder -- set local-address/remote-address"}, "tunnel_type": {"source": "", "target": "g... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → opnsense  (WARN 18/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → opnsense  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, ... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": ""}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:ieee8023adLag"... |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → vyos  (WARN 16/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → vyos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, ... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": ""}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:ieee8023adLag"... |
-| static_routes | DRIFT | [{"destination": "10.100.0.0/16", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → arista_eos  (WARN 17/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → arista_eos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_length": 32, "... | count drift: 19 → 7 (interfaces) |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → aruba_aoscx  (WARN 15/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → aruba_aoscx  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_l... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "iana... |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "distance", "metric": 254, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '172.25.0.0/23'}": {"interface": {"source": "", "target": "distance"}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
@@ -6653,17 +6641,16 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", ... | count drift: 19 → 5 (interfaces) |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 1, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"interface": {"source": "port1", "target": ""}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [{"interface": "", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604800, "dom... | {"dhcp_servers[0] {'network': '10.255.1.0/24'}": {"interface": {"source": "fortilink", "target": ""}}} |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → cisco_iosxe_cli  (WARN 17/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → cisco_iosxe_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_l... | count drift: 19 → 7 (interfaces) |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
@@ -6676,23 +6663,21 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → cisco_nxos  (WARN 16/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → cisco_nxos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_l... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "iana... |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "254", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '172.25.0.0/23'}": {"interface": {"source": "", "target": "254"}, "metric": {"source": 254, "target": 0}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → dell_os10  (WARN 15/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_l... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "iana... |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "254", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '172.25.0.0/23'}": {"interface": {"source": "", "target": "254"}, "metric": {"source": 254, "target": 0}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
@@ -6702,7 +6687,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_length": 32, "... | count drift: 19 → 7 (interfaces) |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"interface": {"source": "port1", "target": ""}, "metric": {"source": 1, "target": 0}}} |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [{"name": "ae0", "members": [], "mode": "active"}] | {"lags[0] {'name': 'fortilink'}": {"name": {"source": "fortilink", "target": "ae0"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
@@ -6718,7 +6703,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_length": 32, "... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": ""}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "ianaift:tunnel", ... |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
 ### fortigate/kevinguenay_fgt_vm_hub.conf → vyos  (WARN 16/21)
@@ -6726,7 +6711,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_length": 32, "... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": ""}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "ianaift:tunnel", ... |
-| static_routes | DRIFT | [{"destination": "172.25.0.0/23", "gateway": "", "interface": "", "metric": 254, "description": "", "vrf": ""}] | [] | all 1 static_routes dropped |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 1, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"interface": {"source": "port1", "target": ""}}} |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
