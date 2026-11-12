@@ -1,5 +1,8 @@
 # Juniper Junos to Arista EOS — vendor reference index
 
+<!-- junos-route-preference -->
+> **Update 2026-11-12 —** a Junos static route's `preference`, and a `qualified-next-hop`'s own, are read as its distance and written on Arista as the `ip route` line's distance; the `static_routes.md` row below, which says they drop, predates this.
+
 Curated vendor-doc excerpts grounding the
 `tests/fixtures/cross_vendor_expectations/juniper_junos__arista_eos.yaml`
 per-field expectations.  See sibling `README.md` (one level up) for

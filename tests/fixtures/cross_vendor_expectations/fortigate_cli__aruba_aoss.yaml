@@ -267,9 +267,14 @@ per_field_expectation:
       (AOS-S has no VRF either) and a route to an address object are
       left out on the source side, each with a row in
       ``dropped_tier3_sections``, so none reaches AOS-S.
-      Metric semantics differ (FortiGate distance / AD-ordering vs
-      Aruba per-route preference) so the integer preserves but its
-      meaning differs.  A route's ``set comment`` is read and not
+      A stated distance is the route's administrative distance on
+      both (FortiOS ``set distance``, AOS-S ``distance <N>``) and
+      is written as stated.  A route that states none is written
+      with none, so it is at each platform's default (10 on FortiOS,
+      1 on AOS-S); where that changes which of two routes to one
+      destination is used, it is the CHANGELOG's known limitation on
+      a destination whose next hops mix a stated and an unstated
+      distance.  A route's ``set comment`` is read and not
       written on AOS-S; no committed cell holds one.
       Aruba's legacy
       ``ip default-gateway`` form synthesises from a 0.0.0.0/0

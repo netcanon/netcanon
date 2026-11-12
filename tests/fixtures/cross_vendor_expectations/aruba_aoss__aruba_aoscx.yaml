@@ -357,11 +357,12 @@ per_field_expectation:
     note: >
       Preserved on all 5 cells that populate it (12 routes in total);
       destination and gateway survive and the render emits
-      `ip route <prefix> <next-hop>`.  Two declared losses are not exercised
-      by this corpus and should be checked by hand if your config uses them:
-      aruba_aoss declares `/routing/static-route/metric` lossy and both sides
-      declare `/routing/static-route/description` lossy, but every committed
-      route carries a zero metric and an empty description.  aruba_aoss
+      `ip route <prefix> <next-hop>`.  A declared loss is not exercised
+      by this corpus and should be checked by hand if your config uses it:
+      both sides declare `/routing/static-route/description` lossy, but
+      every committed route carries an empty description.  The AOS-S
+      parser reads a route's `distance <N>`; every committed route states
+      none.  aruba_aoss
       declares `/routing/static-route/vrf` unsupported — AOS-S has no VRF, so
       no route arrives with one.
     references: [aoss-aoscx-surface]

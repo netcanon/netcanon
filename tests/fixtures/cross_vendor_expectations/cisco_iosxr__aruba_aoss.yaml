@@ -363,9 +363,10 @@ per_field_expectation:
       intact, which is why two cells preserve the field under a `lossy`
       disposition.
       Routes with a real gateway and no VRF round-trip intact.  aruba_aoss
-      additionally declares `/routing/static-route/metric` and `/description`
-      lossy; neither fires on this corpus (no IOS-XR cell sets them), so those
-      are declared-but-unmeasured on this pair.
+      additionally declares `/routing/static-route/description` lossy; it
+      does not fire on this corpus (no IOS-XR cell sets one), so it is
+      declared-but-unmeasured on this pair.  A distance is written
+      `distance <N>`; no IOS-XR cell sets one either.
     references: [iosxr-aoss-surface]
 
   # -- Services -------------------------------------------------------------

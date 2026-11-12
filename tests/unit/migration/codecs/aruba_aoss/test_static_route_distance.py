@@ -11,8 +11,11 @@ left out and said in a row (see
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from netcanon.migration.canonical.intent import CanonicalIntent, CanonicalStaticRoute
 from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
 from netcanon.migration.codecs.mikrotik_routeros.codec import (
     MikroTikRouterOSCodec,
@@ -85,3 +88,41 @@ def test_a_route_of_no_form_read_here_is_said(gw):
     assert "10.0.0.0/8" not in _routes(cfg)
     rows = ARUBA.parse(cfg).dropped_tier3_sections
     assert any(row.startswith(f"ip route 10.0.0.0/8 {gw} (") for row in rows), rows
+
+
+def test_the_distance_is_a_supported_path():
+    """The render writes it and the parser reads it back: a distance is
+    no loss on AOS-S (up to 0.7.7 the matrix declared it lossy)."""
+    assert ARUBA.capabilities.classify("/routing/static-route/metric") == "supported"
+
+
+#: Each route form the render writes, at a distance of its own.
+_FORMS = [
+    CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1", metric=200),
+    CanonicalStaticRoute(destination="0.0.0.0/0", gateway="192.0.2.1", metric=7),
+    CanonicalStaticRoute(destination="10.9.0.0/16", interface="Vlan10", metric=9),
+    CanonicalStaticRoute(destination="10.8.0.0/16", interface="Null0", metric=250),
+    CanonicalStaticRoute(destination="2001:db8::/32", gateway="2001:db8::1", metric=30),
+]
+
+
+def _check_each_form(rendered: str) -> None:
+    back = sorted((r.destination, r.metric) for r in ARUBA.parse(rendered).static_routes)
+    assert back == sorted((r.destination, r.metric) for r in _FORMS)
+
+
+def _rendered() -> str:
+    return ARUBA.render(CanonicalIntent(hostname="t", static_routes=list(_FORMS)))
+
+
+def test_each_form_the_render_writes_carries_its_distance():
+    _check_each_form(_rendered())
+
+
+def test_the_check_can_fail():
+    """With the distance taken off each line, the check fails."""
+    rendered = _rendered()
+    stripped = re.sub(r" distance [0-9]+$", "", rendered, flags=re.MULTILINE)
+    assert stripped != rendered
+    with pytest.raises(AssertionError):
+        _check_each_form(stripped)

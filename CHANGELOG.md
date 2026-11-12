@@ -1401,6 +1401,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A static route's distance is declared supported on AOS-S.**  The
+  AOS-S matrix declared `/routing/static-route/metric` lossy ("Render
+  emits destination + next-hop only"), so a job onto AOS-S whose
+  routes have a distance listed it as a loss, while the render writes
+  the distance as `distance <N>` on every route form it writes (an
+  address, `vlan <id>`, `blackhole`) and the parser reads it back;
+  AOS-Switch takes 1 to 255, default 1 (Aruba Central, "Configuring
+  Routing").  The path is supported now, the expectation cells that
+  recorded the declaration as unmeasured or contradicted are
+  rewritten, and the FortiGate -> AOS-S cell no longer says the two
+  distances differ in meaning: each is the route's administrative
+  distance.  The vendor-reference pages of the Junos pairs carry a
+  note that a route's `preference` is read and written now (#664).
+
 - **A Junos static route's preference is read, and written.**  A
   Junos static route's preference is its administrative distance
   ("Preference value for a static, aggregate, or generated route",

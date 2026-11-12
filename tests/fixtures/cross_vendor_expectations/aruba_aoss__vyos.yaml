@@ -415,10 +415,9 @@ per_field_expectation:
       `/routing/static-route/description` LOSSY and aruba_aoss declares
       `/routing/static-route/vrf` UNSUPPORTED, and no committed cell sets
       either — every route on this corpus carries an empty description and an
-      empty VRF, so those sub-losses are untested here.  aruba_aoss also
-      declares `/routing/static-route/metric` lossy on its own side; every
-      measured route carries metric 0, so that too is untested rather than
-      proven.
+      empty VRF, so those sub-losses are untested here.  Every
+      measured route carries metric 0, so a route's distance (AOS-S
+      `distance <N>`) is untested here too.
     references: [aoss-vyos-surface]
 
   dhcp_servers:

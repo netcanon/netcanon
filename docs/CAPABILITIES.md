@@ -435,6 +435,7 @@ text").
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
+| `/routing/static-route/metric` | Supported | A route's administrative distance is `distance <N>` on every route form the render writes (an address, `vlan <id>`, `blackhole`), and the parser reads it back; AOS-Switch takes 1 to 255, default 1 (Aruba Central, "Configuring Routing").  ⚠️ Up to 0.7.7 it was declared lossy, while the render wrote it. |
 | `/routing/static-route/vrf` | Unsupported | AOS-S has no VRF (HPE's routing guide names none): a route in a VRF is left out under a `; review:` line rather than written into the switch's one table. |
 | `/routing/static-route/interface` | Lossy (error) | AOS-S takes an address, `vlan <id>`, `reject` or `blackhole` as a next hop.  A route to `Null0` is written `blackhole` and one out a VLAN interface `vlan <id>`; a route out any other interface is left out under a `; review:` line.  The job is `partial` for any route that names an interface, since the matrix reads the field and not its value. |
 | `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan, `loopback<N>` → softwareLoopback). |
