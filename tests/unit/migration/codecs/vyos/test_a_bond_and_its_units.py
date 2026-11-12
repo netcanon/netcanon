@@ -266,14 +266,6 @@ def test_a_unit_of_a_lag_is_a_vif_of_its_bond(source: str) -> None:
 #: membership, and its parser reads none back.
 WRITES_NO_LAG = {"cisco_iosxe"}
 
-#: Targets whose own parser reads the unit back on the LAG itself, so
-#: that one interface carries both addresses.  The AOS-CX output says
-#: ``interface lag 0.10``; its parser reads ``lag 0``.  Compared for
-#: equality, so a parser that comes to read the unit fails until the
-#: pin is taken out.
-UNIT_READ_ONTO_ITS_LAG = {"aruba_aoscx"}
-
-
 @functools.cache
 def _from_vyos(form: str, target: str, parse=None) -> MigrationJob:
     return run_plan_with_checked_names(
@@ -304,19 +296,10 @@ def _losses(job: MigrationJob, target: str) -> list[str]:
 @pytest.mark.parametrize("target", PUBLIC)
 @pytest.mark.parametrize("form", ["block", "set"])
 def test_the_bond_and_its_unit_reach_every_target(form: str, target: str) -> None:
-    lost = _losses(_from_vyos(form, target), target)
-    if target in UNIT_READ_ONTO_ITS_LAG:
-        assert len(lost) == 1 and lost[0].startswith("both addresses on "), lost
-    else:
-        assert lost == []
-
-
-def test_the_pin_is_what_is_measured() -> None:
-    measured = {
-        target for target in PUBLIC
-        if any(loss.startswith("both addresses") for loss in _losses(_from_vyos("block", target), target))
-    }
-    assert measured == UNIT_READ_ONTO_ITS_LAG
+    """Onto AOS-CX too: its output says ``interface lag 0.10``, which
+    its parser read as ``lag 0`` up to 0.7.7, so that the LAG carried
+    both addresses."""
+    assert _losses(_from_vyos(form, target), target) == []
 
 
 class _OldParse(type(get_codec("vyos"))):

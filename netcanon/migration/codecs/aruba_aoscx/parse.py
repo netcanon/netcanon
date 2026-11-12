@@ -31,6 +31,10 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
   (Phase 2; ``lacp mode active|passive`` → mode, absent → static) AND a
   :class:`CanonicalInterface` (kind ``lag``) carrying the LAG's switchport
   state.  The ``multi-chassis`` (VSX MLAG) modifier is dropped in v1.
+* a sub-interface of a port or a LAG (``interface 1/1/1.201``,
+  ``interface lag 1.201``) → a :class:`CanonicalInterface` whose
+  ``dot1q_vlan`` is the tag its ``encapsulation dot1q <VLAN-ID>``
+  states, read whole (:func:`_tag_read`).
 * ``user <name> group <group> password <ciphertext|plaintext> <value>``
   (Phase 2) → :class:`CanonicalLocalUser` (``group`` → role;
   administrators → priv 15, else 1; the keyword, not the value's shape,
@@ -124,9 +128,14 @@ _VERSION_RE = re.compile(
 
 #: ``interface <name>`` — captures the type token plus an OPTIONAL
 #: space-separated numeric index, so ``interface vlan 11`` -> ``vlan 11``,
-#: ``interface lag 1 multi-chassis`` -> ``lag 1`` (modifier dropped), and
-#: ``interface 1/1/1`` -> ``1/1/1`` (the triple is one ``\S+`` token).
-_IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\d+))?\b", re.IGNORECASE)
+#: ``interface lag 1 multi-chassis`` -> ``lag 1`` (modifier dropped),
+#: ``interface lag 1.201`` -> ``lag 1.201`` (a LAG's sub-interface: read
+#: as ``lag 1`` it was a second record of the LAG, the sub-interface's
+#: address on the LAG), and ``interface 1/1/1`` -> ``1/1/1`` (the triple
+#: is one ``\S+`` token).
+_IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\d+(?:\.\d+)?))?\b", re.IGNORECASE)
+#: The name of a LAG itself, ``lag <N>`` -- not of its sub-interface.
+_A_LAG_NAME_RE = re.compile(r"lag\s+\d+", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
@@ -729,19 +738,20 @@ def _on_tag_line(current: dict, line: str) -> bool:
 
 
 def _is_a_sub_interface(name: str) -> bool:
-    """Whether *name* is a sub-interface of a port: ``<port>.<n>``,
-    the part before the dot a name the classifier reads as a port
-    (``1/1/1.201``).
+    """Whether *name* is a sub-interface of a port or a LAG:
+    ``<parent>.<n>``, the part before the dot a name the classifier
+    reads as a port or a LAG (``1/1/1.201``, ``lag 1.201``).
 
-    A LAG's (``interface lag 1.201``, which HPE documents on an L3
-    LAG) is not read as one yet: the header reader takes that line
-    for ``lag 1``, and a tag statement there is not read onto the
-    LAG.
+    HPE documents sub-interfaces of physical ports, of split children
+    of physical ports and of L3 LAGs.  A split child's
+    (``1/1/1:1.201``) is not read as one: the classifier does not read
+    the port's name, so the tag is not read onto it, and the name is
+    left to the port translator, which says so.
     """
     port, dot, unit = name.rpartition(".")
     return (
         bool(dot) and unit.isascii() and unit.isdigit()
-        and _port_names.classify_port_name(port).kind == "physical"
+        and _port_names.classify_port_name(port).kind in ("physical", "lag")
     )
 
 
@@ -1054,7 +1064,8 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
 
     def _note_header(name: str) -> None:
         nonlocal current_lag
-        if name.lower().startswith("lag "):
+        # ``lag 1`` is a LAG; ``lag 1.201`` is a sub-interface of one.
+        if _A_LAG_NAME_RE.fullmatch(name):
             declared.add(name)
             current_lag = name
         else:

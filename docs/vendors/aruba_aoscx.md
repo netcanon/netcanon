@@ -444,9 +444,13 @@ translate it again from `show running-config` as the switch prints it.
   `encapsulation dot1q`, and the job is `partial`, its validation
   listing `/interfaces/interface/dot1q-vlan`.  Set the tag on the
   target by hand.  A LAG's sub-interface (`interface lag 1.201`,
-  which HPE documents on an L3 LAG) is not read as one yet: the
-  parser reads its header as `lag 1`, so its lines are read onto the
-  LAG, and its tag is not read.
+  which HPE documents on an L3 LAG) is read the same way, and goes
+  where its LAG goes (`Port-Channel1.201` on EOS).  Up to 0.7.7 its
+  header was read as `lag 1`: the sub-interface was a second record
+  of the LAG, its address on the LAG itself, in jobs that said
+  `completed`.  A split port's sub-interface (`1/1/1:1.201`) is not
+  read as one, since the split port's name is not read: the job
+  lists the name and is `partial`.
 - **A port under a name AOS-CX cannot read gets no VLAN line.**  As
   a target, AOS-CX writes a port's `vlan access` / `vlan trunk`
   lines only where the port's name reads as a port or a LAG
