@@ -127,18 +127,18 @@ One hand-authored fixture per codec exercising every field the codec's :class:`C
 | Source fixture | arista_eos | aruba_aoscx | aruba_aoss | cisco_iosxe | cisco_iosxe_cli | cisco_iosxr | cisco_nxos | dell_os10 | fortigate_cli | juniper_junos | mikrotik_routeros | opnsense | vyos |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | arista_eos/kitchen_sink.txt | WARN 20/21 | WARN 10/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 11/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 14/21 | WARN 13/21 |
-| aruba_aoscx/kitchen_sink.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
+| aruba_aoscx/kitchen_sink.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
 | aruba_aoss/kitchen_sink.cfg | WARN 18/21 | WARN 13/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 14/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 15/21 |
 | cisco_iosxe/kitchen_sink.xml | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 9/21 | WARN 13/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 12/21 |
 | cisco_iosxr/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 |
-| cisco_nxos/kitchen_sink.cfg | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 15/21 | WARN 14/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 |
+| cisco_nxos/kitchen_sink.cfg | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 |
 | dell_os10/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
 | fortigate_cli/kitchen_sink.conf | WARN 15/21 | WARN 13/21 | WARN 13/21 | WARN 20/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 15/21 |
 | juniper_junos/kitchen_sink.set | WARN 13/21 | WARN 7/21 | WARN 11/21 | WARN 18/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | WARN 12/21 | WARN 11/21 | WARN 10/21 |
 | mikrotik_routeros/kitchen_sink.rsc | WARN 14/21 | WARN 12/21 | WARN 15/21 | WARN 20/21 | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 11/21 | WARN 18/21 | WARN 15/21 | WARN 20/21 | WARN 16/21 | WARN 14/21 |
 | opnsense/kitchen_sink.xml | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 13/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 14/21 |
-| vyos/kitchen_sink.conf | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 | WARN 18/21 | WARN 16/21 | OK 21/21 |
+| vyos/kitchen_sink.conf | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | OK 21/21 |
 
 ## Top drifted (source codec → target codec) pairs
 
@@ -150,7 +150,7 @@ Combined across both matrices.  Sums every WARN cell's ``fields_drifted`` count 
 | 2 | cisco_nxos | vyos | 73 |
 | 3 | cisco_nxos | aruba_aoscx | 67 |
 | 4 | juniper_junos | dell_os10 | 66 |
-| 5 | cisco_nxos | juniper_junos | 65 |
+| 5 | cisco_nxos | juniper_junos | 64 |
 | 6 | cisco_nxos | opnsense | 63 |
 | 7 | juniper_junos | opnsense | 63 |
 | 8 | juniper_junos | vyos | 63 |
@@ -2386,7 +2386,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "1.2.39.22/32", "gateway": "1.2.32.39", "interface": "", "metric": ... | count drift: 14 → 3 (static_routes) |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": 10, "description": "", "vrf": ""}, {"destination": "1.2.39.22/32", "gateway": "1.2.32.39", "interface": "", "metric":... | count drift: 14 → 3 (static_routes) |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → opnsense  (WARN 20/21)
 
@@ -6681,7 +6681,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_length": 32, "... | count drift: 19 → 7 (interfaces) |
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"interface": {"source": "port1", "target": ""}, "metric": {"source": 1, "target": 0}}} |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "port1", "metric": 1, "description": "", "vrf": ""}] | [{"destination": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "", "metric": 1, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"interface": {"source": "port1", "target": ""}}} |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [{"name": "ae0", "members": [], "mode": "active"}] | {"lags[0] {'name': 'fortilink'}": {"name": {"source": "fortilink", "target": "ae0"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
@@ -10350,13 +10350,12 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | routing_instances | UNSUPPORTED (by design) | [{"name": "BLUE", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "RED", "instance_type": "vrf", "route_distingui... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 02:00:0a:14:14:01 |  | anycast_gateway_mac: '02:00:0a:14:14:01' → '' |
 
-### aruba_aoscx/kitchen_sink.cfg → juniper_junos  (WARN 14/21)
+### aruba_aoscx/kitchen_sink.cfg → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1/1/1", "default_name": "", "description": "Uplink to spine", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9198, "ip_mtu": 1500, "ipv4_addresses": [{"ip": "198.51.... | [{"name": "1/1/1", "default_name": "", "description": "Uplink to spine", "enabled": true, "interface_type": "", "mtu": 9198, "ip_mtu": 1500, "ipv4_addresses": [{"ip": "198.51.100.1", "prefix_length... | count drift: 13 → 9 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["lag 1"], "ipv4_addresses": []}, {"id": 10, "name": "USERS", "description": "User access VLAN", "tagged_ports": ["1/... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "USERS", "description": "User access VLAN", "tagged_ports": ["1/1... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}, "untagged_ports": {"source": ["lag 1"], "target": []}}, "vlans[1] {'id': 10, 'name': 'USERS'}": {"tagged_ports": {"so... |
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.2", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.99.0.0/16", "gateway": "203.0.113.254", "interface": "", "m... | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.2", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.99.0.0/16", "gateway": "203.0.113.254", "interface": "", "m... | {"static_routes[1] {'destination': '10.99.0.0/16'}": {"metric": {"source": 200, "target": 0}}} |
 | snmp | DRIFT | {"community": "FAKECOMMUNITY", "location": "Data Center 1", "contact": "noc@example.net", "trap_hosts": [], "v3_users": [{"name": "monitor", "group": "", "auth_protocol": "sha", "auth_passphrase": ... | {"community": "FAKECOMMUNITY", "location": "Data Center 1", "contact": "noc@example.net", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "lag 1", "members": ["1/1/5", "1/1/6"], "mode": "active"}, {"name": "lag 2", "members": [], "mode": "static"}] | [{"name": "ae1", "members": ["1/1/5", "1/1/6"], "mode": "active"}] | count drift: 2 → 1 (lags) |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "AQBFAKECIPHERTEXTBLOBADMIN", "role": "administrators"}, {"name": "netops", "privilege_level": 1, "hashed_password": "AQBFAKECIPHERTEXTB... | [] | all 2 local_users dropped |
@@ -11001,13 +11000,12 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | routing_instances | UNSUPPORTED (by design) | [{"name": "TENANT-A", "instance_type": "vrf", "route_distinguisher": "65001:100", "rt_imports": ["65001:100"], "rt_exports": ["65001:100"], "description": "tenant a routing instance", "l3_vni": 500... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:01:c7:3a:00:00 |  | anycast_gateway_mac: '00:01:c7:3a:00:00' → '' |
 
-### cisco_nxos/kitchen_sink.cfg → juniper_junos  (WARN 14/21)
+### cisco_nxos/kitchen_sink.cfg → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "routed uplink to spine", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9216, "ip_mtu": null, "ipv4_addresses": [{"... | [{"name": "Ethernet1/1", "default_name": "", "description": "routed uplink to spine", "enabled": true, "interface_type": "", "mtu": 9216, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.0.2.1", "pre... | {"interfaces[0] {'name': 'Ethernet1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': 'Ethernet1/2'}": {"interface_type": {"source": "ianaift:eth... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "PROD", "description": "", "tagged_ports": ["Ethernet1/4", "port-channe... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "PROD", "description": "", "tagged_ports": ["Ethernet1/4", "port-... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}} |
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.0.2.254", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.100.0.0/16", "gateway": "192.0.2.253", "interface": "", "met... | [{"destination": "0.0.0.0/0", "gateway": "192.0.2.254", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.100.0.0/16", "gateway": "192.0.2.253", "interface": "", "met... | {"static_routes[1] {'destination': '10.100.0.0/16'}": {"metric": {"source": 200, "target": 0}}} |
 | snmp | DRIFT | {"community": "public-ro", "location": "DataCenter-1-RackB", "contact": "netops@example.net", "trap_hosts": ["192.0.2.50"], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol":... | {"community": "public-ro", "location": "DataCenter-1-RackB", "contact": "netops@example.net", "trap_hosts": ["192.0.2.50"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "port-channel1", "members": ["Ethernet1/5", "Ethernet1/6"], "mode": "active"}] | [{"name": "ae1", "members": ["Ethernet1/5", "Ethernet1/6"], "mode": "active"}] | {"lags[0] {'name': 'port-channel1'}": {"name": {"source": "port-channel1", "target": "ae1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$KitchenSink$adminhashvalue01", "role": "network-admin"}, {"name": "netops", "privilege_level": 1, "hashed_password": "5 $5$Kitchen... | [] | all 2 local_users dropped |
@@ -11908,12 +11906,11 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 1912, "vni": 10100, "mcast_group": "", "flood_list": ["198.51.100.9"], "source_interface": "10.255.0.1", "udp_port": 4789}] | [] | all 1 vxlan_vnis dropped |
 | routing_instances | UNSUPPORTED (by design) | [{"name": "BLUE", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | [] | all 1 routing_instances dropped |
 
-### vyos/kitchen_sink.conf → juniper_junos  (WARN 15/21)
+### vyos/kitchen_sink.conf → juniper_junos  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "bond0", "default_name": "", "description": "server lag", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.50.0.1", "prefix_length": 24, "... | [{"name": "bond0", "default_name": "", "description": "server lag", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.50.0.1", "prefix_length": 24, "... | {"interfaces[8] {'name': 'eth4'}": {"lag_member_of": {"source": "bond0", "target": "ae0"}}, "interfaces[9] {'name': 'eth5'}": {"lag_member_of": {"source": "bond0", "target": "ae0"}}, "interfaces[10... |
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.0", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.99.0.0/16", "gateway": "10.10.10.254", "interface": "", "me... | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.0", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.99.0.0/16", "gateway": "10.10.10.254", "interface": "", "me... | {"static_routes[1] {'destination': '10.99.0.0/16'}": {"metric": {"source": 20, "target": 0}}} |
 | snmp | DRIFT | {"community": "FAKEPUBLIC", "location": "rack 4 / row B", "contact": "netops@example.com", "trap_hosts": [], "v3_users": [{"name": "snmpv3admin", "group": "operators", "auth_protocol": "sha", "auth... | {"community": "FAKEPUBLIC", "location": "rack 4 / row B", "contact": "netops@example.com", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "bond0", "members": ["eth4", "eth5"], "mode": "active"}] | [{"name": "ae0", "members": ["eth4", "eth5"], "mode": "active"}] | {"lags[0] {'name': 'bond0'}": {"name": {"source": "bond0", "target": "ae0"}}} |
 | local_users | DRIFT | [{"name": "netops", "privilege_level": 15, "hashed_password": "$6$FAKEKITCHENSINKHASHnetops", "role": ""}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$FAKEKITCHENSINKHASHvyos", "... | [{"name": "netops", "privilege_level": 15, "hashed_password": "junos:$6$FAKEKITCHENSINKHASHnetops", "role": "super-user"}, {"name": "vyos", "privilege_level": 15, "hashed_password": "junos:$6$FAKEK... | {"local_users[0] {'name': 'netops'}": {"hashed_password": {"source": "$6$FAKEKITCHENSINKHASHnetops", "target": "junos:$6$FAKEKITCHENSINKHASHnetops"}, "role": {"source": "", "target": "super-user"}}... |
