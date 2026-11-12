@@ -41,6 +41,7 @@ Grammar notes that shape the output (see
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 
@@ -449,11 +450,59 @@ def _render_ntp(servers: list) -> list[str]:
     return out
 
 
+#: A next hop that discards the traffic, as the tree names it: IOS-XE,
+#: NX-OS, EOS and IOS XR route to the interface ``Null0``.
+_DISCARD_HOP_RE = re.compile(r"^null[ \t]*0$", re.IGNORECASE)
+
+
+def _is_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _route_hop(route, pad: str) -> list[str]:
+    """The block of *route*'s next hop, in VyOS's form for it (vyos-1x,
+    ``static-route.xml.i``; VyOS, "Static"):
+
+    * an address -- ``next-hop <address>``, with the ``interface`` the
+      route also names ("Gateway interface name"), which FRR is
+      given as ``ip route <prefix> <address> <interface>``;
+    * the discard (``Null0``) -- ``blackhole``, which discards with no
+      ICMP error to the sender.  Whether the source answered such
+      traffic with one is not in the tree;
+    * an interface and no address -- ``interface <name>``.  Up to
+      0.7.7 it was written ``next-hop <name>``, which is not a next
+      hop VyOS takes.
+
+    A gateway that is no address is taken for an interface, since
+    ``next-hop`` takes an address only (an operator's map, or a
+    parser, may put a name there).  The administrative distance (canonical
+    ``metric``; 0 = unset) is ``distance <N>`` in the block.
+    """
+    gateway = route.gateway or ""
+    hop = gateway if _is_address(gateway) else ""
+    via = route.interface or ("" if hop else gateway)
+    inner = [f"{pad}    distance {route.metric}"] if route.metric else []
+    if hop:
+        head = f"next-hop {hop}"
+        if via and not _DISCARD_HOP_RE.match(via):
+            inner.append(f"{pad}    interface {via}")
+    elif _DISCARD_HOP_RE.match(via):
+        head = "blackhole"
+    else:
+        head = f"interface {via}"
+    return [f"{pad}{head} {{", *inner, f"{pad}}}"]
+
+
 def _render_static(routes: list, depth: int = 1) -> list[str]:
     """Render the ``static { }`` block body (nested under ``protocols``).
 
-    Each route emits ``route <CIDR> { next-hop <gw> { distance <N> } }``
-    (``route6`` for IPv6 destinations).  Sorted by destination so the
+    Each route emits ``route <CIDR> { <next hop> { distance <N> } }``
+    (``route6`` for IPv6 destinations), the next hop as
+    :func:`_route_hop` writes it.  Sorted by destination so the
     output is stable (the round-trip compares by destination anyway).
 
     Args:
@@ -468,12 +517,8 @@ def _render_static(routes: list, depth: int = 1) -> list[str]:
     lines = [f"{pad}static {{"]
     for r in sorted(usable, key=lambda x: x.destination):
         kw = "route6" if ":" in r.destination else "route"
-        nexthop = r.gateway or r.interface
         lines.append(f"{pad}    {kw} {r.destination} {{")
-        lines.append(f"{pad}        next-hop {nexthop} {{")
-        if r.metric:
-            lines.append(f"{pad}            distance {r.metric}")
-        lines.append(f"{pad}        }}")
+        lines.extend(_route_hop(r, f"{pad}        "))
         lines.append(f"{pad}    }}")
     lines.append(f"{pad}}}")
     return lines

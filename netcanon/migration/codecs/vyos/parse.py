@@ -44,7 +44,11 @@ Phase 1 (Tier-1) surface:
   :class:`CanonicalInterface` named ``<ethN>.<vid>`` (router-on-a-stick
   VLAN tagging).
 * ``protocols static route <CIDR> { next-hop <ip> { distance <N> } }``
-  (+ ``route6``) → :class:`CanonicalStaticRoute`.
+  (+ ``route6``) → :class:`CanonicalStaticRoute`; so are a route out
+  an interface (``interface <name>``, and 1.3's ``interface-route
+  <CIDR> { next-hop-interface <name> }``), the interface a next hop
+  names (``next-hop <ip> { interface <name> }``) and ``blackhole``
+  (a route to the tree's discard, ``Null0``).
 
 Grammar notes that shape the walker:
 
@@ -96,7 +100,14 @@ vrf name <name> protocols static ...``).  A next hop that names
 another VRF (``next-hop <address> vrf <name>``, the route leaking of
 the same page) and a next hop VyOS holds disabled (``next-hop
 <address> disable``: "Disable the route via the specified next-hop
-IP address") are left out, and a row says so.
+IP address") are left out, and a row says so.  So are the forms the
+tree has no form for: a ``reject`` route (it discards with an ICMP
+error to the sender, which the tree's one discard does not say), a
+route through the gateway DHCP gives an interface
+(``dhcp-interface``), a route of another routing table (``table
+<N>``, which policy routing uses) and a route through SRv6
+``segments``.  Up to 0.7.7 each of them was dropped with nothing
+said, and so was every interface route and ``blackhole``.
 """
 
 from __future__ import annotations
@@ -243,6 +254,9 @@ _SETFORM_TAG_NODES = frozenset({
     # no id, and its row could not say which.
     "vif-s", "vif-c",
     "route", "route6", "next-hop",
+    # VyOS 1.3's interface route, ``interface-route <CIDR>
+    # next-hop-interface <name>``.
+    "interface-route", "interface-route6", "next-hop-interface",
     "name",            # `vrf name <X>` (and Tier-3 `firewall name <X>`)
     "community", "user", "server", "interface",
 })
@@ -257,6 +271,10 @@ _SETFORM_LEAVES = frozenset({
     "vni", "group", "remote", "source-address", "source-interface",
     "link", "dev", "port", "table",
     "location", "contact", "engineid",
+    # A static route's ``dhcp-interface <name>`` and an SRv6 next
+    # hop's ``segments <list>``: each takes a value, and read as
+    # containers they were blocks named by the value.
+    "dhcp-interface", "segments",
 })
 
 
@@ -278,10 +296,13 @@ def _chunk_setline(tokens: list[str]) -> tuple[list[str], str | None]:
     the list of brace-header strings (the node path) and an optional leaf
     line (``"<key> <value...>"``).
 
-    The single context-sensitive case is ``vrf``: a top-level ``vrf name
-    <X>`` declaration makes ``vrf`` a container (and ``name`` its tag
-    node), whereas the per-interface ``vrf <name>`` binding makes ``vrf``
-    a leaf.  The ``vrf name`` bigram disambiguates them.
+    The context-sensitive cases are ``vrf`` and ``table``.  A top-level
+    ``vrf name <X>`` declaration makes ``vrf`` a container (and
+    ``name`` its tag node), whereas the per-interface ``vrf <name>``
+    binding makes ``vrf`` a leaf; the ``vrf name`` bigram tells them
+    apart.  ``table`` is a leaf (a VRF's ``table <N>``) except
+    directly under ``protocols static``, where ``table <N>`` holds the
+    routes of another routing table.
     """
     headers: list[str] = []
     i, n = 0, len(tokens)
@@ -293,6 +314,13 @@ def _chunk_setline(tokens: list[str]) -> tuple[list[str], str | None]:
                 i += 1
                 continue
             return headers, " ".join(tokens[i:])   # per-interface leaf
+        if (
+            tok == "table" and i + 1 < n
+            and headers[-2:] == ["protocols", "static"]
+        ):
+            headers.append(f"table {tokens[i + 1]}")
+            i += 2
+            continue
         if tok in _SETFORM_LEAVES:
             return headers, " ".join(tokens[i:])
         if tok in _SETFORM_TAG_NODES and i + 1 < n:
@@ -410,6 +438,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     iface_order: list[str] = []
     static_routes: list[dict] = []
     cur_route: dict | None = None  # the route whose next-hop block is open
+    route_depth = 0                # how deep that block is on the stack
+    # The routes the tree has no form for, by kind, each once for
+    # its VRF (or table) and destination.
+    routes_not_held: dict[str, dict[tuple[str, str], None]] = {
+        kind: {} for kind in _ROUTES_NOT_HELD
+    }
     # ── Phase 2 scratch ──
     users: dict[str, dict] = {}       # name -> {"hash": str, "level": str}
     user_order: list[str] = []
@@ -579,9 +613,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
         if line == "}":
             if stack:
-                popped = stack.pop()
-                if popped[0] == "next-hop":
-                    cur_route = None
+                stack.pop()
+                if len(stack) < route_depth:
+                    cur_route, route_depth = None, 0
             continue
 
         if line.endswith("{"):
@@ -710,13 +744,31 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[1][0] == "ntp"
             ):
                 once.add(ntp_servers, node[1])
-            # A ``next-hop`` block under ``static route`` creates a route.
-            elif node[0] == "next-hop":
-                cur_route = _open_route(stack, node[1], static_routes)
+            # ``next-hop <address> interface <name>`` as the set form
+            # becomes it, ``interface`` being a tag node there: the
+            # interface the open next hop names.
+            elif (
+                node[0] == "interface" and node[1]
+                and cur_route is not None
+                and len(stack) == route_depth + 1
+                and stack[-2][0] == "next-hop"
+            ):
+                cur_route["interface"] = _unquote(node[1])
+            # A block under ``static route`` that opens one of its next
+            # hops creates a route.
+            elif node[0] in _HOP_FRAMES:
+                opened = _open_route(stack, static_routes)
+                if opened is not None:
+                    cur_route, route_depth = opened, len(stack)
+            # A route of another table, and a ``reject`` route.
+            if _table_route(stack) is not None:
+                routes_not_held["table"][_table_route(stack)] = None
+            elif node[0] == "reject" and _route_frame(stack[:-1]) is not None:
+                routes_not_held["reject"][_route_frame(stack[:-1])] = None
             if closes_at_once:
                 stack.pop()
-                if node[0] == "next-hop":
-                    cur_route = None
+                if len(stack) < route_depth:
+                    cur_route, route_depth = None, 0
             continue
 
         # ── Leaf line: "<key> <value...>" or bare "<key>" ──
@@ -765,11 +817,6 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 intent.dns_servers.append(value)
             continue
 
-        # static-route metric (distance) inside the open next-hop block
-        if key == "distance" and cur_route is not None and value.isdigit():
-            cur_route["metric"] = int(value)
-            continue
-
         # ``vrf <name>`` under a next hop: the VRF the next hop is
         # looked up in (``next-hop <address> vrf <name>``; ``default``
         # is the global table).  Read past, a route that leaks to
@@ -777,10 +824,21 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # every target.  The tree has no form for it: where the VRF is
         # not the route's own, the route is left out (below).  And
         # ``disable``: VyOS installs nothing through that next hop.
-        if (
-            cur_route is not None
-            and stack and stack[-1][0] == "next-hop"
-        ):
+        # Each is read in the block of the next hop itself (an address,
+        # an interface or the discard), with its ``distance``, the
+        # ``interface`` a next hop names, and ``segments``: a next hop
+        # through SRv6, which the tree has no form for, so the route is
+        # left out (below).
+        if cur_route is not None and len(stack) == route_depth:
+            if key == "distance" and value.isdigit():
+                cur_route["metric"] = int(value)
+                continue
+            if key == "interface" and value and stack[-1][0] == "next-hop":
+                cur_route["interface"] = value
+                continue
+            if key == "segments" and value:
+                cur_route["srv6"] = True
+                continue
             if key == "vrf" and value:
                 looked_up_in = "" if value == "default" else value
                 if looked_up_in != cur_route["vrf"]:
@@ -788,6 +846,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 continue
             if key == "disable" and not value:
                 cur_route["disabled"] = True
+                continue
+
+        # A leaf of a route itself: ``blackhole`` or ``reject`` with
+        # nothing under it, and ``dhcp-interface <name>``.
+        if key in ("blackhole", "reject", "dhcp-interface"):
+            where = _route_frame(stack)
+            if where is not None:
+                if key == "blackhole" and not value:
+                    _open_route([*stack, ("blackhole", "")], static_routes)
+                elif key == "reject" and not value:
+                    routes_not_held["reject"][where] = None
+                elif key == "dhcp-interface" and value:
+                    routes_not_held["dhcp-interface"][where] = None
                 continue
 
         # ── Phase 2: bond mode (interfaces / bonding bondN / mode <m>) ──
@@ -962,11 +1033,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         CanonicalStaticRoute(
             destination=r["destination"],
             gateway=r["gateway"],
+            interface=r["interface"],
             metric=r["metric"],
             vrf=r["vrf"],
         )
         for r in static_routes
-        if not r["disabled"] and not r["elsewhere"]
+        if not r["disabled"] and not r["elsewhere"] and not r["srv6"]
     ]
     # A next hop held disabled is a statement the source does not
     # run, so its row is a left-out row; a route whose next hop is
@@ -976,6 +1048,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     ]
     routes_elsewhere = sum(
         1 for r in static_routes if r["elsewhere"] and not r["disabled"]
+    )
+    routes_srv6 = sum(
+        1 for r in static_routes
+        if r["srv6"] and not r["disabled"] and not r["elsewhere"]
     )
 
     # ── Phase 2 surfaces ──
@@ -1050,8 +1126,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         *left_out_rows(routes_left_out, rest="disabled-route"),
         *next_hop_elsewhere_rows(
             "protocols static", routes_elsewhere,
-            "next-hop <address> vrf <name>",
+            "next-hop <address> vrf <name>, or interface <name> vrf <name>",
         ),
+        *_routes_not_held_rows(routes_not_held, routes_srv6),
     ]
 
     logger.debug(
@@ -1066,25 +1143,70 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     return intent
 
 
-def _open_route(
-    stack: list[tuple[str, str]], gateway: str, routes: list[dict],
-) -> dict | None:
-    """Create a static-route scratch when a ``next-hop`` block opens.
+#: The frames of a static route, VyOS 1.4's and 1.3's.
+_ROUTE_FRAMES = frozenset({
+    "route", "route6", "interface-route", "interface-route6",
+})
 
-    Expects the stack path ``protocols / static / route <CIDR> /
-    next-hop <gw>`` (``route6`` accepted for IPv6), at the top of the
-    config (a route of the global table) or under ``vrf / name <X>``
-    (a route of VRF X).  Matched on the last frames alone, a route
-    of a VRF was a route of the global table on every target, VyOS
-    included, in a job that said ``completed``.  Returns the new
-    scratch dict (so the caller can attach a ``distance`` metric, the
-    VRF its next hop is looked up in, or ``disable``) or None when
-    the path doesn't match.
+#: The frames that open a next hop of a static route, each with the
+#: route frames it belongs under (vyos-1x, ``static-route.xml.i``;
+#: VyOS, "Static", 1.3 and 1.4): an address (``next-hop``), an
+#: interface (``interface``; 1.3's ``next-hop-interface``), or the
+#: discard (``blackhole``: "Configure a blackhole route for the
+#: specified subnet").
+_HOP_FRAMES: dict[str, tuple[str, ...]] = {
+    "next-hop": ("route", "route6"),
+    "interface": ("route", "route6"),
+    "blackhole": ("route", "route6"),
+    "next-hop-interface": ("interface-route", "interface-route6"),
+}
+
+#: The next hop the tree gives a route that discards what it
+#: matches: the interface IOS-XE, NX-OS, EOS and IOS XR route to, as
+#: the AOS-S parser reads its own ``blackhole``.  Whether the source
+#: answered such traffic with an ICMP error is not in the tree, so a
+#: ``reject`` route, which does, is not read as one.
+_DISCARD_HOP = "Null0"
+
+#: The routes the tree has no form for, by kind, with what the row of
+#: each says: "Configure a reject route for the specified subnet",
+#: "a static route that derives its next-hop IP address from the
+#: specified DHCP-enabled interface" (VyOS, "Static", rolling), and
+#: a route of ``protocols static table <N>``, the table a policy
+#: route sends traffic to (VyOS, "Policy examples").
+_ROUTES_NOT_HELD: dict[str, str] = {
+    "reject": (
+        "reject route(s): a reject route discards with an ICMP error "
+        "to the sender, which the tree's one discard (a route to "
+        f"{_DISCARD_HOP}) does not say"
+    ),
+    "dhcp-interface": (
+        "route(s) through the gateway DHCP gives an interface "
+        "(dhcp-interface <name>): the tree has no form for a gateway "
+        "learned by DHCP"
+    ),
+    "table": (
+        "route(s) of a routing table other than the main one (table "
+        "<id>, which policy routing sends traffic to): the tree has no "
+        "form for such a table"
+    ),
+}
+
+
+def _route_frame(stack: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """The VRF and destination of the static route whose frame is the
+    last of *stack*, or None where it is no such frame.
+
+    A route is read at the top of the config (the global table) and
+    under ``vrf / name <X>`` (a route of VRF X).  Matched on the
+    last frames alone, a route of a VRF was a route of the
+    global table on every target, VyOS included, in a job that said
+    ``completed``.
     """
-    if len(stack) == 4:
+    if len(stack) == 3:
         vrf = ""
     elif (
-        len(stack) == 6
+        len(stack) == 5
         and stack[0][0] == "vrf"
         and stack[1][0] == "name"
         and stack[1][1]
@@ -1093,22 +1215,92 @@ def _open_route(
     else:
         return None
     if (
-        stack[-4][0] == "protocols"
-        and stack[-3][0] == "static"
-        and stack[-2][0] in ("route", "route6")
+        stack[-3][0] == "protocols"
+        and stack[-2][0] == "static"
+        and stack[-1][0] in _ROUTE_FRAMES
+        and stack[-1][1]
     ):
-        dest = stack[-2][1]
-        if dest:
-            route = {
-                "destination": dest, "gateway": gateway, "metric": 0,
-                "vrf": vrf, "elsewhere": False, "disabled": False,
-                "path": [
-                    word for frame in stack for word in frame if word
-                ],
-            }
-            routes.append(route)
-            return route
+        return vrf, _unquote(stack[-1][1])
     return None
+
+
+def _table_route(stack: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """The table and destination of the route whose frame is the last
+    of *stack*, where that is ``protocols / static / table <N> /
+    route <CIDR>``; otherwise None."""
+    if (
+        len(stack) == 4
+        and stack[0][0] == "protocols"
+        and stack[1][0] == "static"
+        and stack[2][0] == "table"
+        and stack[3][0] in _ROUTE_FRAMES
+        and stack[3][1]
+    ):
+        return stack[2][1], _unquote(stack[3][1])
+    return None
+
+
+def _routes_not_held_rows(
+    not_held: dict[str, dict[tuple[str, str], None]], srv6: int,
+) -> list[str]:
+    """One row for each kind of static route the tree has no form for,
+    with how many.  A row names no destination, VRF or table: each
+    route is in force on the router, so the row is a section, not a
+    statement left out."""
+    rows = [
+        f"protocols static: {len(not_held[kind])} {says}; not translated"
+        for kind, says in _ROUTES_NOT_HELD.items()
+        if not_held[kind]
+    ]
+    if srv6:
+        rows.append(
+            f"protocols static: {srv6} route(s) through SRv6 segments "
+            "(next-hop <address> segments <list>): the tree has no form "
+            "for a segment list; not translated"
+        )
+    return rows
+
+
+def _open_route(
+    stack: list[tuple[str, str]], routes: list[dict],
+) -> dict | None:
+    """Create a static-route scratch when a block that opens one of its
+    next hops opens.
+
+    Expects the last frame of *stack* to be one of
+    :data:`_HOP_FRAMES` and the frame before it a route frame it
+    belongs under (:func:`_route_frame`): ``next-hop <address>`` is
+    the route's gateway, ``interface <name>`` and
+    ``next-hop-interface <name>`` its interface, ``blackhole`` the
+    discard (:data:`_DISCARD_HOP`).  Up to 0.7.7 only ``next-hop`` was
+    read, and a route out an interface or to the discard was dropped
+    with nothing said.  Returns the new scratch dict (so the caller
+    can attach a ``distance`` metric, the interface a next hop names,
+    the VRF it is looked up in, ``disable`` or ``segments``) or None
+    when the path doesn't match.
+    """
+    kind, arg = stack[-1]
+    where = _route_frame(stack[:-1])
+    if where is None or stack[-2][0] not in _HOP_FRAMES.get(kind, ()):
+        return None
+    gateway, interface = "", ""
+    if kind == "blackhole":
+        interface = _DISCARD_HOP
+    elif not arg:
+        return None
+    elif kind == "next-hop":
+        gateway = _unquote(arg)
+    else:
+        interface = _unquote(arg)
+    vrf, dest = where
+    route = {
+        "destination": dest, "gateway": gateway, "interface": interface,
+        "metric": 0, "vrf": vrf, "elsewhere": False, "disabled": False,
+        "srv6": False,
+        "path": [word for frame in stack for word in frame if word],
+    }
+    routes.append(route)
+    return route
 
 
 def _apply_iface_leaf(sc: dict, key: str, value: str) -> None:

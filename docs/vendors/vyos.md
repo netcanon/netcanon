@@ -35,12 +35,18 @@ via `dropped_tier3_sections`, **not** translated.
   802.1Q VLANs are `vif <vid>` sub-interfaces, modelled as
   `ethN.<vid>` interfaces (there is **no** top-level VLAN database).
 - Static routes — of the global table and of a VRF (`vrf name <X> {
-  protocols { static { … } } }`), with administrative `distance`.
-  Only the `next-hop <address>` form is read: a route `interface
-  <name>`, `blackhole`, `reject` or `dhcp-interface` is not, and
-  nothing says so yet — re-create it on the target.  A next hop in
-  another VRF, and a next hop held `disable`, are left out and said
-  (see the gotchas)
+  protocols { static { … } } }`), with administrative `distance`:
+  `next-hop <address>` with the `interface` beside it, a route out
+  an interface (`interface <name>`, and 1.3's `interface-route
+  <prefix> { next-hop-interface <name> }`), and `blackhole`, which
+  is read as a route to `Null0` and written for one.  A `reject`
+  route, a gateway from DHCP, a route of a policy-routing table,
+  SRv6 `segments`, a next hop in another VRF and a next hop held
+  `disable` are left out and said (see the gotchas).  ⚠️ Up to
+  0.7.7 only the `next-hop <address>` form was read, and onto VyOS
+  a route out an interface was written `next-hop <interface>`,
+  which is not a next hop VyOS takes: translate a config with such
+  routes again
 - NTP servers (`system ntp` / `service ntp`, bare + block form)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
@@ -133,15 +139,10 @@ translatable with caveats:
   — VyOS writes a VRF as its name and its table only: its
   description, route distinguisher and route targets are not
   written.
-- **`/routing/static-route/interface`** — a route that names an
-  interface and no gateway is written as `next-hop <interface>`,
-  which is not a next hop VyOS takes (an interface route is
-  `interface <name>`): the route is not written as one out of that
-  interface.
 - **`/snmp/trap-host`** — the codec writes no SNMP trap target: the
   trap hosts are dropped.
 
-The last three are severity `warn`: the job says so and stays
+The last two are severity `warn`: the job says so and stays
 `completed`.
 
 ## What we don't do
@@ -221,7 +222,8 @@ real set-form) capture are welcomed via
   into its global table: re-check the routes of a VRF on a device
   migrated from or onto VyOS with an earlier release.
 - **A next hop in another VRF, or held `disable`, is left out and
-  said.**  `next-hop <address> vrf <name>` looks the next hop up in
+  said.**  `next-hop <address> vrf <name>` (and `interface <name>
+  vrf <name>`) looks the next hop up in
   another VRF (as the route-leaking and NAT examples of VyOS's "VRF"
   page write it; `vrf default` is the global table), which the tree
   has no form for: the route is left out, and one `protocols
@@ -229,7 +231,22 @@ real set-form) capture are welcomed via
   table is read as the route.  `next-hop <address> disable` ("Disable
   the route via the specified next-hop IP address", VyOS, "Static")
   installs nothing, and is left out with a `disabled:` row that names
-  it.
+  it, as is `interface <name> disable`.
+- **A route that rejects, takes its gateway from DHCP, is of a
+  policy-routing table, or goes over SRv6 segments is left out and
+  said.**  `reject` ("Emit an ICMP unreachable when matched",
+  vyos-1x) answers the sender, which the tree's one discard — a
+  route to `Null0`, which `blackhole` ("Silently discard pkts when
+  matched") is read as — does not say; `dhcp-interface <name>`
+  ("DHCP interface supplying next-hop IP address") has a gateway
+  the config does not state; a route under `protocols static table
+  <id>` ("Policy route table number") is in a table only policy
+  routing sends traffic to; and an IPv6 next hop's `segments` steer
+  it over SRv6.  The tree has a form for none of them: each is left
+  out, and one `protocols static:` row of the Tier-3 banner counts
+  each kind.  Write them on the target by hand.  ⚠️ Up to 0.7.7 each
+  was dropped with nothing said, and a route with `segments` was
+  read and written without them.
 - **A user or community whose NAME holds white space is left out as
   a target.**  `user <name> {` and `community <name> {` are tag
   nodes, one word, so such a record is left out with a `/* review */`

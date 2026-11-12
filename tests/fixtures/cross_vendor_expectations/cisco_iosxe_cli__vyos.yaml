@@ -404,19 +404,15 @@ per_field_expectation:
     reason: >
       Every destination survives — 0 missing and 0 extra across the 6
       cells that populate routes, 39 destination-matched records out of
-      48 source records.  Two separate sub-losses ride on those
-      surviving records.  The one route of a VRF (`CUSTOMER-A`, on the
+      48 source records.  One sub-loss rides on those surviving
+      records.  The one route of a VRF (`CUSTOMER-A`, on the
       synthetic kitchen sink) comes back in its VRF, written under
       `vrf name CUSTOMER-A protocols static`.
-      NEXT-HOP KIND (interface empties on 30 records, gateway gains a
-      token on 27): VyOS renders every next-hop with one grammar,
-      `next-hop <token>`, so an IOS-XE interface next-hop is
-      indistinguishable from a gateway address after the round-trip.  33
-      source routes carry an interface-only next-hop and those tokens
-      migrate into `gateway`; 3 carry both an interface and a gateway, in
-      which case the interface is dropped and the gateway kept.  The
-      route still points somewhere; which KIND of thing it points at is
-      no longer recorded.
+      The next hop's kind survives: a route out an interface is written
+      `interface <name>`, a gateway's interface `next-hop <address> {
+      interface <name> }`, and both read back as they were.  Up to
+      0.7.7 VyOS wrote every next hop `next-hop <token>`: the interface
+      emptied on 30 records and the gateway gained a token on 27.
       DESCRIPTION (2 records, `bippety` and `UMBRELLA_SIG`): empties.
       Both codecs declare `/routing/static-route/description` lossy.
       Recorded `lossy` rather than `unsupported`: the route records

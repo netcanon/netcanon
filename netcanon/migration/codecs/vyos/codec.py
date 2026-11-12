@@ -158,13 +158,6 @@ _DROPPED: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "A route that names an interface and no gateway is written as "
-        "`next-hop <interface>`, which is not a next hop VyOS takes (an "
-        "interface route is `interface <name>`): the route is not written "
-        "as one out of that interface.",
-        ("/routing/static-route/interface",),
-    ),
-    (
         "The codec writes no SNMP trap target: the trap hosts are dropped.",
         ("/snmp/trap-host",),
     ),
@@ -262,9 +255,13 @@ class VyOSCodec(CodecBase):
             "/interfaces/interface/dhcp-client",
             "/interfaces/interface/dhcp-client-v6",
             # Static routes, of the global table and of a VRF
-            # (`vrf name <X> { protocols { static { route ... } } }`)
+            # (`vrf name <X> { protocols { static { route ... } } }`),
+            # with the interface of each: `interface <name>` for a
+            # route out an interface, `next-hop <address> { interface
+            # <name> }` beside a gateway, `blackhole` for `Null0`.
             "/routing/static-route",
             "/routing/static-route/vrf",
+            "/routing/static-route/interface",
             # ── Phase 2: local users (`system login user`) ──
             "/local-users/user/name",
             "/local-users/user/hashed-password",

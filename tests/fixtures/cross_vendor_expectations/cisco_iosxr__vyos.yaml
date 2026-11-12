@@ -25,9 +25,9 @@
 # ROLE that collapses. Do not carry the EOS credential finding across.
 #
 # The real losses on this pair are the LAG surface (a total concept drop),
-# the IANA interface type hint, the dot1q/VLAN registry, the per-VRF
-# scoping of static routes, the VRF RD/route-target plumbing and its
-# description, and the local-user role.
+# the IANA interface type hint, the dot1q/VLAN registry, the VRF
+# RD/route-target plumbing and its description, and the local-user
+# role.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
 # and a full `run_full_mesh.py` pass over the committed corpus (12 fixture
@@ -53,8 +53,7 @@ meta:
     identity, static-route destinations and next-hops, and every local
     account with its secret blob all survive. What does not is the whole
     Bundle-Ether/LAG surface (dropped outright), the IANA interface type
-    hint on every port, the dot1q VLAN registry, the VRF scoping on static
-    routes (VRF routes land in the global table), the VRF RD and
+    hint on every port, the dot1q VLAN registry, the VRF RD and
     route-targets with the VRF description, and the local-user role —
     every account arrives as `admin`.
   certainty: medium
@@ -385,26 +384,20 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The routes survive; something about some of them does not.  Measured
-      on the 6 cells that populate static routing: 20 routes in, 20 out, and
-      every one of the 20 destinations matched on the target side — so this
-      is NOT a record loss.  The 3 routes of a VRF come back in their VRF,
-      written under `vrf name <X> protocols static`.  6 of the 20 lose
-      something:
-      (1) EGRESS INTERFACE — 4 routes with an interface-only next-hop
-      (`Null0` x3, `BVI500` x1) come back with that value re-mounted onto
-      the `gateway` field instead of `interface`; the identity survives,
-      the field it lives in does not.  A further 2 routes that carried BOTH
-      a gateway and an egress interface keep the gateway and lose the
-      interface qualifier outright.
-      (2) `/routing/static-route/description` is declared LOSSY by both
-      codecs, but no committed cell sets one, so that sub-loss is declared
-      here rather than observed.
-      Recorded `lossy` and not `unsupported` because the destination and
-      next-hop — the part that forwards traffic — survive on 20 of 20.
-      Re-author the interface-only routes on the target before cutover.
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate static routing: 20 routes
+      in, 20 out, every destination matched, with gateway, interface,
+      distance and VRF intact.  The 3 routes of a VRF come back in their
+      VRF, written under `vrf name <X> protocols static`.  A route out an
+      interface is written `interface <name>`, a gateway's interface
+      `next-hop <address> { interface <name> }`, and a route to `Null0`
+      `blackhole`, which VyOS reads back as a route to `Null0`.  Up to
+      0.7.7 each was written `next-hop <token>`, and 6 of the 20 came
+      back with the interface moved onto the gateway or lost.
+      One caveat that is declared rather than observed:
+      `/routing/static-route/description` is declared LOSSY by both
+      codecs, and no committed cell sets one.
     references: [iosxr-vyos-surface]
 
   dhcp_servers:

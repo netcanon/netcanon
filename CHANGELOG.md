@@ -1401,6 +1401,41 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A VyOS route out an interface, and a `blackhole` route, are read
+  and written.**  VyOS writes a route out an interface as `route
+  <prefix> { interface <name> }` ("Next-hop IPv4 router
+  interface", vyos-1x), a gateway's own interface as `next-hop
+  <address> { interface <name> }`, a route that discards as
+  `blackhole` ("Silently discard pkts when matched"), and, on 1.3,
+  an interface route as `interface-route <prefix> {
+  next-hop-interface <name> }`.  The parser read `next-hop
+  <address>` only, so each of the others was lost on every target,
+  VyOS included, with nothing said, and an IPv6 next hop's SRv6
+  `segments` were dropped from a route that was then written
+  without them; the renderer wrote a route out an interface as
+  `next-hop <interface>`, which is not a next hop VyOS takes, and
+  left a gateway's interface out.  Each form is now read --
+  `blackhole` as a route to `Null0`, the tree's discard -- and
+  written: `interface <name>`, `next-hop <address> { interface
+  <name> }`, and `blackhole` for a route to `Null0`.  A route the
+  tree has no form for is left out, with one `protocols static:`
+  row a kind: `reject` (which answers with an ICMP error),
+  `dhcp-interface <name>`, a route of `protocols static table <id>`
+  (policy routing), and a next hop with `segments`; `interface
+  <name> vrf <name>` is counted in the row for a next hop in
+  another VRF, and `interface <name> disable` is left out with a
+  `disabled:` row.  The matrix says `/routing/static-route/interface`
+  is supported.  Over the committed inputs no VyOS input holds such
+  a route; onto VyOS the output of 13 jobs moves, from IOS-XE CLI,
+  IOS XR, FortiOS and RouterOS: 34 routes out an interface are
+  written `interface <name>` and 3 routes to `Null0` `blackhole`,
+  each of which was `next-hop <name>`, and 8 routes keep the
+  interface beside their gateway; no job's status, warnings or rows
+  move.  The cross-mesh harness now finds the static routes of the
+  IOS XR and FortiOS inputs whole on VyOS, and their expectation
+  notes say so; notes and vendor-reference pages that said VyOS
+  writes every next hop `next-hop <token>` are corrected.
+
 - **An AOS-CX route of `nullroute` or `reject` is left out and
   said, never a route out an interface.**  HPE documents two words
   where an AOS-CX route's next hop goes that are no next hop:

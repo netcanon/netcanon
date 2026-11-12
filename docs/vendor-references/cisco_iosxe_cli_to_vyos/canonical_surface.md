@@ -1,5 +1,8 @@
 # IOS-XE CLI → VyOS: measured canonical surface
 
+<!-- a-vyos-route-out-an-interface -->
+> **Update 2026-11-12 — a route out an interface is written `interface <name>`, and read back.**  The VyOS render wrote every next hop as `next-hop <token>`, an interface's name included, which is not a next hop VyOS takes, and wrote no interface beside a gateway; its parser read `next-hop <address>` only.  A route out an interface is now written `interface <name>`, a gateway's interface `next-hop <address> { interface <name> }`, and a route to `Null0` `blackhole`, and each is read back.  The next-hop-kind sub-loss below (the interface emptied on 30 records, the gateway gaining a token on 27, and the interface dropped beside a gateway) is gone; the description sub-loss stands.  The body below is the measurement as it was made.
+
 <!-- a-vyos-route-keeps-its-vrf -->
 > **Update 2026-11-12 — a route of a VRF is written in its VRF, and read back.**  The VyOS render wrote every route into the global `protocols static` block, its parser read no route under `vrf name <X> protocols static`, and its matrix declared `/routing/static-route/vrf` unsupported.  It now writes a route of a VRF under `vrf name <X> protocols static` (declaring, with a table of its own, a VRF that a route names and the config does not), reads it back, and declares the path supported.  On this pair the one route of a VRF now arrives in its VRF; `static_routes` stays `lossy` for the interface next hops and the descriptions.  Sentences below that quote the unsupported declaration, or say that a route of a VRF lands in the global table, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__vyos.yaml`.
 

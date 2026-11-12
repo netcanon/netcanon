@@ -26,7 +26,7 @@
 # structural loss is not counted six times.
 #
 # The real losses on this pair are the LAG surface, the VLAN database,
-# the egress interface of a static route, DHCP pools, RADIUS, SNMP trap hosts, the IANA
+# DHCP pools, RADIUS, SNMP trap hosts, the IANA
 # interface type hint, SNMPv3 algorithm strength — and local-user roles,
 # which fail OPEN while the passwords survive intact.
 #
@@ -54,10 +54,10 @@ meta:
     edge.  Hostname, domain, DNS and NTP, the full interface inventory with
     its descriptions, MTU, admin state and IPv4/IPv6 addressing, SNMP
     community/location/contact, local account names and their stored
-    credentials all survive.  What does not is the LAG surface, the VLAN
-    database and its 802.1Q tags, the egress-interface binding of a
-    static route (a FortiOS blackhole route is left out on the source
-    side, with a row), DHCP scopes,
+    credentials all survive, as do static routes with their egress
+    interface (a FortiOS blackhole route is left out on the source
+    side, with a row).  What does not is the LAG surface, the VLAN
+    database and its 802.1Q tags, DHCP scopes,
     RADIUS, SNMP trap hosts, SNMPv3 algorithm strength, the IANA interface
     type hint — and every local-user role, which is flattened to `admin`.
   certainty: medium
@@ -410,17 +410,16 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The record survives, the egress binding does not.  3 canonical routes
-      enter the pair across the 2 cells that carry any, and each comes back
-      with destination, gateway and distance intact while `interface` goes
-      to `""` (`port1` and `agg1` on `kitchen_sink.conf`).
-      fortigate_cli declares `/routing/static-route/interface` SUPPORTED;
-      vyos declares NO path for the route interface at any level while
-      dropping it — a target under-declaration, the same shape as the
-      trap-host gap, and one for a codec change rather than for this file.
-      Also declared but untested here: vyos declares
+    disposition: good
+    note: >
+      Preserved: 3 canonical routes enter the pair across the 2 cells that
+      carry any, and each comes back with destination, gateway, distance
+      and interface intact, the interface written beside the gateway as
+      `next-hop <address> { interface <name> }`.  Both matrices declare
+      `/routing/static-route/interface` supported.  Up to 0.7.7 VyOS wrote
+      no interface, and `port1` and `agg1` on `kitchen_sink.conf` came
+      back `""`.
+      Declared but untested here: vyos declares
       `/routing/static-route/description` LOSSY; no committed cell sets a
       route comment.
       Stated so the counts are not over-read: the source parser reduces the
@@ -432,7 +431,6 @@ per_field_expectation:
       default route, which states no `set dst`), and the blackhole routes of
       `kevinguenay_fgt_70g_branch.conf` yield none.  That is a source-side
       property, not a loss this pair causes, and it is not counted as one.
-      Re-add the egress-interface binding on the routes by hand.
     references: [fgt-vyos-surface]
 
   dhcp_servers:
