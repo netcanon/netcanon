@@ -72,7 +72,9 @@ a range nor a static binding, which the server discards.  Neither
 served anything, and each is left out for that reason.  **Action:**
 none, unless the target is to serve the pool — then write it there by
 hand.  A `disabled: ip route <destination>` row is a RouterOS route
-held `disabled=yes`, which installs nothing.  **Action:** none, unless
+held `disabled=yes`, or an IOS-XE route of administrative distance
+255, which IOS does not install; neither installs anything.
+**Action:** none, unless
 the route is to be in force on the target — then write it there by
 hand.
 
@@ -90,7 +92,10 @@ device (bind the pool to a zone that has one, or write it on the
 target by hand), and `/ip route: <n> route(s) in a routing table
 other than main ...` or `/ip route: <n> blackhole, unreachable or
 prohibit route(s) ...` for RouterOS routes of a VRF or that discard
-(write them on the target by hand, a VRF's routes in that VRF).  See
+(write them on the target by hand, a VRF's routes in that VRF), and
+`router static: <n> route(s) whose next hop is in another VRF ...`
+for IOS XR routes whose next hop is resolved in another VRF's table
+(the same).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"

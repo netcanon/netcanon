@@ -297,21 +297,44 @@ def _render_bgp_rd(instances: list[CanonicalRoutingInstance]) -> list[str]:
     return block
 
 
+#: The largest administrative distance IOS XR takes on a static route.
+_MOST_DISTANCE = 254
+
+
 def _static_route_line(route) -> str:
     """Format one static-route leaf: ``<dest> [<interface>] [<gateway>] [<distance>]``.
 
     Empty components drop out (interface-only for ``Null0`` / blackhole;
     gateway-only for a plain next-hop).  The administrative distance
-    (metric) trails the next-hop and is emitted only when set; it is
-    clamped to 254 (IOS-XR's maximum installable distance — 255 marks a
-    route unreachable) so a donor-carried out-of-range value stays valid
-    CLI.
+    (metric) trails the next-hop and is emitted only when set.  IOS XR
+    takes 1 to 254, so a larger one is written as 254, which the
+    router installs, and :func:`_distance_review_lines` says so.
     """
     parts = [route.destination]
     parts.extend(t for t in (route.interface, route.gateway) if t)
     if route.metric:
-        parts.append(str(min(route.metric, 254)))
+        parts.append(str(min(route.metric, _MOST_DISTANCE)))
     return " ".join(parts).rstrip()
+
+
+def _distance_review_lines(routes: list) -> list[str]:
+    """A review line for each route whose distance IOS XR cannot take.
+
+    A route of a distance past 254 is written with 254: a route the
+    source may hold as a last resort, or not install at all (a
+    platform that keeps a route of distance 255 out of its table),
+    is a route IOS XR installs.  The lines are written at the top
+    level, before ``router static``: a ``!`` inside the block ends
+    the mode it is in.
+    """
+    return [
+        f"! review: static route {route.destination}"
+        f"{' vrf ' + route.vrf if route.vrf else ''} has administrative "
+        f"distance {route.metric} in the source; IOS XR takes 1 to "
+        f"{_MOST_DISTANCE}, and it is written with {_MOST_DISTANCE}"
+        for route in routes
+        if route.metric > _MOST_DISTANCE
+    ]
 
 
 def _render_router_static(routes: list) -> list[str]:
@@ -348,7 +371,7 @@ def _render_router_static(routes: list) -> list[str]:
             blk.append(f"{indent}!")
         return blk
 
-    out = ["router static"]
+    out = [*_distance_review_lines(routes), "router static"]
     out.extend(_emit_afs(default_routes, " "))
     for vrf_name, vroutes in vrf_routes.items():
         out.append(f" vrf {vrf_name}")

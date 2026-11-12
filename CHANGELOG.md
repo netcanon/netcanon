@@ -1401,6 +1401,34 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS XR route out an interface written in two words, an IOS XR
+  next hop in another VRF and an IOS-XE route of distance 255 are no
+  longer translated as the routes they are not.**  The IOS XR `router
+  static` parser read a leaf a word at a time:
+  `10.5.0.0/16 Bundle-Ether 10 198.51.100.10` was a route out an
+  interface called `Bundle-Ether` at distance 10, and
+  `10.0.0.0/8 vrf RED 192.0.2.1` -- a next hop resolved in another
+  VRF's table -- a route out an interface called `vrf`, onto every
+  target, and from IOS XR to IOS XR in a job that said nothing of it.
+  A type and number written apart are now one name there, as they are
+  in an interface header, and an address after the type word is the
+  route's gateway.  A route whose next hop is in another VRF is left
+  out, and one `router static:` row counts such routes: the tree has
+  no form for it, and written into the route's own table it would
+  carry traffic the source keeps apart.  A leaf that names the route's
+  own VRF is read as the route.  An IOS-XE route of administrative
+  distance 255, which IOS does not install, was read as any other
+  route: onto IOS XR it was written with 254, which the router
+  installs.  It is now left out and said, in a `disabled: ip route
+  <destination>` row.  IOS XR as a target still writes a route of a
+  distance past 254 with 254, and now says so in a review line before
+  `router static` (a `!` inside the block ends the mode it is in).
+  The migrate page's sentence for a `disabled:` row took every such
+  row for a DHCP server, pool or setting -- the RouterOS route rows
+  of the entry below included; a route's row has a sentence of its
+  own, and the row that counts the rows past those listed is given
+  neither.  No job of a committed input moves.
+
 - **A RouterOS route of a VRF, a disabled route and a route that
   discards are no longer written as routes in force.**  The `/ip
   route` parser read `dst-address`, `gateway`, `distance` and

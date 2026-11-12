@@ -1953,8 +1953,9 @@
     // for an interface the router does not have; the IOS XR and EOS
     // parsers: a sub-interface that states no tag, which the device
     // does not bring up; the AOS-S, FortiOS, RouterOS and EOS
-    // parsers: a DHCP server or pool the source does not serve;
-    // _tier3_detection.left_out_row makes the row).
+    // parsers: a DHCP server or pool the source does not serve; the
+    // RouterOS and IOS-XE parsers: a route the router does not
+    // install; _tier3_detection.left_out_row makes the row).
     // It is not a section to apply by hand, so it is not counted as
     // one, and the banner says what it is.  Each kind has a sentence
     // of its own: a deactivated statement is not for the target, a
@@ -1972,14 +1973,35 @@
       label = String(label);
       return label.indexOf('untagged: ') === 0;
     }).length;
+    // A route the source does not install: RouterOS holds it
+    // disabled=yes, or IOS-XE gives it administrative distance 255.
+    function isRoute(label) {
+      return label.indexOf('disabled: ip route ') === 0
+        || label.indexOf('disabled: ipv6 route ') === 0;
+    }
+    var uninstalled = sections.filter(function(label) {
+      return isRoute(String(label));
+    }).length;
+    // The row that counts the rows of one kind past those listed
+    // ("disabled: ... (N more statements left out; not listed)").
+    // "disabled: " begins a DHCP row and a route row alike, so this
+    // row says neither: the rows listed before it bring their own
+    // sentence.
+    function isMore(label) {
+      return label.indexOf('disabled: ... (') === 0;
+    }
+    var unlisted = sections.filter(function(label) {
+      return isMore(String(label));
+    }).length;
     // A DHCP statement of a source whose server is not enabled, a
     // subnet an EOS server disables, and a pool the AOS-S server
     // discards.
     var unserved = sections.filter(function(label) {
       label = String(label);
-      return label.indexOf('disabled: ') === 0 || label.indexOf('incomplete: ') === 0;
+      return (label.indexOf('disabled: ') === 0 || label.indexOf('incomplete: ') === 0)
+        && !isRoute(label) && !isMore(label);
     }).length;
-    var leftOut = deactivated + held + untagged + unserved;
+    var leftOut = deactivated + held + untagged + unserved + uninstalled + unlisted;
     var leftOutNotes = [];
     if (deactivated) {
       leftOutNotes.push('A line that '
@@ -2013,6 +2035,15 @@
         + 'discards.  Neither served anything there, and each is left '
         + 'out here for that reason.  Write it on the target by hand '
         + 'only if the target is to serve it.');
+    }
+    if (uninstalled) {
+      leftOutNotes.push('A line that begins <code>disabled: ip route</code> '
+        + 'or <code>disabled: ipv6 route</code> is a route the source '
+        + 'does not install: RouterOS holds it <code>disabled=yes</code>, '
+        + 'or IOS-XE gives it administrative distance 255.  It carried '
+        + 'no traffic there, and is left out here for that reason.  '
+        + 'Write it on the target by hand only if it is to be in force '
+        + 'there.');
     }
     var tier3 = sections.length - leftOut;
     var rows = sections.map(function(label, idx) {

@@ -1626,7 +1626,7 @@ tests use these exclusively — never CSS classes or element structure.  See
   is written back to IOS-XE as it was (a canonical route cannot say
   "from DHCP"); a VTEP's source ADDRESS in `vxlan_vnis[].source_interface`
   on AOS-CX and VyOS; and the parsers that still read a spaced name
-  a word at a time (IOS XR and AOS-CX route lines).
+  a word at a time (AOS-CX route lines).
   Guarded by
   `tests/unit/migration/test_a_word_is_not_a_name.py`, which sends
   each form through the plan path onto every public codec and reads

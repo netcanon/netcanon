@@ -13,7 +13,10 @@ device would take as meant:
 * IOS-XE and IOS XR ``interface ethernet 1/11`` made an interface
   called ``ethernet``; two such stanzas made one name.
 * IOS-XE ``ip route 0.0.0.0 0.0.0.0 loopback 66 100`` was a route out
-  an interface called ``loopback`` at distance 66.
+  an interface called ``loopback`` at distance 66, and IOS XR
+  ``10.5.0.0/16 Bundle-Ether 10 198.51.100.10`` one out ``Bundle-Ether``
+  at distance 10.  IOS XR ``10.0.0.0/8 vrf RED 192.0.2.1`` -- a next
+  hop in another VRF -- was a route out an interface called ``vrf``.
 * OPNsense ``<dhcpd><lan>`` put the ZONE's name in a DHCP pool's
   interface: Junos bound a DHCP server to ``interface lan``.
 * Junos ``set interfaces irb unit 100 ...`` made an empty interface
@@ -1296,3 +1299,169 @@ class TestAnInterfaceIsANameSomeLineConfigures:
         assert [(iface.name, iface.mtu) for iface in unit_zero.interfaces] == [("irb", 9086)]
         assert [(a.ip, a.prefix_length) for a in unit_zero.interfaces[0].ipv4_addresses] == [("10.8.0.1", 24)]
         assert [(v.id, [a.ip for a in v.ipv4_addresses]) for v in unit_zero.vlans] == [(100, ["10.1.100.1"])]
+
+
+# ---------------------------------------------------------------------------
+# 6. IOS XR static routes: a spaced interface, and a next hop in another VRF
+# ---------------------------------------------------------------------------
+
+
+def _xr_static(leaf: str, vrf: str = "") -> str:
+    """A config whose ``router static`` holds *leaf*, in *vrf*'s block
+    or the default one, under the address family of its prefix."""
+    family = "ipv6" if ":" in leaf.split()[0] else "ipv4"
+    if vrf:
+        body = f" vrf {vrf}\n  address-family {family} unicast\n   {leaf}\n  !\n !\n"
+    else:
+        body = f" address-family {family} unicast\n  {leaf}\n !\n"
+    return "hostname xr1\nrouter static\n" + body + "!\nend\n"
+
+
+def _xr_route(leaf: str, vrf: str = ""):
+    """(interface, gateway, distance) of each route an IOS XR leaf is
+    read as, and the rows of the parse."""
+    tree = get_codec("cisco_iosxr").parse(_xr_static(leaf, vrf))
+    return [(r.interface, r.gateway, r.metric) for r in tree.static_routes], tree.dropped_tier3_sections
+
+
+def _elsewhere(count: int) -> str:
+    """The row that counts the routes whose next hop is in another VRF."""
+    return (
+        f"router static: {count} route(s) whose next hop is in another VRF "
+        "(<prefix> vrf <name> <next hop>): the tree has no form for a next "
+        "hop outside the route's own VRF; not translated"
+    )
+
+
+_XR_SPACED = """hostname xr1
+interface Bundle-Ether10
+ ipv4 address 198.51.100.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0/1
+ ipv4 address 192.0.2.1 255.255.255.0
+!
+router static
+ address-family ipv4 unicast
+  10.5.0.0/16 Bundle-Ether 10 198.51.100.10
+  10.6.0.0/16 GigabitEthernet 0/0/0/1 192.0.2.254 30
+ !
+!
+end
+"""
+
+
+class TestAnIosXrRouteOutASpacedInterface:
+    """The type and number of an interface written apart in the place
+    of a route's next hop are one name, as they are in a header."""
+
+    @pytest.mark.parametrize(
+        ("leaf", "read"),
+        [
+            ("10.5.0.0/16 Bundle-Ether 10 198.51.100.10", ("Bundle-Ether10", "198.51.100.10", 0)),
+            ("10.5.0.0/16 Bundle-Ether 10 198.51.100.10 20", ("Bundle-Ether10", "198.51.100.10", 20)),
+            ("10.5.0.0/16 GigabitEthernet 0/0/0/1", ("GigabitEthernet0/0/0/1", "", 0)),
+            ("10.5.0.0/16 Null 0 200", ("Null0", "", 200)),
+            ("10.5.0.0/16 tunnel-ip 5 7", ("tunnel-ip5", "", 7)),
+            ("2001:db8::/32 Bundle-Ether 10 2001:db8::1 30", ("Bundle-Ether10", "2001:db8::1", 30)),
+            # Written together, as the router prints them: as they were.
+            ("10.5.0.0/16 Bundle-Ether10 198.51.100.10 20", ("Bundle-Ether10", "198.51.100.10", 20)),
+            ("10.5.0.0/16 Null0 10", ("Null0", "", 10)),
+            ("10.5.0.0/16 198.51.100.10 20", ("", "198.51.100.10", 20)),
+            # An address is no number: it is the gateway.
+            ("10.5.0.0/16 Bundle-Ether 198.51.100.10 20", ("Bundle-Ether", "198.51.100.10", 20)),
+            ("2001:db8::/32 Bundle-Ether 2001:db8::1", ("Bundle-Ether", "2001:db8::1", 0)),
+            # Only the word in the place of the next hop is joined.
+            ("10.5.0.0/16 198.51.100.10 20 tag 7", ("", "198.51.100.10", 20)),
+        ],
+    )
+    def test_how_the_leaf_is_read(self, leaf: str, read: tuple) -> None:
+        assert _xr_route(leaf) == ([read], [])
+
+    @pytest.mark.parametrize("target", PUBLIC)
+    def test_no_output_names_the_type_alone(self, target: str) -> None:
+        """Read a word at a time, ``Bundle-Ether`` was the route's
+        interface and 10 its distance, in a job from IOS XR to IOS XR
+        that said nothing."""
+        job = _job("cisco_iosxr", _XR_SPACED, target)
+        for word in ("Bundle-Ether", "GigabitEthernet"):
+            assert _lines_with(job.rendered, word) == [], (target, word)
+            assert word not in _listed(job), (target, word)
+
+    def test_its_own_output_reads_back_right(self) -> None:
+        back = _own_output_read_back("cisco_iosxr", _XR_SPACED)
+        assert sorted((r.destination, r.interface, r.gateway, r.metric) for r in back.static_routes) == [
+            ("10.5.0.0/16", "Bundle-Ether10", "198.51.100.10", 0),
+            ("10.6.0.0/16", "GigabitEthernet0/0/0/1", "192.0.2.254", 30),
+        ]
+
+
+_XR_ELSEWHERE = """hostname xr1
+vrf RED
+!
+interface GigabitEthernet0/0/0/1
+ ipv4 address 192.0.2.1 255.255.255.0
+!
+router static
+ address-family ipv4 unicast
+  203.0.113.0/24 vrf RED 192.0.2.77
+  10.1.0.0/16 192.0.2.254
+ !
+ vrf RED
+  address-family ipv4 unicast
+   198.51.100.0/24 vrf default 192.0.2.88
+  !
+ !
+!
+end
+"""
+
+
+class TestAnIosXrNextHopInAnotherVrf:
+    """``<prefix> vrf <name> <next hop>``: a next hop resolved in
+    another VRF.  The tree has no form for it, so the route is left out
+    and one row counts such routes; read a word at a time, it was a
+    route out an interface called ``vrf``."""
+
+    @pytest.mark.parametrize(
+        ("leaf", "vrf"),
+        [
+            ("10.0.0.0/8 vrf RED 192.0.2.1", ""),
+            ("10.0.0.0/8 vrf RED Bundle-Ether 10 192.0.2.1 5", ""),
+            ("10.0.0.0/8 VRF RED 192.0.2.1", ""),
+            ("10.3.0.0/16 vrf default 192.0.2.1", "RED"),
+            ("10.3.0.0/16 vrf BLUE 192.0.2.1", "RED"),
+            ("2001:db8::/32 vrf RED 2001:db8::1", ""),
+        ],
+    )
+    def test_the_route_is_left_out_and_counted(self, leaf: str, vrf: str) -> None:
+        assert _xr_route(leaf, vrf) == ([], [_elsewhere(1)])
+
+    @pytest.mark.parametrize(
+        ("leaf", "vrf", "read"),
+        [
+            ("10.4.0.0/16 vrf RED 192.0.2.4 5", "RED", ("", "192.0.2.4", 5)),
+            ("10.4.0.0/16 vrf default 192.0.2.4", "", ("", "192.0.2.4", 0)),
+            ("10.4.0.0/16 vrf default Bundle-Ether 10 192.0.2.4", "", ("Bundle-Ether10", "192.0.2.4", 0)),
+        ],
+    )
+    def test_a_leaf_that_names_its_own_vrf_is_its_route(self, leaf: str, vrf: str, read: tuple) -> None:
+        assert _xr_route(leaf, vrf) == ([read], [])
+
+    def test_the_row_is_a_section(self) -> None:
+        """The source runs such a route: the row is a section the
+        operator writes by hand, not a statement left out."""
+        assert not is_left_out_row(_elsewhere(1))
+
+    def test_one_row_counts_them(self) -> None:
+        tree = get_codec("cisco_iosxr").parse(_XR_ELSEWHERE)
+        assert [route.destination for route in tree.static_routes] == ["10.1.0.0/16"]
+        assert tree.dropped_tier3_sections == [_elsewhere(2)]
+        assert [iface.name for iface in tree.interfaces] == ["GigabitEthernet0/0/0/1"]
+
+    @pytest.mark.parametrize("target", PUBLIC)
+    def test_no_output_has_the_route(self, target: str) -> None:
+        job = _job("cisco_iosxr", _XR_ELSEWHERE, target)
+        for gone in ("203.0.113.0", "198.51.100.0", "192.0.2.77", "192.0.2.88"):
+            assert gone not in job.rendered, (target, gone)
+        assert "vrf" not in [name.lower() for name in _listed(job)], target
+        assert _elsewhere(2) in job.dropped_tier3_sections, target

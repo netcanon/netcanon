@@ -60,8 +60,14 @@ translatable with caveats:
   config of IOS XR.  From another platform the account is given `group
   root-lr` at privilege 15 and `group operator` below it, chosen from
   the privilege level; the source's role is not carried.
-- **`/routing/static-route/metric`** — render emits destination +
-  next-hop only; the administrative distance (metric) drops.
+- **A route's administrative distance past 254.**  IOS XR takes 1
+  to 254.  A route of a larger distance from another platform is
+  written with 254, which the router installs, under a `! review:
+  static route <prefix> has administrative distance <n> in the
+  source ...` line written before `router static`.  A source that keeps a route of distance 255 out
+  of its table did not run that route: check it by hand.  An IOS-XE
+  route of distance 255 is left out at the source (see the IOS-XE
+  page).  ⚠️ Up to 0.7.7 it was written with 254 and said nothing.
 - **`/routing/static-route/description`** — the static-route name /
   description drops on render.
 - **`/routing-instances/instance`** — VRF name / description /
@@ -402,8 +408,17 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
 - **A type and its number written apart** (`interface Bundle-Ether
   10`, `interface Loopback 0`) are one name, as the router reads
   them.  ⚠️ Up to 0.7.7 the name was the first word alone, and two
-  such stanzas were one interface.  An interface written that way
-  inside a `router static` line is still read a word at a time.  A
+  such stanzas were one interface.  So is one in the place of a
+  route's next hop (`10.5.0.0/16 Bundle-Ether 10 198.51.100.10` is a
+  route out `Bundle-Ether10`); an address after the type word is the
+  route's gateway, not the type's number.  ⚠️ Up to 0.7.7 such a
+  route went out an interface called `Bundle-Ether` at distance 10,
+  in every target's output, and from IOS XR to IOS XR with no
+  warning.  A route whose next hop is in another VRF (`<prefix> vrf
+  <name> <next hop>`) is not translated: the tree has no form for
+  it, and one `router static: <n> route(s) whose next hop is in
+  another VRF ...` row on the migrate banner counts such routes
+  (up to 0.7.7 it was a route out an interface called `vrf`).  A
   header that begins `interface range` or `interface breakout`
   names no interface: it is not translated, and is listed on the
   migrate banner as a section (up to 0.7.7 it was an interface

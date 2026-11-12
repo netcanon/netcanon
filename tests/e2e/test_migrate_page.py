@@ -857,3 +857,76 @@ class TestADeactivatedStatement:
             "for that reason. Write it on the target by hand only if the target "
             "is to serve it."
         )
+
+    def test_a_route_the_source_does_not_install(self, page: Page, base_url: str):
+        """An IOS-XE route of administrative distance 255 is one the
+        router does not install: no route in the output, and a row under
+        the heading of statements the source held and did not run, with
+        the sentence for a route -- not the one for a DHCP pool, which
+        begins with the same word."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("cisco_iosxe_cli")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(
+            "hostname r1\n"
+            "interface GigabitEthernet1\n ip address 192.0.2.1 255.255.255.0\n!\n"
+            "ip route 198.51.100.0 255.255.255.0 192.0.2.254 255\n!\nend\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("192.0.2.1")
+        expect(mig.output).not_to_contain_text("198.51.100.0")
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Statements the source held and did not run")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "disabled: ip route 198.51.100.0/24 "
+            "(a route of administrative distance 255, which the source does not "
+            "install; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
+            "A line that begins disabled: ip route or disabled: ipv6 route is a "
+            "route the source does not install: RouterOS holds it disabled=yes, "
+            "or IOS-XE gives it administrative distance 255. It carried no "
+            "traffic there, and is left out here for that reason. Write it on "
+            "the target by hand only if it is to be in force there."
+        )
+
+    def test_more_routes_than_are_listed(self, page: Page, base_url: str):
+        """Past the rows a job lists, one row counts the rest, and it
+        begins with the word of its kind.  For a route that word begins
+        a DHCP row too: the page gives the counting row neither
+        sentence, and the routes listed before it bring theirs."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("cisco_iosxe_cli")
+        mig.pick_target("arista_eos")
+        routes = "".join(
+            f"ip route 10.{n // 256}.{n % 256}.0 255.255.255.0 192.0.2.254 255\n" for n in range(203)
+        )
+        mig.fill_raw(
+            "hostname r1\n"
+            "interface GigabitEthernet1\n ip address 192.0.2.1 255.255.255.0\n!\n"
+            + routes + "!\nend\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("192.0.2.1")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-section-200"]')).to_have_text(
+            "disabled: ... (3 more statements left out; not listed)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-201"]')).to_have_count(0)
+        note = page.locator('[data-testid="migrate-tier3-inactive-note"]')
+        expect(note).to_contain_text("is a route the source does not install")
+        expect(note).not_to_contain_text("DHCP")

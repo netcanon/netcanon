@@ -990,8 +990,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
         if ri.name in _l3vni_by_vrf:
             ri.l3_vni = _l3vni_by_vrf[ri.name]
 
-    # Static routes
-    intent.static_routes = _parse_static_routes(raw)
+    # Static routes.  One the router does not install is left out,
+    # and a row says so.
+    intent.static_routes, routes_left_out = _parse_static_routes(raw)
+    intent.dropped_tier3_sections.extend(
+        left_out_rows(routes_left_out, rest="distance-255"),
+    )
 
     # SNMP (Tier 2)
     intent.snmp = _parse_snmp(raw)
@@ -2187,6 +2191,16 @@ def _is_an_address(word: str) -> bool:
     return _is_ipv4_literal(word) or _is_ipv6_literal(word)
 
 
+#: The administrative distance of a route IOS does not install.
+_NOT_INSTALLED = 255
+
+
+def _route_path(family: str, vrf: str, dest: str) -> list[str]:
+    """The words a row names a route by: ``ip route [vrf <name>]
+    <destination>``, the destination as a prefix."""
+    return [family, "route", *(["vrf", vrf] if vrf else []), dest]
+
+
 def _route_after_destination(
     words: list[str], is_address: Callable[[str], bool],
 ) -> tuple[str, str, int, str]:
@@ -2259,7 +2273,9 @@ def _route_after_destination(
     return gateway, iface, metric, description
 
 
-def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+def _parse_static_routes(
+    raw: str,
+) -> tuple[list[CanonicalStaticRoute], list[tuple[str, list[str]]]]:
     """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text.
 
     Handles the optional ``vrf <NAME>`` qualifier
@@ -2270,8 +2286,22 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     What follows the destination is read by
     :func:`_route_after_destination`; the ``global`` next-hop-leak
     keyword is not modelled and is read past.
+
+    A route of administrative distance 255 is one the router does not
+    install: Cisco gives 255 as the distance of a source the router
+    does not believe, whose route it keeps out of the routing table
+    ("Understand Administrative Distance", document 15986).  It is a
+    statement the source holds and does not run, and is left out.
+    Kept, it was written onto targets that install it (IOS XR takes 1
+    to 254, and wrote 254).
+
+    Returns:
+        ``(routes, left_out)``: the routes, and ``(kind, path)`` for
+        each route left out, for
+        :func:`netcanon.migration._tier3_detection.left_out_rows`.
     """
     routes: list[CanonicalStaticRoute] = []
+    left_out: list[tuple[str, list[str]]] = []
     for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
@@ -2280,6 +2310,9 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             gateway, iface, metric, description = _route_after_destination(
                 [m6.group(3), *(m6.group(4) or "").split()], _is_ipv6_literal,
             )
+            if metric == _NOT_INSTALLED:
+                left_out.append(("distance-255", _route_path("ipv6", vrf, dest)))
+                continue
             routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,
@@ -2300,6 +2333,9 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             gateway, iface, metric, description = _route_after_destination(
                 [gw_or_iface, *(m.group(5) or "").split()], _is_ipv4_literal,
             )
+            if metric == _NOT_INSTALLED:
+                left_out.append(("distance-255", _route_path("ip", vrf, dest)))
+                continue
             routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,
@@ -2318,7 +2354,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                 destination="0.0.0.0/0",
                 gateway=m.group(1),
             ))
-    return routes
+    return routes, left_out
 
 
 # -- SNMP parse helpers (shared via re-export for sibling codecs if needed)

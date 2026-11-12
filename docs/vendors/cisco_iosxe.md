@@ -708,6 +708,13 @@ translate it again from `show running-config` as the device prints it.
   stanzas were one interface called `ethernet`, the route went out
   `loopback` at distance 66, and a range or a breakout line was an
   interface called `range` or `breakout`.
+- **A route of administrative distance 255 is left out** (CLI
+  codec).  IOS does not install such a route (Cisco, "Understand
+  Administrative Distance").  It is a statement the router holds
+  and does not run: it is not translated, and a `disabled: ip route
+  <prefix>` row on the migrate banner (`ipv6 route` for an IPv6 one)
+  says so.  ⚠️ Up to 0.7.7 it was translated as a route: onto IOS
+  XR with distance 254, which that router installs.
 - **`ip route <prefix> <mask> dhcp` keeps a word where a name
   goes** (CLI codec).  The keyword says the next hop is the default
   router a DHCP server hands out, and a translated route holds an
