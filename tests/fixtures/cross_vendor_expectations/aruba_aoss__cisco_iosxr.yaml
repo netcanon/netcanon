@@ -335,8 +335,7 @@ per_field_expectation:
       `router static / address-family ipv4 unicast`.
       Two sub-canonical caveats that do not change the disposition: both
       codecs declare `/routing/static-route/description` lossy, and
-      aruba_aoss additionally declares `/routing/static-route/metric` lossy
-      and `/routing/static-route/vrf` unsupported.  Neither fires on this
+      aruba_aoss declares `/routing/static-route/vrf` unsupported.  Neither fires on this
       corpus because no committed AOS-S fixture sets a route description, a
       non-default metric or a VRF — so the declarations are untested here
       rather than contradicted.

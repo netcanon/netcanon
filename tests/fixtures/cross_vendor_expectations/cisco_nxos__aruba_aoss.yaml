@@ -16,8 +16,7 @@
 # committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors).  The
 # per-field and per-sub-field measurement is cached in
 # `docs/vendor-references/cisco_nxos_to_aruba_aoss/canonical_surface.md`.
-# Where the two disagree the MEASUREMENT wins and the entry says so — see
-# `static_routes[].metric`.
+# Where the two disagree the MEASUREMENT wins and the entry says so.
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/cisco_nxos_to_aruba_aoss/
@@ -346,12 +345,12 @@ per_field_expectation:
   "static_routes[].metric":
     disposition: good
     note: >
-      Recorded from the MEASUREMENT against the target matrix, which declares
-      `/routing/static-route/metric` lossy ("render emits destination +
-      next-hop only").  The one fixture carrying a non-default administrative
+      The administrative distance is written `distance <N>` and read back.
+      The one fixture carrying a non-default administrative
       distance (`10.100.0.0/16`, metric 200) round-trips it intact, and no
-      cell shows metric drift, so the declared loss does not reproduce on this
-      corpus.
+      cell shows metric drift.  Up to 0.7.7 the target matrix declared
+      `/routing/static-route/metric` lossy, which this measurement did not
+      reproduce.
     references: [nxos-aoss-surface]
 
   # -- LAGs.  Top-level key omitted: members and mode survive on every

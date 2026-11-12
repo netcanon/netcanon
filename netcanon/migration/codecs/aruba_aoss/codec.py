@@ -267,6 +267,10 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/trunk-native-vlan",
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
+            # ``distance <N>`` on every route form the render writes,
+            # read back by the parser (AOS-Switch takes 1 to 255,
+            # default 1: Aruba Central, "Configuring Routing").
+            "/routing/static-route/metric",
             # The switch's own DHCP server: a ``dhcp-server pool`` stanza
             # for each pool, ``dhcp-server`` in the VLAN that serves it,
             # ``dhcp-server enable`` last (:mod:`.dhcp_pools`).  What AOS-S
@@ -448,18 +452,10 @@ class ArubaAOSSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/routing/static-route/metric",
-                reason=(
-                    "Render emits destination + next-hop only; the static-"
-                    "route administrative distance (metric) is dropped (run3)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/routing/static-route/description",
                 reason=(
-                    "Render emits destination + next-hop only; the static-"
-                    "route name / description is dropped (run3)."
+                    "Render emits destination, next hop and distance only; "
+                    "the static-route name / description is dropped (run3)."
                 ),
                 severity="warn",
             ),

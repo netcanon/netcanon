@@ -1,5 +1,8 @@
 # NX-OS -> Aruba AOS-S: measured canonical surface
 
+<!-- aoss-route-distance -->
+> **Update 2026-11-12 — a route's distance is declared supported on AOS-S.**  The AOS-S matrix declared `/routing/static-route/metric` lossy ("Render emits destination + next-hop only"), while its render writes a route's distance as `distance <N>` on every form it writes (an address, `vlan <id>`, `blackhole`) and its parser reads it back.  The path is declared supported now; AOS-Switch takes a static route's administrative distance from 1 to 255, default 1 (Aruba Central, "Configuring Routing").  What the body below says of the declared loss predates this.
+
 <!-- snmpv3-key-gate-467 -->
 > **Update 2026-09-17 (#467) — the SNMPv3 USM behaviour described in this document has changed.**  `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's PASSPHRASE and AOS-S derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies an NX-OS `localizedkey` digest, localised against the source agent's engine ID.  Such a key is now refused: no `snmpv3 user` line, and a `; ... -- review:` comment names the user.  Measured after the change: **0 of 12** USM users arrive across the 11 cells that carry one, 12 refused (12 localised).  The refusal also drops the user's `snmpv3 group ... user ...` binding, which would otherwise name a user that was never created.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
 

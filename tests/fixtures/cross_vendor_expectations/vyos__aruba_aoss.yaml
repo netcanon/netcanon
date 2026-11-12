@@ -404,8 +404,8 @@ per_field_expectation:
       `ipv6 route`, with the default route rendered as
       `ip default-gateway`).  Both matrices declare `/routing/static-route`
       supported.
-      One declared-lossy path is exercised here and SURVIVES: aruba_aoss
-      declares `/routing/static-route/metric` lossy, but the single route
+      The distance survives too (up to 0.7.7 aruba_aoss declared
+      `/routing/static-route/metric` lossy): the single route
       carrying a metric (`kitchen_sink.conf`, `10.99.0.0/16` via
       `10.10.10.254`, metric 20) renders as `ip route … distance 20` and
       re-parses with `metric: 20` intact.

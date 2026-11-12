@@ -1,5 +1,8 @@
 # VyOS → Juniper Junos: measured canonical surface
 
+<!-- junos-route-preference -->
+> **Update 2026-11-12 — a route's distance is written as its Junos `preference`.**  Up to 0.7.7 the Junos render wrote destination and next hop only, so a route's distance was lost and a floating route came out as a second next hop of the same preference, carrying traffic beside the route it backs up.  The next hops at a destination's lowest distance are now written `next-hop <address>` with one `route <prefix> preference <n>` line, and each other next hop `qualified-next-hop <address> preference <n>` ("The qualified next-hop preference and metric override the route preference and metric", Juniper, "Static Route Preferences and Qualified Next Hops").  A destination whose next hops mix a stated and an unstated distance is a known limitation: the unstated one is written at the Junos default, 5.  What the body below says of the distance on this pair predates this.
+
 <!-- a-vyos-route-keeps-its-vrf -->
 > **Update 2026-11-12 — a VyOS route of a VRF is read.**  The VyOS parser read no route under `vrf name <X> protocols static`, and its matrix declared `/routing/static-route/vrf` unsupported.  It now reads such a route into its VRF and declares the path supported.  No committed VyOS input has a route in a VRF, so no measurement of this pair moved.  Lists below that name `/routing/static-route/vrf` among the paths `vyos` declares unsupported describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__juniper_junos.yaml`.
 

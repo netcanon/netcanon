@@ -338,9 +338,9 @@ per_field_expectation:
     note: >
       Preserved on both cells that populate it (3 routes total).  Destination,
       gateway and administrative distance all survive — including the one route
-      carrying a non-default metric of 200, which is notable because aruba_aoss
-      declares `/routing/static-route/metric` lossy ("Render emits destination +
-      next-hop only").  On this corpus the declared loss does not fire.  Two
+      carrying a non-default metric of 200, written `distance 200` and read
+      back.  (Up to 0.7.7 aruba_aoss declared `/routing/static-route/metric`
+      lossy, though its render writes the distance.)  Two
       caveats that rest on declarations rather than observations, because no
       committed route exercises them: `/routing/static-route/description` is
       declared lossy on BOTH sides, and aruba_aoss declares

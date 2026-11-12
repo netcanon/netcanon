@@ -1,5 +1,8 @@
 # Static routes: Junos versus OPNsense
 
+<!-- junos-route-preference -->
+> **Update 2026-11-12 — a static route's `preference` is read as its distance.**  Up to 0.7.7 the Junos parser read no `preference` and left every `qualified-next-hop` out.  Each next hop's preference -- a qualified next hop's own, else the route's, else `static defaults preference` -- is now its distance.  OPNsense writes no static route of the tree (its matrix declares `/routing/static-route` unsupported), so this pair's output is unchanged; what the body below says of `preference` and `qualified-next-hop` on the Junos side predates this.
+
 <!-- junos-rib-inet6 -->
 > **Update 2026-11-12 — an IPv6 static route of `rib inet6.0` is read.**  Junos holds an IPv6 static route in `inet6.0`, `set routing-options rib inet6.0 static route ...` ([Juniper, Example: Configuring IPv6 Static Routes](https://www.juniper.net/documentation/en_US/junos12.3/topics/example/policy-ipv6-static-routes.html)), and in a routing instance in `<instance>.inet6.0` ("In a routing instance, the routing table name must include the routing instance name", [Juniper, rib (Routing Options)](https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/ref/statement/rib-edit-routing-options.html)).  Up to 0.7.7 the Junos parser read no `rib` line, and such a route was lost on every target, with nothing said, whatever the body below says of it.  A static route of `rib inet.0` and `rib inet6.0`, and of the instance's own two tables, is now read as one of `static` is; a static route of any other table is left out, and one row counts them.  The body's IPv6 example under `routing-options static`, and its sentence that IPv6 statics live there, are not so.
 
