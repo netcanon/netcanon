@@ -244,6 +244,20 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
 
 ## Common gotchas
 
+- **A header names one interface, or none.**  EOS takes a type and
+  its number written apart (`interface ethernet 1`) and a range or a
+  list where a name goes (`interface ethernet 1 - 4` opens
+  `config-if-Et1-4`, in Arista's manual; `interface ethernet
+  4/1,4/3,4/5`).
+  A spaced header is read as the one name its words spell
+  (`ethernet1`).  A header that names a range or a list is not
+  translated: no interface is made of it, nothing in its stanza is
+  read, and the job lists the header among its sections.  Configure
+  the ports it covers on the target by hand.  ⚠️ Up to 0.7.7 a header
+  of two words opened no stanza: the interface, its address and its
+  VLANs were in no record and nothing said so; and a range written as
+  one word was an interface named for the range.  Translate such a
+  config again.
 - **A port, lane or port channel numbered 0 at the source is written
   as 1 here.**  EOS counts each from 1 (a channel group's number
   "Values range from 1 through 2000", in Arista's manual).  With no

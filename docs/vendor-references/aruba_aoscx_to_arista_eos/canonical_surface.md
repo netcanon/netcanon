@@ -2,6 +2,8 @@
 
 > **Update 2026-10-20 — the EOS render no longer writes a second VLAN interface beside an AOS-CX `interface vlan <N>`, and on this path the VLAN's address is now lost.**  `synthesize_svis_from_vlan_l3` now recognises a VLAN interface however a codec spells it, so a VLAN whose address is already on `interface vlan 101` gets no `interface Vlan101` as well.  That duplicate was the only line that carried the address back on the mesh path, which translates no name: the EOS parser reads no `interface vlan 101`, the same loss as every spaced AOS-CX name (`lag 1`, `loopback 0`).  `vlans[].ipv4_addresses` is therefore recorded `unsupported` on all five cells, and each cell parses back fewer interface records than before.  With port names translated, as the API and the demo do, `vlan 101` arrives as `Vlan101` with its address; the active gateway is not kept on the VLAN.  Statements below that the address survives on this path describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
 
+> **Update 2026-11-11 — the EOS parser reads a header written as a type and its number apart as one interface.**  `interface lag 1` and `interface loopback 0` are now `lag1` and `loopback0` on read-back, where before such a header opened no stanza.  On two cells the interface records now line up, and on those description, admin state, MTU and IPv6 arrive intact, so the YAML declares those four `good`.  The table below is the 2026-08-25 measurement.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoscx__arista_eos.yaml`.
 
@@ -35,16 +37,16 @@ campus port in `show running-config`, including ports carrying only default
 configuration; the EOS render emits what the canonical model considers
 configured.
 
-Consequence, and the reason it is worth stating loudly: **every
-`interfaces[].*` sub-field measures as drifted on all 7 cells**, because a
-dropped record takes all of its attributes with it. Declaring any of them
-`good` — even ones like `description` or `mtu` that are declared supported on
-both sides and are intact on every *surviving* record — would manufacture a
-false `CODEC_BUG`.
+Consequence: on a cell whose interface count differs, a dropped record takes
+all of its attributes with it.  The harness charges that loss to
+`interfaces[].name` and measures every later `interfaces[].*` sub-field as
+`STRUCTURAL_ONLY`, whatever it is declared — so declaring `description` or
+`mtu` `good` cannot produce a false `CODEC_BUG` there.  Each sub-field is
+declared on what a *surviving* record keeps, which is what the cells whose
+records line up measure.
 
-This is the trap that makes reasoning from the capability matrices alone
-unsafe on this pair. Both matrices declare description, enabled and MTU
-supported. The matrices are right; the records still vanish.
+Both matrices declare description, enabled and MTU supported.  The matrices
+are right; the records that vanish are `interfaces[].name`'s loss.
 
 ## Per-field measurement (7 cells)
 

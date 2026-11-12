@@ -60,7 +60,7 @@ from __future__ import annotations
 import bisect
 import ipaddress
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from ...canonical.intent import CanonicalDHCPPool, CanonicalInterface
@@ -374,14 +374,17 @@ def _read_block_line(block: _Block, line: str) -> None:
         block.skip_deeper_than = depth
 
 
-def read_dhcp(lines: Sequence[str], interface_header: re.Pattern[str]) -> Read:
+def read_dhcp(
+    lines: Sequence[str], interface_named: Callable[[str], str | None],
+) -> Read:
     """What *lines* state of the DHCP server.
 
     Args:
         lines: The config's lines, bodies of text emptied.
-        interface_header: The parser's pattern for an ``interface``
-            line, whose first group is the name it keys the interface
-            by: an interface is found by the same name.
+        interface_named: The parser's reading of a line in column 0:
+            the name it keys the interface an ``interface`` header
+            names by, or ``None`` where the line is no such header.
+            An interface is found by the same name.
 
     Returns:
         The servers, the interfaces that serve, and the ``ip dhcp
@@ -398,10 +401,8 @@ def read_dhcp(lines: Sequence[str], interface_header: re.Pattern[str]) -> Read:
         if not line.startswith((" ", "\t")):
             # A line in column 0 ends the block it is in, and may open one.
             block = None
-            interface = None
-            header = interface_header.match(line)
-            if header:
-                interface = header.group(1)
+            interface = interface_named(line)
+            if interface is not None:
                 continue
             server = SERVER_HEADER_RE.match(line)
             if server:
