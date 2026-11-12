@@ -1,6 +1,6 @@
-"""An NX-OS or EOS interface header names one interface, or none.
+"""An NX-OS, EOS or OS10 interface header names one interface, or none.
 
-Both platforms take a type and its number written apart where a name
+NX-OS and EOS take a type and its number written apart where a name
 goes (``interface ethernet 1/2``, ``interface Ethernet 1``) and print
 them together; both take a range or a list there too (``interface
 Ethernet1/1-4``, ``interface Ethernet1,3``), which configures every
@@ -17,6 +17,14 @@ header a word at a time, and each got both wrong in its own way:
   stanza: the interface, its address and its VLANs were in no record
   and no row, and nothing said so.  A range was an interface of that
   name.
+* OS10 does the same.  Dell types ``interface ethernet 1/1/14`` (KB
+  000201923) and ``interface range ethernet 1/1/3, 1/1/14-1/1/15``
+  (KB 000196765), and prints ``interface ethernet1/1/14``.  The parser
+  read a number written apart only for ``vlan``, ``port-channel`` and
+  the like; ``interface ethernet 1/1/14`` opened no stanza, and an
+  ``interface range`` stanza -- in six committed inputs -- was in no
+  record and no row.  A range where a name goes was an interface of
+  that name.
 
 Now a header is read for the one interface it names
 (``_helpers.one_interface_named``): one word, or a type and its number,
@@ -27,10 +35,12 @@ and its header line is a section row of ``dropped_tier3_sections``
 (``without_stanzas_of_no_one_interface``).
 
 The oracle for a spaced header is the parser's own reading of the
-header written together: every committed NX-OS and EOS input with its
-headers spaced parses to the tree of the input, and a spaced text and
-its joined twin make the same job onto every public codec.  Each check
-is handed the defect it is for, and has to fail.
+header written together: every committed NX-OS, EOS and OS10 input
+with its headers spaced parses to the tree of the input, and a spaced
+text and its joined twin make the same job onto every public codec.
+The oracle for a range is the text: every ``interface range`` line of
+every committed OS10 input is a row.  Each check is handed the defect
+it is for, and has to fail.
 """
 
 from __future__ import annotations
@@ -50,6 +60,8 @@ from netcanon.migration.codecs._helpers import (
 )
 from netcanon.migration.codecs.arista_eos import parse as eos_parse
 from netcanon.migration.codecs.cisco_nxos import parse as nxos_parse
+from netcanon.migration.codecs.dell_os10 import parse as os10_parse
+from netcanon.migration.codecs.dell_os10 import render as os10_render
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJob
 from netcanon.services.migration_pipeline import run_plan_with_checked_names
@@ -58,7 +70,7 @@ from tests.unit.migration.test_vlan_members_reach_the_output import CAPTURES
 pytestmark = pytest.mark.unit
 
 PUBLIC = list_public_codecs()
-SOURCES = ("arista_eos", "cisco_nxos")
+SOURCES = ("arista_eos", "cisco_nxos", "dell_os10")
 
 
 @functools.cache
@@ -289,11 +301,55 @@ end
 
 _EOS_NAMES = ["Ethernet1", "Ethernet2", "Port-Channel10", "Ethernet3", "Loopback0"]
 
-_TEXTS = {"cisco_nxos": _NXOS, "arista_eos": _EOS}
-_NAMES = {"cisco_nxos": _NXOS_NAMES, "arista_eos": _EOS_NAMES}
+#: As Dell types the commands (KB 000201923: ``OS10(config)# interface
+#: ethernet 1/1/14``).
+_OS10 = """! Version 10.5.1.0
+hostname tor1
+!
+interface ethernet 1/1/1
+ description first
+ no shutdown
+ no switchport
+ ip address 10.11.0.1/24
+!
+interface ethernet 1/1/2
+ description second
+ no shutdown
+ no switchport
+ ip address 10.12.0.1/24
+!
+interface port-channel 1
+ description pc-one
+ switchport mode trunk
+ switchport trunk allowed vlan 10
+!
+interface port-channel 2
+ description pc-two
+ switchport mode trunk
+ switchport trunk allowed vlan 20
+!
+interface ethernet 1/1/3
+ channel-group 1 mode active
+!
+interface ethernet 1/1/4
+ channel-group 2 mode active
+!
+interface loopback 0
+ ip address 10.255.0.1/32
+!
+"""
+
+_OS10_NAMES = [
+    "ethernet1/1/1", "ethernet1/1/2", "port-channel1", "port-channel2",
+    "ethernet1/1/3", "ethernet1/1/4", "loopback0",
+]
+
+_TEXTS = {"cisco_nxos": _NXOS, "arista_eos": _EOS, "dell_os10": _OS10}
+_NAMES = {"cisco_nxos": _NXOS_NAMES, "arista_eos": _EOS_NAMES, "dell_os10": _OS10_NAMES}
 _LAGS = {
     "cisco_nxos": [("port-channel1", ["ethernet1/3"]), ("port-channel2", ["ethernet1/4"])],
     "arista_eos": [("Port-Channel10", ["Ethernet3"])],
+    "dell_os10": [("port-channel1", ["ethernet1/1/3"]), ("port-channel2", ["ethernet1/1/4"])],
 }
 
 #: A range, a list and (on NX-OS) a breakout line, in each grammar,
@@ -312,6 +368,16 @@ _WITH_RANGES = {
         "interface Ethernet9,11\n   description held-as-a-list\n   no switchport\n   ip address 10.9.0.1/24\n!\n"
         "interface Ethernet1\n   no switchport\n   ip address 10.1.0.1/24\n!\nend\n"
     ),
+    # Dell's own range and list (KB 000196765), a range where a name
+    # goes, and two breakout lines.
+    "dell_os10": (
+        "hostname tor1\n!\n"
+        "interface range ethernet1/1/5-1/1/8\n description held-as-a-range\n channel-group 5 mode active\n!\n"
+        "interface range ethernet 1/1/3, 1/1/14-1/1/15\n description held-as-a-list\n switchport access vlan 30\n!\n"
+        "interface ethernet1/1/9-1/1/12\n description held-as-a-name\n no switchport\n ip address 10.9.0.1/24\n!\n"
+        "interface breakout 1/1/49 map 10g-4x\ninterface breakout 1/1/50 map 10g-4x\n!\n"
+        "interface ethernet1/1/1\n no shutdown\n no switchport\n ip address 10.1.0.1/24\n!\n"
+    ),
 }
 
 _WITH_RANGES_ROWS = {
@@ -320,9 +386,18 @@ _WITH_RANGES_ROWS = {
         "interface breakout module 1 port 49-52 map 10g-4x",
     ],
     "arista_eos": ["interface Ethernet5-8", "interface Ethernet9,11"],
+    # The Tier-3 detector's one row for every breakout line first.
+    "dell_os10": [
+        "interface breakout",
+        "interface range ethernet1/1/5-1/1/8",
+        "interface range ethernet 1/1/3, 1/1/14-1/1/15",
+        "interface ethernet1/1/9-1/1/12",
+    ],
 }
 
-_WITH_RANGES_NAMES = {"cisco_nxos": ["Ethernet1/1"], "arista_eos": ["Ethernet1"]}
+_WITH_RANGES_NAMES = {
+    "cisco_nxos": ["Ethernet1/1"], "arista_eos": ["Ethernet1"], "dell_os10": ["ethernet1/1/1"],
+}
 
 
 def _check_reads_each_spaced_header(source: str) -> None:
@@ -379,6 +454,13 @@ def test_the_job_is_the_joined_texts(source: str, target: str) -> None:
     ), (source, target)
 
 
+#: A name that is one of the ranges or lists of the texts, read by the
+#: test: NX-OS and EOS ``5-8``, an OS10 number, a hyphen and a port
+#: number with a slash (``1/1/9-1/1/12``), or a comma.  Not any digit,
+#: hyphen and digit: FortiOS names a port ``port-1-1-1``.
+_NAMES_SEVERAL = re.compile(r"5-8|\d-\d+/|,")
+
+
 @pytest.mark.parametrize("source", SOURCES)
 @pytest.mark.parametrize("target", PUBLIC)
 def test_no_output_has_the_range(source: str, target: str) -> None:
@@ -393,7 +475,7 @@ def test_no_output_has_the_range(source: str, target: str) -> None:
     back = get_codec(target).parse(job.rendered)
     assert not [
         iface.name for iface in back.interfaces
-        if "5-8" in iface.name or "," in iface.name or "breakout" in iface.name.lower()
+        if _NAMES_SEVERAL.search(iface.name) or "breakout" in iface.name.lower()
     ]
     assert _holder(back, "10.9.0.1") == []
     # The interface beside them is there, by its address, or listed.
@@ -421,15 +503,15 @@ def test_an_eos_pool_is_on_the_spaced_interface() -> None:
 _INPUTS = [(codec, path) for codec, _rel, path in CAPTURES if codec in SOURCES]
 
 
-def test_there_are_inputs_of_both() -> None:
+def test_there_are_inputs_of_each() -> None:
     assert {codec for codec, _path in _INPUTS} == set(SOURCES)
 
 
 @pytest.mark.parametrize(("source", "path"), _INPUTS, ids=[f"{c}-{i}" for i, (c, _p) in enumerate(_INPUTS)])
 def test_an_input_with_its_headers_spaced_is_the_input(source: str, path) -> None:
-    """Every header of every committed NX-OS and EOS input is printed in
-    one word; written apart, each is read as the same interface, and
-    the tree is the input's."""
+    """Every header of every committed NX-OS, EOS and OS10 input is
+    printed in one word; written apart, each is read as the same
+    interface, and the tree is the input's."""
     text = Path(path).read_text(encoding="utf-8")
     spaced, count = _spaced(text)
     assert count > 0
@@ -437,10 +519,117 @@ def test_an_input_with_its_headers_spaced_is_the_input(source: str, path) -> Non
 
 
 # ---------------------------------------------------------------------------
+# OS10's own forms
+# ---------------------------------------------------------------------------
+
+#: An ``interface range`` header printed with a space before it, inside
+#: an open stanza and after a ``!``, as two committed inputs print it.
+_OS10_INDENTED_RANGE = (
+    "hostname tor1\n!\n"
+    "interface vlan717\n description STORAGE\n no shutdown\n"
+    " interface range ethernet1/1/1-1/1/12\n description held-as-a-range\n switchport access vlan 700\n!\n"
+    " interface range ethernet1/1/13-1/1/14\n description held-as-a-range\n switchport mode trunk\n!\n"
+    "interface ethernet1/1/20\n no switchport\n ip address 10.1.0.1/24\n!\n"
+)
+
+#: A ``track`` object's indented ``interface ... line-protocol`` line,
+#: which names a port and opens no stanza.
+_OS10_TRACK = (
+    "hostname tor1\n!\n"
+    "track 1\n interface ethernet1/1/1 line-protocol\n!\n"
+    "interface ethernet1/1/1\n no switchport\n ip address 10.1.0.1/24\n!\n"
+)
+
+
+def _check_an_indented_range_is_a_row() -> None:
+    """Each indented range header is a section row; its body is in no
+    record, and the stanza it was printed inside keeps its own lines."""
+    tree = get_codec("dell_os10").parse(_OS10_INDENTED_RANGE)
+    assert [iface.name for iface in tree.interfaces] == ["vlan717", "ethernet1/1/20"]
+    svi = tree.interfaces[0]
+    assert (svi.description, svi.access_vlan, svi.switchport_mode) == ("STORAGE", None, None)
+    assert "held-as-a" not in tree.model_dump_json()
+    assert tree.dropped_tier3_sections == [
+        "interface range ethernet1/1/1-1/1/12", "interface range ethernet1/1/13-1/1/14",
+    ]
+    assert not [row for row in tree.dropped_tier3_sections if is_left_out_row(row)]
+
+
+def _check_a_track_line_stays() -> None:
+    """Only a range header is moved to the left: the ``track`` line is
+    no stanza and no row, and the port it names keeps its record."""
+    tree = get_codec("dell_os10").parse(_OS10_TRACK)
+    assert [
+        (iface.name, [address.ip for address in iface.ipv4_addresses])
+        for iface in tree.interfaces
+    ] == [("ethernet1/1/1", ["10.1.0.1"])]
+    assert tree.dropped_tier3_sections == []
+
+
+#: An ``interface range`` line of a text, read by the test.
+_RANGE_LINE = re.compile(r"^[ \t]*interface[ \t]+range\b[^\r\n]*", re.MULTILINE | re.IGNORECASE)
+
+
+def _check_every_range_of_every_input_is_a_row() -> None:
+    """The oracle is the text: every ``interface range`` line of every
+    committed OS10 input, its white space made single, is a row of the
+    parse, and no record is named for one."""
+    seen = 0
+    for codec, path in _INPUTS:
+        if codec != "dell_os10":
+            continue
+        text = Path(path).read_text(encoding="utf-8")
+        tree = get_codec("dell_os10").parse(text)
+        for line in _RANGE_LINE.findall(text):
+            seen += 1
+            assert " ".join(line.split()) in tree.dropped_tier3_sections, path
+        assert not [iface.name for iface in tree.interfaces if "range" in iface.name.lower()], path
+    assert seen > 0
+
+
+def _check_a_spaced_header_is_read_in_lower_case() -> None:
+    text = (
+        "hostname tor1\n!\n"
+        "interface Port-Channel 10\n description pc\n switchport mode trunk\n"
+        " switchport trunk allowed vlan 20\n!\n"
+        "interface Ethernet 1/1/2\n channel-group 10 mode active\n!\n"
+    )
+    tree = get_codec("dell_os10").parse(text)
+    assert [iface.name for iface in tree.interfaces] == ["port-channel10", "ethernet1/1/2"]
+    assert [(lag.name, lag.members) for lag in tree.lags] == [("port-channel10", ["ethernet1/1/2"])]
+
+
+class TestOS10:
+    def test_an_indented_range_header_is_a_row(self) -> None:
+        _check_an_indented_range_is_a_row()
+
+    def test_a_track_line_stays(self) -> None:
+        _check_a_track_line_stays()
+
+    def test_every_range_of_every_input_is_a_row(self) -> None:
+        _check_every_range_of_every_input_is_a_row()
+
+    def test_a_spaced_header_is_read_in_lower_case(self) -> None:
+        """OS10 prints every name in lower case, and a type typed apart
+        from its number was read so up to 0.7.7: ``interface
+        Port-Channel 10`` is the LAG ``channel-group 10`` makes, one
+        record of it."""
+        _check_a_spaced_header_is_read_in_lower_case()
+
+    def test_a_name_that_names_no_one_interface_is_no_svi(self) -> None:
+        """The render asks the parser's reading of ``interface <name>``:
+        ``vlan10 5`` names no one interface and is no SVI; ``Vlan 10``,
+        as Dell types it, is VLAN 10's."""
+        assert os10_render._svi_of("vlan10 5") is None
+        assert os10_render._svi_of("Vlan 10") == 10
+        assert os10_render._svi_of("vlan10") == 10
+
+
+# ---------------------------------------------------------------------------
 # Each check, handed the defect it is for
 # ---------------------------------------------------------------------------
 
-_MODULES = {"cisco_nxos": nxos_parse, "arista_eos": eos_parse}
+_MODULES = {"cisco_nxos": nxos_parse, "arista_eos": eos_parse, "dell_os10": os10_parse}
 
 
 @pytest.mark.parametrize("source", SOURCES)
@@ -472,3 +661,46 @@ def test_the_spaced_input_check_sees_a_word_at_a_time(
     text = Path(path).read_text(encoding="utf-8")
     monkeypatch.setattr(_MODULES[source], "spaced_port_name", lambda first, _second: first)
     assert get_codec(source).parse(_spaced(text)[0]) != get_codec(source).parse(text)
+
+
+def _every_indented_interface_line_moved(raw: str) -> str:
+    """A mover that takes every indented ``interface`` line to the left,
+    not only a range header."""
+    return "".join(
+        line.lstrip() if line.lstrip().lower().startswith("interface ") else line
+        for line in raw.splitlines(keepends=True)
+    )
+
+
+class TestTheOS10ChecksCanFail:
+    def test_an_indented_range_left_where_it_is(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(os10_parse, "_range_header_at_column_0", lambda raw: raw)
+        with pytest.raises(AssertionError):
+            _check_an_indented_range_is_a_row()
+
+    def test_every_indented_interface_line_moved(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            os10_parse, "_range_header_at_column_0", _every_indented_interface_line_moved,
+        )
+        with pytest.raises(AssertionError):
+            _check_a_track_line_stays()
+
+    def test_no_range_taken_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            os10_parse, "without_stanzas_of_no_one_interface", lambda raw: (raw, []),
+        )
+        with pytest.raises(AssertionError):
+            _check_every_range_of_every_input_is_a_row()
+
+    def test_a_spaced_header_read_as_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        real = os10_parse._iface_name
+        monkeypatch.setattr(
+            os10_parse, "_iface_name",
+            lambda m: m.group(1) + m.group(2) if m.group(2) else real(m),
+        )
+        with pytest.raises(AssertionError):
+            _check_a_spaced_header_is_read_in_lower_case()
+
+    def test_the_render_asks_no_more_than_the_pattern(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(os10_render, "one_interface_named", lambda line: line)
+        assert os10_render._svi_of("vlan10 5") == 10

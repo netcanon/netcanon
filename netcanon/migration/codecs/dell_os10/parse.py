@@ -27,10 +27,16 @@ they carry real password hashes), not inferred from another vendor:
   (``interface breakout 1/1/1 map 100g-1x`` ×148, ``interface range
   ethernet1/1/1-1/1/12`` ×10).  A naive ``^interface\\s+(\\S+)`` header
   anchor creates phantom interfaces named ``breakout`` / ``range`` and
-  absorbs the real config that follows.  :data:`_IFACE_RE` excludes both
-  explicitly AND requires the header to end after the name, so a third
-  such keyword added by a later OS10 release fails closed (no match)
-  rather than becoming a phantom port.
+  absorbs the real config that follows.  A header that names no ONE
+  interface -- a keyword, a range or a list where a name goes, words
+  that are no one name -- has its stanza taken out before any reader
+  sees it, and its header line is a section row of
+  ``dropped_tier3_sections`` (:func:`_without_headers_of_no_one_interface`);
+  up to 0.7.7 such a stanza was in no record and no row.  Every
+  ``interface breakout`` line is one row between them, the label the
+  Tier-3 detector gives them.  Two of the ``interface range`` lines are
+  written with a space in front, after a ``!``; such a header is read
+  as one at column 0 (:func:`_range_header_at_column_0`).
 
 * **An indented ``!`` does NOT close a stanza.**  Device dumps separate
   an SVI's L3 block from its VRRP block with a one-space ``!``::
@@ -52,7 +58,12 @@ they carry real password hashes), not inferred from another vendor:
   appears as ``interface vlan700`` ×161 (device output), ``interface Vlan
   700`` ×28 and ``interface vlan 700`` ×24 (operator-authored).  Parse
   accepts all three and normalises to the device form ``vlan700`` so one
-  VLAN cannot enter the canonical tree under two names.
+  VLAN cannot enter the canonical tree under two names.  Any other type
+  and its number written apart are one name too, in lower case: Dell
+  types ``OS10(config)# interface ethernet 1/1/14`` and the prompt
+  names ``eth1/1/14`` (Dell KB 000201923), so ``interface ethernet
+  1/1/14`` is ``ethernet1/1/14``, as the switch prints it.  Up to 0.7.7
+  such a stanza was in no record and no row.
 
 * **``switchport access vlan`` on a TRUNK port is the native VLAN**, not
   an access VLAN — the same semantic as Cisco's ``switchport trunk
@@ -126,8 +137,11 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     address_key,
+    keyword_stanza_rows,
     mtu_read,
+    spaced_port_name,
     trunk_list_read,
+    without_stanzas_of_no_one_interface,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
@@ -164,14 +178,17 @@ _VRF_DECL_RE = re.compile(
 #:   1. the negative lookahead rejects ``breakout`` / ``range``, which are
 #:      column-0 ``interface ...`` commands that declare no interface;
 #:   2. the trailing ``\s*$`` requires the header to END after the name (or
-#:      after a space-separated numeric index), so any other multi-token
-#:      ``interface <verb> ...`` form fails closed instead of becoming a
-#:      phantom port.
+#:      after a second word that begins with a digit), so any other
+#:      multi-token ``interface <verb> ...`` form fails closed instead of
+#:      becoming a phantom port.
 #:
-#: Group 2 captures the index of the space-separated operator spelling
-#: (``interface Vlan 700``); it is ``None`` for the device form.
+#: Group 2 captures the number of a type written apart from it
+#: (``interface Vlan 700``, ``interface ethernet 1/1/14``); it is
+#: ``None`` for the device form.  A header the readers are given
+#: names one interface: every other has had its stanza taken out
+#: (:func:`_without_headers_of_no_one_interface`).
 _IFACE_RE = re.compile(
-    r"^interface\s+(?!breakout\b|range\b)(\S+)(?:\s+(\d+))?\s*$",
+    r"^interface\s+(?!breakout\b|range\b)(\S+)(?:\s+(\d\S*))?\s*$",
     re.IGNORECASE,
 )
 
@@ -402,16 +419,22 @@ def _iface_name(m: re.Match[str]) -> str:
     single VLAN cannot enter the canonical tree under two names — and so
     a render can emit the form a real device produces.  Every other OS10
     interface type is already lower-case and single-token in 100% of
-    captures and passes through verbatim.
+    captures and passes through verbatim; written apart from its number
+    (``interface ethernet 1/1/14``, as Dell types it), it is joined to
+    it (:func:`.._helpers.spaced_port_name`) in lower case, as the
+    switch prints it, so that a header names the interface it names in
+    either spelling.  Up to 0.7.7 a spaced ``vlan``, ``port-channel`` or
+    ``loopback`` header was read in lower case, and it still is:
+    ``interface Port-Channel 10`` is the LAG that ``channel-group 10``
+    makes, ``port-channel10``.
     """
-    head, index = m.group(1), m.group(2)
-    if index is not None:
-        # Space-separated operator spelling: ``Vlan 700`` / ``vlan 700``.
-        return f"{head.lower()}{index}"
-    svi = _SVI_SPLIT_RE.match(head)
+    name = spaced_port_name(m.group(1), m.group(2))
+    if m.group(2) is not None:
+        name = name.lower()
+    svi = _SVI_SPLIT_RE.match(name)
     if svi:
         return f"vlan{svi.group(1)}"
-    return head
+    return name
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +590,77 @@ def without_banner_bodies(raw: str) -> str:
     )
 
 
+#: The one row every ``interface breakout`` line makes between them:
+#: the label the Tier-3 detector gives them (``_tier3_detection``).  A
+#: row a line would be a row for every port a switch splits.
+_BREAKOUT_ROW = "interface breakout"
+
+
+def _range_header_at_column_0(raw: str) -> str:
+    """*raw* with each ``interface range`` header that is written with
+    white space in front of it moved to column 0.
+
+    Two committed inputs write one so, after a ``!``, with the range's
+    lines below it at the same depth.  The readers end a stanza at a
+    line in column 0 only, so such a header was read as no header at
+    all: its stanza was in no record and no row.  Whether the switch
+    reads the line as the header is not established (no Dell page
+    says how a pasted line's indentation is taken); moved to column 0
+    it is a header that names no one interface, and its stanza is
+    taken out and said (:func:`_without_headers_of_no_one_interface`)
+    -- inside an open stanza too, which it then ends, where a range's
+    lines would otherwise have been read as that stanza's.  Only
+    ``range`` is moved: an indented ``interface`` line is also a line
+    of other contexts (``track <n>`` / ``interface <port>
+    line-protocol``), which this parser does not read.
+
+    Returns:
+        *raw* itself when it has no such line.
+    """
+    lines = raw.splitlines(keepends=True)
+    moved = False
+    for at, line in enumerate(ticked(lines)):
+        if not line[:1].isspace():
+            continue
+        words = line.split(None, 2)
+        if len(words) > 1 and words[0].lower() == "interface" and words[1].lower() == "range":
+            lines[at] = line.lstrip()
+            moved = True
+    return "".join(lines) if moved else raw
+
+
+def _without_headers_of_no_one_interface(raw: str) -> tuple[str, list[str]]:
+    """*raw* without each ``interface`` stanza whose header names no
+    ONE interface, and the rows of ``dropped_tier3_sections`` that say
+    them.
+
+    ``interface range ethernet1/1/1-1/1/12`` configures every port it
+    names (Dell KB 000196765 types ``interface range ethernet
+    1/1/14-1/1/15`` and ``interface range ethernet 1/1/3,
+    1/1/14-1/1/15``), and ``interface breakout 1/1/49 map 10g-4x``
+    splits a port; neither names an interface a record can be made
+    for, and nor does a range or a list where a name goes, or words
+    that are no one name (:func:`.._helpers.one_interface_named`).
+    Each such stanza is taken out before any reader sees it, its
+    body with it (:func:`.._helpers.without_stanzas_of_no_one_interface`),
+    as on NX-OS and EOS.  It is in force where it was typed and is not
+    translated, so its header line is a section row
+    (:func:`.._helpers.keyword_stanza_rows`), except that every
+    ``interface breakout`` line is one row between them
+    (:data:`_BREAKOUT_ROW`).
+
+    Returns:
+        ``(text, rows)``: *raw* itself and no row when it has no such
+        stanza.
+    """
+    raw, headers = without_stanzas_of_no_one_interface(_range_header_at_column_0(raw))
+    breakout = [header for header in headers if header.split()[1].lower() == "breakout"]
+    rows = keyword_stanza_rows(header for header in headers if header not in breakout)
+    if breakout:
+        rows.append(_BREAKOUT_ROW)
+    return raw, rows
+
+
 def _refuse_a_flat_text(raw: str) -> None:
     """Raise :class:`ParseError` for a text with no indentation whose
     stanzas have their bodies at the left margin.
@@ -634,6 +728,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_vendor="dell_os10",
         source_format="cli-dellos10",
     )
+
+    # A header that names no one interface (``interface range ...``,
+    # ``interface breakout ...``, a range where a name goes) has its
+    # stanza taken out of the text every reader below is given, and
+    # is a section row.
+    raw, intent.dropped_tier3_sections = _without_headers_of_no_one_interface(raw)
 
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)

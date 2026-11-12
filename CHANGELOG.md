@@ -1401,6 +1401,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An OS10 `interface range` stanza is listed, and a header Dell
+  types with a space is one interface.**  Dell types `interface
+  ethernet 1/1/14` (KB 000201923) and `interface range ethernet
+  1/1/3, 1/1/14-1/1/15` (KB 000196765); the switch prints `interface
+  ethernet1/1/14`.  The OS10 parser joined a type and its number
+  written apart only for `vlan`, `port-channel` and the like, so
+  `interface ethernet 1/1/14` opened no stanza: the port, its address
+  and its VLANs were in no record and no row, in jobs that said
+  `completed`.  An `interface range` stanza was in no record and no
+  row either, and a range where a name goes (`interface
+  ethernet1/1/9-1/1/12`) was an interface of that name, with the
+  range's address.  A type and its number written apart are now one
+  name, in lower case as the switch prints it (`ethernet1/1/14`).  A
+  header that names no one interface -- `interface range`, a range or
+  a list where a name goes -- has its stanza taken out, and the
+  header is a section row of
+  `dropped_tier3_sections`; a range header printed with a space in
+  front of it is read as one in column 0.  Every `interface breakout`
+  line is still one row between them.  The renderer asks the same
+  reading when it looks for a VLAN interface's VLAN.
+
 - **A FortiOS interface in a VRF other than 0 is not written into
   the global table.**  `set vrf <id>` on an interface puts it in
   another VRF ("All routes relating to that interface are isolated

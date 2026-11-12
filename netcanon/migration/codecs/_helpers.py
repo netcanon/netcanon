@@ -1918,12 +1918,14 @@ _NAMES_SEVERAL_RE = re.compile(r",|\d[ \t]*-[ \t]*\d")
 
 
 def one_interface_named(header: str) -> str:
-    """The one interface an NX-OS or EOS ``interface`` *header* line
-    names, or ``""`` where it names none or several.
+    """The one interface an NX-OS, EOS or OS10 ``interface`` *header*
+    line names, or ``""`` where it names none or several.
 
     The name is one word, or a type and its number written apart
-    (:func:`spaced_port_name`; both platforms take ``interface
-    ethernet 1/2`` and print ``interface Ethernet1/2``).  A header that
+    (:func:`spaced_port_name`; NX-OS and EOS take ``interface
+    ethernet 1/2`` and print ``interface Ethernet1/2``, and OS10 takes
+    ``interface ethernet 1/1/14`` and prints ``interface
+    ethernet1/1/14``).  A header that
     names a range or a list names no ONE interface, and nor does a
     keyword of :data:`NOT_AN_INTERFACE_TYPE`, two words that are not
     one name, or more words than a name has.  Read a word at a time,
@@ -2024,7 +2026,8 @@ def without_stanzas_of_no_one_interface(raw: str) -> tuple[str, list[str]]:
     """*raw* without each ``interface`` stanza whose header names no
     ONE interface (:func:`one_interface_named`), and the header line of
     each -- NX-OS and EOS, where a range or a list goes where a name
-    does.
+    does, and OS10, whose ``interface range`` and ``interface
+    breakout`` lines name none.
 
     Such a stanza configures every interface it names, where it was
     typed, and is not translated: it is taken out before any reader

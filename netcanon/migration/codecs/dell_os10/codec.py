@@ -783,8 +783,12 @@ class DellOS10Codec(CodecBase):
         # alone appears in 10 of 12 OS10 captures, so this banner fires on
         # most real configs; that is correct behaviour, not a defect.
         # Read from the text the parser read: a banner's lines are text,
-        # not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_dellos10(without_banner_bodies(raw))
+        # not stanzas.  After them, the rows the parser itself made: the
+        # header of a stanza that names no one interface.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_dellos10(without_banner_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:
