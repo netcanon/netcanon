@@ -397,8 +397,8 @@ per_field_expectation:
       "Null0"`.  The 3 routes that carry a VRF all arrive with `vrf` empty:
       `AZURE` on `batfish_ebgp_border02`, `blue` on `batfish_vpnv4_pe1`,
       `CUSTOMER-A` on `kitchen_sink`.  fortigate_cli declares
-      `/routing/static-route/vrf` unsupported ("Per-VRF static-route binding
-      parses-and-ignores in v1"), so the measurement and the declaration agree.
+      `/routing/static-route/vrf` unsupported ("No VRF is read or
+      written"), so the measurement and the declaration agree.
       Recorded `lossy` at the list level, not `unsupported`, because the route
       records themselves survive and install — which is exactly what `lossy`'s
       compatible=True is for.  But an unbound customer route lands in the

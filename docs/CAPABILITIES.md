@@ -531,7 +531,7 @@ warning of the job (see [`vendors/fortigate.md`](vendors/fortigate.md)
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | FortiGate is an edge firewall with no native anycast surface (HA is delivered via VRRP groups, not anycast-MAC fabrics).  **Cross-vendor consequence:** the gateway is dropped and the job is `partial`, the validation report listing it; the interface's own address beside it (Junos `address X virtual-gateway-address Y`, AOS-CX `active-gateway`) is written.  ⚠️ Up to 0.7.7 the address was dropped with it. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — FortiGate has no anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/routing/static-route/vrf` | Unsupported | No VRF is read or written.  A FortiOS route of a VRF other than 0 (`set vrf <id>`) is left out, with a row; a route of another vendor's VRF is written into the global table.  ⚠️ Up to 0.7.7 a FortiOS route of `set vrf <id>` was read as a route of the global table. |
 | `/interfaces/interface/config/description` | Lossy | FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated. |
 | `/vlans/vlan/id` | Lossy | FortiOS has no VLAN apart from a VLAN interface on a parent (`set vlanid` / `set interface`).  A VLAN on a switch interface (`set type switch`) is read back as a VLAN; one another platform carries on a port or a LAG is written as a VLAN interface on it, which the parser reads back as a routed sub-interface of the port (its tag the VLAN's id), with no VLAN record. |
 | `/vlans/vlan/name` | Lossy | A FortiOS VLAN is an interface (`set type vlan`), and its name is that interface's, which other lines refer to.  Another platform's VLAN name is written as the interface's alias, which holds 25 characters, where the interface states no description of its own, and in a `# review:` line beside the alias where it does; the parser reads the alias as the VLAN's description. |
@@ -901,6 +901,8 @@ disable` is listed as `disabled: config system dhcp server edit <id>`,
 and is not translated, and a RouterOS route held `disabled=yes`, and
 an IOS-XE route of administrative distance 255, which IOS does not
 install, as `disabled: ip route <destination>` (`ipv6 route` for an
+IPv6 one).  A FortiGate route of `status disable` is listed as
+`disabled: config router static edit <id>` (`router static6` for an
 IPv6 one).  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
@@ -984,6 +986,25 @@ and true of the same sentence — they are not in the output:
   own (commonly a backup), which read as a next hop would carry
   traffic beside the route's own.  The tree has a form for none of
   them, and they are left out.  Write them on the target by hand.
+* **`router static: <n> route(s) of a VRF other than 0 ...`**,
+  **`router static: <n> blackhole route(s) ...`**, **`router static:
+  <n> route(s) to an address object or an Internet service ...`**,
+  **`router static: <n> route(s) whose gateway is learned from DHCP
+  or PPP ...`**, **`router static: <n> route(s) with neither a
+  gateway nor a device ...`** and **`router static: <n> route(s)
+  whose destination is not read ...`** (FortiOS; `router static6`
+  for IPv6) — a route of a VRF (`set vrf <id>`), a route that
+  discards (`set blackhole enable`), a route whose destination is an
+  object (`set dstaddr`, `set internet-service`), a route whose next
+  hop is whatever DHCP or PPP gives its interface (`set
+  dynamic-gateway enable`), an SD-WAN route (`set sdwan-zone`), and
+  a `set dst` that is not a prefix.  The tree has a form for none of
+  them, and they are left out: in the global table of the output a
+  route of a VRF would carry traffic the source keeps apart, and
+  without its flag a blackhole route is a route to nowhere.  Write
+  them on the target by hand.  A route printed with no `set dst` is
+  a default route, FortiOS's `show` leaving out a setting at its
+  default.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):

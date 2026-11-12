@@ -22,6 +22,12 @@ escapes (:func:`_statements`), so no line of a quoted value -- a
 certificate, a key, a replacement message's HTML -- is a statement of
 its own.
 
+A static route printed with no ``set dst`` is a default route (the
+default FortiOS's ``show`` leaves out), and a route the tree cannot
+hold -- disabled, of a VRF other than 0, a blackhole, to an address
+object, with a gateway learned from DHCP or PPP, or with neither a
+gateway nor a device -- is left out and said (:class:`_RoutesNotHeld`).
+
 Wave B: also handles **VRRP groups** nested as ``config vrrp /
 edit N / set vrip X / set priority / set preempt / set adv-interval
 / set status / set authentication / next / end`` inside the
@@ -1134,65 +1140,183 @@ def _apply_snmp_user(
         ))
 
 
+#: What FortiOS takes for a route's destination when no ``set dst``
+#: line is printed: ``show`` leaves out a setting at its default, and
+#: the default ``dst`` is ``0.0.0.0 0.0.0.0`` (``config router
+#: static``) and ``::/0`` (``config router static6``) -- Fortinet,
+#: FortiOS 7.4 CLI reference,
+#: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
+#: and .../525620/config-router-static6.  A route printed with no
+#: ``set dst`` is a default route.
+_DEFAULT_DESTINATION: dict[str, str] = {
+    "router static": "0.0.0.0/0",
+    "router static6": "::/0",
+}
+
+#: The ``gateway`` FortiOS prints for a route with none: the default,
+#: which ``show full-configuration`` prints (same references).
+_NO_GATEWAY = frozenset({"0.0.0.0", "::"})
+
+#: The rows of :class:`_RoutesNotHeld`, a kind each, as each ends.
+_ROUTES_NOT_HELD: dict[str, str] = {
+    "vrf": (
+        "route(s) of a VRF other than 0 (set vrf <id>): no VRF of a "
+        "FortiOS config is read; not translated"
+    ),
+    "blackhole": (
+        "blackhole route(s) (set blackhole enable): the tree has no form "
+        "for a route that discards; not translated"
+    ),
+    "object": (
+        "route(s) to an address object or an Internet service (set "
+        "dstaddr, set internet-service): the tree holds a destination as "
+        "a prefix; not translated"
+    ),
+    "dynamic": (
+        "route(s) whose gateway is learned from DHCP or PPP (set "
+        "dynamic-gateway enable): the tree has no form for one; not "
+        "translated"
+    ),
+    "nowhere": (
+        "route(s) with neither a gateway nor a device (an SD-WAN route, "
+        "set sdwan-zone): the tree has no form for one; not translated"
+    ),
+    "unread": "route(s) whose destination is not read; not translated",
+}
+
+
+class _RoutesNotHeld:
+    """The routes of one ``config router static`` or ``static6`` block
+    the parser reads and does not translate, and the rows that say so.
+
+    * ``set status disable`` -- the FortiGate holds the route and does
+      not install it: left out, a row of :func:`left_out_rows` each.
+    * ``set vrf <id>`` other than 0 -- a VRF's route.  The parser reads
+      no VRF of a FortiOS config, and in the global table of the output
+      such a route would carry traffic the source keeps apart.
+    * ``set blackhole enable`` -- the tree has no form for a route that
+      discards; without its flag it is a route to nowhere.
+    * ``set dstaddr`` / ``set internet-service`` -- the destination is
+      an object, and a canonical route's destination is a prefix.
+    * ``set dynamic-gateway enable`` -- the next hop is whatever DHCP or
+      PPP gives the interface; without it the route is an interface
+      route.
+    * neither a gateway nor a device (an SD-WAN route) -- a route to
+      nowhere on every target.
+    * a ``set dst`` the parser cannot read as a prefix.
+
+    Each kind but the first is one row that counts its routes.
+    """
+
+    def __init__(self, head: str) -> None:
+        self.head = head
+        self.disabled: list[tuple[str, list[str]]] = []
+        self.counts: dict[str, int] = dict.fromkeys(_ROUTES_NOT_HELD, 0)
+
+    def rows(self) -> list[str]:
+        """The rows, in a bounded number: the disabled routes through
+        :func:`left_out_rows`, the others one row a kind."""
+        rows = left_out_rows(self.disabled, rest="disabled-route")
+        rows.extend(
+            f"{self.head}: {count} {_ROUTES_NOT_HELD[kind]}"
+            for kind, count in self.counts.items() if count
+        )
+        return rows
+
+
+def _first(edit: _EditBlock, key: str) -> str:
+    """The first word of the edit's ``set <key>``, or ``""``."""
+    tokens = edit.settings.get(key) or [""]
+    return tokens[0]
+
+
+def _route_destination(tokens: list[str] | None, head: str) -> str | None:
+    """The prefix a route's ``set dst`` names; FortiOS's default where
+    there is no such line; ``None`` where the words are not a prefix.
+
+    ``config router static`` prints an address and a mask; a prefix
+    written ``<address>/<length>`` is read as written, as it is in
+    ``config router static6``.
+    """
+    if not tokens:
+        return _DEFAULT_DESTINATION[head]
+    if len(tokens) == 1 and "/" in tokens[0]:
+        return tokens[0]
+    if head == "router static" and len(tokens) == 2 and "/" not in tokens[0]:
+        return f"{tokens[0]}/{_mask_to_prefix(tokens[1], vendor='fortigate_cli')}"
+    return None
+
+
+def _read_routes(block: _ConfigBlock, intent: CanonicalIntent) -> None:
+    """Read the routes of a ``config router static`` or ``static6``
+    block, and say each the tree cannot hold (:class:`_RoutesNotHeld`).
+
+    ``set comment "<text>"`` is the route's description; ``set
+    distance <n>`` (administrative distance, FortiOS's default 10) is
+    its metric, so that a floating static round-trips.
+    """
+    not_held = _RoutesNotHeld(block.config_path)
+    for edit in ticked(block.edits):
+        if _first(edit, "status").lower() == "disable":
+            not_held.disabled.append((
+                "disabled-route",
+                ["config", *block.config_path.split(), "edit", edit.edit_id],
+            ))
+            continue
+        vrf = _first(edit, "vrf")
+        if vrf and vrf != "0":
+            not_held.counts["vrf"] += 1
+            continue
+        if _first(edit, "blackhole").lower() == "enable":
+            not_held.counts["blackhole"] += 1
+            continue
+        if (
+            _first(edit, "dstaddr")
+            or _first(edit, "internet-service") not in ("", "0")
+            or _first(edit, "internet-service-custom")
+        ):
+            not_held.counts["object"] += 1
+            continue
+        destination = _route_destination(edit.settings.get("dst"), block.config_path)
+        if destination is None:
+            not_held.counts["unread"] += 1
+            continue
+        if _first(edit, "dynamic-gateway").lower() == "enable":
+            not_held.counts["dynamic"] += 1
+            continue
+        gateway = _first(edit, "gateway")
+        if gateway in _NO_GATEWAY:
+            gateway = ""
+        device = _first(edit, "device")
+        if not gateway and not device:
+            not_held.counts["nowhere"] += 1
+            continue
+        distance = _first(edit, "distance")
+        intent.static_routes.append(CanonicalStaticRoute(
+            destination=destination,
+            gateway=gateway,
+            interface=device,
+            metric=int(distance) if distance.isdigit() else 0,
+            description=_first(edit, "comment"),
+        ))
+    intent.dropped_tier3_sections.extend(not_held.rows())
+
+
 def _apply_router_static(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
-    for edit in ticked(block.edits):
-        dst = edit.settings.get("dst")
-        if not dst or len(dst) < 2:
-            # Default-route entries sometimes use `dstaddr` instead;
-            # keep the scope narrow for now.
-            continue
-        ip, mask = dst[0], dst[1]
-        destination = f"{ip}/{_mask_to_prefix(mask, vendor='fortigate_cli')}"
-        gateway_tokens = edit.settings.get("gateway") or [""]
-        device_tokens = edit.settings.get("device") or [""]
-        # FortiOS `set comment "<text>"` (singular) is the per-route
-        # description slot; the render emits it via
-        # ``CanonicalStaticRoute.description``.  Closing the parser
-        # gap so the canonical description round-trips through a
-        # FortiGate -> FortiGate (or any source -> FortiGate) pipe.
-        # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
-        comment_tokens = edit.settings.get("comment") or [""]
-        # FortiOS ``set distance <n>`` (admin distance, default 10).  Landed
-        # on CanonicalStaticRoute.metric so a floating static round-trips.
-        distance_tokens = edit.settings.get("distance") or [""]
-        metric = int(distance_tokens[0]) if distance_tokens[0].isdigit() else 0
-        intent.static_routes.append(CanonicalStaticRoute(
-            destination=destination,
-            gateway=gateway_tokens[0],
-            interface=device_tokens[0],
-            metric=metric,
-            description=comment_tokens[0],
-        ))
+    """Parse ``config router static`` (IPv4 static routes): see
+    :func:`_read_routes`."""
+    _read_routes(block, intent)
 
 
 def _apply_router_static6(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
-    """Parse ``config router static6`` (IPv6 static routes).
-
-    Unlike the IPv4 ``config router static`` form, ``set dst`` here is a
-    single ``<prefix>/<len>`` token (no dotted mask), so the destination
-    is used verbatim.
-    """
-    for edit in ticked(block.edits):
-        dst = edit.settings.get("dst")
-        if not dst:
-            continue
-        destination = dst[0]  # already in <prefix>/<len> form
-        gateway_tokens = edit.settings.get("gateway") or [""]
-        device_tokens = edit.settings.get("device") or [""]
-        comment_tokens = edit.settings.get("comment") or [""]
-        distance_tokens = edit.settings.get("distance") or [""]
-        metric = int(distance_tokens[0]) if distance_tokens[0].isdigit() else 0
-        intent.static_routes.append(CanonicalStaticRoute(
-            destination=destination,
-            gateway=gateway_tokens[0],
-            interface=device_tokens[0],
-            metric=metric,
-            description=comment_tokens[0],
-        ))
+    """Parse ``config router static6`` (IPv6 static routes): see
+    :func:`_read_routes`.  ``set dst`` here is a single
+    ``<prefix>/<len>`` token (no dotted mask), read as written."""
+    _read_routes(block, intent)
 
 
 def _apply_system_admin(

@@ -348,13 +348,17 @@ per_field_expectation:
     references: [fortigate-os10-surface]
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 4 cells: drifted on 2, preserved on 1, both
-      sides empty on 1. Sample drift: {"static_routes[0]
-      {'destination': '10.100.0.0/16'}": {'interface': {'source': '',
-      'target': '254'}, 'metric': {'source': 254, 'target': 0}}}.
+    disposition: good
+    note: >
+      Measured over 4 cells: preserved on 2, both sides empty on 2.  The
+      two cells that drifted here held FortiGate blackhole routes (no
+      gateway, distance 254), whose distance the render wrote where the
+      next hop belongs; such a route is left out on the source side now,
+      with a row in `dropped_tier3_sections`, as is a route of a VRF other
+      than 0 and a route to an address object.  Caveats this corpus does
+      not exercise: a route's `set comment` is not written on OS10, and a
+      FortiOS route that states no distance (the device's default, 10) is
+      read with none, so the OS10 route takes OS10's default.
     references: [fortigate-os10-surface]
 
   syslog_servers:

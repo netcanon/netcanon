@@ -451,9 +451,9 @@ per_field_expectation:
     reason: >
       Drifts to `""` on every per-VRF route (6 record-occurrences; e.g.
       `management` -> `""`, `TENANT-A` -> `""`).  The fortigate_cli matrix
-      declares `/routing/static-route/vrf` unsupported — the binding
-      parses-and-ignores in v1 because there is no routing-instance to bind
-      to.  The consequence is silent and dangerous: a management-VRF default
+      declares `/routing/static-route/vrf` unsupported — no VRF is read or
+      written, and a route of another vendor's VRF is written into the
+      global table.  The consequence is silent and dangerous: a management-VRF default
       route and a tenant-VRF default route both land in the global table, so
       the last one rendered wins and traffic can follow the wrong next hop.
       Split them across VDOMs or drop the ones that should not be global.

@@ -210,17 +210,20 @@ per_field_expectation:
     references: [vlans]
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Default-VRF static routes round-trip cleanly via mask <-> CIDR
-      conversions.  ``interface`` field requires the rename mesh to
-      map FortiGate's ``port1`` to a Cisco-shape name.  Metric
-      semantics differ (FortiGate distance / AD-ordering vs Cisco
-      per-static-comparator) so the integer preserves but its
-      meaning differs.  Description (FortiGate ``set comment``) is
-      not currently parsed.  Per-VRF static routes (FortiGate ``set
-      vrf <id>``) are unsupported — the fortigate_cli codec does not
-      parse ``set vrf`` into ``CanonicalStaticRoute.vrf``.
+    disposition: good
+    note: >
+      Preserved on both cells that carry a route: destination, gateway,
+      outgoing interface and distance round-trip via mask <-> CIDR
+      conversions, and a FortiOS route that states no ``set dst`` is the
+      default route on both sides.  A FortiOS route the tree cannot hold -- a blackhole, a route of a VRF
+      other than 0, a destination given as an address object or an
+      Internet service, a dynamic gateway -- is left out on the source side
+      with a row in ``dropped_tier3_sections``, so it reaches no target.
+      Caveats this corpus does not exercise: a route's ``set comment`` is
+      written as the route's ``name``, one word, so a comment that holds
+      white space comes back with ``_`` for it (under a ``review:`` line);
+      and a FortiOS route that states no distance (the device's default,
+      10) is read with none, so the IOS-XE route takes IOS-XE's default.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

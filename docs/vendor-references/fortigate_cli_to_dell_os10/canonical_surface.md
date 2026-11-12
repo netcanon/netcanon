@@ -1,5 +1,8 @@
 # FortiGate → Dell OS10: measured canonical surface
 
+<!-- a-fortios-route-the-tree-cannot-hold -->
+> **Update 2026-11-12 — a FortiOS route printed with no `set dst` is the default route, and a route the tree cannot hold is left out and said.**  The FortiOS parser read a `config router static` entry with no `set dst` (FortiOS prints none for the default, 0.0.0.0/0) as no route, read a blackhole route as a route with no next hop and a route of a VRF other than 0 as a route of the global table, and dropped a route to an address object or an Internet service without a word.  It now reads the first as the default route and leaves each of the others out with a row in `dropped_tier3_sections` (a route of `status disable` with a `disabled:` row); `config router static6` is read by the same rules, and `set gateway 0.0.0.0` is no gateway.  Measured after the change: the drift on two cells went with the blackhole routes; `static_routes` is preserved on 2 cells and empty on 2, and the YAML calls it `good`.  Sentences below that describe a blackhole route reaching this pair, or say that `set vrf` is not parsed, describe the codec before that change; a sentence that says `set comment` is not parsed is older still, for the parser reads a route's comment into its description.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__dell_os10.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/fortigate_cli__dell_os10.yaml`.
 

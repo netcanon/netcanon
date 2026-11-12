@@ -1401,6 +1401,30 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiOS default route printed with no `set dst` is read, and a
+  FortiOS route the tree cannot hold is left out and said.**  The
+  `config router static` and `static6` parser read `dst`, `gateway`,
+  `device`, `distance` and `comment` and nothing else, so a route
+  printed with no `set dst` -- a default route, `show` leaving out a
+  setting at its default -- and a route to an address object (`set
+  dstaddr`) were missing from every output, with nothing said; a
+  blackhole route (`set blackhole enable`) was a route with no next
+  hop; a route of `status disable` was written as a route in force; a
+  route of a VRF other than 0 (`set vrf <id>`) was a route of the
+  global table; a route whose gateway is learned from DHCP or PPP was
+  an interface route; and `set gateway 0.0.0.0`, which `show
+  full-configuration` prints for a route with none, was a next hop of
+  that spelling.  A route with no `set dst` is now the default route
+  (`0.0.0.0/0`, `::/0`) and `0.0.0.0` (`::`) no gateway; a disabled
+  route is left out with a `disabled: config router static edit <id>`
+  row; and a route of a VRF, a blackhole, a route to an address
+  object or an Internet service, one with a DHCP or PPP gateway, an
+  SD-WAN route with neither a gateway nor a device, and a `set dst`
+  that is not a prefix are left out with one row of the Tier-3 banner
+  a kind that says how many.  The matrix reason of
+  `/routing/static-route/vrf` says what the codec does; it said the
+  binding parses-and-ignores, with a wire-up scheduled for v0.2.0.
+
 - **An IOS-XE VRF is written with the address families its
   addresses need, and every VRF the output names is defined.**  An
   address on an interface bound to a VRF needs the VRF's address
