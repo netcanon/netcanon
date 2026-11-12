@@ -1213,7 +1213,14 @@ the policy locally:
   statement), a `range` stanza or a `breakout` line is in force and
   not translated (its header, a section).  In a route, a word after
   a type is joined to it only where it can be the type's number: an
-  address there is the gateway.  (`cisco_nxos`, `aruba_aoscx` and
+  address there is the gateway.  The NX-OS and EOS parsers take the
+  same two readings from **`one_interface_named(header)`** and
+  **`without_stanzas_of_no_one_interface(raw)`**: on those platforms
+  a range or a list goes where a name does (`interface Ethernet1/1-4`,
+  `interface ethernet 1 - 4`, `interface Ethernet1,3`), so a header
+  names one interface -- one word, or a type and its number -- or
+  none, and a stanza whose header names none is taken out and is a
+  section row through `keyword_stanza_rows`.  (`aruba_aoscx` and
   `dell_os10` read their headers themselves.)
 
 * **`netcanon/migration/codecs/_helpers.py::without_unread_tags`**,

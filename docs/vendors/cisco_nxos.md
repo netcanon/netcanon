@@ -305,6 +305,25 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **A header names one interface, or none.**  NX-OS takes a type and
+  its number written apart (`interface ethernet 2/1`) and a range or
+  a list where a name goes (`interface ethernet 2/29-30`, `interface
+  ethernet 2/29, ethernet 2/33, ethernet 2/35`: "Dashes separate
+  contiguous interfaces and commas separate noncontiguous
+  interfaces", in Cisco's Nexus 9000 interfaces guide).  A spaced
+  header is read as the one name its two words spell, in the letters
+  the config has (`ethernet2/1`).  A header that names a range or a
+  list configures each interface it names and is not translated: no
+  interface is made of it, nothing in its stanza is read, and the
+  job lists the header among its sections.  So is `interface
+  breakout module <n> port <ports> map <mapping>`.  Configure the
+  ports a range covers on the target by hand.  ⚠️ Up to 0.7.7 the
+  parser took the first word of a header for the name: `interface
+  ethernet 1/1` was an interface called `ethernet`, two such stanzas
+  one interface, `interface port-channel 1` and `interface
+  port-channel 2` one port-channel, a range an interface named for
+  the range and a breakout line one called `breakout`, in jobs that
+  said `completed`.  Translate such a config again.
 - **One tag per sub-interface.**  The sub-interface statement this
   codec reads and writes is `encapsulation dot1q <id>`, one tag: a
   source's sub-interface of two tags (IOS-XE `second-dot1q`, EOS

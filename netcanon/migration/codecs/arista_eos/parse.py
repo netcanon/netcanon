@@ -73,9 +73,12 @@ from .._helpers import (
     TrunksByName,
     Uniques,
     a_tag,
+    keyword_stanza_rows,
     merge_trunk_allowed,
+    spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
+    without_stanzas_of_no_one_interface,
     without_unread_tags,
 )
 from .._input_shape import detect_input_shape
@@ -287,7 +290,21 @@ _VRRP_DESCRIPTION_RE = re.compile(r"^vrrp\s+(\d+)\s+description\s+(\S.*)$")
 _VRF_RT_RE = re.compile(
     r"^\s+route-target\s+(import|export|both)\s+(?:evpn\s+)?(\S+)\s*$"
 )
-_INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
+#: An interface header: one word, or a type and its number written
+#: apart (``interface Ethernet 1``), which EOS takes and prints together.
+#: A header that names no ONE interface is taken out before any reader
+#: sees it (``without_stanzas_of_no_one_interface``).
+_INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?\s*$")
+
+
+def _interface_named(line: str) -> str | None:
+    """The interface a header *line* names, or ``None`` where the
+    line is no interface header: one word, or a type and its number
+    written apart, joined (``Ethernet 1`` -> ``Ethernet1``).  Matched
+    as one word, a header of two opened no stanza, and its interface
+    was in no record and no row."""
+    m = _INTERFACE_HEADER_RE.match(line)
+    return spaced_port_name(m.group(1), m.group(2)) if m else None
 
 
 def _parse_vrf_stanzas(raw: str) -> list[CanonicalRoutingInstance]:
@@ -665,10 +682,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # one that states no tag, which the switch does not bring up
     # (``a_sub_interface_needs_a_tag``), under a left-out row.  The
     # codec's ``parse()`` keeps the rows beside the Tier-3 ones.
-    raw, intent.dropped_tier3_sections = without_unread_tags(
+    #
+    # Before that, a header that names no ONE interface -- a range
+    # (``interface Ethernet1-4``), a list, words that are not one name
+    # -- has its stanza taken out, and its header line is a row: read
+    # as one word, such a header opened no stanza, and nothing said so.
+    raw, headers = without_stanzas_of_no_one_interface(raw)
+    raw, unread = without_unread_tags(
         raw, _is_tag_statement, _tags_of,
         _port_names.a_sub_interface_needs_a_tag,
     )
+    intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *unread]
 
     # --- Top-level scalar fields (regex-based, single-pass) ---
     m = _HOSTNAME_RE.search(raw)
@@ -899,7 +923,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     #     holds an address of it -- from the interfaces read above
     #     (:mod:`.dhcp_pools`, which cites Arista's manual and AVD).
     intent.dhcp_servers, pool_rows, pools_left_out = pools_of(
-        read_dhcp(raw.splitlines(), _INTERFACE_HEADER_RE), intent.interfaces,
+        read_dhcp(raw.splitlines(), _interface_named), intent.interfaces,
     )
     intent.dropped_tier3_sections.extend(pool_rows)
     intent.dropped_tier3_sections.extend(
@@ -1089,10 +1113,9 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         if not line.startswith((" ", "\t")):
             # Possible new top-level stanza.  Close anything open
             # from the previous stanza first.
-            iface_m = _INTERFACE_HEADER_RE.match(line)
+            name = _interface_named(line)
             vlan_m = _VLAN_HEADER_RE.match(line)
-            if iface_m:
-                name = iface_m.group(1)
+            if name is not None:
                 # GAP 6: Vxlan<N> is a VXLAN config container, not
                 # a real interface.  Its sub-commands populate
                 # CanonicalVxlan records via _apply_iface_subcommand,

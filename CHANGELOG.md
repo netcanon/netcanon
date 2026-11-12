@@ -1365,6 +1365,51 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An NX-OS or EOS interface header names one interface, or none.**
+  Both platforms take a type and its number written apart where a
+  name goes (`interface ethernet 2/1`, `interface ethernet 1`), and a
+  range or a list there too (`interface ethernet 2/29-30`, `interface
+  ethernet 2/29, ethernet 2/33`, `interface ethernet 1 - 4`); `show
+  running-config` prints neither.  The NX-OS parser took a header's
+  first word for the name: `interface ethernet 1/1` was an interface
+  called `ethernet`, two such stanzas one record, `interface
+  port-channel 1` and `interface port-channel 2` one port-channel, a
+  range an interface named for the range, and `interface breakout
+  module 1 port 49-52 map 10g-4x` one called `breakout`, on every
+  target, in jobs that said `completed`.  The EOS parser matched a
+  header of one word only: a header of two opened no stanza, and the
+  interface, its address and its VLANs were in no record and no row;
+  a range of one word was an interface of that name.  Both now read
+  the one interface a header names (`one_interface_named` in
+  `codecs/_helpers.py`): one word, or a type and its number, joined as
+  the IOS-XE and IOS XR parsers join them (`spaced_port_name`).  A
+  header that names none -- a range, a list, a keyword, words that
+  are not one name -- has its stanza taken out before any reader sees
+  it (`without_stanzas_of_no_one_interface`), and its header line is
+  a section row of `dropped_tier3_sections`, as an IOS-XE `interface
+  range` stanza is.  A range is a hyphen between two numbers: one that
+  a letter follows is in a name, so another vendor's `ether1-gateway`,
+  written as it is where the target has no name for it, is read back
+  as that name.  The EOS DHCP reader finds the interface that serves a
+  subnet by the same name.  No committed NX-OS or EOS input writes a
+  header apart or names a range, and no job moved, with a port map or
+  without.  The harness, which translates no names, reads its outputs
+  back with these parsers, and three pairs moved there.  A RouterOS or
+  FortiOS name with a space in it (`br - lan1`, `lan zone`) is written
+  into the NX-OS output as it is -- a job of the plan endpoints is
+  `partial` for it and lists it -- and is now read back as no interface
+  and a row, where it was an interface named for its first word.  And
+  AOS-CX's `interface lag 1` and `interface loopback 0`, written into
+  the EOS output as they are, now read back as one interface each, so
+  on two AOS-CX cells the records line up: description, admin state,
+  MTU and IPv6 arrive intact there, and the AOS-CX to EOS expectations
+  declare them `good` where they had recorded a loss of the record.
+  Guarded by `tests/unit/migration/test_a_header_names_one_interface.py`:
+  every committed NX-OS and EOS input with its headers written apart
+  parses to the tree of the input; a spaced text and its joined twin
+  make the same job onto every public codec; a range, a list and a
+  breakout line make no record and are a row there; and each check is
+  handed the defect it is for.
 - **A tunnel's two ends are read and written on IOS-XE, and said
   everywhere else.**  No parser read `tunnel source` or `tunnel
   destination`, so an IOS-XE tunnel was written with no ends onto
@@ -5170,8 +5215,10 @@ timestamp if your timezone matters for an audit.
   still keeps the keyword where the route's interface goes — the
   line is written back to IOS-XE as it was, other platforms are
   given a route out an interface called `dhcp`, and onto Junos the
-  validation report holds the job; NX-OS still reads `interface
-  port-channel 1` as `port-channel`; an IOS XR `router static` line
+  validation report holds the job; NX-OS still read `interface
+  port-channel 1` as `port-channel` (mended since: "An NX-OS or EOS
+  interface header names one interface, or none"); an IOS XR
+  `router static` line
   and an AOS-CX `ip route` line still read a spaced interface a word
   at a time (AOS-CX writes `loopback 77` itself, and reads its own
   line back as distance 77); and a Junos output never has the line

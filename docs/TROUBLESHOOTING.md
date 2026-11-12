@@ -75,9 +75,12 @@ hand.
 
 Some rows are sections the parser itself took out, and are in no
 output: an `interface range ...` header in a text read as IOS-XE or
-IOS XR (configure the ports it covers by hand), an `interface
-breakout <port> map <profile>` line in the same (split the port on
-the target by hand, if it is to be split there), and
+IOS XR (configure the ports it covers by hand), a header that names
+a range or a list of interfaces in a text read as NX-OS or EOS
+(`interface ethernet 2/29-30`, `interface ethernet 1 - 4`; the same),
+an `interface breakout <port> map <profile>` line in the same, or
+NX-OS's `interface breakout module ...` (split the port on the
+target by hand, if it is to be split there), and
 `<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has no
 interface` for an OPNsense DHCP pool whose zone is assigned to no
 device (bind the pool to a zone that has one, or write it on the

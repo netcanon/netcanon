@@ -11,12 +11,14 @@
 # surface EOS is built around.
 #
 # The dominant loss on this pair is structural, not per-attribute: the
-# interface list shrinks (9 -> 5 on the representative cell), so EVERY
-# `interfaces[].*` sub-field is measured as drifted. Declaring any of them
-# `good` would manufacture a CODEC_BUG — that is why each one below records a
-# loss even where the surviving records keep the attribute intact. (The one
-# exception is `interfaces[].vrrp_groups`, which is `unsupported` on its own
-# merits: AOS-CX declares that whole subtree unsupported.)
+# interface list shrinks (9 -> 5 on the representative cell).  Where it
+# does, the harness charges the loss to `interfaces[].name` and measures
+# every later `interfaces[].*` sub-field as STRUCTURAL_ONLY, whatever it is
+# declared.  So each sub-field below is declared on what a record that
+# survives carries: description, admin state, MTU and IPv6 arrive intact on
+# the cells whose records line up, and are `good`; the type, IPv4 and LAG
+# membership are lossy on their own merits, and `interfaces[].vrrp_groups`
+# is `unsupported` (AOS-CX declares that whole subtree unsupported).
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
 # and a full `run_full_mesh.py` pass over the committed corpus (7 fixture
@@ -122,38 +124,38 @@ per_field_expectation:
       AOS-CX enumerates every physical campus port in `show running-config`,
       including ports carrying only default configuration; the EOS render
       emits the interfaces the canonical model considers configured.  Ports
-      that vanish take their whole record with them, which is why every
-      `interfaces[].*` sub-field below is also lossy rather than good.
+      that vanish take their whole record with them: the loss is charged
+      here, and the sub-fields below say what a record that survives keeps.
       Inventory the source port list before cutover if port-by-port parity
       matters.
     references: [aoscx-arista-surface]
 
   "interfaces[].description":
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Both matrices declare `/interfaces/interface/config/description`
-      supported, so a description that survives is intact.  It is lossy here
-      only because the record it belongs to may not survive — see
-      `interfaces[].name`.
+      supported, and a record that survives keeps its description intact
+      (both cells whose records line up).  A record that does not survive
+      takes it along — that loss is `interfaces[].name`'s.
     references: [aoscx-arista-surface]
 
   "interfaces[].enabled":
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Admin state is declared supported on both sides and is preserved on
-      every surviving record; lossy on this pair because the interface list
-      itself shrinks (`interfaces[].name`).  A dropped port takes its
-      shutdown/no-shutdown state with it, so a port that was administratively
-      down on AOS-CX is simply absent on EOS rather than down.
+      every surviving record (both cells whose records line up).  A dropped
+      port takes its shutdown/no-shutdown state with it, so a port that was
+      administratively down on AOS-CX is absent on EOS rather than down —
+      the loss of `interfaces[].name`.
     references: [aoscx-arista-surface]
 
   "interfaces[].mtu":
-    disposition: lossy
-    reason: >
-      `/interfaces/interface/config/mtu` is supported on both sides; lossy
-      here for the same structural reason as the rest of the interface
-      sub-fields.  Re-check MTU on any uplink after cutover — a dropped
-      record silently reverts the target to its default.
+    disposition: good
+    note: >
+      `/interfaces/interface/config/mtu` is supported on both sides and a
+      record that survives keeps its MTU (both cells whose records line up).
+      Re-check MTU on any uplink after cutover — a dropped record leaves the
+      target at its default, which is the loss of `interfaces[].name`.
     references: [aoscx-arista-surface]
 
   "interfaces[].ipv4_addresses":
@@ -167,13 +169,13 @@ per_field_expectation:
     references: [aoscx-arista-surface]
 
   "interfaces[].ipv6_addresses":
-    disposition: lossy
-    reason: >
-      Same structural cause as `interfaces[].ipv4_addresses`.  No committed
-      cell on this pair carries IPv6 on a surviving record, so the specific
-      failure has not been observed in isolation — the declaration follows
-      the parent record's fate rather than an independent measurement, and
-      is stated that way rather than implied.
+    disposition: good
+    note: >
+      Declared supported on both sides, and the one cell whose records line
+      up and carry IPv6 keeps every address intact.  Unlike
+      `interfaces[].ipv4_addresses` there is no virtual-gateway form to
+      degrade; a record that does not survive takes its addresses along,
+      which is the loss of `interfaces[].name`.
     references: [aoscx-arista-surface]
 
   "interfaces[].interface_type":
@@ -189,12 +191,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The audit applies LAG-name canonicalisation to this key, so a pure
-      `lag1` <-> `Port-Channel1` rename would NOT count as drift.  It drifts
-      anyway on all 7 cells.  Note the drift alone is not proof of membership
-      loss here — every `interfaces[].*` key drifts on this pair because the
-      record count shrinks, so this key carries no independent signal.  The
-      proof is the round-trip in `lags`: the member interface `1/1/32` is not
-      among the 5 survivors and the render emits no channel-group.
+      `lag1` <-> `Port-Channel1` rename would NOT count as drift.  It
+      drifts on the cells whose records line up as well, so the loss is this
+      key's own and not only the record count's.  The round-trip in `lags`
+      shows it: the member interface `1/1/32` is not among the 5 survivors
+      and the render emits no channel-group.
     references: [aoscx-arista-surface]
 
   "interfaces[].vrrp_groups":

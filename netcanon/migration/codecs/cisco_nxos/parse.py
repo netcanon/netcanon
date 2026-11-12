@@ -77,10 +77,13 @@ from .._helpers import (
     _parse_vlan_list,
     a_tag,
     address_key,
+    keyword_stanza_rows,
     sole_vlan_id,
+    spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
     untags_its_native_vlan,
+    without_stanzas_of_no_one_interface,
     without_unread_tags,
 )
 from .._hsrp import Groups, Unread, group_number
@@ -129,7 +132,23 @@ _NTP_SERVER_RE = re.compile(r"^ntp\s+server\s+(\S+)", re.IGNORECASE | re.MULTILI
 #: :mod:`ipaddress` (mirrors cisco_iosxe_cli / arista_eos ``_SYSLOG_LINE_RE``).
 _SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
-_IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+#: An interface header, and the word after the first: NX-OS takes a
+#: type and its number written apart (``interface ethernet 1/2``) and
+#: prints them together.  A header that names no ONE interface is taken
+#: out before any reader sees it (``without_stanzas_of_no_one_interface``),
+#: so every header a reader meets is one word or a type and its number.
+_IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+
+
+def _iface_name(m: re.Match[str]) -> str:
+    """The interface an :data:`_IFACE_RE` match names: one word, or a
+    type and its number written apart, joined (``ethernet 1/2`` ->
+    ``ethernet1/2``).  Read a word at a time, ``interface ethernet
+    1/2`` was an interface called ``ethernet``, and ``interface
+    port-channel 1`` and ``interface port-channel 2`` one interface."""
+    return spaced_port_name(m.group(1), m.group(2))
+
+
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
@@ -638,9 +657,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # for its first number it was tag 0, or a tag no VLAN has, on
     # every target that writes one (the codec's ``parse()`` keeps the
     # row beside the Tier-3 rows).
-    raw, intent.dropped_tier3_sections = without_unread_tags(
-        raw, _is_tag_statement, _tag_read,
-    )
+    #
+    # Before that, a header that names no ONE interface -- a range
+    # (``interface Ethernet1/1-4``), a list, a keyword (``interface
+    # breakout ...``), words that are not one name -- has its stanza
+    # taken out, and its header line is a row: read for its first word
+    # it was an interface named for the range, or ``breakout``, on
+    # every target.
+    raw, headers = without_stanzas_of_no_one_interface(raw)
+    raw, unread = without_unread_tags(raw, _is_tag_statement, _tag_read)
+    intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *unread]
 
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
@@ -1026,7 +1052,7 @@ def _parse_interfaces(  # noqa: C901
         # the stanza open-but-unmaterialised so its indented body lines
         # fall through the scanner's ``current is None`` skip — mirrors
         # arista_eos's ``Vxlan1`` interception.
-        name = m.group(1)
+        name = _iface_name(m)
         if name.lower().startswith("nve"):
             return None
         scratch = _new_iface_scratch(name)
@@ -1310,7 +1336,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
-            current_iface = m.group(1)
+            current_iface = _iface_name(m)
             _note_header(current_iface)
             continue
         if current_iface is None:
@@ -1319,7 +1345,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             current_iface = None
             m = _IFACE_RE.match(line)
             if m:
-                current_iface = m.group(1)
+                current_iface = _iface_name(m)
                 _note_header(current_iface)
             continue
         cgm = _CHANNEL_GROUP_RE.match(line)
@@ -1581,7 +1607,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
-            in_nve = im.group(1).lower().startswith("nve")
+            in_nve = _iface_name(im).lower().startswith("nve")
             current_member_vni = None
             continue
         if line and not line[0].isspace():

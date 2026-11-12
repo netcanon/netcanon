@@ -1906,6 +1906,106 @@ def spaced_port_name(first: str, second: str | None) -> str:
     return first
 
 
+#: Where the name part of an ``interface`` header names more than one
+#: interface: a list (a comma) or a range (a hyphen between two
+#: numbers).  NX-OS and EOS take either where a name goes (``interface
+#: Ethernet1/1-4``, ``interface Ethernet1,3``); ``show running-config``
+#: prints neither.  A hyphen in a type (``Port-Channel10``) follows a
+#: letter, and one that a letter follows is in a name: another vendor's
+#: name (``ether1-gateway``) is written as it is where the target has
+#: none for it, and is read back as that name.
+_NAMES_SEVERAL_RE = re.compile(r",|\d[ \t]*-[ \t]*\d")
+
+
+def one_interface_named(header: str) -> str:
+    """The one interface an NX-OS or EOS ``interface`` *header* line
+    names, or ``""`` where it names none or several.
+
+    The name is one word, or a type and its number written apart
+    (:func:`spaced_port_name`; both platforms take ``interface
+    ethernet 1/2`` and print ``interface Ethernet1/2``).  A header that
+    names a range or a list names no ONE interface, and nor does a
+    keyword of :data:`NOT_AN_INTERFACE_TYPE`, two words that are not
+    one name, or more words than a name has.  Read a word at a time,
+    ``interface ethernet 1/2`` was an interface called ``ethernet`` on
+    NX-OS, and ``interface Ethernet1/1-4`` one of that name on both; on
+    EOS a header of two words opened no stanza, and the interface was
+    in no record and no row.
+
+    Args:
+        header: The header line.
+
+    Returns:
+        The name, its letters as the line has them, or ``""``.
+    """
+    words = header.split()[1:]
+    if not words or len(words) > 2 or _NAMES_SEVERAL_RE.search(" ".join(words)):
+        return ""
+    if words[0].lower() in NOT_AN_INTERFACE_TYPE:
+        return ""
+    if len(words) == 1:
+        return words[0]
+    name = spaced_port_name(words[0], words[1])
+    return name if name != words[0] else ""
+
+
+def _without_stanzas(
+    raw: str, takes_out: Callable[[str], bool],
+) -> tuple[str, list[str]]:
+    """*raw* without each ``interface`` stanza whose header line
+    *takes_out* names, and the header of each, white space apart, in
+    the order met and once each.  A stanza ends where the interface
+    readers end one, at the next line that is not indented: a line that
+    begins with a space or a tab is of the body, and so is an empty
+    line."""
+    lines = raw.splitlines(keepends=True)
+    kept: list[str] | None = None
+    headers: dict[str, None] = {}
+    inside = False
+    for at, line in enumerate(ticked(lines)):
+        if inside and line[:1].isspace():
+            continue
+        inside = False
+        if _HEADER_WORD_RE.match(line) and takes_out(line):
+            if kept is None:
+                kept = lines[:at]
+            headers[" ".join(line.split())] = None
+            inside = True
+            continue
+        if kept is not None:
+            kept.append(line)
+    if kept is None:
+        return raw, []
+    return "".join(kept), list(headers)
+
+
+def _opens_with_a_keyword(header: str) -> bool:
+    """Whether the first word after ``interface`` on *header* is one
+    of :data:`NOT_AN_INTERFACE_TYPE`."""
+    word = _HEADER_WORD_RE.match(header)
+    return bool(word) and word.group(1).lower() in NOT_AN_INTERFACE_TYPE
+
+
+def without_stanzas_of_no_one_interface(raw: str) -> tuple[str, list[str]]:
+    """*raw* without each ``interface`` stanza whose header names no
+    ONE interface (:func:`one_interface_named`), and the header line of
+    each -- NX-OS and EOS, where a range or a list goes where a name
+    does.
+
+    Such a stanza configures every interface it names, where it was
+    typed, and is not translated: it is taken out before any reader
+    sees it, its body with it, and its header line is a section row of
+    ``dropped_tier3_sections`` (:func:`keyword_stanza_rows`), as an
+    IOS-XE ``interface range`` stanza is.  Read as one interface, a
+    range was an interface named for the range on every target.
+
+    Returns:
+        ``(text, headers)`` as :func:`without_keyword_stanzas` returns
+        them.
+    """
+    return _without_stanzas(raw, lambda line: not one_interface_named(line))
+
+
 def without_keyword_stanzas(raw: str) -> tuple[str, list[str]]:
     """*raw* without the ``interface`` stanzas a keyword opens, and
     the header line of each.
@@ -1929,31 +2029,13 @@ def without_keyword_stanzas(raw: str) -> tuple[str, list[str]]:
         the header lines as written, white space apart, in the order
         met and once each.
     """
-    lines = raw.splitlines(keepends=True)
-    kept: list[str] | None = None
-    headers: dict[str, None] = {}
-    inside = False
-    for at, line in enumerate(ticked(lines)):
-        if inside and line[:1].isspace():
-            continue
-        inside = False
-        word = _HEADER_WORD_RE.match(line)
-        if word and word.group(1).lower() in NOT_AN_INTERFACE_TYPE:
-            if kept is None:
-                kept = lines[:at]
-            headers[" ".join(line.split())] = None
-            inside = True
-            continue
-        if kept is not None:
-            kept.append(line)
-    if kept is None:
-        return raw, []
-    return "".join(kept), list(headers)
+    return _without_stanzas(raw, _opens_with_a_keyword)
 
 
 def keyword_stanza_rows(headers: Iterable[str]) -> list[str]:
     """The rows of ``dropped_tier3_sections`` for the stanzas
-    :func:`without_keyword_stanzas` took out.
+    :func:`without_keyword_stanzas` or
+    :func:`without_stanzas_of_no_one_interface` took out.
 
     The keywords are two different things to say.  ``interface
     preconfigure <name>`` is a statement the device HOLDS AND DOES
@@ -1965,7 +2047,8 @@ def keyword_stanza_rows(headers: Iterable[str]) -> list[str]:
     nothing, and its job is not ``completed``.  ``interface range
     ...`` and ``interface breakout ...`` are in force where they
     were typed and are not translated: the row of each is its header
-    line, a section like any other the output does not have.
+    line, a section like any other the output does not have.  So is
+    an NX-OS or EOS header that names a range or a list.
 
     Args:
         headers: The header lines, as :func:`without_keyword_stanzas`

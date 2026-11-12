@@ -1359,7 +1359,8 @@ tests use these exclusively — never CSS classes or element structure.  See
   config has been read.  The name is the one the config WRITES, the
   stanza's header line, not the one the parser reads from it: two
   parsers read `interface port-channel 1` and `interface
-  port-channel 2` as one name (the NX-OS parser still does), and
+  port-channel 2` as one name (each now reads the one name the
+  two words spell), and
   keyed by that name a trunk with no list of its own would be given
   its neighbour's.  (2) **A default is given to what the config
   STATES, never to what the parser inferred.**  The NX-OS and EOS
@@ -1614,7 +1615,7 @@ tests use these exclusively — never CSS classes or element structure.  See
   is written back to IOS-XE as it was (a canonical route cannot say
   "from DHCP"); a VTEP's source ADDRESS in `vxlan_vnis[].source_interface`
   on AOS-CX and VyOS; and the parsers that still read a spaced name
-  a word at a time (NX-OS headers, IOS XR and AOS-CX route lines).
+  a word at a time (IOS XR and AOS-CX route lines).
   Guarded by
   `tests/unit/migration/test_a_word_is_not_a_name.py`, which sends
   each form through the plan path onto every public codec and reads
