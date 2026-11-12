@@ -1441,6 +1441,33 @@ class TestRenameModalTheJobsAccountAndApply:
             _tid("migrate-output")
         ).inner_text()
 
+    def test_a_pair_the_job_does_not_list_under_a_port_plan(
+        self, page: Page, live_server_url: str,
+    ):
+        """With both devices declared the job's account is the same:
+        the plan's of the hardware ports and the job's own of the rest.
+        The two loopback rows still show ``Loopback0``, and are still
+        not two interfaces: nothing marks them, and Apply is not held
+        on a job the server called completed."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_VTEP_SOURCE)
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="profile:EX4300-48T"
+        )
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(
+            value="DCS-7050SX-64"
+        )
+        _apply(page)
+        assert "status: completed" in _status_line(page)
+        expect(_strip(page)).to_have_attribute("data-state", "ok")
+        _unfold(page, "loopback")
+        _unfold(page, "svi")
+        for name in ("lo0", "lo0.0"):
+            assert page.locator(_tid(f"migrate-rename-auto-{name}")).inner_text() == "Loopback0"
+            expect(page.locator(_tid(f"migrate-rename-collision-{name}"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-summary"))).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+
     def test_two_rows_typed_onto_one_hold_apply(
         self, page: Page, live_server_url: str,
     ):

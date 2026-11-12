@@ -478,6 +478,81 @@ class TestModelTranslationServedByEmbeddedServer:
         ):
             assert needed in migrate_page, needed
 
+    def test_with_both_devices_the_names_no_pairing_decides(self, tmp_path: Path) -> None:
+        """The pairing decides hardware ports.  Through the embedded
+        server, two VLAN interfaces on one and an aggregate left under
+        its source name hold a job with both devices declared, as
+        they do with none, and an entry settles each.  And the page
+        draws them beside the plan's own account."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        two_on_one = {
+            "source": "juniper_junos", "target": "arista_eos",
+            "source_profile": "juniper_junos/EX4300-48T",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+            "raw_text": "\n".join([
+                "set system host-name r1",
+                "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
+                "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+                "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
+                "",
+            ]),
+        }
+        one_dropped = {**two_on_one, "port_rename_map": {"vlan.100": None}}
+        left = {
+            "source": "fortigate_cli", "target": "juniper_junos",
+            "source_profile": "fortigate/60F",
+            "target_profile": "juniper_junos/EX4300-48T",
+            "raw_text": "\n".join([
+                "config system interface",
+                '    edit "internal1"', "        set type physical", "    next",
+                '    edit "internal2"', "        set type physical", "    next",
+                '    edit "LAG_CORE"',
+                "        set ip 192.168.1.1 255.255.255.0",
+                "        set type aggregate",
+                '        set member "internal1" "internal2"',
+                "    next",
+                "end", "",
+            ]),
+        }
+        named = {**left, "port_rename_map": {"LAG_CORE": "ae0"}}
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                migrate_page = _get_text(port, "/migrate")
+                fused_said, fused = _post_job(port, "/api/v1/migration/plan", two_on_one)
+                dropped_said, dropped = _post_job(port, "/api/v1/migration/plan/ports", one_dropped)
+                left_said, left_job = _post_job(port, "/api/v1/migration/plan", left)
+                named_said, named_job = _post_job(port, "/api/v1/migration/plan", named)
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        assert fused_said == "partial"
+        assert fused["port_mapping_plan"]["applied"]
+        assert fused["port_mapping_plan"]["fused"] == {}
+        assert fused["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
+        assert dropped_said == "completed" and dropped["fused_ports"] == {}
+        assert left_said == "partial"
+        assert left_job["untranslated_ports"] == ["LAG_CORE"]
+        assert left_job["port_mapping_plan"]["unresolved_ports"] == []
+        # The entry the job asked for is not reported as off the device.
+        assert named_said == "completed" and named_job["untranslated_ports"] == []
+        assert named_job["port_mapping_plan"]["off_target"] == []
+        assert "set interfaces ae0 unit 0 family inet address 192.168.1.1/24" in (
+            named_job["rendered"].splitlines()
+        )
+        for needed in (
+            "function _namesChips", "function _namesHow", "namesUnsettled",
+            "(plan && plan.fused) || {}",
+        ):
+            assert needed in migrate_page, needed
+
     def test_a_stack_on_both_sides(self, tmp_path: Path) -> None:
         """Two members declared for the source AND for the target,
         through the embedded server: the members pair in the order

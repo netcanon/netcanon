@@ -419,7 +419,8 @@ def plan_migration(
     ``null``.  Two entries that point at one name are reported like
     any other two, and a blank target is a 422.  Declaring both
     devices decides the hardware ports among these names and no
-    others.
+    others: with both declared the same three are read for the names
+    the pairing does not decide, and listed on the job the same way.
 
     **Declared devices.**  When the body says which device the config
     came from and which it is going to (``source_deployment`` or

@@ -792,9 +792,11 @@ The validation report is one reason for `partial`; the port names
 are another.  `job.error` (the status banner on the migrate page)
 says which.  If it begins **"Port mapping is incomplete"** you
 declared both devices: see that section below.  If it says **"Port
-names are not settled"** you declared none, every port name was
-translated by the shape of the name, and the job found one or more
-of three things in its own output.
+names are not settled"**, names were translated by the shape of the
+name — every name, where you declared no devices; with both
+declared, the names the pairing does not decide (a loopback, a
+tunnel, a VLAN interface, an aggregate) — and the job found one or
+more of three things in its own output.
 
 **1. Two source names ended on one name.**  The config of two
 interfaces is written as one.  `fused_ports` on the job lists each
@@ -892,8 +894,8 @@ a port of its own (see [`CAPABILITIES.md`](CAPABILITIES.md) section
 G).  For anything else, no.  A pair of devices decides nothing about
 two loopbacks on one loopback, a tunnel that was dropped or a VLAN
 interface left under its source name: with both devices declared the
-output has them the same and the job is not held for them, so you
-would get `completed` for the output you were warned about.  The
+output has them the same, and the job is held for them and lists
+them as it does here, so the same entries settle them.  The
 job's sentence offers the devices only where a hardware port is
 among what it lists; where it does not offer them, an entry is what
 settles the name.  The strip in the rename modal follows the same
@@ -930,7 +932,8 @@ physically distinct source ports resolved to a single name on the
 target.  A target that writes a stanza for each port writes two
 under that name, and a device reads one port.  The job is `partial`
 for it, and lists the names in `fused_ports` (with both devices
-declared, in `port_mapping_plan.fused`).  (One exception: a Junos
+declared, a name a paired port ended on is in
+`port_mapping_plan.fused` instead).  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
 one interface, and is not in `fused_ports`.  Another unit of `lo0` is
 the loopback of a routing instance, and is a loopback of its own on
@@ -1210,7 +1213,12 @@ used in its place.
 You declared both devices (`source_deployment` / `target_deployment`)
 and some ports the config uses could not be settled.
 `port_mapping_plan.unresolved_ports` on the job lists them; the lists
-below say why each is there:
+below say why each is there.  Where the sentence goes on with **"Port
+names are not settled"**, that part is about names the pairing does
+not decide — a loopback, a tunnel, a VLAN interface, an aggregate —
+which are in the job's own `fused_ports`, `unresolved_ports` and
+`untranslated_ports`: see ["My job is `partial` and the validation
+report is clean"](#my-job-is-partial-and-the-validation-report-is-clean).
 
 * **`unplaced`** — the source has more ports of a kind than the
   target.  A 48-port config onto a 24-port switch leaves ports 25-48

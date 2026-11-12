@@ -1046,9 +1046,19 @@ tests use these exclusively — never CSS classes or element structure.  See
   nobody can see.
   **And advice is a claim about another path**: the sentence ended
   "or declare both devices", and for two loopbacks on one loopback
-  the path with devices says `completed` for the same output.  Offer
+  the path with devices said `completed` for the same output.  Offer
   a way out only where it settles what is listed (`_names_message`
-  asks whether a hardware port is among it).  **And advice is
+  asks whether a hardware port is among it).  **And a check built
+  for one path is not built for the other**: with both devices
+  declared the pairing decides the hardware ports, and nothing asked
+  what the translator made of any other name -- two Junos VLAN
+  interfaces on one EOS `Vlan100`, a FortiGate aggregate written
+  under its own name into a Junos config, a tunnel dropped -- each
+  a warning in a job that said `completed`, where the same request
+  with no devices was `partial`.  The same three questions are asked
+  there of the names the pairing leaves
+  (`_names_the_pairing_leaves`), with those names on the job and the
+  hardware ports on the plan, never one name in both.  **And advice is
   mended wherever it is given**: with the sentence corrected, the
   strip of the rename modal still ended "Choose the target device
   to pair ports by position" beside one chosen device, whatever
@@ -1057,10 +1067,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   hardware port; and an offer needs something to choose from, so no
   pair is offered for a vendor nobody has described a device of.
   The page obeys the
-  same authority: with no plan on the job, rows that are as the job
-  was made collide only where the job lists them (`jobFusedRows`),
+  same authority: rows that are as the job was made collide only
+  where the job lists them (`jobFusedRows`: under a port plan, the
+  plan's account of the hardware ports and the job's of the rest),
   or Apply is held on a job the server called `completed` until the
-  operator breaks something to free it.
+  operator breaks something to free it -- under a port plan it was,
+  for a Junos `lo0` and `lo0.0`, both `Loopback0`, until the rule
+  read both accounts.
   The guard does not ask the function it guards, nor take its list
   of names: it reads the rendered output back with the target's
   parser and finds interfaces BY ADDRESS — no interface of a

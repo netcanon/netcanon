@@ -1130,6 +1130,37 @@ def _kind_read(iface: Any) -> str:
     )
 
 
+def _interface_counter(
+    rendered: Counter[str],
+    kinds: dict[str, set[str]],
+    fold_target: bool,
+) -> TransformCallable:
+    """A transform that fills *rendered* and *kinds* from the tree it
+    is handed, and hands the tree on as it was.
+
+    Put last among a run's transforms, what it reads is the tree
+    handed to the renderer: for each interface name, compared as the
+    target compares names, how many interfaces the tree holds under
+    it (*rendered*, for :func:`_shared_final_names`), and what the
+    source parser read the interfaces of each name as written to be
+    (*kinds*, for :func:`_left_under_a_source_name`).  Both are
+    emptied first, so that a run made again leaves what IT rendered.
+    """
+    from ..migration.port_mapping import name_key
+
+    def count_interfaces(tree: Any) -> Any:
+        rendered.clear()
+        kinds.clear()
+        for iface in getattr(tree, "interfaces", None) or []:
+            name = getattr(iface, "name", None)
+            if isinstance(name, str):
+                rendered[name_key(name, fold_target)] += 1
+                kinds.setdefault(name, set()).add(_kind_read(iface))
+        return tree
+
+    return count_interfaces
+
+
 def _one_platform(source: CodecBase, target: CodecBase) -> bool:
     """*source* and *target* are codecs of ONE platform: two wire
     formats of one operating system (IOS-XE as CLI text and over
@@ -1240,11 +1271,15 @@ def _names_message(
     devices_known: bool = True,
 ) -> str:
     """The sentence a job's ``error`` carries when the port translator
-    left names unsettled and no devices were declared, or ``""``.
+    left names unsettled, or ``""``.
 
     Each kind in words of its own, counted, and then what settles
     it; which names is on the job as data (``fused_ports``,
-    ``unresolved_ports``, ``untranslated_ports``).
+    ``unresolved_ports``, ``untranslated_ports``).  With no devices
+    declared that is every name the translator placed; with both
+    declared, the names the pairing does not decide
+    (:func:`_names_the_pairing_leaves`), and the devices are not
+    offered (*devices_known* false).
 
     Declaring both devices is offered only where it would settle
     something that is listed.  The pairing is of hardware ports: it
@@ -1252,9 +1287,9 @@ def _names_message(
     on one loopback, for two sub-interfaces of ONE port that share a
     name (onto VyOS, where a sub-interface is named by its tag, two
     units with one tag), or for a tunnel the target has no form for -- a job
-    with both devices declared renders those the same and does not
-    hold for them, so sending an operator there for them would be
-    sending them to a status that says less.  Where some of what is
+    with both devices declared renders those the same and is held for
+    them as this one is, so sending an operator there for them would
+    send them to the same entries by a longer road.  Where some of what is
     listed is a hardware port and some is not, the sentence says
     which the devices decide.  And an offer needs something to
     choose: where no device is described for the source's vendor
@@ -1267,7 +1302,8 @@ def _names_message(
         hardware: ``MigrationJob.source_ports`` -- which of the
             names are hardware ports.
         devices_known: A device can be declared of the source's
-            vendor and of the target's.
+            vendor and of the target's -- and is not yet: false where
+            both are declared already.
     """
     from ..migration.canonical.port_names import split_unit
 
@@ -1419,8 +1455,9 @@ def run_plan_with_checked_names(
     classified there, and each stands.
 
     With both devices declared :func:`run_plan_with_models` asks a
-    question of its own, about hardware ports, and this one is not
-    asked there.
+    question of its own about hardware ports, which the pairing
+    decides, and asks this one of every name the pairing does not
+    (:func:`_names_the_pairing_leaves`).
 
     **What went with a dropped name is said.**  The translator
     removes a static route out of a name it drops, a DHCP pool on it,
@@ -1469,7 +1506,7 @@ def run_plan_with_checked_names(
         ``untranslated_ports`` filled, and its status and ``error``
         changed as above, where the run left port names unsettled.
     """
-    from ..migration.port_mapping import name_key, what_went_lines
+    from ..migration.port_mapping import what_went_lines
 
     if port_rename_map is None:
         return run_plan_with_overrides(
@@ -1496,16 +1533,7 @@ def run_plan_with_checked_names(
     # ... and what the source parser read each to be, by the name as
     # written: a name left as it was is under that name here.
     kinds: dict[str, set[str]] = {}
-
-    def count_interfaces(tree: Any) -> Any:
-        rendered.clear()
-        kinds.clear()
-        for iface in getattr(tree, "interfaces", None) or []:
-            name = getattr(iface, "name", None)
-            if isinstance(name, str):
-                rendered[name_key(name, fold_target)] += 1
-                kinds.setdefault(name, set()).add(_kind_read(iface))
-        return tree
+    count_interfaces = _interface_counter(rendered, kinds, fold_target)
 
     job = run_plan_with_overrides(
         source=source,
@@ -1561,6 +1589,89 @@ def run_plan_with_checked_names(
         len(untranslated),
     )
     return job
+
+
+def _names_the_pairing_leaves(
+    job: MigrationJob,
+    plan: MappingPlan,
+    used: Iterable[str],
+    merged: Mapping[str, str | None],
+    rendered: Mapping[str, int],
+    kinds: Mapping[str, Iterable[str]],
+    source: CodecBase,
+    target: CodecBase,
+    fold_source: bool,
+    fold_target: bool,
+) -> tuple[dict[str, list[str]], list[str], list[str]]:
+    """With both devices declared, what the port translator left
+    unsettled among the names the pairing does not decide: names of
+    the output that two of them ended on, names it dropped, and names
+    it left under the source's name.
+
+    The pairing decides hardware ports -- it gives each a port of the
+    target or drops it, and the plan says so (``fused``,
+    ``unresolved_ports``) -- and checks what the translator made of a
+    logical name only where that touches a port: a name on a port
+    another name has, or on a port of the target.  Every other name
+    went to the translator and nothing asked what became of it.  Two
+    Junos VLAN interfaces (``irb.100``, ``vlan.100``) on one EOS
+    ``Vlan100``, a FortiGate aggregate
+    called ``LAG_CORE`` written as it stands into a Junos config, a
+    tunnel the target has no form for: each said ``completed`` with
+    devices declared, where the same request with none said
+    ``partial``.  Here the same three questions
+    :func:`run_plan_with_checked_names` asks are asked of those
+    names, with the same helpers, and anything the plan already
+    lists is left to the plan, so that no name is in both accounts:
+    a hardware port the config uses, the names the plan holds
+    (``unresolved_ports``) and the names the run was given an entry
+    for -- the pairing's, a displaced name's, the operator's.  Where
+    no pairing was made at all, every name went by its shape, and
+    hardware ports are asked about as well.
+
+    Args:
+        job: The finished run.
+        plan: The settled pairing.
+        used: The hardware ports the config uses.
+        merged: The map the run was given: a key is a decided name.
+        rendered: As :func:`_shared_final_names`.
+        kinds: As :func:`_left_under_a_source_name`.
+        source: Source codec.
+        target: Target codec.
+        fold_source: Source names compare without regard to case.
+        fold_target: Target names do.
+
+    Returns:
+        ``(fused, dropped, untranslated)``, as the job's
+        ``fused_ports``, ``unresolved_ports`` and
+        ``untranslated_ports``.
+    """
+    from ..migration.port_mapping import name_key
+
+    ports = {name_key(name, fold_source) for name in used} if plan.applied else set()
+    the_plans = ports | {name_key(name, fold_source) for name in plan.unresolved_ports}
+
+    def left_to_the_translator(name: str) -> bool:
+        return name_key(name, fold_source) not in the_plans
+
+    fused = {
+        final: names
+        for final, names in _shared_final_names(
+            job, rendered, fold_source, fold_target,
+        ).items()
+        if not any(name_key(name, fold_source) in ports for name in names)
+    }
+    dropped = [
+        name for name in _undecided_drops(job, merged, fold_source)
+        if left_to_the_translator(name)
+    ]
+    untranslated = [
+        name for name in _left_under_a_source_name(
+            job._untranslated, kinds, source, target,
+        )
+        if left_to_the_translator(name)
+    ]
+    return fused, dropped, untranslated
 
 
 def _sub_interface_followers(
@@ -1800,6 +1911,21 @@ def _undecided_clashes(
     return sorted(losers)
 
 
+def _reads_as_a_port(codec: CodecBase, name: str) -> bool:
+    """*codec*'s classifier reads *name* as a hardware port.  A
+    classifier that cannot read it, or fails on it, says no: naming a
+    doubt is a courtesy to the plan, and must not be able to fail the
+    job."""
+    from ..migration.canonical.port_names import HARDWARE_PORT_KINDS
+
+    classify = getattr(codec, "classify_port_name", None)
+    try:
+        identity = classify(name) if classify is not None else None
+    except Exception:
+        return False
+    return identity is not None and identity.kind in HARDWARE_PORT_KINDS
+
+
 def _unlisted_landings(
     every: list[str],
     used: list[str],
@@ -1840,18 +1966,7 @@ def _unlisted_landings(
         target_names: The ports of the declared target.
         fold_target: Target names compare without regard to case.
     """
-    from ..migration.canonical.port_names import HARDWARE_PORT_KINDS
     from ..migration.port_mapping import name_key
-
-    def reads_as_a_port(codec: CodecBase, name: str) -> bool:
-        classify = getattr(codec, "classify_port_name", None)
-        try:
-            identity = classify(name) if classify is not None else None
-        except Exception:
-            # Naming a doubt is a courtesy to the report; it must not
-            # be able to fail the job.
-            return False
-        return identity is not None and identity.kind in HARDWARE_PORT_KINDS
 
     ports = set(used)
     on_target = {name_key(name, fold_target) for name in target_names}
@@ -1864,7 +1979,7 @@ def _unlisted_landings(
         final = job.port_renames.get(name)
         if not final or name_key(final, fold_target) in on_target:
             continue
-        if reads_as_a_port(target, final) or reads_as_a_port(source, name):
+        if _reads_as_a_port(target, final) or _reads_as_a_port(source, name):
             found[name] = final
     return found
 
@@ -2606,7 +2721,12 @@ def run_plan_with_models(
     stripped and taken as typed.  An entry with a blank target is set aside: it would
     render a port with no name, and decides nothing.  Where the
     operator's own entries point two ports at one target name, that is
-    done as they asked and reported (``port_mapping_plan.fused``).
+    done as they asked and reported (``port_mapping_plan.fused``).  An
+    entry for a name that is not a hardware port of the source is
+    reported as off the target device (``off_target``) only where the
+    name it gives reads as a hardware port to the target:
+    ``{"LAG_CORE": "ae0"}`` onto an EX4300 is where an aggregate
+    belongs, and ``ge-0/0/99`` is a port the device does not have.
 
     Status.  A job that would have been ``completed`` is ``partial``,
     with ``job.error`` saying why, when
@@ -2624,7 +2744,16 @@ def run_plan_with_models(
     * a port is looked up by its hardware nowhere in the output
       (``unbound_ports``); or
     * no pairing could be made at all (one side lists no ports), so
-      every name went by name shape although devices were declared.
+      every name went by name shape although devices were declared; or
+    * the translator left a name the pairing does not decide -- a
+      loopback, a tunnel, a VLAN interface, an aggregate -- unsettled
+      as :func:`run_plan_with_checked_names` reads it: two of them on
+      one name of the output, one dropped, or one left under its
+      source name as a foreign name on the target, and no entry names
+      it (:func:`_names_the_pairing_leaves`).  Those names are on the
+      job (``fused_ports``, ``unresolved_ports``,
+      ``untranslated_ports``) and not on the plan, which keeps the
+      hardware ports: no name is in both.
 
     A job that is already ``partial`` for another reason keeps its
     status and has the same sentence appended to ``job.error``.  The
@@ -2787,6 +2916,13 @@ def run_plan_with_models(
             target_names, fold_target, same_codec, hardware,
         ))
 
+    # The interfaces of the tree that is rendered, by name, and what
+    # the source parser read each to be: what the names the pairing
+    # does not decide are asked against (_names_the_pairing_leaves).
+    rendered: Counter[str] = Counter()
+    kinds: dict[str, set[str]] = {}
+    count_interfaces = _interface_counter(rendered, kinds, fold_target)
+
     def translate(port_map: dict[str, str | None]) -> MigrationJob:
         return run_plan_with_overrides(
             source=source,
@@ -2797,7 +2933,9 @@ def run_plan_with_models(
             local_user_rename_map=local_user_rename_map,
             snmp_community_rename_map=snmp_community_rename_map,
             snmpv3_user_rename_map=snmpv3_user_rename_map,
-            transforms=[*binders, *(transforms or [])] if binders else transforms,
+            # Last, so that what is counted is the tree handed to the
+            # renderer.
+            transforms=[*binders, *(transforms or []), count_interfaces],
             transform_specs=transform_specs,
             force=force,
         )
@@ -2904,6 +3042,7 @@ def run_plan_with_models(
         units=same_codec,
         unbound=unbound,
         by_factory_name=bool(binders),
+        reads_as_a_port=lambda name: _reads_as_a_port(target, name),
     )
     job.port_mapping_plan = plan
     if not read_back:
@@ -2917,7 +3056,24 @@ def run_plan_with_models(
         )
     job.warnings.extend(plan.warnings)
 
-    message = _mapping_message(plan, dropped)
+    # And what the translator made of the names the pairing does not
+    # decide: a logical name is as lost, or as foreign, as a port.
+    fused_names, dropped_names, left_names = _names_the_pairing_leaves(
+        job, plan, used, merged, rendered, kinds, source, target,
+        fold_source, fold_target,
+    )
+    names = _names_message(
+        fused_names, dropped_names, left_names, job.source_ports,
+        devices_known=False,
+    )
+    if names:
+        job.fused_ports = fused_names
+        job.unresolved_ports = dropped_names
+        job.untranslated_ports = left_names
+
+    message = " ".join(
+        part for part in (_mapping_message(plan, dropped), names) if part
+    )
     if message:
         if job.status == MigrationJobStatus.completed:
             job.status = MigrationJobStatus.partial

@@ -205,24 +205,22 @@
     var ownCollisions = 0;
     var firstShared = '';
     var firstOwnShared = '';
-    // With no devices declared for the job on screen, the job says
-    // itself which names it wrote as one interface, and for the rows
-    // it was made with it is the authority: a Junos ``lo0.0`` beside
-    // ``lo0`` ends on the loopback's own name and is not a second
-    // interface, and counting the pair held Apply on a job the
-    // server called completed.  What was typed since is in no job
-    // yet, and is counted as it always was.  (rename-table.js marks
-    // the rows by the same rule.)
-    var planOnScreen = (typeof currentPortPlan === 'function')
-      ? currentPortPlan() : null;
+    // The job says itself which names it wrote as one interface --
+    // under a port plan, the plan of the hardware ports and the job
+    // of every other name -- and for the rows it was made with it is
+    // the authority: a Junos ``lo0.0`` beside ``lo0`` ends on the
+    // loopback's own name and is not a second interface, and
+    // counting the pair held Apply on a job the server called
+    // completed.  What was typed since is in no job yet, and is
+    // counted as it always was.  (rename-table.js marks the rows by
+    // the same rule.)
     var jobFused = (typeof jobFusedRows === 'function')
       ? jobFusedRows() : Object.create(null);
     Object.keys(targetSources).forEach(function(t) {
       var sources = targetSources[t];
       if (sources.length <= 1) return;
       var counted = sources.length;
-      if (!planOnScreen && typeof portRowAsSent === 'function'
-          && sources.every(portRowAsSent)) {
+      if (typeof portRowAsSent === 'function' && sources.every(portRowAsSent)) {
         counted = sources.filter(function(src) { return jobFused[src]; }).length;
         if (counted <= 1) return;
       }

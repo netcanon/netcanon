@@ -29,8 +29,8 @@
    *   currentTargetDevice()  — device-models.js: the target's ports,
    *                            from a profile or a family model
    *   currentPortPlan(), portPlanRowMeta(plan) — device-models.js
-   *   jobNamesNotSettled()   — device-models.js: what a job with no
-   *                            plan says of its own port names
+   *   jobNamesNotSettled()   — device-models.js: what the job says
+   *                            of the port names no pairing decides
    *
    * And two this file gives the summary (rename-panel.js):
    *
@@ -192,12 +192,13 @@
     return _renameUserMap[name] === had;
   }
 
-  /** The rows the job itself says were written as one interface,
-   *  with no devices declared for it: source name to the name of the
-   *  output it shares (``on``) and the names it shares it with
-   *  (``others``).  Only names whose rows are as sent, and only
-   *  where two of a group still are.  Empty under a port plan, which
-   *  has an account of its own.
+  /** The rows the job itself says were written as one interface:
+   *  source name to the name of the output it shares (``on``) and the
+   *  names it shares it with (``others``).  Only names whose rows are
+   *  as sent, and only where two of a group still are.  Under a port
+   *  plan the job has two accounts, and both are read: the plan's of
+   *  the hardware ports (``fused``), and the job's own of every other
+   *  name.
    *
    *  The job compares names as the two platforms do, which a
    *  comparison of strings here is not: ``Trk1`` and ``trk1`` are
@@ -206,11 +207,18 @@
    *  interface, not a second one on its name. */
   function jobFusedRows() {
     var rows = Object.create(null);
+    if (typeof jobNamesNotSettled !== 'function') return rows;
     var plan = (typeof currentPortPlan === 'function') ? currentPortPlan() : null;
-    if (plan || typeof jobNamesNotSettled !== 'function') return rows;
-    var fused = jobNamesNotSettled().fused;
-    Object.keys(fused).forEach(function(shared) {
-      var names = (fused[shared] || []).filter(portRowAsSent);
+    var groups = [];
+    [jobNamesNotSettled().fused, (plan && plan.fused) || {}].forEach(function(fused) {
+      if (!fused || typeof fused !== 'object') return;
+      Object.keys(fused).forEach(function(shared) {
+        groups.push({ shared: shared, names: fused[shared] });
+      });
+    });
+    groups.forEach(function(group) {
+      var shared = group.shared;
+      var names = (group.names || []).filter(portRowAsSent);
       if (names.length < 2) return;
       names.forEach(function(name) {
         rows[name] = {
@@ -463,14 +471,14 @@
       });
     });
 
-    // What the job itself says of its names, when no devices were
-    // declared for it: which source names ended on one name of the
-    // output (compared as the two platforms compare names, which a
-    // string comparison here is not), which were dropped undecided,
-    // and which were left under their source name.  The job's
-    // account of a name stands for as long as the row's entry is
-    // the one the job was made with (portRowAsSent).
-    var jobOpen = (!plan && typeof jobNamesNotSettled === 'function')
+    // What the job itself says of the names no pairing decides --
+    // every name, with no devices declared: which source names ended
+    // on one name of the output (compared as the two platforms
+    // compare names, which a string comparison here is not), which
+    // were dropped undecided, and which were left under their source
+    // name.  The job's account of a name stands for as long as the
+    // row's entry is the one the job was made with (portRowAsSent).
+    var jobOpen = (typeof jobNamesNotSettled === 'function')
       ? jobNamesNotSettled() : { fused: {}, dropped: [], left: [] };
     var jobFused = jobFusedRows();
     var jobLeft = new Set(jobOpen.left);
@@ -478,20 +486,21 @@
     /** The other rows that end on the target *effective* with the
      *  row for *source*, when that is a collision; else null.
      *
-     *  Under a port plan every such group is one, as it always was.
-     *  With no plan the job has an account of its own, and it is the
-     *  authority for the rows it was made with: where every row of
-     *  the group is as sent, the job has looked at exactly these
-     *  names, and the ones it wrote as one interface are in
-     *  ``jobFused`` -- a Junos ``lo0.0`` beside ``lo0`` is not among
-     *  them, and marking the pair held Apply on a job the server
-     *  called completed until one of the two was renamed or dropped.
+     *  The job has an account of its own -- under a port plan, the
+     *  plan's of the hardware ports and the job's of every other
+     *  name -- and it is the authority for the rows it was made
+     *  with: where every row of the group is as sent, the job has
+     *  looked at exactly these names, and the ones it wrote as one
+     *  interface are in ``jobFused`` -- a Junos ``lo0.0`` beside
+     *  ``lo0`` is not among them, and marking the pair held Apply on
+     *  a job the server called completed until one of the two was
+     *  renamed or dropped.
      *  A group with a row changed in the modal since is in no job
      *  yet: two rows given one name in the fields collide here. */
     function collidesWith(source, effective) {
       var hits = effective ? targetHits[effective] : null;
       if (!hits || hits.length < 2) return null;
-      if (!plan && hits.every(portRowAsSent)) return null;
+      if (hits.every(portRowAsSent)) return null;
       return hits.filter(function(other) { return other !== source; });
     }
 
@@ -595,11 +604,12 @@
         return !!collidesWith(r.source, effective) || !!jobFused[r.source];
       }).length;
 
-      // Names the port plan left for the operator to decide -- or,
-      // with no plan, the names the job says were dropped undecided
-      // or left under their source name.
-      var undecided = planActive ? (plan.unresolved_ports || [])
-        : jobOpen.dropped.concat(jobOpen.left);
+      // Names the port plan left for the operator to decide, and the
+      // names the job says were dropped undecided or left under their
+      // source name -- every name with no plan, the names the pairing
+      // does not decide under one.
+      var undecided = (planActive ? (plan.unresolved_ports || []) : [])
+        .concat(jobOpen.dropped, jobOpen.left);
       var decisionCount = rows.filter(function(r) {
         return undecided.indexOf(r.source) !== -1
           && _renameUserMap[r.source] === undefined;

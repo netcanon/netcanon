@@ -2478,27 +2478,28 @@ class TestEveryRowStateIsDrawn:
             "Applied. Ports were NOT paired by position — see above."
         )
 
-    def test_an_unapplied_plan_has_no_account(
+    def test_under_an_unapplied_plan_the_job_lists_the_pair(
         self, page: Page, live_server_url: str,
     ) -> None:
         """Both devices declared, and nothing paired: the source
         profile lists no ports, so every name went by its shape and
-        two ended on one.  A job made with devices declared has no
-        account of its own of names that share one -- its fields are
-        empty by design, and a plan that was not applied says nothing
-        either.  So under a plan the page compares the rows itself,
-        as it always did, and holds Apply for the pair."""
+        two ended on one.  The pairing decided none of them, so the
+        job lists the pair as it would with no devices declared
+        (``fused_ports``), and the plan, which was not applied, says
+        nothing of it.  The page marks both rows and holds Apply for
+        the pair."""
         _translate(page, live_server_url, "opnsense", "aruba_aoss", _OPNSENSE_TWO_PORTS)
         _declare(page, "Generic", TARGET_2930M_48G)
         job = _apply_and_read(page)
         assert job["port_mapping_plan"]["applied"] is False
         assert job["port_renames"] == {"igb0": "1", "igb1": "1"}
-        assert job["fused_ports"] == {} and job["port_mapping_plan"]["fused"] == {}
+        assert job["fused_ports"] == {"1": ["igb0", "igb1"]}
+        assert job["port_mapping_plan"]["fused"] == {}
         expect(_plan(page)).to_have_attribute("data-state", "unapplied")
         failed = painted_token(page, "#mig-rename-sections", "--badge-failed-bg")
         for name, other in (("igb0", "igb1"), ("igb1", "igb0")):
             mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
-            assert mark.get_attribute("title") == f"Collides with: {other}"
+            assert mark.get_attribute("title") == f"Written as one interface (1) with: {other}"
             assert alike(
                 painted_background(page.locator(_tid(f"migrate-rename-source-{name}"))), failed,
             ), name
@@ -4318,3 +4319,129 @@ class TestAStoredConfigMeetsTheModal:
         expect(source).to_have_value("fam:2930M:2930M-48G-PoEP")
         expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("96 ports")
         assert [each.get("source_filename") for each in asked] == [first, second]
+
+
+# ---------------------------------------------------------------------------
+# The names no pairing decides
+# ---------------------------------------------------------------------------
+
+#: Two Junos VLAN interfaces, which EOS writes as one ``Vlan100``.
+_JUNOS_TWO_VLAN_INTERFACES = """set system host-name r1
+set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
+set interfaces irb unit 100 family inet address 192.0.2.65/26
+set interfaces vlan unit 100 family inet address 192.0.2.2/32
+"""
+
+#: A FortiGate aggregate an operator called ``LAG_CORE``: no
+#: classifier reads the name, and Junos has no interface of it.
+_FORTIGATE_LAG_NAMED = """config system interface
+    edit "internal1"
+        set type physical
+    next
+    edit "internal2"
+        set type physical
+    next
+    edit "LAG_CORE"
+        set ip 192.168.1.1 255.255.255.0
+        set type aggregate
+        set member "internal1" "internal2"
+    next
+end
+"""
+
+
+class TestTheNamesNoPairingDecides:
+    """With both devices declared the pairing decides the hardware
+    ports, and the job says of every other name what it says with no
+    devices declared.  The strip draws that beside the plan's own
+    account, in the same chips; Apply is held for two names on one;
+    the footer does not call such a job refreshed; and an entry
+    settles each name."""
+
+    def test_two_vlan_interfaces_on_one_hold_the_job_and_apply(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        mp = _translate(
+            page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_TWO_VLAN_INTERFACES,
+        )
+        _declare(page, "EX4300-48T", "DCS-7050SX-64")
+        job = _apply_and_read(page)
+        assert job["port_mapping_plan"]["applied"]
+        assert job["port_mapping_plan"]["fused"] == {}
+        assert job["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
+        expect(mp.status_summary).to_contain_text("partial")
+        strip = _plan(page)
+        expect(strip).to_have_attribute("data-state", "block")
+        expect(page.locator(_tid("migrate-rename-plan-title"))).to_have_text(
+            "Ports paired by position"
+        )
+        chip = page.locator(_tid("migrate-rename-names-fused"))
+        expect(chip).to_have_text("1 name of the output given more than one source name")
+        expect(page.locator(_tid("migrate-rename-names-how"))).to_have_text(
+            "Give all but one of the rows that share a name a target of their own, "
+            "or drop them. Then Apply."
+        )
+        # The devices are declared: the strip does not offer them, and
+        # has one title, the plan's.
+        expect(strip).not_to_contain_text("choose both devices")
+        expect(page.locator(_tid("migrate-rename-names-title"))).to_have_count(0)
+        assert alike(painted_background(strip), painted_token(page, TOP, "--badge-failed-bg"))
+        assert ink(chip) == token_ink(page, "--badge-failed-fg")
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "Applied. The mapping reports something that has to be put right — see above."
+        )
+        # The rows are the job's: Apply is held, and says why.
+        button = page.locator(_tid("migrate-rename-apply-btn"))
+        expect(button).to_be_disabled()
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_have_text(
+            "Apply is held: two rows end on one target name (Vlan100) — "
+            "give one another target, or drop it."
+        )
+        page.locator(_tid("migrate-rename-drop-vlan.100")).click()
+        expect(button).to_be_enabled()
+        settled = _apply_and_read(page)
+        assert settled["status"] == "completed" and settled["fused_ports"] == {}
+        expect(chip).to_have_count(0)
+        expect(strip).to_have_attribute("data-state", "ok")
+        expect(mp.status_summary).to_contain_text("completed")
+
+    def test_a_name_left_under_its_source_name_needs_a_decision(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        mp = _translate(page, live_server_url, "fortigate_cli", "juniper_junos", _FORTIGATE_LAG_NAMED)
+        _declare(page, "60F", "EX4300-48T")
+        job = _apply_and_read(page)
+        assert job["untranslated_ports"] == ["LAG_CORE"]
+        assert job["port_mapping_plan"]["unresolved_ports"] == []
+        strip = _plan(page)
+        expect(strip).to_have_attribute("data-state", "warn")
+        left = page.locator(_tid("migrate-rename-names-left"))
+        expect(left).to_have_text(
+            "1 name left under its source name: not read as any kind of port"
+        )
+        expect(page.locator(_tid("migrate-rename-plan-pending"))).to_have_text(
+            "1 needs your decision"
+        )
+        # Not decided by "Accept as shown": whether the name is right
+        # on the target is said row by row.
+        expect(page.locator(_tid("migrate-rename-plan-accept"))).to_have_count(0)
+        assert alike(painted_background(strip), painted_token(page, TOP, "--badge-partial-bg"))
+        assert ink(left) == token_ink(page, "--badge-partial-fg")
+        # Not "Rendered output refreshed" over a job that is partial.
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "Applied. Port names are still not settled — see above."
+        )
+        expect(page.locator(_tid("migrate-rename-decision-LAG_CORE"))).to_be_visible()
+        # The list keeps the name, drops it, or puts it on a port of
+        # the target.  Dropped by the operator's own entry, it is
+        # decided.
+        choose_override(page, "LAG_CORE", "__DROP__")
+        expect(page.locator(_tid("migrate-rename-plan-pending"))).to_have_text(
+            "1 decision recorded — Apply to confirm"
+        )
+        settled = _apply_and_read(page)
+        assert (settled["status"], settled["untranslated_ports"]) == ("completed", [])
+        assert "LAG_CORE" in settled["port_drops"]
+        expect(left).to_have_count(0)
+        expect(strip).to_have_attribute("data-state", "ok")
+        expect(mp.status_summary).to_contain_text("completed")

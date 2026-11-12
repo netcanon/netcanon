@@ -345,7 +345,9 @@ to `job.error` after any the job already has.
    has it; none of those is a loss the capability matrix has a path
    for.  With both devices declared `run_plan_with_models` checks its
    own finished run, for the hardware ports, and records the outcome
-   on `port_mapping_plan`.  With none declared
+   on `port_mapping_plan`; the names its pairing does not decide are
+   asked the questions below, and listed on the job as they are with
+   no devices (`_names_the_pairing_leaves`).  With none declared
    `run_plan_with_checked_names` asks what became of every name in a
    run made by name shape — logical ones included, since there is
    no pairing whose ports alone need protecting — and puts the names

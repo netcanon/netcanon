@@ -84,7 +84,7 @@ Pure functions — no I/O, no global state.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from ..models.port_inventory import (
     Inventory,
@@ -513,6 +513,7 @@ def settle_plan(
     units: bool = False,
     unbound: Iterable[str] = (),
     by_factory_name: bool = False,
+    reads_as_a_port: Callable[[str], bool] | None = None,
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
@@ -604,6 +605,15 @@ def settle_plan(
             beside its own (``CodecBase.ports_keep_a_factory_name``),
             so an override target that is not a port is a NAME there
             and never another spelling of a port.
+        reads_as_a_port: Whether the target reads a name as a
+            hardware port.  Given, an entry for a name that is no
+            hardware port the config uses -- a LAG, a loopback, a
+            VLAN interface -- is off-target only where its target
+            reads as a port: ``ae0`` for a FortiGate aggregate is
+            where the aggregate belongs on Junos, and the job that
+            asked for that entry must not then say it is off the
+            device.  Not given, every entry is held to the device's
+            port list.
     """
     dropped = set(port_drops)
     decided = set(operator_map)
@@ -730,6 +740,7 @@ def settle_plan(
         # off-target -- unless it only NAMED a port whose hardware has
         # a place (RouterOS), or a port no line of the output looks
         # up; each of those is said in a line of its own.
+        hardware_names = set(used)
         plan.off_target = sorted({
             value for key, value in operator_map.items()
             if isinstance(value, str) and key in present
@@ -737,6 +748,10 @@ def settle_plan(
             and key not in plan.unbound_ports
             and not listed_by_target(value, _ends_in_a_unit(key))
             and forms.get(key) != name_key(value, fold_target)
+            and (
+                reads_as_a_port is None or key in hardware_names
+                or reads_as_a_port(value)
+            )
         })
         # Every name that ended somewhere occupies that name -- a
         # logical interface an operator put on a port as much as a
