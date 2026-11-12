@@ -813,10 +813,9 @@ class MappingPlan(BaseModel):
     """Destinations of static routes whose next hop names an
     interface that has another name in the output, or is gone.  A
     next hop that is exactly an interface name follows that
-    interface; a list of them (RouterOS ``gateway=ether1,ether2``), a
-    routing-table suffix (``ether3@main``), and — across vendors — a
-    unit of an interface (Junos ``next-hop et-0/0/24.0``) are left as
-    written, and so is a next hop naming a port of the declared
+    interface; a list of them (RouterOS ``gateway=ether1,ether2``)
+    and — across vendors — a unit of an interface (Junos ``next-hop
+    et-0/0/24.0``) are left as written, and so is a next hop naming a port of the declared
     source that the config has no interface for.  A list whose
     members only changed places among themselves is not listed.  The
     job is ``partial`` while this is not empty.  No entry rewrites

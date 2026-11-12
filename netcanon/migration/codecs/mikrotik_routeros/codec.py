@@ -655,10 +655,11 @@ class MikroTikRouterOSCodec(CodecBase):
             UnsupportedPath(
                 path="/routing/static-route/vrf",
                 reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
+                    "No VRF is read or written.  A route of another "
+                    "routing table (routing-table=, routing-mark=), or "
+                    "with a gateway resolved in one (<gateway>@<table>), "
+                    "is left out with a row; a route of another "
+                    "vendor's VRF is written into the main table."
                 ),
             ),
             # -- Paths this codec writes nothing for (see _NOT_RENDERED). --

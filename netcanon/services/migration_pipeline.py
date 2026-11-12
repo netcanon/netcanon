@@ -2223,11 +2223,11 @@ def _stale_next_hops(
     an interface of the tree (and, between two configs of one codec,
     such a name with a unit), and removes the route when that
     interface is dropped.  What it leaves as written: a LIST of
-    gateways (RouterOS ``gateway=ether1,ether2``), a routing-table
-    suffix (``ether3@main``), across vendors a unit of an interface
-    (Junos ``next-hop et-0/0/24.0``) — and a next hop that names a
-    port of the declared source the config gives no interface record,
-    which the translator cannot know is a port.  Read here from the
+    gateways (RouterOS ``gateway=ether1,ether2``), across vendors a
+    unit of an interface (Junos ``next-hop et-0/0/24.0``) — and a
+    next hop that names a port of the declared source the config
+    gives no interface record, which the translator cannot know is a
+    port.  Read here from the
     parsed source tree, the finished run and the pairing, so the plan
     can say it.
 
@@ -2670,9 +2670,10 @@ def _unbound_hardware(
     each piece that each list's cutting makes of it: where the
     output names a piece, the name was written into a list that
     cut it.  A name none of whose pieces the parser gives back as a
-    name (``@a`` as a next hop: the piece after the ``@`` is read
-    as a routing table), or that has a line break in it, is NOT
-    caught; the entry of a port with no line of its own is then
+    name, or that has a line break in it, is NOT caught: ``@a`` or
+    ``x@a`` as a next hop is a gateway resolved in the routing table
+    ``a``, and the parser leaves a route of a table other than
+    ``main`` out; the entry of a port with no line of its own is then
     listed off-target only.  White space and a double quote are
     no longer among them: the renderer writes each list as one
     string where it holds any character outside a bare value, and

@@ -79,7 +79,8 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   ⚠️ Up to 0.7.7 a tunnel's MTU was not written or read.
 - VLANs — `/interface bridge port` with vlan-id mappings + tagged
   / untagged port assignment
-- Static routes (`/ip route`)
+- Static routes (`/ip route`) of the main table, in force (the
+  others: [Lossy paths](#lossy-paths))
 - LAGs (`/interface bonding`)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
@@ -266,7 +267,22 @@ can appear BEFORE `/interface vrrp` in the source.
   writes: the interface is written without one (severity `warn`).
 - **No VRF is written.**  `/routing-instances/instance` is
   `unsupported`, and so is each field of a VRF and each interface's
-  VRF: no interface is placed in one.
+  VRF: no interface is placed in one.  A route of another vendor's
+  VRF is written into the main table, and the job is `partial` for
+  its VRF.
+- **A route the tree cannot hold is left out, with a row.**  A route
+  of another routing table (`routing-table=` on RouterOS 7,
+  `routing-mark=` on 6), or one whose gateway is resolved in one
+  (`192.0.2.9@vrf1`), is a VRF's route, and no VRF of a RouterOS
+  config is read; a `blackhole` route, and RouterOS 6's
+  `type=blackhole`, `unreachable` and `prohibit`, discards what it
+  matches, which the tree has no form for.  One row counts the routes
+  of each of the two.  A route held `disabled=yes` installs nothing,
+  and is a `disabled: ip route <destination>` row.  ⚠️ Up to 0.7.7
+  each was read as a route of the main table, in force: a VRF's route
+  carried traffic the source keeps apart, on every target, RouterOS
+  included; a disabled route was installed; and a route that discards
+  was a route with no next hop, or, with a gateway, one that forwards.
 - See per-codec `CapabilityMatrix.lossy` declarations.
 
 ## What we don't do
@@ -472,11 +488,19 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   `@` or a `%` a next hop, so a name that holds one is pieces there;
   with both devices declared a placed port under such a name is
   listed in `unbound_ports`, whether or not it has a line of its
-  own.)
+  own -- except under a name that holds an `@` not followed by
+  `main`, which makes the route one of another routing table: no
+  piece of it is read back, and it is not listed.)
 - **`gateway=<interface>` routes** follow the interface when it is
-  renamed, and are removed with it when it is dropped.  A list of
-  gateways (`gateway=ether1,ether2`) and a routing-table suffix
-  (`ether3@main`) are left as written.  A gateway that is one name
+  renamed, and are removed with it when it is dropped.  A gateway
+  resolved in the main table (`ether3@main`, `192.0.2.9@main`) is
+  that gateway: `main` is where a gateway that names no table is
+  resolved.  ⚠️ Up to 0.7.7 the `@main` was written as part of the
+  next hop.  A list of gateways (`gateway=ether1,ether2`, an ECMP
+  route) is one route, each gateway once, left as written: onto
+  another vendor it is one next hop that no other target reads, in
+  a job that says `completed` -- write such a route there by hand,
+  one route a gateway.  A gateway that is one name
   and not an address is read as the route's interface, the form
   RouterOS output is written in for a route out of an interface.
   ⚠️ Up to 0.7.7 it was read as the route's gateway: onto a target

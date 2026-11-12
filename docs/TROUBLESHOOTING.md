@@ -71,6 +71,9 @@ begins `incomplete:` is an AOS-S DHCP pool with neither a network and
 a range nor a static binding, which the server discards.  Neither
 served anything, and each is left out for that reason.  **Action:**
 none, unless the target is to serve the pool — then write it there by
+hand.  A `disabled: ip route <destination>` row is a RouterOS route
+held `disabled=yes`, which installs nothing.  **Action:** none, unless
+the route is to be in force on the target — then write it there by
 hand.
 
 Some rows are sections the parser itself took out, and are in no
@@ -84,7 +87,10 @@ target by hand, if it is to be split there), and
 `<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has no
 interface` for an OPNsense DHCP pool whose zone is assigned to no
 device (bind the pool to a zone that has one, or write it on the
-target by hand).  See
+target by hand), and `/ip route: <n> route(s) in a routing table
+other than main ...` or `/ip route: <n> blackhole, unreachable or
+prohibit route(s) ...` for RouterOS routes of a VRF or that discard
+(write them on the target by hand, a VRF's routes in that VRF).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"
@@ -1298,10 +1304,10 @@ hop, an interface that has another name in the output, or is not in
 it"**.
 `port_mapping_plan.stale_next_hops` lists their destinations.  A next
 hop that is exactly an interface's name follows the interface; a
-RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
-suffix (`ether3@main`) and, across vendors, a Junos unit
-(`next-hop et-0/0/24.0`) are left as written.  The job is `partial`
-while a route names an interface that has another name in the output.
+RouterOS list of gateways (`gateway=ether1,ether2`) and, across
+vendors, a Junos unit (`next-hop et-0/0/24.0`) are left as written.
+The job is `partial` while a route names an interface that has
+another name in the output.
 No entry rewrites the route: correct it in the output, or keep the
 names it uses — on a RouterOS target an entry that gives each such
 port its old name (`{"ether3": "ether3"}`) leaves the route right,
