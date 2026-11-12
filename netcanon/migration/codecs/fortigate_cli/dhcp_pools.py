@@ -53,7 +53,7 @@ job (``FortiGateCLICodec.render_warnings``).
 from __future__ import annotations
 
 import ipaddress
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -149,6 +149,12 @@ _KINDS: dict[str, tuple[str, str, bool]] = {
     "relay": ("set relay-agent", "a pool for the clients of one relay", False),
     "shared": ("set shared-subnet enable", "a pool on a subnet shared with another", False),
     "ipsec": ("set server-type ipsec", "a pool served over IPsec", False),
+    "vrf": (
+        "set interface",
+        "a pool on an interface in a VRF other than 0 (set vrf <id>), and no "
+        "VRF of a FortiOS config is read",
+        True,
+    ),
 }
 
 #: ``set <key> <keyword>`` that the tree has no place for, as the kind.
@@ -508,7 +514,9 @@ def _row(kind: str, edits: Sequence[str]) -> str:
 
 
 def pools_of(
-    blocks: Sequence[_ConfigBlock], interfaces: Sequence[CanonicalInterface],
+    blocks: Sequence[_ConfigBlock],
+    interfaces: Sequence[CanonicalInterface],
+    in_a_vrf: Collection[str] = frozenset(),
 ) -> tuple[list[CanonicalDHCPPool], list[str], list[tuple[str, list[str]]]]:
     """The tree's pools for the ``config system dhcp server`` blocks.
 
@@ -517,6 +525,9 @@ def pools_of(
         interfaces: The config's interfaces, as parsed: a pool of
             ``dns-service local`` gives its clients the address of its
             own.
+        in_a_vrf: The interfaces in a VRF other than 0: a pool on one
+            serves that VRF, which the parser does not read, and is
+            left out with a row.
 
     Returns:
         The pools; the rows of what the tree has no place for (one a
@@ -540,6 +551,10 @@ def pools_of(
             shown = _shown(edit.edit_id)
             if _word(edit.settings, "status") == "disable":
                 left_out.append(("disabled", ["config", "system", "dhcp", "server", "edit", shown]))
+                continue
+            on = edit.settings.get("interface")
+            if on and on[0] in in_a_vrf:
+                by_kind.setdefault("vrf", []).append(shown)
                 continue
             kinds: dict[str, None] = {}
             unread: dict[str, None] = {}

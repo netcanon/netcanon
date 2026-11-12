@@ -1401,6 +1401,31 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiOS interface in a VRF other than 0 is not written into
+  the global table.**  `set vrf <id>` on an interface puts it in
+  another VRF ("All routes relating to that interface are isolated
+  to that VRF specific routing table", Fortinet, FortiOS 7.0.1
+  Administration Guide, "Implementing VRF"), and the parser read
+  none: such an interface was written with its addresses, its VRRP
+  groups, the DHCP pool on it and the routes out it into the one
+  table of the output, connected to every other interface, in jobs
+  that said `completed`.  The parser still reads no VRF.  It keeps
+  the interface's record (description, state, MTU, type, tag, LAG)
+  and leaves out its IPv4 and IPv6 addresses, DHCP client and VRRP
+  groups, with a row of `dropped_tier3_sections` that names a few of
+  the interfaces; each DHCP pool on it, with a pool row; and each
+  static route whose `set device` is such an interface, counted in
+  the row for routes of a VRF other than 0 (a static route is put in
+  a VRF by its interface: Fortinet KB, "Configure static routes and
+  black hole routes to different VRFs").  The interfaces are read
+  before any route, so a route block printed first is read the
+  same.  FortiOS supports VRF for IPv6 from 7.0.1 (Fortinet KB, "VRF
+  Support for IPv6"); what a release before it does with such an
+  interface's IPv6 addresses is not established, and they are left
+  out with the rest.  No
+  committed input has an interface in a VRF other than 0, so no
+  committed job changes.
+
 - **A static route's distance is declared supported on AOS-S.**  The
   AOS-S matrix declared `/routing/static-route/metric` lossy ("Render
   emits destination + next-hop only"), so a job onto AOS-S whose

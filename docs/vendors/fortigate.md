@@ -35,8 +35,13 @@ firewall translation is your primary need, see
   `set mtu N` into the canonical model, and emitted on render as
   `set mtu-override enable` + `set mtu N` (FortiOS requires the override
   flag before `set mtu` takes effect on physical ports).  `mtu` is declared
-  `supported` in the codec capability matrix.  Per-interface VRF is
-  routing-instance-scoped, not a Tier-1 binding.
+  `supported` in the codec capability matrix.  An interface in a
+  VRF other than 0 (`set vrf <id>`) keeps its record, and its
+  addresses, DHCP client and VRRP groups, the DHCP pools on it and
+  the routes out it are left out, each with a row of the Tier-3
+  banner: the parser reads no VRF, and the output puts nothing in
+  one.  ⚠️ Up to 0.7.7 they were written into the global table,
+  connected to every other interface.
   **hardware-switch members:** on small appliances (40F/60F/80F)
   `internal1`-`internalN` / `lanN` are *switched ports* of the
   `internal` / `lan` L2 fabric, not standalone routed ports.  They
@@ -168,7 +173,8 @@ firewall translation is your primary need, see
   gateway 0.0.0.0` (`::`) is no gateway.  A route of `status disable`
   is left out with a `disabled:` row, and one the tree cannot hold is
   left out with a row of the Tier-3 banner that counts them: a route
-  of a VRF other than 0 (`set vrf <id>`), a blackhole (`set blackhole
+  of a VRF other than 0 (`set vrf <id>` on the route, or on the
+  interface its `set device` names), a blackhole (`set blackhole
   enable`), a route to an address object or an Internet service
   (`set dstaddr`, `set internet-service`), one whose gateway is
   learned from DHCP or PPP (`set dynamic-gateway enable`), and an

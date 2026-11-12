@@ -1,5 +1,8 @@
 # VRF / VDOM: FortiGate FortiOS versus Aruba AOS-S
 
+<!-- fortios-interface-vrf -->
+> **Update 2026-11-12 — a FortiOS interface in a VRF other than 0 is not written into the global table.**  The FortiOS parser read no interface's `set vrf <id>`, so an interface in a VRF other than 0 was written with its addresses, its VRRP groups, the DHCP pool on it and the routes out it into the one table of the output, connected to every other interface.  It still reads no VRF.  It now keeps such an interface's record (description, state, MTU, type, tag) and leaves out its IPv4 and IPv6 addresses, DHCP client and VRRP groups, each DHCP pool on it and each route whose `set device` names it, each with a row in `dropped_tier3_sections`.  What the body below says of `set vrf <id>` being parsed and ignored, or dropped at parse, predates this.
+
 This is the reverse-direction sibling of
 [`../aruba_aoss_to_fortigate_cli/vrf.md`](../aruba_aoss_to_fortigate_cli/vrf.md).
 
