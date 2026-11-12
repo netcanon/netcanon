@@ -1401,6 +1401,32 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos IPv6 static route is read from `rib inet6.0`, and
+  written there.**  Junos holds an IPv6 static route in `inet6.0`:
+  `set routing-options rib inet6.0 static route ::/0 next-hop ...`
+  (Juniper, Example: Configuring IPv6 Static Routes); and, in a
+  routing instance, in `<instance>.inet6.0` ("In a routing
+  instance, the routing table name must include the routing
+  instance name", Juniper, rib (Routing Options)).  The parser read
+  no `rib` line, so such a route was lost on every target, Junos
+  included, with nothing said; and the renderer wrote an IPv6 route
+  under `routing-options static`, as an IPv4 route is.  A static
+  route of `rib inet.0` and `rib inet6.0`, and of a routing
+  instance's own two tables, is now read as one of `static` is --
+  a form the tree has no form for is counted in the rows of
+  `routing-options static` -- and a static route of any other table
+  (`inet.3`, `inet.2`, a table of another instance) is left out,
+  with one row that counts them.  An IPv6 route is written under
+  `rib inet6.0`, or `rib <instance>.inet6.0`.  Over the committed
+  inputs, the two Junos inputs that hold an IPv6 route of a routing
+  instance now carry it onto eight targets, and onto AOS-S, FortiOS
+  and RouterOS, which put nothing in a VRF, it is left out under a
+  review line; the Junos output of seven jobs moves its IPv6 routes
+  under `rib inet6.0`; no job's status, warnings or rows move.
+  Expectation notes and vendor-reference pages that said Junos's
+  `rib inet6.0` routes were not read, or that put an IPv6 route under
+  `routing-options static`, are corrected.
+
 - **An IPv6 route of a RouterOS config is read from `/ipv6 route`,
   and written there.**  RouterOS keeps its IPv4 routes in `/ip
   route` and its IPv6 ones in `/ipv6 route` ("To add or remove

@@ -40,7 +40,12 @@ looked up in another table (``next-table``), one that forwards to
 no next hop (``discard``, ``reject``, ``receive``), and a
 ``qualified-next-hop``, a next hop with a preference of its own --
 is left out, and one row a kind counts them
-(:func:`_static_routes_not_held_rows`).
+(:func:`_static_routes_not_held_rows`).  A static route is read
+from ``routing-options static`` and from ``routing-options rib
+inet.0`` / ``rib inet6.0`` (``rib <instance>.inet.0`` /
+``<instance>.inet6.0`` in a routing instance), where Juniper's
+examples put an IPv6 one; a static route of any other table is
+left out, and one row counts them (:func:`_apply_rib_static_route`).
 
 Handles VXLAN switch-options globals (``set switch-options
 vtep-source-interface`` / ``vxlan-port``) by stashing on intent
@@ -71,7 +76,8 @@ Internal helpers (``_split_words``, ``_tokenise_set``, ``_dispatch_set``,
 ``_apply_system``, ``_apply_interfaces``, ``_apply_interface_range``,
 ``_apply_vlans``, ``_apply_switch_options``,
 ``_apply_routing_instances``, ``_apply_routing_options``,
-``_apply_static_route``, ``_static_routes_not_held_rows``,
+``_apply_static_route``, ``_apply_rib_static_route``,
+``_static_routes_not_held_rows``, ``_routes_of_other_tables_row``,
 ``_apply_snmp``, ``_apply_snmp_v3``, ``_get_or_create_v3_user``,
 ``drop_session_lines``, ``_looks_like_blockform``,
 ``_blockform_tokens``, ``_tokenise_blockform``,
@@ -1313,6 +1319,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         *pool_rows(several_ranges, no_addresses),
         *exclusion_rows(split, none_left, unread_exclusions),
         *_static_routes_not_held_rows(found.routes_not_held),
+        *_routes_of_other_tables_row(found.routes_of_other_tables),
     ]
     if not cut_lines:
         return intent, raw
@@ -2092,6 +2099,10 @@ class _Found:
         self.routes_not_held: dict[str, set[tuple[str, str, str]]] = {
             kind: set() for kind in _STATIC_ROUTE_KINDS_NOT_HELD.values()
         }
+        # The static routes of a ``rib`` other than the main tables,
+        # each once by VRF, table and destination
+        # (:func:`_apply_rib_static_route`).
+        self.routes_of_other_tables: set[tuple[str, str, str]] = set()
 
 
 def _dispatch_set(
@@ -3772,17 +3783,24 @@ def _apply_routing_instances(
     # ``qualified-next-hop`` are left out and counted, as in the global
     # routing table (:func:`_apply_static_route`).  (v0.2.0 — graduates
     # /routing/static-route/vrf from lossy to supported.)
-    if (
-        head == "routing-options"
-        and len(rest) >= 5
-        and rest[1] == "static"
-        and rest[2] == "route"
-        and _apply_static_route(rest[3:], ri_name, intent, found)
+    # The same of ``routing-options rib <name>.inet.0`` and
+    # ``<name>.inet6.0`` (:func:`_apply_rib_static_route`).
+    if head == "routing-options" and (
+        (
+            len(rest) >= 5
+            and rest[1] == "static"
+            and rest[2] == "route"
+            and _apply_static_route(rest[3:], ri_name, intent, found)
+        )
+        or (
+            rest[1:2] == ["rib"]
+            and _apply_rib_static_route(rest[2:], ri_name, intent, found)
+        )
     ):
         return
-    # Non-static routing-options (``rib`` / ``autonomous-system`` /
-    # etc.), and a route's other lines (a route the tree has no form
-    # for among them, counted above), fall through to
+    # Other routing-options (``autonomous-system`` and the like), and
+    # a route's other lines (a route the tree has no form for among
+    # them, or of another table, counted above), fall through to
     # routing-instance materialisation + parse-and-ignore below —
     # unchanged from prior behaviour.
 
@@ -3877,17 +3895,53 @@ def _apply_routing_instances(
         except ValueError:
             pass
         return
-    # Other sub-paths (protocols bgp, routing-options ``rib`` /
-    # blackhole forms, policies) — parse-and-ignore.
+    # Other sub-paths (protocols bgp, policies) — parse-and-ignore.
 
 
 def _apply_routing_options(
     tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
 ) -> None:
     """``set routing-options static route <dest>/<prefix> next-hop <gw>``
-    (:func:`_apply_static_route`)."""
+    (:func:`_apply_static_route`), and the same under ``rib inet.0``
+    or ``rib inet6.0`` (:func:`_apply_rib_static_route`)."""
     if len(tokens) >= 4 and tokens[0] == "static" and tokens[1] == "route":
         _apply_static_route(tokens[2:], "", intent, found)
+    elif tokens[:1] == ["rib"]:
+        _apply_rib_static_route(tokens[1:], "", intent, found)
+
+
+def _apply_rib_static_route(
+    words: list[str], vrf: str, intent: CanonicalIntent,
+    found: _Found | None = None,
+) -> bool:
+    """One ``rib <table> static route`` line of the global table (*vrf*
+    empty) or of a routing instance: *words* are what follows ``rib``.
+
+    Juniper's examples put an IPv6 static route under ``rib inet6.0``
+    ("set routing-options rib inet6.0 static route ::/0 next-hop ...",
+    Example: Configuring IPv6 Static Routes), and "In a routing
+    instance, the routing table name must include the routing
+    instance name" (rib (Routing Options)): ``<instance>.inet6.0``.
+    A route of the main tables -- ``inet.0`` and ``inet6.0``, or the
+    instance's own -- is read as :func:`_apply_static_route` reads
+    one of ``static``.  A route of any other table (``inet.3``,
+    ``inet.2``, a table of another instance) is not a route the
+    tree holds: it is counted on *found*, once by VRF, table and
+    destination, and left out (:func:`_routes_of_other_tables_row`).
+    Up to 0.7.7 no ``rib`` line was read, and such a route of the
+    main tables was lost with nothing said.
+
+    Returns:
+        Whether the line was a next hop the tree holds.
+    """
+    if len(words) < 4 or words[1] != "static" or words[2] != "route":
+        return False
+    own = f"{vrf}." if vrf else ""
+    if words[0] in (f"{own}inet.0", f"{own}inet6.0"):
+        return _apply_static_route(words[3:], vrf, intent, found)
+    if found is not None and "/" in words[3]:
+        found.routes_of_other_tables.add((vrf, words[0], words[3]))
+    return False
 
 
 #: The words after ``static route <destination>`` that make a route
@@ -3949,6 +4003,21 @@ def _apply_static_route(
         address = words[2] if kind == "qualified-next-hop" and len(words) >= 3 else ""
         found.routes_not_held[kind].add((vrf, dest, address))
     return False
+
+
+def _routes_of_other_tables_row(routes: set[tuple[str, str, str]]) -> list[str]:
+    """The row of ``dropped_tier3_sections`` for the static routes of
+    a table other than the main ones (:func:`_apply_rib_static_route`):
+    counted, never a table or a destination.  Each is in force on the
+    device, so the row is a section, not a statement left out."""
+    if not routes:
+        return []
+    return [
+        f"routing-options rib: {len(routes)} static route(s) of a "
+        "routing table other than inet.0 and inet6.0 (<instance>.inet.0 "
+        "and <instance>.inet6.0 in a routing instance): the tree holds "
+        "the routes of those tables alone; not translated"
+    ]
 
 
 def _static_routes_not_held_rows(

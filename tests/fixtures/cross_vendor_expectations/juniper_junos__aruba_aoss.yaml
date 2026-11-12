@@ -523,10 +523,11 @@ per_field_expectation:
       attributes have no Aruba analogue and drop on render.
       Per-routing-instance static routes (``set routing-instances X
       routing-options static``) drop on Aruba render — Aruba has
-      no VRF concept (see ``vrf_unsupported.md``).  IPv6 static
-      routes (``set routing-options rib inet6.0 static``) parse-
-      and-ignore today (CanonicalStaticRoute is IPv4-shaped) —
-      lossy by deferral.
+      no VRF concept (see ``vrf_unsupported.md``).  An IPv6 static
+      route of ``rib inet6.0`` is written ``ipv6 route X/N Y``;
+      up to 0.7.7 no ``rib`` line was read, and such a route was
+      lost with nothing said.  A static route of another table is
+      left out of the Junos source with a row that counts them.
     references: [junos-static-routing, aruba-static-routes]
 
   # ── Tier 2 — DHCP server ──
@@ -847,9 +848,6 @@ per_field_expectation:
 #     `unsupported` rather than `lossy` because Junos source
 #     actively populates the canonical fields and Aruba cannot
 #     represent them at all on render.
-#
-#   * IPv6 static routes — CanonicalStaticRoute is IPv4-shaped
-#     today; Junos's ``rib inet6.0 static`` parses-and-ignores.
 #
 #   * Per-VRF static routes — aruba_aoss has no VRF / routing-instance
 #     concept, so per-VRF routes are structurally absent on the Aruba

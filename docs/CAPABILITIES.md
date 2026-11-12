@@ -465,6 +465,15 @@ a pool its exclusions split, empty, or state in a form that cannot be
 read (see
 [`vendors/juniper_junos.md`](vendors/juniper_junos.md)).
 
+A static route is read from `routing-options static` and from
+`routing-options rib inet.0` / `rib inet6.0` (`rib
+<instance>.inet.0` / `<instance>.inet6.0` in a routing instance),
+and an IPv6 route is written under `rib inet6.0`, where Junos holds
+one; a static route of any other table is left out, with a row.
+⚠️ Up to 0.7.7 no `rib` line was read -- such a route was lost on
+every target, with nothing said -- and an IPv6 route was written
+under `routing-options static`.
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, and nothing in the output stands in its place.  A group is written under an IPv4 address, so a group with no IPv4 virtual IP is not written either.  No virtual MAC is written (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said IPv6 (`vrrp-inet6-group`) was wired: it is not (next row). |
@@ -474,7 +483,7 @@ read (see
 | `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Supported (Wave C) | Per-IRB-unit `virtual-gateway-v4-mac M` populates the per-address MAC override. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 form: `family inet6 address X virtual-gateway-address Y`. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Supported (Wave C) | `virtual-gateway-v6-mac M`. |
-| `/routing/static-route/vrf` | Supported (v0.2.0) | `set routing-instances <NAME> routing-options static route <dest> next-hop <gw>` harvests onto `CanonicalStaticRoute.vrf` and renders back out (the routing-instances dispatcher now descends into `routing-options static`).  Top-level `set routing-options static route` lines round-trip with `vrf=""`.  next-hop form only — `discard` / `reject` blackhole routes and the explicit `rib <name>` form (e.g. IPv6 `inet6.0`) are not modelled, same as the global table; a VRF implied solely by a static route does not materialise an empty routing-instance. |
+| `/routing/static-route/vrf` | Supported (v0.2.0) | `set routing-instances <NAME> routing-options static route <dest> next-hop <gw>` harvests onto `CanonicalStaticRoute.vrf` and renders back out (the routing-instances dispatcher now descends into `routing-options static`).  Top-level `set routing-options static route` lines round-trip with `vrf=""`.  next-hop form only — a route of `rib <NAME>.inet.0` and `rib <NAME>.inet6.0` is read the same way (an IPv6 one is written there), and a static route of another table is left out with a row; `discard` / `reject` routes are left out with a row, as in the global table (⚠️ up to 0.7.7 no `rib` line was read); a VRF implied solely by a static route does not materialise an empty routing-instance. |
 | `/anycast-gateway-mac` | Unsupported | Junos has no chassis-wide anycast-gateway MAC; per-IRB-unit overrides live on `CanonicalIPv4Address.virtual_gateway_mac` (the `virtual-gateway-v4-mac` / `-v6-mac` grammar) and round-trip through the supported per-address surface instead.  Cross-vendor migration from a source carrying a system-wide MAC (Arista, NX-OS) must distribute the value across every IRB unit's per-address MAC on the receiving Junos side. |
 | `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent, unless it carries a tag (`unit 0 vlan-id N` under `vlan-tagging`): then it is `<parent>.0`, beside a parent that keeps its own lines, and onto another vendor it is named by its tag (`Ethernet1.54`); a tagged unit 0 with `family ethernet-switching` is left out, with a row.  A unit of another kind -- one that states a family other than `inet`, `inet6`, `iso` and `mpls` (`bridge`, `ccc`, `vpls`, `ethernet-switching` above unit 0 under `flexible-ethernet-services`), or an `encapsulation` and no inet family (`vlan-bridge`, `vlan-ccc`) -- is left out, with a row; a port's `encapsulation`, and a routed unit's, are said in a row.  Units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips), and an inner tag (`vlan-tags outer N inner M`) on `/interfaces/interface/dot1q-inner-vlan`; the device is written `vlan-tagging`, `stacked-vlan-tagging` or `flexible-vlan-tagging` as its units need. From another vendor, a unit numbered above 16,384 (Juniper's range for `unit`) is written as the unit of its tag (of two tags, its inner tag), and one with no tag holds the job. A unit whose tag statement matches more than one tag (a range, a list, a TPID other than 0x8100) is left out, with a row. Per-unit subinterface attributes beyond the address + 802.1Q tags remain unmodelled. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
@@ -993,6 +1002,14 @@ and true of the same sentence — they are not in the output:
   own (commonly a backup), which read as a next hop would carry
   traffic beside the route's own.  The tree has a form for none of
   them, and they are left out.  Write them on the target by hand.
+* **`routing-options rib: <n> static route(s) of a routing table
+  other than inet.0 and inet6.0 ...`** (Junos) — a static route of
+  a table the tree holds no route of (`inet.3`, `inet.2`, a table
+  of another routing instance; in a routing instance, any table
+  but its own `<instance>.inet.0` and `<instance>.inet6.0`).  It
+  is in force on the device; read as a route of the main table, it
+  would carry traffic the source does not, so it is left out.
+  Write it on the target by hand where the target has such a table.
 * **`router static: <n> route(s) of a VRF other than 0 ...`**,
   **`router static: <n> blackhole route(s) ...`**, **`router static:
   <n> route(s) to an address object or an Internet service ...`**,

@@ -31,8 +31,11 @@ welcome.
 - VLANs (`set vlans <name> vlan-id <id>`, and its `description`) with
   VLAN-centric membership projection
 - Static routes (`set routing-options static route <destination>
-  next-hop <address>`), in the global table and in a routing
-  instance
+  next-hop <address>`, and under `rib inet.0` / `rib inet6.0`,
+  where an IPv6 route is and where the render writes one), in the
+  global table and in a routing instance (`rib
+  <instance>.inet6.0`).  ⚠️ Up to 0.7.7 no `rib` line was read,
+  and an IPv6 route was written under `routing-options static`.
 - LAGs (`ae<N>` aggregated-ethernet, reconciled with cross-vendor
   names like `Port-channel<N>` / `trk<N>`)
 
@@ -479,8 +482,10 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   preference of its own, commonly a backup) are not translated;
   one row of the Tier-3 banner a kind says how many, in the
   global table and in a routing instance.  Write them on the
-  target by hand.  ⚠️ Up to 0.7.7 they were left out and nothing
-  said so.
+  target by hand.  A static route of a table that is not `inet.0`
+  or `inet6.0` (the instance's own two, in a routing instance) is
+  left out as well, and one row counts them.  ⚠️ Up to 0.7.7 they
+  were left out and nothing said so.
 - **Units.**  A tagged unit (`set interfaces ge-0/0/1 unit 54
   vlan-id 54`) is an interface of its own here, `ge-0/0/1.54`.
   Between two Junos configs it keeps its name, and follows a

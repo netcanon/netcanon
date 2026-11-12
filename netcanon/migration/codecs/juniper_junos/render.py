@@ -13,7 +13,8 @@ interfaces sharing a (mtu, description, enabled) tuple, VLANs
 (plus VLAN-to-VNI mappings for VXLAN), switch-options
 (``vtep-source-interface`` / ``vxlan-port`` switch-level globals),
 routing-instances (instance-type, RD/RT, interface bindings, L3
-VNI for EVPN Type-5), routing-options static routes, SNMP
+VNI for EVPN Type-5), routing-options static routes (an IPv6 one
+under ``rib inet6.0``), SNMP
 (community / location / contact / trap-group / v3 USM users +
 VACM groups), apply-groups + group-content for round-trip
 fidelity (GAP 9b), **VRRP groups** (nested under ``family inet
@@ -123,7 +124,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         3. ``set interfaces <name> description / disable / unit 0
            family inet address``
         4. ``set vlans <NAME> vlan-id``
-        5. ``set routing-options static route``
+        5. ``set routing-options static route`` (an IPv6 route:
+           ``set routing-options rib inet6.0 static route``)
         6. ``set snmp community / location / contact / trap-group
            targets``
 
@@ -1166,11 +1168,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             )
 
     # --- routing-options ---
+    # An IPv6 route is a route of ``inet6.0``: "set routing-options
+    # rib inet6.0 static route ::/0 next-hop ..." (Juniper, Example:
+    # Configuring IPv6 Static Routes), and of ``<instance>.inet6.0``
+    # in a routing instance ("In a routing instance, the routing
+    # table name must include the routing instance name", rib
+    # (Routing Options)).  Up to 0.7.7 it was written under
+    # ``routing-options static``, as an IPv4 route is.
     for route in tree.static_routes:
         if not route.gateway:
             # Junos requires a next-hop for static routes; skip
             # connected/blackhole entries we can't express.
             continue
+        if ":" in route.destination:
+            table = f"{route.vrf}.inet6.0" if route.vrf else "inet6.0"
+            static = f"rib {_quote_if_needed(table)} static"
+        else:
+            static = "static"
         if route.vrf:
             # Per-VRF static routes nest under the routing-instance
             # (v0.2.0 — graduated /routing/static-route/vrf to
@@ -1179,12 +1193,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # block) round-trips cleanly.
             out.append(
                 f"set routing-instances {_quote_if_needed(route.vrf)} "
-                f"routing-options static route {route.destination} "
+                f"routing-options {static} route {route.destination} "
                 f"next-hop {route.gateway}"
             )
         else:
             out.append(
-                f"set routing-options static route {route.destination} "
+                f"set routing-options {static} route {route.destination} "
                 f"next-hop {route.gateway}"
             )
 
