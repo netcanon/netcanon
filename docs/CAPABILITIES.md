@@ -963,24 +963,29 @@ past the bound, one last row counts the statements not listed.
 Rows a parser adds itself are sections, counted with the others
 and true of the same sentence — they are not in the output:
 
-* **`interface range ...`** (IOS-XE, IOS XR) — the header of a
-  stanza that configures several ports at once.  It names no
+* **`interface range ...`** (IOS-XE, IOS XR, OS10) — the header of
+  a stanza that configures several ports at once.  It names no
   interface, so no interface is made of it and nothing in it is
-  read.  Configure the ports it covers on the target by hand.
+  read.  Configure the ports it covers on the target by hand.  An
+  OS10 range header printed with a space in front of it is read
+  as one in column 0.
 * **`interface breakout <port> map <profile>`** (IOS-XE, IOS XR)
   — OS10's line for splitting a port into lanes, in a text read as
   one of those two.  It names no interface either: one row a line,
   and nothing of it in the output.  NX-OS's own line for it,
   `interface breakout module <n> port <ports> map <mapping>`, is a
-  row the same way.
-* **`interface <a range or a list>`** (NX-OS, EOS) — a header that
-  names several interfaces where a name goes (`interface ethernet
-  2/29-30`, `interface ethernet 2/29, ethernet 2/33`, `interface
-  ethernet 1 - 4`), or words that are no one name.  No interface is
-  made of it and nothing in it is read, as for `interface range`.
-  Configure the ports it covers on the target by hand.  A type and
-  its number written apart (`interface ethernet 1/2`) is one name,
-  and is read as the name the switch prints (`ethernet1/2`).
+  row the same way.  From OS10 itself, every such line is one row
+  between them, `interface breakout`.
+* **`interface <a range or a list>`** (NX-OS, EOS, OS10) — a header
+  that names several interfaces where a name goes (`interface
+  ethernet 2/29-30`, `interface ethernet 2/29, ethernet 2/33`,
+  `interface ethernet 1 - 4`, `interface ethernet1/1/9-1/1/12`), or
+  words that are no one name.  No interface is made of it and
+  nothing in it is read, as for `interface range`.  Configure the
+  ports it covers on the target by hand.  A type and its number
+  written apart (`interface ethernet 1/2`; on OS10 `interface
+  ethernet 1/1/14`, as Dell types it) is one name, and is read as
+  the name the switch prints (`ethernet1/2`, `ethernet1/1/14`).
 * **`<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has
   no interface`** (OPNsense) — a DHCP pool keyed by a zone no
   device is assigned to.  It has no interface to be on, and is

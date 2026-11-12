@@ -125,7 +125,23 @@ mgmt1/1/1           ->  management port
 Breakout subports (the `:lane` suffix) are unambiguous and classify
 properly rather than falling through to `unknown`.  The chassis-level
 `interface breakout 1/1/1 map 100g-1x` lines that *declare* the split
-are not ports and do not become interfaces.
+are not ports and do not become interfaces; the job lists them as one
+row, `interface breakout`.
+
+A type and its number written apart, as Dell types the command
+(`interface ethernet 1/1/14`), are one name, read in lower case as
+the switch prints it (`ethernet1/1/14`).  An `interface range` stanza
+(`interface range ethernet 1/1/3, 1/1/14-1/1/15`), or a range or a
+list where a name goes (`interface ethernet1/1/9-1/1/12`), names no
+one interface: nothing in it is read, and the job lists its header
+among the sections it did not translate.  Configure the ports it
+covers on the target by hand.  A range header printed with a space
+in front of it is read as one in column 0.  ⚠️ Up to 0.7.7 a spaced
+header other than `vlan`, `port-channel` and the like opened no
+stanza, and a range stanza was listed nowhere: such a port, its
+address and its VLANs were missing from the output, in jobs that
+said `completed`.  A range where a name goes was an interface of
+that name, with the range's address.
 
 OS10 does not stack: as a target, the node is always 1, and a port and
 a port channel count from 1 (a port channel is 1 to 128).  Translated
@@ -534,7 +550,8 @@ has VLAN 1 on its list -- its platform's default native VLAN -- is
 written `switchport access vlan 1` with VLAN 1 off the allowed line;
 release 0.7.7 and earlier wrote VLAN 1 ON the allowed line, tagged,
 and no access line: check such trunks migrated then.  `interface range` is
-not read, so a trunk stated that way has no VLANs in any output.  The
+not read, so a trunk stated that way has no VLANs in any output; the
+job lists its header (see [Port naming](#port-naming)).  The
 vendors' own sentences are in the
 [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 

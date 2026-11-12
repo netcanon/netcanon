@@ -1012,7 +1012,9 @@ def _digest(codec: str, path: str) -> str:
 #: IOS-XE input with a local account, when the parser stopped making
 #: up a role from the privilege level (``netcanon/migration/_roles.py``);
 #: and every IOS-XE input with an ``ip address dhcp`` interface, when the
-#: parser read the line back (``test_what_is_written_is_read_back.py``).
+#: parser read the line back (``test_what_is_written_is_read_back.py``);
+#: and every OS10 input with an ``interface range`` stanza, when each
+#: became a row (``test_a_header_names_one_interface.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1104,15 +1106,33 @@ BEFORE: dict[str, str] = {
     # is not kept, and a row says so (test_hsrp_is_read.py): was
     # "f3cb7a5a89f3".
     "synthetic/cisco_nxos/kitchen_sink.cfg": "1b4b327e3945",
-    "real/dell_os10/azlocal_tor1.txt": "254896e1a85a",
-    "real/dell_os10/azlocal_tor2.txt": "88bb0da08716",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "254896e1a85a".
+    "real/dell_os10/azlocal_tor1.txt": "4bf7c16de0c3",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "88bb0da08716".
+    "real/dell_os10/azlocal_tor2.txt": "73757237414f",
     "real/dell_os10/azsupport_TOR1_Sample.cfg": "4751d5837437",
     "real/dell_os10/azsupport_TOR2_Sample.cfg": "c67c68101040",
     "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "048abe38dae0",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "34857fa6db7b",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "621b35863c2d",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "a115f3940371",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "c6abd209a7bc",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "34857fa6db7b".
+    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "80d66fcdb1e4",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "621b35863c2d".
+    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "6e8d5e225c9d",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "a115f3940371".
+    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "3cf01f04454c",
+    # Moved on purpose, by its `interface range` rows and nothing else: each
+    # such stanza is listed among the sections not translated
+    # (test_a_header_names_one_interface.py): was "c6abd209a7bc".
+    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "4df2c949e91f",
     "synthetic/dell_os10/kitchen_sink.cfg": "2afb408e4714",
     "real/arista_eos/batfish_duplicateprivate_eos4211.txt": "92358f840447",
     "real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt": "0760df6623db",

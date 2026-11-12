@@ -112,6 +112,7 @@ from .._helpers import (
     TRUNK_ALL,
     mtu_written,
     native_vlan_stated,
+    one_interface_named,
     same_vendor_version,
     switchport_trunk_allowed_value,
     trunk_list_says,
@@ -440,10 +441,13 @@ def _svi_of(name: str) -> int | None:
     too).  The classifier reads only ``vlan<N>``: asked instead, an
     AOS-CX ``vlan 101`` was no SVI here, the render made a second
     ``interface vlan101`` for its VLAN, and the description of the
-    stanza OS10 applies last was the VLAN's label.
+    stanza OS10 applies last was the VLAN's label.  A line that names
+    no one interface (``vlan10 5``) the parser takes out, and it is no
+    SVI.
     """
-    header = _parse._IFACE_RE.match(f"interface {name}")
-    if header is None:
+    line = f"interface {name}"
+    header = _parse._IFACE_RE.match(line)
+    if header is None or not one_interface_named(line):
         return None
     svi = _parse._SVI_NAME_RE.match(_parse._iface_name(header))
     return int(svi.group(1)) if svi else None
