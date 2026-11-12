@@ -40,7 +40,7 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | aruba_aoss/user_contrib_2930m_wc1611.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | cisco_iosxe/batfish_cisco_aaa.txt | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 |
 | cisco_iosxe/batfish_cisco_interface.txt | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxe/batfish_cisco_ip_route.txt | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
+| cisco_iosxe/batfish_cisco_ip_route.txt | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 |
 | cisco_iosxe/batfish_cisco_logging.txt | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
 | cisco_iosxe/batfish_cisco_snmp.txt | OK 21/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 |
 | cisco_iosxe/batfish_iosxe_basic_vrrp.txt | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 |
@@ -176,7 +176,7 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 
 ## Per-cell drill-downs — real captures
 
-One section per non-OK real-capture cell (1149 total).  Sections are ordered by source fixture then target codec.
+One section per non-OK real-capture cell (1147 total).  Sections are ordered by source fixture then target codec.
 
 ### arista_eos/batfish_duplicateprivate_eos4211.txt → aruba_aoscx  (WARN 19/21)
 
@@ -2356,62 +2356,49 @@ One section per non-OK real-capture cell (1149 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[5] {'destination': '0.0.0.0/0'}": {"description": {"source": "boppety", "target": ""}}, "static_routes[6] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "targ... |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "target": ""}}} |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → aruba_aoscx  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | count drift: 16 → 14 (static_routes) |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "target": ""}}} |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → aruba_aoss  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": 10, "description": "", "vrf": ""}, {"destination": "1.2.39.22/32", "gateway": "1.2.32.39", "interface": "", "metric":... | count drift: 16 → 3 (static_routes) |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": 10, "description": "", "vrf": ""}, {"destination": "1.2.39.22/32", "gateway": "1.2.32.39", "interface": "", "metric":... | count drift: 14 → 3 (static_routes) |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → cisco_iosxr  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[5] {'destination': '0.0.0.0/0'}": {"description": {"source": "boppety", "target": ""}}, "static_routes[6] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "targ... |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "target": ""}}} |
 
-### cisco_iosxe/batfish_cisco_ip_route.txt → cisco_nxos  (WARN 19/21)
+### cisco_iosxe/batfish_cisco_ip_route.txt → cisco_nxos  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[5] {'destination': '0.0.0.0/0'}": {"description": {"source": "boppety", "target": ""}}, "static_routes[6] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "targ... |
-| routing_instances | DRIFT | [] | [{"name": "myvrf", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | 1 routing_instances appeared in target (parser bug?) |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "target": ""}}} |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → dell_os10  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[5] {'destination': '0.0.0.0/0'}": {"description": {"source": "boppety", "target": ""}}, "static_routes[6] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "targ... |
-
-### cisco_iosxe/batfish_cisco_ip_route.txt → fortigate_cli  (WARN 20/21)
-
-| Field | Disposition | Source | Target | Drift |
-|---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '0.0.0.0/0'}": {"vrf": {"source": "myvrf", "target": ""}}, "static_routes[5] {'destination': '0.0.0.0/0'}": {"vrf": {"source": "myvrf", "target": ""}}} |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '1.2.3.0/25'}": {"description": {"source": "bippety", "target": ""}}} |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → juniper_junos  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "5.6.7.8", "interface": "", "metric": 0, "description": "", "vrf": "myvrf"}, {"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": ... | count drift: 16 → 4 (static_routes) |
-
-### cisco_iosxe/batfish_cisco_ip_route.txt → mikrotik_routeros  (WARN 20/21)
-
-| Field | Disposition | Source | Target | Drift |
-|---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | {"static_routes[4] {'destination': '0.0.0.0/0'}": {"vrf": {"source": "myvrf", "target": ""}}, "static_routes[5] {'destination': '0.0.0.0/0'}": {"vrf": {"source": "myvrf", "target": ""}}} |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [{"destination": "1.2.3.0/25", "gateway": "2.3.4.5", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "1.2.39.22/32", "gateway": "1.2.32.39", "interface": "", "metric": ... | count drift: 14 → 3 (static_routes) |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → opnsense  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [] | all 16 static_routes dropped |
+| static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback66", "metric": 100, "description": "", "vrf": ""}, {"destination": "0.0.0.0/0", "gateway": "", "interface": "loopback99", "metric"... | [] | all 14 static_routes dropped |
 
 ### cisco_iosxe/batfish_cisco_ip_route.txt → vyos  (WARN 20/21)
 
