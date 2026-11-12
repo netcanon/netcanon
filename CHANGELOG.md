@@ -1401,6 +1401,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IPv6 route of a RouterOS config is read from `/ipv6 route`,
+  and written there.**  RouterOS keeps its IPv4 routes in `/ip
+  route` and its IPv6 ones in `/ipv6 route` ("To add or remove
+  routes /ip(ipv6) route menus should be used", MikroTik's IP
+  Routing page).  The parser read no `/ipv6 route` section, so
+  every IPv6 route of a RouterOS config was lost on every target,
+  RouterOS included, in jobs that said `completed` and nothing
+  more; and the renderer wrote every route, the IPv6 ones included,
+  as an `add` of `/ip route`.  `/ipv6 route` is now read with the
+  keys of `/ip route` -- a route of another routing table, a
+  disabled route (`disabled: ipv6 route <destination>`) and a
+  route that discards are left out and said as there, each section
+  counting its own -- and each route is written into the section
+  of its family.  Over the committed inputs, the RouterOS output of
+  nine jobs moves its IPv6 routes from `/ip route` into `/ipv6
+  route`, and no job's status, warnings or rows move; the one
+  RouterOS input with an IPv6 route is written by hand and puts it
+  in `/ip route`, where it is still read.  Notes of the expectation
+  files from RouterOS that still said a route of another table was
+  read as a route of the main table, or that an IPv6 route from
+  RouterOS was lost on FortiOS and AOS-S, are corrected.
+
 - **A route of another vendor's VRF is left out of a FortiOS or
   RouterOS output under a review line.**  Neither renderer puts an
   interface in a VRF, and each wrote such a route as a route of its

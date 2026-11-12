@@ -522,9 +522,15 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      Default-table IPv4 + IPv6 routes round-trip cleanly: RouterOS
+      Default-table IPv4 routes round-trip cleanly: RouterOS
       ``/ip route add dst-address=X/N gateway=Y`` -> Junos
       ``set routing-options static route X/N next-hop Y``.
+      An IPv6 route of ``/ipv6 route`` is written the same way;
+      up to 0.7.7 the RouterOS parser read no ``/ipv6 route``
+      section, and such a route was lost with nothing said.
+      Juniper's own examples put an IPv6 static route under
+      ``routing-options rib inet6.0``, which the Junos renderer
+      does not yet write.
       A route whose ``gateway=`` is an interface alone
       (``gateway=ether1``) is the route's interface, and is not
       written: the Junos renderer writes ``next-hop <gateway>`` only
@@ -533,13 +539,14 @@ per_field_expectation:
       read the name as the gateway, and it was written as a Junos
       next hop the device does not have.  Lossy bits: (1) RouterOS ``distance=`` and
       Junos ``preference`` are vendor-specific AD scalars not 1:1
-      with canonical ``metric``; (2) per-VRF static routes
-      (RouterOS ``routing-table=<name>``) flatten to global because
-      the mikrotik_routeros codec parses-and-ignores the
-      ``routing-table=`` binding (``CanonicalStaticRoute.vrf`` is
-      never populated on the RouterOS source);
-      (3) RouterOS ``type=blackhole`` semantics not modelled
-      canonically — drops to a destination-only record.
+      with canonical ``metric``; (2) a route of another routing
+      table (RouterOS ``routing-table=<name>``) is left out of the
+      RouterOS source with a row that counts such routes, since no
+      VRF of a RouterOS config is read (up to 0.7.7 it was read as
+      a route of the main table); (3) a route that discards
+      (``blackhole``, RouterOS 6 ``type=blackhole``) is left out
+      with a row that counts those (up to 0.7.7 it was a
+      destination-only record).
     references: [mikrotik-ip-routing, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──
@@ -854,10 +861,9 @@ per_field_expectation:
 #     surface (lossy for syslog due to per-severity / per-facility
 #     filter loss).
 #
-#   * Per-VRF static routes — CanonicalStaticRoute.vrf already
-#     exists; the RouterOS static-route parse ignores the VRF
-#     binding in v1 (parses-and-ignores).  Lands alongside VRF
-#     wire-up.
+#   * Per-VRF static routes — a route of another routing table is
+#     left out of the RouterOS source with a row: no VRF of a
+#     RouterOS config is read.
 #
 #   * RouterOS firewall / NAT / queues / scripts / hotspot /
 #     wireless / WireGuard / OVPN-server — Tier-3 by design;

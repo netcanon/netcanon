@@ -429,11 +429,12 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Source-side structural absence: the mikrotik_routeros matrix declares
-      `/routing/static-route/vrf` unsupported — the codec parses RouterOS's
-      `routing-table=` binding and does not carry it — so every canonical
-      route arrives in the global table.  A RouterOS config with per-VRF
-      routes will render them all into the Nexus default VRF; re-scope them
-      by hand.
+      `/routing/static-route/vrf` unsupported — no VRF of a RouterOS config
+      is read — so a route of another routing table (`routing-table=`,
+      `routing-mark=`, a gateway resolved in a table) is left out of the
+      RouterOS source with a row that counts such routes.  Up to 0.7.7 every
+      such route arrived in the global table and was written into the Nexus
+      default VRF.
     references: [routeros-nxos-surface]
 
   # -- Tier 2 -- service plane --
