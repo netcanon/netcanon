@@ -1,5 +1,8 @@
 # IOS-XR → MikroTik RouterOS: measured canonical surface
 
+<!-- vrf-route-left-out -->
+> **Update 2026-11-12 — a route of a VRF is left out of a RouterOS output under a review line.**  Up to 0.7.7 the RouterOS render wrote a route of another vendor's VRF as an `add` of `/ip route`, a route of the main table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  The output makes no VRF or routing table, and it now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place.  On the committed inputs 20 routes go in and 17 come out: the 3 of a VRF are left out.  What follows about a route of a VRF on the RouterOS side describes the output before this change.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/cisco_iosxr__mikrotik_routeros.yaml`.
 

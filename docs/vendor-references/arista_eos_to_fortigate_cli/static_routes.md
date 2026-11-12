@@ -1,5 +1,8 @@
 # Static routes: Arista EOS versus FortiGate FortiOS
 
+<!-- vrf-route-left-out -->
+> **Update 2026-11-12 — a route of a VRF is left out of a FortiOS output under a review line.**  Up to 0.7.7 the FortiOS render wrote a route of another vendor's VRF as an entry of `config router static` (`static6`), a route of the global table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  It now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place (FortiOS names a VRF by a number, `set vrf <0-251>`, which a VRF's name does not give).  The `arista_eos` parser reads `ip route vrf <name> ...` into the route's VRF, and an IPv6 route of the global table is written into `config router static6` and read back, so what is said below of both is older than either.  What follows about a route of a VRF on the FortiOS side describes the output before this change.
+
 ## Arista EOS
 
 Source: [Arista EOS User Manual — Routing Static (4.35.2F)](https://www.arista.com/en/um-eos/eos-routing-static)

@@ -359,23 +359,21 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      The records all survive — no route is dropped and no count changes — but
-      two attributes drift across the cells that populate the table, and one
-      of them changes what the configuration MEANS.  (1) VRF binding:
-      RouterOS declares `/routing/static-route/vrf` UNSUPPORTED
-      (parses-and-ignores; wire-up scheduled for v0.2.0), so a VRF-scoped route
-      renders into the GLOBAL table with a byte-identical destination and
-      gateway — `10.99.0.0/16 via 203.0.113.2 vrf=CUSTOMER-A` re-parses as the
-      same route with `vrf=''`.  A customer VPN route silently becomes a global
-      route; nothing warns.  Verified by round-trip on `kitchen_sink.cfg` and
-      `batfish_vpnv4_pe1.txt`.  (2) cisco_iosxr declares
+      Every route of the global table survives; a route of a VRF does not.
+      (1) VRF: RouterOS declares `/routing/static-route/vrf` UNSUPPORTED and
+      its output makes no VRF or routing table, so a VRF-scoped route
+      (`10.99.0.0/16 via 203.0.113.2 vrf=CUSTOMER-A`) is left out under a
+      `# review:` line: 20 routes in, 17 out over the 6 cells that populate
+      the table, one route of a VRF on each of 3.  Up to 0.7.7 it was written
+      into the main table, where a customer VPN route became a global route
+      and nothing warned.  (2) cisco_iosxr declares
       `/routing/static-route/description` lossy in its own right.  A combined
       `gateway%interface` next hop round-trips intact, and so does an
       interface-only one (`gateway=Null0` is read back as the route's
       interface; up to 0.7.7 the RouterOS parser put it in the gateway slot,
       and 3 cells drifted for it).
-      Recorded `lossy` rather than `unsupported` because every route arrives —
-      the danger is that they arrive in the wrong table.
+      Recorded `lossy` rather than `unsupported` because every route of the
+      global table arrives.
     references: [iosxr-routeros-surface]
 
   dhcp_servers:

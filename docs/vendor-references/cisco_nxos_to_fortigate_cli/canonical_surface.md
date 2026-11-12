@@ -1,5 +1,8 @@
 # NX-OS -> FortiGate CLI: measured canonical surface
 
+<!-- vrf-route-left-out -->
+> **Update 2026-11-12 — a route of a VRF is left out of a FortiOS output under a review line.**  Up to 0.7.7 the FortiOS render wrote a route of another vendor's VRF as an entry of `config router static` (`static6`), a route of the global table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  It now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place (FortiOS names a VRF by a number, `set vrf <0-251>`, which a VRF's name does not give).  On the committed inputs the 6 routes of a VRF, on 4 cells, are left out, and `static_routes[].destination` is declared `lossy` for them.  What follows about a route of a VRF on the FortiOS side describes the output before this change.
+
 <!-- account-goes-with-its-secret -->
 > **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the FortiOS render wrote such an account as an `edit` with its access profile and no `set password` -- an admin with no password.  Measured after the change: **0 of 10** local accounts arrive across the 9 cells that populate users; 10 are refused for a secret FortiOS cannot consume (10 SHA-256 crypt (NX-OS type 5 over `$5$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__fortigate_cli.yaml`.
 

@@ -260,17 +260,22 @@ per_field_expectation:
       CIDR ``ip route 10.50.0.0/16 10.0.0.2`` -> FortiOS ``set dst
       10.50.0.0 255.255.0.0 / set gateway 10.0.0.2``.  Per-VRF
       static routes (Arista ``ip route vrf X ...``) are
-      harvested onto ``CanonicalStaticRoute.vrf`` but drop on
-      render because the fortigate_cli codec has no per-route
-      VRF/VDOM binding.  Outgoing-interface field requires
-      the port-rename mesh to map ``Ethernet1`` -> ``port1``.
-      Metric semantics differ (Arista default 1 / per-static
-      comparator vs FortiGate default 10 / AD-ordering) so the
-      integer preserves but its meaning differs.  Description
-      (Arista ``name "<desc>"``) is FortiGate-unwired in v1.
-      IPv6 default routes (``ipv6 route ::/0``) are also not
-      currently rendered on FortiOS through the canonical
-      static_routes list.
+      harvested onto ``CanonicalStaticRoute.vrf`` and left out
+      under a ``# review:`` line in ``config router static``,
+      since the output puts nothing in a VRF: one route on each
+      of the 3 cells that hold one.  Up to 0.7.7 such a route
+      was written into the global table.  Outgoing-interface
+      field requires the port-rename mesh to map ``Ethernet1``
+      -> ``port1``.  Metric semantics differ (Arista default 1 /
+      per-static comparator vs FortiGate default 10 /
+      AD-ordering) so the integer preserves but its meaning
+      differs.  No route description arrives: the arista_eos
+      parser reads none from ``name <desc>`` (its matrix
+      declares ``/routing/static-route/description`` lossy),
+      while FortiOS writes one as ``set comment`` and reads it
+      back.  An IPv6 route of the global table (``ipv6 route
+      ::/0 ...``) is written into ``config router static6`` and
+      read back.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

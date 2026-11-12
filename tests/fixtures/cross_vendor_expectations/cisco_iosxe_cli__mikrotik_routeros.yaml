@@ -232,11 +232,10 @@ per_field_expectation:
       Codec converts dotted-mask <-> CIDR transparently.  Cisco's
       interface-as-gateway form (``ip route X Y GigabitEthernet0/0/2``)
       maps to RouterOS's ``gateway=ether2`` form.  The lossy bit
-      is per-VRF: Cisco ``ip route vrf X ...`` drops to the global
-      table on render because the mikrotik_routeros codec emits no
-      per-route ``routing-table=<vrf>`` binding — the
-      ``CanonicalStaticRoute.vrf`` field is harvested from Cisco
-      but unrendered on RouterOS.
+      is per-VRF: Cisco ``ip route vrf X ...`` is left out under a
+      ``# review:`` line, since the mikrotik_routeros output makes
+      no VRF or routing table — one route, on the one cell that
+      holds one.  Up to 0.7.7 it was written into the main table.
     references: [mikrotik_ip_routing]
 
   # ── Tier 2 — auto-translate with review banner ──

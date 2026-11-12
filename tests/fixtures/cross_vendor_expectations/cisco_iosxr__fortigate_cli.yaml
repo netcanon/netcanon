@@ -389,23 +389,22 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      The routes survive; their VRF binding does not, and that is a forwarding
-      change rather than a cosmetic one.  Measured on all 6 cells that populate
-      the field: 20 routes in, 20 out, with destination, gateway, outgoing
-      interface and metric identical on every one — the render even preserves
-      the discard route as `set dst 192.0.2.0 255.255.255.0 / set device
-      "Null0"`.  The 3 routes that carry a VRF all arrive with `vrf` empty:
-      `AZURE` on `batfish_ebgp_border02`, `blue` on `batfish_vpnv4_pe1`,
-      `CUSTOMER-A` on `kitchen_sink`.  fortigate_cli declares
-      `/routing/static-route/vrf` unsupported ("No VRF is read or
-      written"), so the measurement and the declaration agree.
-      Recorded `lossy` at the list level, not `unsupported`, because the route
-      records themselves survive and install — which is exactly what `lossy`'s
-      compatible=True is for.  But an unbound customer route lands in the
-      global table, so a prefix that was contained inside a VRF becomes
-      globally reachable.  Diff the source's per-VRF route list against the
-      render before cutover; this is the loss on this pair most likely to be
-      mistaken for a clean result, because the route count matches.
+      The routes of the global table survive; a route of a VRF does not.
+      Measured on all 6 cells that populate the field: 20 routes in, 17 out,
+      with destination, gateway, outgoing interface and metric identical on
+      every route written — the render even preserves the discard route as
+      `set dst 192.0.2.0 255.255.255.0 / set device "Null0"`.  The 3 routes
+      that carry a VRF (`AZURE` on `batfish_ebgp_border02`, `blue` on
+      `batfish_vpnv4_pe1`, `CUSTOMER-A` on `kitchen_sink`) are left out under
+      a `# review:` line in `config router static`, since the output puts
+      nothing in a VRF.  fortigate_cli declares `/routing/static-route/vrf`
+      unsupported, so the measurement and the declaration agree.
+      Recorded `lossy` at the list level, not `unsupported`, because the
+      routes of the global table survive and install — which is exactly what
+      `lossy`'s compatible=True is for.  Up to 0.7.7 the 3 were written into
+      the global table, so a prefix that was contained inside a VRF became
+      globally reachable while the route count matched.  Re-create the
+      routes of a VRF by hand, or leave them out, before cutover.
       This is the same event as `routing_instances[].name` — the target models
       no VRF, so the instance and every binding to it go together.  The two are
       NOT independent corroboration of each other.

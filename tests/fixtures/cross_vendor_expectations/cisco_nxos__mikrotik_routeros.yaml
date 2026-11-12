@@ -328,17 +328,25 @@ per_field_expectation:
       any user traffic.
     references: [nxos-routeros-surface]
 
-  # -- Static routes.  Top-level key omitted: routes survive (4 cells fully
-  # preserved) and only the VRF binding drops. --
+  # -- Static routes.  Top-level key omitted: every route of the global
+  # table survives and a route of a VRF is left out, so the loss is stated
+  # per field. --
 
   "static_routes[].destination":
-    disposition: good
-    note: "Preserved on all 8 populated records; NX-OS `ip route` -> `/ip route`."
+    disposition: lossy
+    reason: >
+      A route of a VRF is left out under a `# review:` line, since the
+      mikrotik_routeros output makes no VRF or routing table: the 6 routes of
+      a VRF on 4 cells are not written, and every route of the global table
+      is (NX-OS `ip route` -> `/ip route`).  Up to 0.7.7 a route of a VRF was
+      written into the main table.
     references: [nxos-routeros-surface]
 
   "static_routes[].gateway":
     disposition: good
-    note: "Next-hop preserved on all 8 populated records."
+    note: >
+      Next hop preserved on every route that is written (a route of a VRF
+      is left out; see `static_routes[].destination`).
     references: [nxos-routeros-surface]
 
   "static_routes[].metric":
@@ -370,13 +378,12 @@ per_field_expectation:
   "static_routes[].vrf":
     disposition: unsupported
     reason: >
-      The VRF binding blanks on 6 records (`management` -> `''`) while the
-      route itself survives — so a route that was confined to the management
-      VRF is installed in the GLOBAL table on the target.  Matrix:
-      "a route of another vendor's VRF is written into the main table".
-      This is the dangerous shape of loss: the config
-      looks complete and the route is present, but its scope silently
-      widened.  Review every route that had a VRF before enabling forwarding.
+      No VRF is written, and a route of one is left out under a `# review:`
+      line (6 routes on 4 cells, e.g. of `management`; see
+      `static_routes[].destination`).  Up to 0.7.7 the VRF binding blanked
+      while the route survived, so a route that was confined to the
+      management VRF was installed in the main table on the target.
+      Re-create the routes that belong in a VRF by hand, or leave them out.
     references: [nxos-routeros-surface]
 
   dhcp_servers:

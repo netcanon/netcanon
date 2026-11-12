@@ -274,6 +274,12 @@ def _hostile_tree(kind: str) -> CanonicalIntent:
     # A source whose SNMPv3 grammar is RouterOS's own, so that a v3
     # user is written rather than refused for its key.
     tree.source_vendor = "mikrotik_routeros"
+    # A route of a VRF is left out under a review line, a comment; the
+    # same route in the global table is written, so that its values
+    # reach their keys.
+    tree.static_routes = tree.static_routes + [
+        route.model_copy(update={"vrf": ""}) for route in tree.static_routes
+    ]
     return tree
 
 

@@ -254,17 +254,18 @@ def _onto(target: str) -> tuple[MigrationJobStatus, list[tuple[str, str]]]:
 
 
 #: The targets that write a route of another vendor's VRF into their one
-#: table.  Each says it: the validation report holds the job for
-#: ``/routing/static-route/vrf``, which its matrix declares unsupported.
-#: Still open; the change that mends one takes it out of this set.
-_INTO_THE_GLOBAL_TABLE = {"fortigate_cli", "mikrotik_routeros"}
+#: table.  None does: FortiOS and RouterOS did, and leave it out under a
+#: review line now.  The set stays, so that a target that starts to is
+#: seen.
+_INTO_THE_GLOBAL_TABLE: set[str] = set()
 
 #: The targets whose renderer writes no static route of any table (each
 #: says so: the job is not ``completed``).
 _NO_ROUTE_AT_ALL = {"cisco_iosxe", "opnsense"}
 
-#: AOS-S has no VRF: a route of one is left out under a review line.
-_LEFT_OUT = {"aruba_aoss"}
+#: The targets that leave a route of a VRF out under a review line: AOS-S
+#: has no VRF, and the FortiOS and RouterOS outputs put nothing in one.
+_LEFT_OUT = {"aruba_aoss", "fortigate_cli", "mikrotik_routeros"}
 
 _HOLDS_IT = sorted(set(PUBLIC) - _INTO_THE_GLOBAL_TABLE - _NO_ROUTE_AT_ALL - _LEFT_OUT)
 
@@ -283,8 +284,9 @@ class TestOntoEveryTarget:
         assert routes == [("", "203.0.113.0/24"), ("red", "0.0.0.0/0"), ("red", "10.9.0.0/16")]
         assert status == MigrationJobStatus.completed
 
-    def test_aoss_leaves_each_route_of_a_vrf_out(self) -> None:
-        status, routes = _onto("aruba_aoss")
+    @pytest.mark.parametrize("target", sorted(_LEFT_OUT))
+    def test_each_route_of_a_vrf_is_left_out(self, target) -> None:
+        status, routes = _onto(target)
         assert routes == [("", "203.0.113.0/24")]
         assert status != MigrationJobStatus.completed
 

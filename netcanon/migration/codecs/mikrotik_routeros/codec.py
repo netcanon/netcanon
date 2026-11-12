@@ -659,7 +659,10 @@ class MikroTikRouterOSCodec(CodecBase):
                     "routing table (routing-table=, routing-mark=), or "
                     "with a gateway resolved in one (<gateway>@<table>), "
                     "is left out with a row; a route of another "
-                    "vendor's VRF is written into the main table."
+                    "vendor's VRF is left out under a `# review:` "
+                    "line, since the output puts nothing in a VRF.  It "
+                    "was written into the main table, where it routed "
+                    "traffic the source routed in another."
                 ),
             ),
             # -- Paths this codec writes nothing for (see _NOT_RENDERED). --

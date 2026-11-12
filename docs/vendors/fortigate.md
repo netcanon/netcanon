@@ -329,6 +329,14 @@ parse.
 - **`/system/dns`** with view scoping — view definitions parse-and-
   ignore (`config system dns-database`); cross-vendor mappings
   collapse to global DNS.
+- **`/routing/static-route/vrf`** (unsupported) — no VRF is
+  written: the output puts no interface or route in one.  A route of
+  another vendor's VRF is left out under a `# review:` line in
+  `config router static` (FortiOS names a VRF by a number, `set vrf
+  <0-251>`, which a VRF's name does not give), and the job is
+  `partial` for its VRF.  ⚠️ Up to 0.7.7 it was written into the
+  global table, where it routed traffic the source routed in
+  another.
 - See per-codec `CapabilityMatrix.lossy` declarations for the
   full list.
 

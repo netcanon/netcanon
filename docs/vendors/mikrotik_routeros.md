@@ -268,8 +268,9 @@ can appear BEFORE `/interface vrrp` in the source.
 - **No VRF is written.**  `/routing-instances/instance` is
   `unsupported`, and so is each field of a VRF and each interface's
   VRF: no interface is placed in one.  A route of another vendor's
-  VRF is written into the main table, and the job is `partial` for
-  its VRF.
+  VRF is left out under a `# review:` line, and the job is
+  `partial` for its VRF.  ⚠️ Up to 0.7.7 it was written into the
+  main table, where it routed traffic the source routed in another.
 - **A route the tree cannot hold is left out, with a row.**  A route
   of another routing table (`routing-table=` on RouterOS 7,
   `routing-mark=` on 6), or one whose gateway is resolved in one

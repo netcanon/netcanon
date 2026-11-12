@@ -428,10 +428,14 @@ per_field_expectation:
   # -- Routing --
 
   "static_routes[].destination":
-    disposition: good
-    note: >
-      NX-OS CIDR converts to the FortiOS `set dst <addr> <mask>` pair and back
-      without loss, including the IPv6 default route.
+    disposition: lossy
+    reason: >
+      A route of a VRF is left out under a `# review:` line in `config router
+      static` (`static6`), since the output puts nothing in a VRF: the 6 routes
+      of a VRF on 4 cells (the IPv6 default route among them) are not written,
+      and every route of the global table is.  On those, NX-OS CIDR converts
+      to the FortiOS `set dst <addr> <mask>` pair and back without loss.  Up
+      to 0.7.7 a route of a VRF was written into the global table.
     references: [nxos-fortigate-surface]
 
   "static_routes[].gateway":
@@ -449,14 +453,15 @@ per_field_expectation:
   "static_routes[].vrf":
     disposition: unsupported
     reason: >
-      Drifts to `""` on every per-VRF route (6 record-occurrences; e.g.
-      `management` -> `""`, `TENANT-A` -> `""`).  The fortigate_cli matrix
-      declares `/routing/static-route/vrf` unsupported — no VRF is read or
-      written, and a route of another vendor's VRF is written into the
-      global table.  The consequence is silent and dangerous: a management-VRF default
-      route and a tenant-VRF default route both land in the global table, so
-      the last one rendered wins and traffic can follow the wrong next hop.
-      Split them across VDOMs or drop the ones that should not be global.
+      No VRF is written: the fortigate_cli matrix declares
+      `/routing/static-route/vrf` unsupported, and a route of another
+      vendor's VRF is left out under a `# review:` line (6 routes on 4 cells,
+      e.g. of `management` and `TENANT-A`; see `static_routes[].destination`).
+      Up to 0.7.7 each was written into the global table, so a management-VRF
+      default route and a tenant-VRF default route both landed there and the
+      last one rendered won.  Re-create the routes that belong in a VRF by
+      hand (in a VDOM, or with `set vrf <0-251>` on the route and its
+      interfaces), or leave them out.
     references: [nxos-fortigate-surface]
 
   "static_routes[].interface":
