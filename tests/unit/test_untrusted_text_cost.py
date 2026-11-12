@@ -2388,6 +2388,56 @@ LOOKED_THROUGH: dict[tuple[str, str, str], str] = {
 }
 
 
+def _junos_unit_of_many_vrrp_groups(count: int) -> Any:
+    """A Junos unit of *count* subnets and a VRRP group for each,
+    parsed: the tree the renderer is handed."""
+    lines = [
+        f"set interfaces ge-0/0/1 unit 0 family inet address "
+        f"10.{i // 250}.{i % 250}.2/24 vrrp-group {i + 1} "
+        f"virtual-address 10.{i // 250}.{i % 250}.1"
+        for i in range(count)
+    ]
+    return get_codec("juniper_junos").parse("\n".join(lines) + "\n")
+
+
+class TestAUnitOfManyVRRPGroups:
+    """The Junos renderer writes each VRRP group of a unit under one
+    of its addresses.  Up to 0.7.7 it wrote each under EVERY address
+    of the unit, so a unit of N subnets and a group for each was N
+    times N groups' lines.  Each is written once now, under the
+    address whose subnet holds it, found by the subnet's key
+    (``_vrrp_placement``), never by a pass over the addresses."""
+
+    def test_render_fits(self) -> None:
+        render = get_codec("juniper_junos").render
+        render(_junos_unit_of_many_vrrp_groups(3))
+        slow = _grows_faster_than_its_input(render, _junos_unit_of_many_vrrp_groups, 100)
+        assert not slow, slow
+
+    def test_each_tree_is_what_it_says(self) -> None:
+        """A tree of no groups would be rendered quickly whatever
+        the renderer did."""
+        (unit,) = _junos_unit_of_many_vrrp_groups(40).interfaces
+        assert len(unit.ipv4_addresses) == len(unit.vrrp_groups) == 40
+
+    def test_the_check_can_fail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Handed the renderer as it was, each group under every
+        address, the check finds it."""
+        from netcanon.migration.codecs.juniper_junos import render as junos_render
+
+        def everywhere(addresses: list[Any], groups: list[Any]) -> list[list[Any]]:
+            return [[junos_render._Placed(g, []) for g in groups] for _ in addresses]
+
+        monkeypatch.setattr(junos_render, "_vrrp_placement", everywhere)
+        render = get_codec("juniper_junos").render
+        # Read at two sizes only, and timed above a lower floor: at the
+        # second size the defect writes 400 groups under each of 400
+        # addresses.
+        assert _grows_faster_than_its_input(
+            render, _junos_unit_of_many_vrrp_groups, 100, largest=400, floor=0.05,
+        )
+
+
 class TestNoListIsLookedThroughThenAddedTo:
     """``if x not in lst: lst.append(x)`` reads the list for every
     value it is given.  Where the list belongs to one record and a

@@ -19,7 +19,8 @@ under ``rib inet6.0``), SNMP
 VACM groups), apply-groups + group-content for round-trip
 fidelity (GAP 9b), **VRRP groups** (nested under ``family inet
 address X vrrp-group N`` with priority / preempt / track / auth /
-timers), and **anycast-gateway** (``family inet address X/M
+timers; each under the one address of its unit whose subnet holds
+it, :func:`_vrrp_placement`), and **anycast-gateway** (``family inet address X/M
 virtual-gateway-address Y`` and the IPv6 sibling form, plus
 per-unit ``virtual-gateway-v4-mac`` / ``virtual-gateway-v6-mac``
 overrides emitted after the address block).  Cross-vendor
@@ -65,6 +66,7 @@ Internal helpers (``_split_subiface_name``, ``_quote_if_needed``,
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 from typing import Any, NamedTuple
@@ -516,7 +518,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"set interfaces {parent} unit {unit_num} "
                     f"family inet dhcp"
                 )
-            for addr in iface.ipv4_addresses:
+            placed = _vrrp_placement(
+                iface.ipv4_addresses, iface.vrrp_groups,
+            )
+            for addr, groups in zip(iface.ipv4_addresses, placed, strict=True):
                 line = (
                     f"set interfaces {parent} unit {unit_num} "
                     f"family inet address "
@@ -530,11 +535,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"{addr.virtual_gateway_address}"
                     )
                 out.append(line)
-                # Wave B: classic VRRP groups bound to this address.
-                # Render each group's set-lines immediately after the
-                # parent address so the address ANCHOR is unambiguous.
+                # The VRRP groups this address is the anchor of
+                # (``_vrrp_placement``), right after it.
                 _emit_vrrp_groups_for_address(
-                    out, parent, unit_num, addr, iface.vrrp_groups,
+                    out, parent, unit_num, addr, groups,
                 )
             # GAP-EVPN-3: IPv6 addresses on sub-interfaces.
             # Junos emits scope-uniformly under family inet6 —
@@ -640,7 +644,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"set interfaces {name} unit 0 family inet dhcp"
             )
         # IPv4 addresses — emit under unit 0 (v1's convention).
-        for addr in iface.ipv4_addresses:
+        placed = _vrrp_placement(iface.ipv4_addresses, iface.vrrp_groups)
+        for addr, groups in zip(iface.ipv4_addresses, placed, strict=True):
             line = (
                 f"set interfaces {name} unit 0 family inet "
                 f"address {addr.ip}/{addr.prefix_length}"
@@ -651,9 +656,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"{addr.virtual_gateway_address}"
                 )
             out.append(line)
-            # Wave B: classic VRRP groups bound to this address.
+            # The VRRP groups this address is the anchor of.
             _emit_vrrp_groups_for_address(
-                out, name, 0, addr, iface.vrrp_groups,
+                out, name, 0, addr, groups,
             )
         # GAP-EVPN-3: IPv6 addresses also emit under unit 0.
         for v6 in iface.ipv6_addresses:
@@ -1403,30 +1408,152 @@ def _static_route_lines(routes: list[CanonicalStaticRoute]) -> list[str]:
     return lines
 
 
+class _Placed(NamedTuple):
+    """A VRRP group written under one address of its unit, and the
+    virtual addresses of it that the address's subnet does not hold
+    where the unit has another address the group could have been
+    under (empty for a unit of one address: nothing was chosen)."""
+
+    group: Any
+    outside: list[str]
+
+
+def _ipv4_int(text: str) -> int | None:
+    """The address *text* as an integer, or ``None`` where it is
+    not an IPv4 address."""
+    try:
+        return int(ipaddress.IPv4Address(text))
+    except ValueError:
+        return None
+
+
+def _mask(length: int) -> int:
+    """The IPv4 netmask of *length* bits, as an integer."""
+    return (0xFFFFFFFF << (32 - length)) & 0xFFFFFFFF
+
+
+def _vrrp_placement(
+    addresses: list[Any], vrrp_groups: list[Any],
+) -> list[list[_Placed]]:
+    """The VRRP groups to write under each IPv4 address of a unit,
+    one list for each address, in the order of *addresses*.
+
+    Junos configures a ``vrrp-group`` under one ``family inet
+    address`` (Juniper, "Configuring Basic VRRP Support": the
+    hierarchy is ``[edit interfaces <name> unit <n> family inet
+    address <address>]``), and the tree keeps a unit's groups beside
+    its addresses, with nothing that says which address each was
+    under.  Written under every address, each group was configured
+    once for each address of its unit, a group of one subnet under
+    an address of another included.  So each group is written once:
+    under the first address whose subnet holds one of its virtual
+    addresses, taken in the order the group states them, and else
+    under the first address of the unit, the primary.  Where the
+    unit has more than one address, a virtual address the chosen
+    address's subnet does not hold is in ``_Placed.outside``, for a
+    review line and a warning (:func:`vrrp_placement_warnings`).
+    That Junos refuses such a group is not established: Juniper's
+    page asks a virtual address to share the interface's subnet for
+    an IPv6 link-local one only.
+
+    A group with ``mode != "vrrp"`` (HSRP, CARP) is not written,
+    and no line stands in its place: Junos has no native HSRP or
+    CARP.  Nor is a group with no IPv4 virtual address (IPv6-only
+    VRRP, which Junos states as a ``vrrp-inet6-group`` under a
+    ``family inet6`` address).  The capability matrix declares both
+    (``_DROPPED`` in ``codec.py``).
+
+    Each virtual address is looked up once for each prefix length
+    the unit's addresses have (a key of the subnet, never a pass
+    over the addresses), so a unit of many addresses and many
+    groups costs their sum.
+    """
+    placed: list[list[_Placed]] = [[] for _ in addresses]
+    if not addresses:
+        return placed
+    first_of: dict[tuple[int, int], int] = {}
+    own: list[tuple[int, int] | None] = []
+    for at, addr in enumerate(addresses):
+        value = _ipv4_int(addr.ip)
+        length = addr.prefix_length
+        if value is None or not 0 <= length <= 32:
+            own.append(None)
+            continue
+        key = (length, value & _mask(length))
+        own.append(key)
+        first_of.setdefault(key, at)
+    lengths = sorted({key[0] for key in first_of})
+
+    def holder(vip: int) -> int | None:
+        found = [
+            first_of[(length, vip & _mask(length))]
+            for length in lengths
+            if (length, vip & _mask(length)) in first_of
+        ]
+        return min(found) if found else None
+
+    for group in vrrp_groups:
+        if group.mode != "vrrp" or not group.virtual_ips:
+            continue
+        vips = [(vip, _ipv4_int(vip)) for vip in group.virtual_ips]
+        at = next(
+            (
+                found for _, value in vips
+                if value is not None
+                and (found := holder(value)) is not None
+            ),
+            0,
+        )
+        outside: list[str] = []
+        if len(addresses) > 1:
+            key = own[at]
+            outside = [
+                vip for vip, value in vips
+                if key is None or value is None
+                or (key[0], value & _mask(key[0])) != key
+            ]
+        placed[at].append(_Placed(group, outside))
+    return placed
+
+
+def vrrp_placement_warnings(tree: CanonicalIntent) -> list[str]:
+    """One warning for each review line the output has for a VRRP
+    group: one written under an address of its unit whose subnet
+    does not hold all its virtual addresses, where the unit has
+    another (:func:`_vrrp_placement`)."""
+    warnings: list[str] = []
+    for iface in tree.interfaces:
+        placed = _vrrp_placement(iface.ipv4_addresses, iface.vrrp_groups)
+        for addr, groups in zip(iface.ipv4_addresses, placed, strict=True):
+            for entry in groups:
+                if not entry.outside:
+                    continue
+                warnings.append(
+                    f"VRRP group {entry.group.group_id} of {iface.name} "
+                    f"is written under address "
+                    f"{addr.ip}/{addr.prefix_length}, whose subnet does "
+                    f"not hold its virtual address "
+                    f"{', '.join(entry.outside)}: Junos binds a group to "
+                    f"one address; the output has a review line"
+                )
+    return warnings
+
+
 def _emit_vrrp_groups_for_address(
     out: list[str],
     parent: str,
     unit_num: int,
     addr: Any,
-    vrrp_groups: list[Any],
+    vrrp_groups: list[_Placed],
 ) -> None:
-    """Emit Junos ``vrrp-group`` set-lines bound to a specific IPv4
-    address line.
+    """Emit the Junos ``vrrp-group`` set-lines of the groups
+    :func:`_vrrp_placement` put under the IPv4 address *addr*.
 
-    Junos requires every ``vrrp-group <gid>`` sub-command to nest
-    under a ``family inet address <ip>/<prefix>`` parent — the
-    address acts as the binding anchor.  We render each group's
-    sub-lines (virtual-address, priority, preempt, etc.) prefixed
-    with the full ``set interfaces <parent> unit <N> family inet
-    address <ip>/<prefix> vrrp-group <gid>`` path so the round-trip
-    parse re-binds the same group to the same address.
-
-    Groups with ``mode != "vrrp"`` (e.g. ``"hsrp"`` / ``"carp"``) are
-    not written, and no line stands in their place — Junos has no
-    native HSRP / CARP primitive.  A group with no virtual_ips on the
-    IPv4 family is not written either (IPv6-only VRRP, which Junos
-    states as a ``vrrp-inet6-group`` under a ``family inet6`` address).
-    The capability matrix declares both (``_DROPPED`` in ``codec.py``).
+    Each line has the full ``set interfaces <parent> unit <N> family
+    inet address <ip>/<prefix> vrrp-group <gid>`` path, so the
+    address is the group's anchor.  A group written under an
+    address whose subnet does not hold a virtual address of it is
+    preceded by a review line that says so.
     """
     if not vrrp_groups:
         return
@@ -1435,18 +1562,15 @@ def _emit_vrrp_groups_for_address(
         f"set interfaces {parent} unit {unit_num} "
         f"family inet address {addr_str}"
     )
-    for group in vrrp_groups:
-        if group.mode != "vrrp":
-            # Anycast / HSRP / CARP: not written, and no line says so.
-            # Junos's native anycast surface lives on
-            # CanonicalIPv4Address.virtual_gateway_address (handled
-            # elsewhere); this branch only fires for the remaining
-            # non-VRRP modes.
-            continue
-        if not group.virtual_ips:
-            # All-v6 group — out of scope for v0.2.0 (would need a
-            # different anchor address); not written.
-            continue
+    for group, outside in vrrp_groups:
+        if outside:
+            out.append(
+                f"# review: vrrp-group {group.group_id} of {parent} "
+                f"unit {unit_num} is written under {addr_str}, whose "
+                f"subnet does not hold its virtual address "
+                f"{', '.join(outside)}; Junos binds a group to one "
+                f"address -- not established that it commits here"
+            )
         for vip in group.virtual_ips:
             out.append(
                 f"{prefix} vrrp-group {group.group_id} "
