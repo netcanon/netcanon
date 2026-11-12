@@ -35,6 +35,13 @@ a bridge, a cross-connect, a VPLS circuit, a switching unit -- is
 left out, and said; an ``encapsulation`` the output keeps no form of
 is said as well (:func:`_a_unit_the_tree_holds`).
 
+A static route the tree has no form for -- one whose next hop is
+looked up in another table (``next-table``), one that forwards to
+no next hop (``discard``, ``reject``, ``receive``), and a
+``qualified-next-hop``, a next hop with a preference of its own --
+is left out, and one row a kind counts them
+(:func:`_static_routes_not_held_rows`).
+
 Handles VXLAN switch-options globals (``set switch-options
 vtep-source-interface`` / ``vxlan-port``) by stashing on intent
 scratch attributes during dispatch and back-patching every
@@ -64,6 +71,7 @@ Internal helpers (``_split_words``, ``_tokenise_set``, ``_dispatch_set``,
 ``_apply_system``, ``_apply_interfaces``, ``_apply_interface_range``,
 ``_apply_vlans``, ``_apply_switch_options``,
 ``_apply_routing_instances``, ``_apply_routing_options``,
+``_apply_static_route``, ``_static_routes_not_held_rows``,
 ``_apply_snmp``, ``_apply_snmp_v3``, ``_get_or_create_v3_user``,
 ``drop_session_lines``, ``_looks_like_blockform``,
 ``_blockform_tokens``, ``_tokenise_blockform``,
@@ -106,6 +114,7 @@ from .._helpers import (
     a_tag,
     ip_mtu_read,
     mtu_read,
+    next_hop_elsewhere_rows,
     unread_tags_row,
     unstated_trunk_list,
     vlan_id_run,
@@ -1303,6 +1312,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         *_older_native_rows(older_native),
         *pool_rows(several_ranges, no_addresses),
         *exclusion_rows(split, none_left, unread_exclusions),
+        *_static_routes_not_held_rows(found.routes_not_held),
     ]
     if not cut_lines:
         return intent, raw
@@ -2076,6 +2086,12 @@ class _Found:
         # may state it ahead of ``vlan-id``, so the record it belongs
         # to may not be made yet when the line is read.
         self.vlan_descriptions: dict[str, str] = {}
+        # The static routes the tree has no form for, by kind, each
+        # once by VRF, destination and (for a qualified next hop) its
+        # address (:func:`_static_routes_not_held_rows`).
+        self.routes_not_held: dict[str, set[tuple[str, str, str]]] = {
+            kind: set() for kind in _STATIC_ROUTE_KINDS_NOT_HELD.values()
+        }
 
 
 def _dispatch_set(
@@ -3752,30 +3768,23 @@ def _apply_routing_instances(
     # ALSO carries instance-type / RD / RT / interface / a non-static
     # ``routing-options`` line still materialises via those paths
     # (Junos set-lines are order-independent).  next-hop form only —
-    # ``discard`` / ``reject`` and explicit ``rib <name>`` forms are not
-    # modelled, same as the global routing table.  (v0.2.0 — graduates
+    # ``next-table``, ``discard`` / ``reject`` / ``receive`` and
+    # ``qualified-next-hop`` are left out and counted, as in the global
+    # routing table (:func:`_apply_static_route`).  (v0.2.0 — graduates
     # /routing/static-route/vrf from lossy to supported.)
-    if head == "routing-options" and (
-        len(rest) >= 6
+    if (
+        head == "routing-options"
+        and len(rest) >= 5
         and rest[1] == "static"
         and rest[2] == "route"
-        and "/" in rest[3]
-        and rest[4] == "next-hop"
+        and _apply_static_route(rest[3:], ri_name, intent, found)
     ):
-        dest = rest[3]
-        gateway = rest[5]
-        already = (dest, gateway, ri_name) in (found or _Found(intent)).routes
-        if not already:
-            intent.static_routes.append(CanonicalStaticRoute(
-                destination=dest,
-                gateway=gateway,
-                interface="",
-                vrf=ri_name,
-            ))
         return
-        # Non-static routing-options (``rib`` / ``autonomous-system`` /
-        # etc.) fall through to routing-instance materialisation +
-        # parse-and-ignore below — unchanged from prior behaviour.
+    # Non-static routing-options (``rib`` / ``autonomous-system`` /
+    # etc.), and a route's other lines (a route the tree has no form
+    # for among them, counted above), fall through to
+    # routing-instance materialisation + parse-and-ignore below —
+    # unchanged from prior behaviour.
 
     # All other sub-paths describe the routing-instance itself —
     # materialise (or find) it.
@@ -3875,25 +3884,98 @@ def _apply_routing_instances(
 def _apply_routing_options(
     tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
 ) -> None:
-    """``set routing-options static route <dest>/<prefix> next-hop <gw>``"""
-    if len(tokens) < 5:
-        return
-    if tokens[0] == "static" and tokens[1] == "route":
-        dest = tokens[2]
-        if "/" not in dest:
-            return
-        if tokens[3] == "next-hop" and len(tokens) >= 5:
-            gateway = tokens[4]
-            # De-dup: if GAP 8's two-pass parse or GAP 9b's group-
-            # content render replays the same route at both levels,
-            # we don't want to double up in the canonical list.
-            if (dest, gateway, "") in (found or _Found(intent)).routes:
-                return
+    """``set routing-options static route <dest>/<prefix> next-hop <gw>``
+    (:func:`_apply_static_route`)."""
+    if len(tokens) >= 4 and tokens[0] == "static" and tokens[1] == "route":
+        _apply_static_route(tokens[2:], "", intent, found)
+
+
+#: The words after ``static route <destination>`` that make a route
+#: the tree has no form for, by the kind of row that counts it
+#: (Juniper, "static (Routing Options)"): ``next-table`` names "the
+#: next routing table to the destination", a table a canonical
+#: route cannot name; ``discard`` and ``reject`` "do not forward
+#: packets addressed to this destination", and ``receive`` sends them
+#: to the Routing Engine, none of which a route with no next hop says
+#: on another platform; a ``qualified-next-hop`` is a next hop with a
+#: preference of its own, commonly a backup, and read as a next hop
+#: it would carry traffic beside the route's own.
+_STATIC_ROUTE_KINDS_NOT_HELD: dict[str, str] = {
+    "next-table": "next-table",
+    "discard": "no-next-hop",
+    "reject": "no-next-hop",
+    "receive": "no-next-hop",
+    "qualified-next-hop": "qualified-next-hop",
+}
+
+
+def _apply_static_route(
+    words: list[str], vrf: str, intent: CanonicalIntent,
+    found: _Found | None = None,
+) -> bool:
+    """One ``static route`` line of the global table (*vrf* empty) or
+    of a routing instance: *words* are what follows ``route``.
+
+    ``<dest> next-hop <gw>`` is read.  A route of a form the tree has
+    no form for (:data:`_STATIC_ROUTE_KINDS_NOT_HELD`) is counted on
+    *found*, once by VRF, destination and qualified next hop, and is
+    left out.  Any other line of a route (``preference``, ``tag``,
+    ``no-readvertise``) is not read.
+
+    Returns:
+        Whether the line was a next hop the tree holds.
+    """
+    dest = words[0]
+    if "/" not in dest or len(words) < 2:
+        return False
+    form = words[1]
+    if form == "next-hop":
+        if len(words) < 3:
+            return False
+        gateway = words[2]
+        # De-dup: if GAP 8's two-pass parse or GAP 9b's group-
+        # content render replays the same route at both levels,
+        # we don't want to double up in the canonical list.
+        if (dest, gateway, vrf) not in (found or _Found(intent)).routes:
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,
                 interface="",
+                vrf=vrf,
             ))
+        return True
+    kind = _STATIC_ROUTE_KINDS_NOT_HELD.get(form)
+    if kind is not None and found is not None:
+        address = words[2] if kind == "qualified-next-hop" and len(words) >= 3 else ""
+        found.routes_not_held[kind].add((vrf, dest, address))
+    return False
+
+
+def _static_routes_not_held_rows(
+    routes_not_held: dict[str, set[tuple[str, str, str]]],
+) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the static routes
+    the tree has no form for (:func:`_apply_static_route`): one a
+    kind, counted, never a destination.  Each route is in force on
+    the device, so each row is a section, not a statement left out."""
+    head = "routing-options static"
+    rows = next_hop_elsewhere_rows(
+        head, len(routes_not_held["next-table"]), "next-table <table>",
+    )
+    if routes_not_held["no-next-hop"]:
+        rows.append(
+            f"{head}: {len(routes_not_held['no-next-hop'])} discard, "
+            "reject or receive route(s): the tree has no form for a "
+            "route that forwards to no next hop; not translated"
+        )
+    if routes_not_held["qualified-next-hop"]:
+        rows.append(
+            f"{head}: {len(routes_not_held['qualified-next-hop'])} "
+            "qualified next hop(s) (qualified-next-hop <address>): a "
+            "next hop with a preference of its own, which the tree "
+            "does not hold; not translated"
+        )
+    return rows
 
 
 def _apply_snmp(

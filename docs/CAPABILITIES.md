@@ -962,16 +962,28 @@ and true of the same sentence — they are not in the output:
   and they are left out.  Write them on the target by hand, a VRF's
   routes in that VRF.
 * **`router static: <n> route(s) whose next hop is in another VRF
-  ...`** (IOS XR) and **`ip route: <n> route(s) whose next hop is in
-  another VRF ...`** (IOS-XE, NX-OS, EOS) — a next hop resolved in
-  the table of another VRF: IOS XR `<prefix> vrf <name> <next hop>`
-  (`vrf default` from a VRF's block is the global table), IOS-XE
-  `global` after a VRF route's next hop and IPv6 `nexthop-vrf
-  <name>`, NX-OS `vrf <name>` after the next hop, EOS `egress-vrf
-  <name>`.  The tree has no form for it, and the route is left out:
+  ...`** (IOS XR), **`ip route: <n> route(s) whose next hop is in
+  another VRF ...`** (IOS-XE, NX-OS, EOS) and **`protocols static:
+  <n> route(s) whose next hop is in another VRF ...`** (VyOS) — a
+  next hop resolved in the table of another VRF: IOS XR `<prefix>
+  vrf <name> <next hop>` (`vrf default` from a VRF's block is the
+  global table), IOS-XE `global` after a VRF route's next hop and
+  IPv6 `nexthop-vrf <name>`, NX-OS `vrf <name>` after the next hop,
+  EOS `egress-vrf <name>`, VyOS `next-hop <address> vrf <name>`.
+  The tree has no form for it, and the route is left out:
   written into the route's own table it would carry traffic the
   source keeps apart.  One that names the route's own VRF is read as
   the route it is.
+* **`routing-options static: <n> route(s) whose next hop is in
+  another VRF (next-table <table>) ...`**, **`routing-options
+  static: <n> discard, reject or receive route(s) ...`** and
+  **`routing-options static: <n> qualified next hop(s) ...`**
+  (Junos, in the global table and in a routing instance) — a route
+  whose next hop is looked up in another table, a route that
+  forwards to no next hop, and a next hop with a preference of its
+  own (commonly a backup), which read as a next hop would carry
+  traffic beside the route's own.  The tree has a form for none of
+  them, and they are left out.  Write them on the target by hand.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):

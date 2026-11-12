@@ -1401,6 +1401,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos static route of a form the tree cannot hold is said.**
+  The parser read a route's `next-hop <address>` and passed over
+  every other line of it, so a route whose next hop is looked up in
+  another table (`next-table <table>`), a route that forwards to no
+  next hop (`discard`, `reject`, `receive`) and a
+  `qualified-next-hop` (a next hop with a preference of its own,
+  commonly a backup) were missing from every output, in the global
+  table and in a routing instance, in a job that said nothing of
+  them.  Each is still left out, and one row of the Tier-3 banner a
+  kind says how many.  A route's `preference` is still not read,
+  and none is written; the vendor page says so.
+
 - **A VyOS route of a VRF is no longer a route of the global table,
   and VyOS as a target writes a route of a VRF in its VRF.**  VyOS
   writes a route of a VRF under the VRF (`vrf name <X> protocols
