@@ -87,6 +87,15 @@ Preserved on every populated cell: `interfaces[].name` (11),
 `local_users[].role` (7); `snmp.community` / `.location` / `.contact` /
 `.trap_hosts` / `.v3_users` (2 each); `vxlan_vnis` whole-record (1).
 
+> **Update 2026-11-12 — `static_routes[].vrf` is populated on 1 cell, and
+> `routing_instances` drifts on none.**  The VRF-scoped statics of the
+> `routing_instances` cell below end in `global`: their next hop is in the
+> global table, which the tree has no form for.  The IOS-XE CLI parser leaves
+> such a route out and counts it in an `ip route:` row, so none reaches the
+> render.  The gain described below is real all the same:
+> `tests/unit/migration/test_a_next_hop_in_another_vrf.py` shows it on a
+> config of its own.
+
 ## Why each drifting key drifts
 
 > **Superseded in part (2026-11).**  The local-user role measured in this

@@ -210,3 +210,24 @@ class TestTheOutput:
     def test_the_route_of_its_own_is_written(self, source: str) -> None:
         """Onto its own codec, the other route is in the output."""
         assert "203.0.113.0" in _job(source, _PAIRS[source], source).rendered
+
+
+class TestWhatNoCommittedInputShowsNow:
+    """The one committed IOS-XE input whose VRF routes name no ``vrf
+    definition`` holds them with ``global``, which is left out: no cell
+    of the mesh shows any more that NX-OS makes the VRF of such a route
+    (the ``routing_instances`` loss ``cisco_iosxe_cli__cisco_nxos.yaml``
+    declares).  It is shown here."""
+
+    def test_nxos_makes_a_bare_vrf_for_a_route_of_an_undefined_vrf(self) -> None:
+        text = _XE_HEAD.replace("vrf definition A\n!\n", "") + (
+            "ip route vrf myvrf 10.9.0.0 255.255.0.0 192.0.2.254\n!\nend\n"
+        )
+        assert get_codec("cisco_iosxe_cli").parse(text).routing_instances == []
+        back = get_codec("cisco_nxos").parse(
+            _job("cisco_iosxe_cli", text, "cisco_nxos").rendered,
+        )
+        assert [
+            (r.name, r.route_distinguisher, r.rt_imports, r.rt_exports)
+            for r in back.routing_instances
+        ] == [("myvrf", "", [], [])]

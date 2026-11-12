@@ -605,6 +605,15 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # server, so the kitchen sinks' pools of differing domains come back without
 # theirs.  fortigate_cli__arista_eos stays at 1: its kitchen sink shows the
 # same loss, which its YAML now declares where it had called the field good.
+#
+# Seeded at 1, for ``routing_instances``, when the IOS-XE CLI parser began
+# to leave out a route whose next hop is in another VRF:
+# cisco_iosxe_cli__cisco_nxos.  The one committed input whose VRF routes
+# name no ``vrf definition`` holds them with ``global``, so none reaches the
+# render, and no cell shows any more that NX-OS makes a bare ``vrf
+# context`` for such a route.  The loss is real, and
+# ``test_a_next_hop_in_another_vrf.py`` shows it on a config of its own;
+# the YAML's reason says so.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -629,6 +638,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__arista_eos": 2,
     "cisco_iosxe_cli__aruba_aoss": 2,
     "cisco_iosxe_cli__cisco_iosxe": 1,
+    "cisco_iosxe_cli__cisco_nxos": 1,
     "cisco_iosxe_cli__fortigate_cli": 3,
     "cisco_iosxe_cli__juniper_junos": 4,
     "cisco_iosxe_cli__mikrotik_routeros": 2,
