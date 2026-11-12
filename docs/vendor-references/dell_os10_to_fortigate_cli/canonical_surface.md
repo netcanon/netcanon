@@ -105,7 +105,7 @@ Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
 Drifted on 1 of 1 cells (preserved on 0, both sides empty on 0).
 
-> FortiOS has no IANA ifType; inferred from 'type vlan' sub-setting or name shape.
+> FortiOS has no IANA ifType; read from 'set type' (physical, vlan, aggregate, redundant, loopback, tunnel) or the vlanid sub-setting, and otherwise inferred from the name's shape.
 
 ### `interfaces[].ipv4_addresses` — lossy
 

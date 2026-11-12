@@ -1329,6 +1329,16 @@ def translate_port_names(  # noqa: C901
         iface.name for iface in intent.interfaces
         if iface.interface_type in ("ianaift:l3ipvlan", "ianaift:l2vlan")
     )
+    # Interfaces the source parser typed as a loopback or a tunnel.  No
+    # port carries one as its unit: a FortiOS loopback an operator
+    # called ``port1.5`` is a name, and went after ``port1`` as unit 5
+    # of whatever port ``port1`` became.  A unit of a loopback or a
+    # tunnel (Junos ``lo0.5``, ``st0.1``) still goes where its
+    # loopback or tunnel goes.
+    carries_no_frames: frozenset[str] = frozenset(
+        iface.name for iface in intent.interfaces
+        if iface.interface_type in ("ianaift:softwareLoopback", "ianaift:tunnel")
+    )
     # Interfaces the tree holds an 802.1Q tag for, and the tag.  The
     # tag of a sub-interface is not in its name, so one that is not
     # here is written without a tag wherever it goes -- and onto a
@@ -1365,6 +1375,10 @@ def translate_port_names(  # noqa: C901
         # form of its own on every target.  So does the FortiOS parser,
         # by the interface's type.
         if name in vlan_interfaces or kind_of(name) not in ("unknown", port_kind):
+            return False
+        if name in carries_no_frames and (
+            kind_overrides.get(port) or port_kind
+        ) in UNIT_PARENT_KINDS:
             return False
         if same_codec:
             # The unit means the same thing on both sides.  It moves

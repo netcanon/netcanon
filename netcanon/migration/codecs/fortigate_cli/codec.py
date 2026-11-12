@@ -418,8 +418,10 @@ class FortiGateCLICodec(CodecBase):
             LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
-                    "FortiOS has no IANA ifType; inferred from 'type vlan' "
-                    "sub-setting or name shape."
+                    "FortiOS has no IANA ifType; read from 'set type' "
+                    "(physical, vlan, aggregate, redundant, loopback, "
+                    "tunnel) or the vlanid sub-setting, and otherwise "
+                    "inferred from the name's shape."
                 ),
                 severity="warn",
             ),

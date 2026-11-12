@@ -249,8 +249,9 @@ per_field_expectation:
       `ianaift:l3ipvlan` and comes back `ianaift:ethernetCsmacd`.  Both
       matrices declare `/interfaces/interface/config/type` lossy in their own
       right; fortigate_cli's reason is explicit ("FortiOS has no IANA ifType;
-      inferred from 'type vlan' sub-setting or name shape"), and the
-      passthrough SVI copy has no `type vlan` sub-setting to infer from.  Two
+      read from 'set type' ... and otherwise inferred from the name's
+      shape"), and the passthrough SVI copy has no `type vlan` sub-setting
+      to read.  Two
       independent causes with the record inflation, one disposition.
     references: [aoscx-fortigate-surface]
 
