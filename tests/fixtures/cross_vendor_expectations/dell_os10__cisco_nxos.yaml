@@ -265,23 +265,22 @@ per_field_expectation:
     references: [os10-nxos-surface]
 
   routing_instances:
-    disposition: lossy
-    reason: >
-      The target GAINS a `management` VRF that the OS10 source does not
-      declare (`azlocal_tor1`/`tor2`, 0 -> 1).  NX-OS models its built-in
-      management VRF as a routing instance, so its parser harvests one from
-      the rendered config even when the source carried none.
-      NOTE this is a GAIN, not a loss -- no operator-authored VRF is
-      dropped.  The taxonomy has no class for a materialised record, so
-      `lossy` is the closest available disposition rather than an exact one.
+    disposition: good
+    note: >
+      The OS10 source names its built-in `management` VRF (a `management
+      route`) and declares no instance of it.  NX-OS models its own
+      management VRF as a routing instance, so its parser reads one back
+      from the rendered config.  That instance holds nothing but the name
+      the source gives, and the harness reads it as no drift.  No cell
+      drifts.
     references: [os10-nxos-surface]
 
   routing_instances[].description:
-    disposition: lossy
-    reason: >
-      Follows `routing_instances`: the materialised `management` VRF has no
-      description, so the subfield registers as drifted.  A GAIN, not a
-      loss.
+    disposition: good
+    note: >
+      Follows `routing_instances`: the `management` VRF the target holds
+      for a name the source gives has no description, and no cell
+      drifts.
     references: [os10-nxos-surface]
 
   routing_instances[].name:

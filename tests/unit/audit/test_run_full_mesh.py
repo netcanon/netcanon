@@ -234,6 +234,54 @@ def test_dropped_secondary_address_is_still_drift() -> None:
     assert out["interfaces"]["preserved"] is False
 
 
+def _in_vrf(vrf: str, *, declared: tuple[CanonicalRoutingInstance, ...] = ()) -> CanonicalIntent:
+    return CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="mgmt0", vrf=vrf, ipv4_addresses=[_ip("10.0.0.1")],
+        )],
+        routing_instances=list(declared),
+    )
+
+
+def test_a_vrf_defined_for_a_name_the_source_gives_is_not_drift() -> None:
+    """A source that names a VRF and declares no instance of it has
+    that VRF; a target that has to define it (IOS-XE refuses `vrf
+    forwarding` to a VRF it does not have) re-parses an instance of
+    nothing but the name, which is not drift."""
+    src = _in_vrf("management")
+    tgt = _in_vrf("management", declared=(CanonicalRoutingInstance(name="management"),))
+    out = compute_field_disposition(src, tgt)
+    assert out["routing_instances"]["preserved"] is True
+    assert out["routing_instances"]["trivially_preserved"] is True
+    assert out["routing_instances"]["target_count"] == 0
+
+
+@pytest.mark.parametrize("target_instance", [
+    CanonicalRoutingInstance(name="management", route_distinguisher="65000:1"),
+    CanonicalRoutingInstance(name="management", description="oob"),
+    CanonicalRoutingInstance(name="OTHER"),
+])
+def test_an_instance_that_says_more_than_the_name_is_drift(
+    target_instance: CanonicalRoutingInstance,
+) -> None:
+    """An instance the target holds with anything in it beside the
+    name, or of a VRF the source does not name, is compared."""
+    out = compute_field_disposition(
+        _in_vrf("management"),
+        _in_vrf("management", declared=(target_instance,)),
+    )
+    assert out["routing_instances"]["preserved"] is False
+
+
+def test_a_declared_vrf_the_target_loses_is_still_drift() -> None:
+    """The normalisation reads only VRFs the source declares no
+    instance of: a declared instance that the target loses is drift
+    even when it held nothing but its name."""
+    src = _in_vrf("management", declared=(CanonicalRoutingInstance(name="management"),))
+    out = compute_field_disposition(src, _in_vrf("management"))
+    assert out["routing_instances"]["preserved"] is False
+
+
 def test_snmp_v3_passphrase_hash_is_cosmetic_cross_vendor() -> None:
     """An ``snmp`` dict identical except for the v3 auth/priv PASSPHRASE
     hashes must compare PRESERVED.

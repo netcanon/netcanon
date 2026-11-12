@@ -268,41 +268,35 @@ per_field_expectation:
     references: [os10-vyos-surface]
 
   routing_instances:
-    disposition: lossy
-    reason: >
-      The target GAINS a `management` VRF that the OS10 source does not
-      declare, on the 2 committed inputs that put a `management route` in
-      the built-in `management` VRF with no `ip vrf management` line
-      (0 -> 1).  The 3 other cells that populate VRFs preserve them; the
-      synthetic kitchen sink states `ip vrf management`, and its instance
-      is kept as it is.  VyOS cannot hold a route in a VRF it does not
-      declare, so its render declares one (`vrf name management`, with a
-      table of its own) and its parser reads that instance back.
-      NOTE this is a GAIN, not a loss -- no operator-authored VRF is
-      dropped.  The taxonomy has no class for a materialised record, so
-      `lossy` is the closest available disposition rather than an exact
-      one.  The OS10 management port is not written (VyOS has no name for
-      it, and the job says so), so the VRF holds the route and no
+    disposition: good
+    note: >
+      Every VRF the source declares arrives.  A committed input that puts
+      a `management route` in the built-in `management` VRF with no `ip
+      vrf management` line names that VRF and declares no instance of it;
+      VyOS cannot hold a route in a VRF it does not declare, so its render
+      declares one (`vrf name management`, with a table of its own) and
+      its parser reads that instance back.  The instance holds nothing
+      but the name the source gives, and the harness reads it as no
+      drift.  The OS10 management port is not written (VyOS has no name
+      for it, and the job says so), so the VRF holds the route and no
       interface: bind the port the target is managed through to it.
     references: [os10-vyos-surface]
 
   routing_instances[].description:
-    disposition: lossy
-    reason: >
-      Follows `routing_instances`: the materialised `management` VRF has no
-      description, so the subfield registers as drifted on the same 2
-      cells.  A GAIN, not a loss.
+    disposition: good
+    note: >
+      Follows `routing_instances`: the `management` VRF the target
+      declares for a name the source gives has no description, and no
+      cell drifts.
     references: [os10-vyos-surface]
 
   routing_instances[].name:
     disposition: good
     note: >
-      Every VRF the source declares arrives under its own name, on the 3
-      cells where it declares one.  On 2 other cells the source declares
-      none and the target holds the `management` VRF it declares for a
-      `management route` (see `routing_instances`), which the harness
-      reads as a structural difference in the set of names, not as a name
-      that drifted.
+      Every VRF the source declares arrives under its own name.  Where
+      the source declares none and names the `management` VRF in a
+      `management route`, the target holds the VRF it declares for it
+      under that name (see `routing_instances`).
     references: [os10-vyos-surface]
 
   snmp.community:

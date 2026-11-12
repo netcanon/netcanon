@@ -243,11 +243,16 @@ Canonical mapping:
   platform that defines it.  IOS-XE writes a local account's privilege
   level and no role, from any source; a role the source names is not
   carried.
-- **`/routing-instances/instance`** — VRFs translate, but per-VRF
-  static routes don't carry a VRF discriminator (route-table
-  membership drops on round-trip).  `address-family ipv6` and EVPN
-  sub-stanzas inside `vrf definition` are parse-and-ignore in v1.
-  See the codec's `CapabilityMatrix.lossy` declarations.
+- **`/routing-instances/instance`** — VRFs translate with their
+  RD, route targets and description, and a route of a VRF keeps
+  its VRF (`ip route vrf <name> ...`, `ipv6 route vrf <name>
+  ...`).  The `address-family` blocks of a `vrf definition` are
+  not read: a VRF is written with the families its interfaces and
+  routes use (see Common gotchas), so a family enabled with nothing
+  in it is not carried, and a route target of the `ipv6` block is
+  written under `ipv4`.  EVPN sub-stanzas inside `vrf definition`
+  are parse-and-ignore.  See the codec's `CapabilityMatrix.lossy`
+  declarations.
 - **A DHCP pool's range and interface** — an IOS-XE pool states no
   range and names no interface: it hands out every address of its
   network but those `ip dhcp excluded-address` names and the device's
@@ -727,6 +732,23 @@ translate it again from `show running-config` as the device prints it.
   the route's own table is read as the route.  ⚠️ Up to 0.7.7 the
   words were read past: a VRF's default route to the Internet was
   written as a route to a next hop of the VRF itself.
+- **A VRF is written with the address families it uses** (CLI
+  codec, as a target).  An address on an interface bound to a VRF
+  "requires that the address family corresponding to the address
+  type is active for that VRF" (Cisco, "MPLS VPN VRF CLI for IPv4
+  and IPv6 VPNs"), so each `vrf definition` has an `address-family
+  ipv4` block where an interface of the VRF has an IPv4 address
+  (DHCP included), a route of it is IPv4, route targets are written
+  in it, or nothing in it is IPv6, and an `address-family ipv6`
+  block where an interface has an IPv6 address or a route is IPv6.
+  A VRF an interface or a route names and no `vrf definition`
+  declares (OS10's `management`, a fragment) is defined after the
+  others, since IOS-XE refuses `vrf forwarding` to a VRF it does
+  not have.  ⚠️ Up to 0.7.7 a VRF with no route target was written
+  with no address family at all, and none had `address-family
+  ipv6`: IOS-XE refuses every address of such an interface, from
+  every source, IOS-XE itself included; and a VRF no instance
+  declared was named and not defined.
 - **`ip route <prefix> <mask> dhcp` keeps a word where a name
   goes** (CLI codec).  The keyword says the next hop is the default
   router a DHCP server hands out, and a translated route holds an

@@ -45,7 +45,10 @@ from typing import Any
 import pytest
 
 from netcanon.migration._user_secrets import holds_no_secret
-from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalRoutingInstance,
+)
 
 # Side-effect imports to auto-register every codec with the registry
 # so ``get_codec(name)`` below can look them up by name.  If you add a
@@ -340,7 +343,21 @@ def test_real_capture_round_trips_stable(
     # re-parse even though canonical meaning is identical.  Sorting
     # by the natural identity key for each type gives us the semantic
     # equality check we actually want.
-    def _compare(intent: CanonicalIntent) -> dict[str, Any]:
+    # A VRF the first parse's interfaces or routes name and no
+    # instance declares is defined by a renderer whose platform
+    # refuses a VRF it does not have (IOS-XE `vrf forwarding`), so
+    # the re-parse holds an instance of nothing but that name.  It
+    # says no more than the naming did, and is left out of the
+    # re-parse; an instance with anything more in it, or of a VRF
+    # the first parse declares, is compared.
+    implied = {
+        i.vrf for i in first.interfaces if i.vrf
+    } | {r.vrf for r in first.static_routes if r.vrf}
+    implied -= {r.name for r in first.routing_instances}
+
+    def _compare(
+        intent: CanonicalIntent, implied: frozenset[str] = frozenset(),
+    ) -> dict[str, Any]:
         d = intent.model_dump()
         d.pop("source_vendor", None)
         d.pop("source_format", None)
@@ -373,6 +390,11 @@ def test_real_capture_round_trips_stable(
         d["local_users"] = [
             u for u in d["local_users"]
             if not holds_no_secret(u["hashed_password"])
+        ]
+        d["routing_instances"] = [
+            r for r in d["routing_instances"]
+            if r["name"] not in implied
+            or r != CanonicalRoutingInstance(name=r["name"]).model_dump()
         ]
         # Sort collections by natural identity key.
         for key, id_key in [
@@ -418,7 +440,7 @@ def test_real_capture_round_trips_stable(
                 )
         return d
 
-    assert _compare(first) == _compare(second), (
+    assert _compare(first) == _compare(second, frozenset(implied)), (
         f"{codec_key} round-trip not stable on {path.name}: "
         f"canonical representation changed after parse->render->parse"
     )

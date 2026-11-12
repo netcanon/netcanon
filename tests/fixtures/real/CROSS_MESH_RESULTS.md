@@ -74,8 +74,8 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 17/21 |
 | cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
 | cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| dell_os10/azlocal_tor1.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
-| dell_os10/azlocal_tor2.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
+| dell_os10/azlocal_tor1.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
+| dell_os10/azlocal_tor2.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
 | dell_os10/azsupport_TOR1_Sample.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | dell_os10/azsupport_TOR2_Sample.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | dell_os10/canu_sw-leaf-bmc-001.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
@@ -5737,14 +5737,13 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | UNSUPPORTED (by design) | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... |  | snmp: {'community': '', 'location': 'IIC Azure Local Rack 1', 'contact': 'IIC Infrastructure Team', 'trap_hosts': ['10.0.0.20'], 'v3_users': [{'name': 'iicsnmp', 'group': 'iicsnmp', 'auth_protocol'... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "root-lr"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "root... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "root-lr"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "root-lr"}}} |
 
-### dell_os10/azlocal_tor1.txt → cisco_nxos  (WARN 17/21)
+### dell_os10/azlocal_tor1.txt → cisco_nxos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt_10.0.0.0/24", "description": "", "tagged_port... | {"vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}": {"name": {"source": "oob-mgmt 10.0.0.0/24", "target": "oob-mgmt_10.0.0.0/24"}}, "vlans[2] {'id': 710, 'name': 'mgmt 10.0.1.0/24'}": {"name":... |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role":... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}} |
-| routing_instances | DRIFT | [] | [{"name": "management", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | 1 routing_instances appeared in target (parser bug?) |
 
 ### dell_os10/azlocal_tor1.txt → fortigate_cli  (WARN 16/21)
 
@@ -5785,7 +5784,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor1.txt → vyos  (WARN 16/21)
+### dell_os10/azlocal_tor1.txt → vyos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -5793,7 +5792,6 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": ""}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": ""}] | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": ""}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": ""}}} |
-| routing_instances | DRIFT | [] | [{"name": "management", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | 1 routing_instances appeared in target (parser bug?) |
 
 ### dell_os10/azlocal_tor2.txt → arista_eos  (WARN 17/21)
 
@@ -5851,14 +5849,13 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | UNSUPPORTED (by design) | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... |  | snmp: {'community': '', 'location': 'IIC Azure Local Rack 1', 'contact': 'IIC Infrastructure Team', 'trap_hosts': ['10.0.0.20'], 'v3_users': [{'name': 'iicsnmp', 'group': 'iicsnmp', 'auth_protocol'... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "root-lr"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "root... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "root-lr"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "root-lr"}}} |
 
-### dell_os10/azlocal_tor2.txt → cisco_nxos  (WARN 17/21)
+### dell_os10/azlocal_tor2.txt → cisco_nxos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt_10.0.0.0/24", "description": "", "tagged_port... | {"vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}": {"name": {"source": "oob-mgmt 10.0.0.0/24", "target": "oob-mgmt_10.0.0.0/24"}}, "vlans[2] {'id': 710, 'name': 'mgmt 10.0.1.0/24'}": {"name":... |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role":... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}} |
-| routing_instances | DRIFT | [] | [{"name": "management", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | 1 routing_instances appeared in target (parser bug?) |
 
 ### dell_os10/azlocal_tor2.txt → fortigate_cli  (WARN 16/21)
 
@@ -5899,7 +5896,7 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor2.txt → vyos  (WARN 16/21)
+### dell_os10/azlocal_tor2.txt → vyos  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -5907,7 +5904,6 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": ""}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": ""}] | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": ""}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": ""}}} |
-| routing_instances | DRIFT | [] | [{"name": "management", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}] | 1 routing_instances appeared in target (parser bug?) |
 
 ### dell_os10/azsupport_TOR1_Sample.cfg → arista_eos  (WARN 19/21)
 
