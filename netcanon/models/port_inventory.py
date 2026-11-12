@@ -860,6 +860,11 @@ class MappingPlan(BaseModel):
     target the output then has no source for the VTEP, or names a
     default one that the output does not define."""
 
+    lost_tunnel_sources: list[str] = Field(default_factory=list)
+    """Tunnels that survive but left from a dropped port, sorted.  The
+    tunnel's source went with the port, so the output writes the
+    tunnel with no source."""
+
     unresolved_ports: list[str] = Field(default_factory=list)
     """Used source names that still need a decision, sorted: a port
     dropped because it had no place, a management port kept by the

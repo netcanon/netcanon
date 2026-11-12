@@ -168,6 +168,9 @@ def _maximal_intent() -> CanonicalIntent:
         trunk_allowed_vlans=[10, 20],
         trunk_native_vlan=99, voice_vlan=200, lag_member_of="Port-Channel1",
         dhcp_client=True, dhcp_client_v6="dhcp6", tunnel_type="gre",
+        # A tunnel has one source; both are set so both paths walk.
+        tunnel_source_address="192.0.2.1", tunnel_source_interface="Loopback0",
+        tunnel_destination="198.51.100.7",
         vrf="TENANT",
         vrrp_groups=[CanonicalVRRPGroup(
             group_id=10,

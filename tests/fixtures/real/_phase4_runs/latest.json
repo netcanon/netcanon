@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-11-12T04:13:34+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261112T041331Z.json",
-  "mesh_run_started_utc": "2026-11-12T04:13:20+00:00",
+  "started_utc": "2026-11-12T05:39:34+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261112T053931Z.json",
+  "mesh_run_started_utc": "2026-11-12T05:39:20+00:00",
   "cells_total": 1469,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -795,6 +795,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -822,6 +825,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -849,6 +855,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -886,6 +895,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -913,6 +925,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -940,6 +955,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1687,6 +1705,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1714,6 +1735,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1741,6 +1765,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1778,6 +1805,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1805,6 +1835,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -1832,6 +1865,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3453,6 +3489,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3499,6 +3538,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3526,6 +3568,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3571,6 +3616,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3617,6 +3665,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []
@@ -3644,6 +3695,9 @@
                 "dhcp_client": false,
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                "tunnel_source_address": "",
+                "tunnel_source_interface": "",
+                "tunnel_destination": "",
                 "vrf": "",
                 "kind": "",
                 "vrrp_groups": []

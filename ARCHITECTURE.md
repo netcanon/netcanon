@@ -1676,7 +1676,8 @@ members, and beside a management port under `deployment_ports`.
   `sub_interfaces`, `untagged_units`, `unvouched_units`,
   `emptied_lags`, `shrunk_lags`,
   `lost_routes`,
-  `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
+  `lost_dhcp_pools`, `lost_tracking`, `lost_vtep_sources` and
+  `lost_tunnel_sources` are
   stored fields, so a client reads the outcome as data.  `pairings` and
   `rename_map` stay the pairing as it was made, before the
   operator's map: `overridden` names the pairings a client must not

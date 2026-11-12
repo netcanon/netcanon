@@ -556,6 +556,33 @@ class DellOS10Codec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-address",
+                reason=(
+                    "No tunnel encapsulation is written (see "
+                    "`/interfaces/interface/tunnel-type`), and no end of "
+                    "a tunnel: its source and its destination are not "
+                    "written."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-interface",
+                reason=(
+                    "No tunnel encapsulation is written (see "
+                    "`/interfaces/interface/tunnel-type`), and no end of "
+                    "a tunnel: its source and its destination are not "
+                    "written."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-destination",
+                reason=(
+                    "No tunnel encapsulation is written (see "
+                    "`/interfaces/interface/tunnel-type`), and no end of "
+                    "a tunnel: its source and its destination are not "
+                    "written."
+                ),
+            ),
             # ── ⚠️ SUB-PATHS OF AN UNSUPPORTED ANCHOR ──
             # `CapabilityMatrix.classify()` is an EXACT-STRING match, so
             # declaring a parent (`/snmp/v3-user`) does NOT cover its

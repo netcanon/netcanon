@@ -69,6 +69,17 @@ __all__ = [
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "FortiOS makes a tunnel interface from `config system gre-tunnel` "
+        "or an IPsec phase1-interface, which this output writes none of "
+        "(see `/interfaces/interface/tunnel-type`): the tunnel's source "
+        "and destination are not written.",
+        (
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
+        ),
+    ),
+    (
         "No IPv4 virtual gateway is written "
         "(`ipv4/address/virtual-gateway-address` is unsupported), so "
         "neither is the MAC that goes with one.",

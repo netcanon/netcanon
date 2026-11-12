@@ -72,6 +72,10 @@ Field-typed rules (counter-per-session):
   MACs (derived from the group ID) and multicast / broadcast / all-zero
   addresses are preserved — they identify nothing about the operator
 * ``CanonicalInterface.description`` → ``description redacted``
+* ``CanonicalInterface.tunnel_source_address`` (public) → docs range,
+  and ``CanonicalInterface.tunnel_destination`` (public, or an FQDN →
+  ``host-N.example.test``) — a tunnel's far end is as often as not
+  another site's public WAN address
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalDHCPPool.gateway`` (public) → docs range
 * ``CanonicalDHCPPool.start_ip`` / ``end_ip`` (public) → docs range
@@ -379,6 +383,30 @@ def sanitize_intent(  # noqa: C901
                 redacted=new_vrf,
             ))
             iface.vrf = new_vrf
+
+        # A tunnel's two ends.  The source interface is a port name and
+        # stays; an address is redacted as every address is, and a
+        # destination may be a host name, which re-leaks the domain.
+        if iface.tunnel_source_address:
+            new_source = table.redact_ip_string(iface.tunnel_source_address)
+            if new_source != iface.tunnel_source_address:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"interfaces[{i}].tunnel_source_address",
+                    original=iface.tunnel_source_address,
+                    redacted=new_source,
+                ))
+                iface.tunnel_source_address = new_source
+        if iface.tunnel_destination:
+            new_destination = table.redact_host(iface.tunnel_destination)
+            if new_destination != iface.tunnel_destination:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"interfaces[{i}].tunnel_destination",
+                    original=iface.tunnel_destination,
+                    redacted=new_destination,
+                ))
+                iface.tunnel_destination = new_destination
 
         for j, addr in enumerate(iface.ipv4_addresses):
             new_ip = table.redact_ipv4(addr.ip)

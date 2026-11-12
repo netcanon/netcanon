@@ -346,6 +346,25 @@ class CanonicalInterface(BaseModel):
             populates from interface-name prefix (``gr-`` → gre,
             ``ip-`` → ipip, ``st0`` → ipsec).  Only meaningful when
             ``interface_type == 'ianaift:tunnel'``.
+        tunnel_source_address: The address a tunnel's packets leave
+            from, where the config states one (IOS-XE ``tunnel source
+            192.0.2.1``).  ``""`` = not stated.  An address and never a
+            word of the config: a keyword in its place (IOS-XE
+            ``tunnel source dynamic``) is not read into it, and the
+            parser says the line in ``dropped_tier3_sections``.
+        tunnel_source_interface: The interface whose address a
+            tunnel's packets leave from, where the config states an
+            interface (IOS-XE ``tunnel source Loopback0``).  A port
+            name: the port translator moves it with the port it names,
+            and a drop of that port clears it and says so.  A tunnel
+            has one source, so at most one of the two source fields is
+            set.
+        tunnel_destination: The far end of a tunnel: an address, or a
+            host name on a platform that takes one (IOS-XE ``tunnel
+            destination {host-name | ip-address | ipv6-address}``).
+            ``""`` = not stated.  A codec that writes a tunnel without
+            its ends, or writes no tunnel, declares the three paths
+            unsupported: a tunnel with no destination carries nothing.
         vrf: VRF / routing-instance membership; empty = global /
             default VRF.  Matches a
             :attr:`CanonicalRoutingInstance.name` declared at the
@@ -396,6 +415,9 @@ class CanonicalInterface(BaseModel):
     dhcp_client: bool = False
     dhcp_client_v6: str = ""
     tunnel_type: str = ""
+    tunnel_source_address: str = ""
+    tunnel_source_interface: str = ""
+    tunnel_destination: str = ""
     vrf: str = ""
     kind: str = ""
     vrrp_groups: list[CanonicalVRRPGroup] = Field(default_factory=list)

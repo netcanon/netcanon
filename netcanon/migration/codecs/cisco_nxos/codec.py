@@ -71,6 +71,16 @@ from .render import render_intent
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "The codec writes a tunnel's mode and no `tunnel source` or "
+        "`tunnel destination`: a tunnel interface is written without its "
+        "ends.",
+        (
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
+        ),
+    ),
+    (
         "No DHCP pool is written (`/dhcp-servers/pool` is unsupported), so "
         "no field of one is: its range, its interface, its gateway, DNS "
         "servers, domain and lease go with it.",

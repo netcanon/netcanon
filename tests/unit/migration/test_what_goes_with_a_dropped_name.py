@@ -4,9 +4,9 @@ The port translator drops a name the target has no form for, and a
 name an operator's entry maps to ``null``.  With the name it removes
 what cannot stand without it (``_strip_dropped_ports``): a static
 route out of it, a DHCP pool on it, a VRRP track entry of it, a VXLAN
-source that is it, its place in a LAG.  The job listed the name; what
-went with it was in no line of the job and, being removed, in no line
-of the output.  Where both devices are declared the plan said it,
+source that is it, a tunnel's source that is it, its place in a LAG.
+The job listed the name; what went with it was in no line of the job
+and, being removed, in no line of the output.  Where both devices are declared the plan said it,
 from a reading of its own; with none declared -- what every plan
 endpoint runs by default -- nothing did: the Cisco Live EVPN leaf's
 ``Loopback2`` is its VTEP source, and onto Junos the VTEP was left
@@ -78,6 +78,10 @@ class _Before:
         self.routes = list(tree.static_routes)
         self.pools = list(tree.dhcp_servers)
         self.vnis = [(vx, vx.source_interface) for vx in tree.vxlan_vnis]
+        self.tunnels = [
+            (iface, iface.name, iface.tunnel_source_interface)
+            for iface in tree.interfaces
+        ]
         self.tracks = [
             (iface, iface.name, sum(len(g.track_interfaces) for g in iface.vrrp_groups))
             for iface in tree.interfaces
@@ -133,6 +137,10 @@ def _gone(before: _Before, tree: CanonicalIntent) -> dict[str, Counter]:
             name for iface, name, count in before.tracks
             if id(iface) in interfaces
             and sum(len(g.track_interfaces) for g in iface.vrrp_groups) < count
+        ),
+        "lost_tunnel_sources": Counter(
+            name for iface, name, source in before.tunnels
+            if source and id(iface) in interfaces and not iface.tunnel_source_interface
         ),
         "emptied_lags": emptied,
         "shrunk_lags": shrunk,
@@ -215,6 +223,17 @@ config system dhcp server
 end
 """
 
+_IOS_TUNNEL = """hostname sw
+interface Loopback0
+ ip address 192.0.2.1 255.255.255.255
+!
+interface Tunnel0
+ ip address 10.9.0.1 255.255.255.252
+ tunnel source Loopback0
+ tunnel destination 198.51.100.7
+!
+"""
+
 _SAID = "port_rename: "
 
 
@@ -230,6 +249,7 @@ def _what_went(job) -> list[str]:
     return [line for line in job.warnings if line.startswith(_SAID) and (
         "removed with it" in line or "LAG(s)" in line
         or "VRRP track entry" in line or "VXLAN source interface" in line
+        or "tunnel(s) left from" in line
     )]
 
 
@@ -285,6 +305,24 @@ class TestTheRecord:
         tree = get_codec("fortigate_cli").parse(_FGT_POOL)
         before, result = _translate("fortigate_cli", "cisco_iosxe_cli", tree, {"internal1": None})
         assert result.taken.lost_dhcp_pools == ["10.1.0.0/24"]
+        assert _recorded(result.taken) == _gone(before, tree)
+
+    def test_a_tunnels_source(self) -> None:
+        tree = get_codec("cisco_iosxe_cli").parse(_IOS_TUNNEL)
+        before, result = _translate("cisco_iosxe_cli", "arista_eos", tree, {"Loopback0": None})
+        assert result.taken.lost_tunnel_sources == ["Tunnel0"]
+        assert _recorded(result.taken) == _gone(before, tree)
+        (tunnel,) = tree.interfaces
+        assert (tunnel.tunnel_source_interface, tunnel.tunnel_destination) == (
+            "", "198.51.100.7",
+        )
+
+    def test_a_tunnel_that_is_itself_dropped_lost_nothing(self) -> None:
+        tree = get_codec("cisco_iosxe_cli").parse(_IOS_TUNNEL)
+        before, result = _translate(
+            "cisco_iosxe_cli", "arista_eos", tree, {"Loopback0": None, "Tunnel0": None},
+        )
+        assert result.taken.lost_tunnel_sources == []
         assert _recorded(result.taken) == _gone(before, tree)
 
     def test_the_translators_own_drop(self) -> None:
@@ -376,6 +414,19 @@ class TestTheOracleFails:
         )
         assert _what_went(job) == []
 
+    def test_a_record_that_says_nothing_of_the_tunnel(self, monkeypatch) -> None:
+        real = port_names._what_goes
+
+        def less(intent, dropped, named):
+            taken = real(intent, dropped, named)
+            taken.lost_tunnel_sources = []
+            return taken
+
+        monkeypatch.setattr(port_names, "_what_goes", less)
+        tree = get_codec("cisco_iosxe_cli").parse(_IOS_TUNNEL)
+        before, result = _translate("cisco_iosxe_cli", "arista_eos", tree, {"Loopback0": None})
+        assert _recorded(result.taken) != _gone(before, tree)
+
     def test_a_record_of_what_stayed(self, monkeypatch) -> None:
         """A record of a route the strip did not remove."""
         real = port_names._what_goes
@@ -447,6 +498,15 @@ class TestTheJobSaysIt:
         assert _what_went(job) == [
             "port_rename: the VXLAN source interface was dropped (Loopback2), "
             "so the VTEP is left without the source it was bound to — give it one",
+        ]
+
+    def test_a_tunnels_source(self) -> None:
+        job = _checked("cisco_iosxe_cli", "cisco_iosxe_cli", _IOS_TUNNEL, {"Loopback0": None})
+        assert "tunnel source" not in job.rendered
+        assert "tunnel destination 198.51.100.7" in job.rendered
+        assert _what_went(job) == [
+            "port_rename: 1 tunnel(s) left from a dropped interface, so the "
+            "tunnel has no source on the target — give it one: Tunnel0",
         ]
 
     def test_no_drop_says_nothing(self) -> None:

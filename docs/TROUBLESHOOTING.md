@@ -1340,12 +1340,13 @@ and the four causes above do not apply.  That is a fault in netcanon
 — report it with the config.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
-`lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
-port took something with it: a LAG loses a dropped member (and may be
-left with none), a static route or a DHCP pool that names a dropped
-port is removed whole, an interface that stays loses the VRRP track
-entry that named it, and a VTEP loses the source interface it was
-bound to.
+`lost_dhcp_pools`, `lost_tracking`, `lost_vtep_sources` or
+`lost_tunnel_sources`, a dropped port took something with it: a LAG
+loses a dropped member (and may be left with none), a static route or
+a DHCP pool that names a dropped port is removed whole, an interface
+that stays loses the VRRP track entry that named it, a VTEP loses the
+source interface it was bound to, and a tunnel loses the interface it
+left from.
 
 If the plan lists `off_target`, one of your targets is not a name the
 target model lists.  That is allowed — but check it is not another

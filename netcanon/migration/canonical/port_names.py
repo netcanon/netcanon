@@ -311,6 +311,8 @@ class TakenWithDrops(BaseModel):
     lost_tracking: list[str] = Field(default_factory=list)
     #: The dropped names a VXLAN VNI had as its source interface.
     lost_vtep_sources: list[str] = Field(default_factory=list)
+    #: Tunnels kept whose source interface was dropped.
+    lost_tunnel_sources: list[str] = Field(default_factory=list)
 
     def add(self, other: TakenWithDrops) -> None:
         """Add *other*'s entries, and keep a LAG that another drop
@@ -458,6 +460,8 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
             yield iface.lag_member_of
         if iface.vlan_parent:
             yield iface.vlan_parent
+        if iface.tunnel_source_interface:
+            yield iface.tunnel_source_interface
         # VRRP track-interface references are port names too.
         for grp in iface.vrrp_groups:
             yield from grp.track_interfaces
@@ -482,8 +486,9 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
 def _only_referred_to(intent: CanonicalIntent) -> set[str]:
     """The names *intent* holds only where it REFERS to an interface:
     a static route's or a DHCP pool's interface, a VRRP track entry,
-    a VXLAN source, the parent a VLAN interface rides on -- and in no
-    other place the sweep visits.
+    a VXLAN source, the parent a VLAN interface rides on, the
+    interface a tunnel leaves from -- and in no other place the sweep
+    visits.
 
     Counted, not listed from the other side: a name is one of these
     when every place :func:`_swept_names` finds it is one of those
@@ -496,6 +501,8 @@ def _only_referred_to(intent: CanonicalIntent) -> set[str]:
             referred.update(grp.track_interfaces)
         if iface.vlan_parent:
             referred[iface.vlan_parent] += 1
+        if iface.tunnel_source_interface:
+            referred[iface.tunnel_source_interface] += 1
     referred.update(r.interface for r in intent.static_routes if r.interface)
     referred.update(p.interface for p in intent.dhcp_servers if p.interface)
     referred.update(v.source_interface for v in intent.vxlan_vnis if v.source_interface)
@@ -538,6 +545,10 @@ def rewrite_port_names(
             iface.lag_member_of = resolve(iface.lag_member_of)
         if iface.vlan_parent:
             iface.vlan_parent = resolve(iface.vlan_parent)
+        # A tunnel leaves from its source interface under the name the
+        # output gives it.
+        if iface.tunnel_source_interface:
+            iface.tunnel_source_interface = resolve(iface.tunnel_source_interface)
         # (#3) Rewrite each VRRP group's track-interface list so failover
         # tracking survives a rename (a stale name silently disables it).
         for grp in iface.vrrp_groups:
@@ -1166,6 +1177,7 @@ def translate_port_names(  # noqa: C901
         * ``intent.interfaces[].name``
         * ``intent.interfaces[].lag_member_of``
         * ``intent.interfaces[].vlan_parent``
+        * ``intent.interfaces[].tunnel_source_interface``
         * ``intent.interfaces[].vrrp_groups[].track_interfaces[]``
         * ``intent.vlans[].tagged_ports[]``
         * ``intent.vlans[].untagged_ports[]``
@@ -2066,6 +2078,9 @@ def _strip_dropped_ports(
           failover on the target).
         * ``intent.vxlan_vnis[].source_interface`` — cleared if dropped
           (a dangling VTEP source breaks the whole overlay binding).
+        * ``intent.interfaces[].tunnel_source_interface`` — cleared if
+          dropped (a tunnel cannot leave from an interface the output
+          does not have).
 
     Mutates *intent* in place.  Idempotent: subsequent calls with the
     same *dropped* set are no-ops.
@@ -2086,6 +2101,8 @@ def _strip_dropped_ports(
             iface.lag_member_of = None
         if iface.vlan_parent in dropped:
             iface.vlan_parent = None
+        if iface.tunnel_source_interface in dropped:
+            iface.tunnel_source_interface = ""
         # (#3) Drop dangling VRRP track-interface references.
         for grp in iface.vrrp_groups:
             grp.track_interfaces = [
@@ -2176,6 +2193,11 @@ def _what_goes(
         vx.source_interface for vx in intent.vxlan_vnis
         if vx.source_interface and vx.source_interface in dropped
     ))
+    taken.lost_tunnel_sources = [
+        iface.name for iface in intent.interfaces
+        if iface.name not in dropped
+        and iface.tunnel_source_interface in dropped
+    ]
     return taken
 
 
