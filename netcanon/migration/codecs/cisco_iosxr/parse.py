@@ -153,6 +153,7 @@ from .._helpers import (
     ip_mtu_read,
     keyword_stanza_rows,
     mtu_read,
+    next_hop_elsewhere_rows,
     second_dot1q_tags,
     spaced_port_name,
     without_keyword_stanzas,
@@ -1383,13 +1384,9 @@ def _parse_router_static(raw: str) -> tuple[list[CanonicalStaticRoute], list[str
             r = _parse_static_leaf(stripped, vrf=current_vrf)
             if r:
                 routes.append(r)
-    rows = []
-    if elsewhere:
-        rows.append(
-            f"router static: {elsewhere} route(s) whose next hop is in "
-            "another VRF (<prefix> vrf <name> <next hop>): the tree has no "
-            "form for a next hop outside the route's own VRF; not translated"
-        )
+    rows = next_hop_elsewhere_rows(
+        "router static", elsewhere, "<prefix> vrf <name> <next hop>",
+    )
     return routes, rows
 
 

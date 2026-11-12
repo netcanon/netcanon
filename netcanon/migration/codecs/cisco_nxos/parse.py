@@ -78,6 +78,7 @@ from .._helpers import (
     a_tag,
     address_key,
     keyword_stanza_rows,
+    next_hop_elsewhere_rows,
     sole_vlan_id,
     spaced_port_name,
     tags_every_native_vlan,
@@ -689,7 +690,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # merge into static_routes below.  ``vni`` (L3VNI) stays Phase 4.
     # Per-interface ``vrf member`` membership is set by
     # :func:`_parse_interfaces`.
-    intent.routing_instances, _vrf_static_routes = _parse_routing_instances(raw)
+    intent.routing_instances, _vrf_static_routes, _vrf_elsewhere = (
+        _parse_routing_instances(raw)
+    )
 
     # An HSRP statement the tree does not hold is said, a row for each
     # kind (``hsrp timers``, ``hsrp authentication md5 key-string 7``).
@@ -708,8 +711,14 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # per-VRF routes harvested from inside ``vrf context`` blocks (above)
     # carry ``vrf=<name>`` and merge in here.  The two sets are disjoint
     # by indentation (top-level ``^ip route`` vs nested ``  ip route``),
-    # so no de-dup is required.
-    intent.static_routes = _parse_static_routes(raw) + _vrf_static_routes
+    # so no de-dup is required.  A route whose next hop is in another
+    # VRF is left out of both, and a row says how many.
+    _top_routes, _top_elsewhere = _parse_static_routes(raw)
+    intent.static_routes = _top_routes + _vrf_static_routes
+    intent.dropped_tier3_sections.extend(next_hop_elsewhere_rows(
+        "ip route", _top_elsewhere + _vrf_elsewhere,
+        "ip route <prefix> <next hop> vrf <name>",
+    ))
 
     # LAGs (Phase 2) — both the ``interface port-channelN`` declaration
     # and per-member ``channel-group N mode M`` lines contribute.
@@ -819,7 +828,7 @@ def _extract_version(raw: str) -> str:
 
 def _parse_routing_instances(
     raw: str,
-) -> tuple[list[CanonicalRoutingInstance], list[CanonicalStaticRoute]]:
+) -> tuple[list[CanonicalRoutingInstance], list[CanonicalStaticRoute], int]:
     """Extract ``vrf context <name>`` blocks + their per-VRF static routes.
 
     A NX-OS VRF stanza looks like::
@@ -834,7 +843,9 @@ def _parse_routing_instances(
             route-target both auto evpn   ← Phase 3 (RT kept, evpn dropped)
           ip route 10.50.0.0/16 172.16.0.2  ← Phase 3 (per-VRF static)
 
-    Returns a ``(instances, per_vrf_routes)`` pair.  Phase 3 harvests
+    Returns ``(instances, per_vrf_routes, elsewhere)``: *elsewhere*
+    counts the nested routes whose next hop is in another VRF, which
+    are left out (:func:`_without_next_hop_vrf`).  Phase 3 harvests
     ``name`` / ``description`` / ``rd`` (``auto`` preserved verbatim as a
     sentinel) / ``route-target`` (``both`` expands to import + export; a
     trailing ``evpn`` discriminator is dropped) onto the instance, and
@@ -850,8 +861,10 @@ def _parse_routing_instances(
     non-indented line.
     """
     per_vrf_routes: list[CanonicalStaticRoute] = []
+    elsewhere = 0
 
     def _on_line(line: str, current: CanonicalRoutingInstance) -> None:
+        nonlocal elsewhere
         dm = _VRF_DESCRIPTION_RE.match(line)
         if dm:
             current.description = dm.group(1).strip()
@@ -869,6 +882,11 @@ def _parse_routing_instances(
             if direction in ("export", "both"):
                 current.rt_exports.append(rt)
             return
+        if _VRF_IPV6_ROUTE_RE.match(line) or _VRF_IP_ROUTE_RE.match(line):
+            line, away = _without_next_hop_vrf(line, current.name)
+            if away:
+                elsewhere += 1
+                return
         route6_m = _VRF_IPV6_ROUTE_RE.match(line)
         if route6_m:
             per_vrf_routes.append(_make_static_route_v6(
@@ -933,7 +951,7 @@ def _parse_routing_instances(
         ri.rt_imports = list(dict.fromkeys(ri.rt_imports))
         ri.rt_exports = list(dict.fromkeys(ri.rt_exports))
 
-    return instances, per_vrf_routes
+    return instances, per_vrf_routes, elsewhere
 
 
 def _new_iface_scratch(name: str) -> dict:
@@ -1524,7 +1542,53 @@ def _make_static_route_v6(
     )
 
 
-def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+#: The words of an NX-OS route line whose value follows them: a value
+#: spelled ``vrf`` is no VRF keyword.
+_ROUTE_WORDS_WITH_A_VALUE = frozenset({"name", "tag", "track"})
+
+
+def _without_next_hop_vrf(line: str, own: str) -> tuple[str, bool]:
+    """*line* without the ``vrf <name>`` of its next hop, and whether
+    that VRF is another than *own*.
+
+    NX-OS writes ``ip route <prefix> {<next hop> | <interface>
+    [<next hop>]} [name <n>] [tag <t>] [<preference>] [track <n>]
+    [vrf <name>]``, the VRF being "the VRF for the next hop, if it is
+    different from the present VRF" (Cisco, Nexus 9000 "Configuring
+    Static Routing"); the 9.3 command reference writes it right after
+    the next hop.  Read past, the words were lost and the route was
+    written as a route to a next hop of its own VRF, and a preference
+    after them was lost with them.  A route whose next hop is in
+    another VRF is one the tree has no form for; a ``vrf`` that names
+    the route's own VRF is taken out, and the line read without it.
+
+    Args:
+        line: An ``ip route`` or ``ipv6 route`` line, at the top level
+            or in a ``vrf context``.
+        own: The VRF the route is in (``default`` at the top level).
+
+    Returns:
+        ``(line, elsewhere)``: the line, without its next hop's VRF
+        where that is *own*; and whether the next hop is in another
+        VRF.
+    """
+    words = line.split()
+    at = 3
+    while at < len(words) - 1:
+        word = words[at].lower()
+        if word in _ROUTE_WORDS_WITH_A_VALUE:
+            at += 2
+        elif word == "vrf":
+            if words[at + 1] != own:
+                return line, True
+            indent = line[: len(line) - len(line.lstrip())]
+            return indent + " ".join(words[:at] + words[at + 2:]), False
+        else:
+            at += 1
+    return line, False
+
+
+def _parse_static_routes(raw: str) -> tuple[list[CanonicalStaticRoute], int]:
     """Extract top-level ``ip route`` lines (default VRF) from NX-OS text.
 
     NX-OS form: ``ip route <dest>/<prefix> <gw> [<pref>]``.  The trailing
@@ -1536,9 +1600,20 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     :func:`_parse_routing_instances` (Phase 3) onto
     ``CanonicalStaticRoute.vrf`` and merged into the route list by the
     caller.
+
+    Returns:
+        ``(routes, elsewhere)``: the routes, and how many were left out
+        because their next hop is in another VRF
+        (:func:`_without_next_hop_vrf`).
     """
     routes: list[CanonicalStaticRoute] = []
+    elsewhere = 0
     for line in ticked(raw.splitlines()):
+        if _STATIC_ROUTE_V6_RE.match(line) or _STATIC_ROUTE_RE.match(line):
+            line, away = _without_next_hop_vrf(line, "default")
+            if away:
+                elsewhere += 1
+                continue
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             routes.append(_make_static_route_v6(
@@ -1553,7 +1628,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             m.group(1), m.group(2), m.group(3), m.group(5),
             second_hop=m.group(4),
         ))
-    return routes
+    return routes, elsewhere
 
 
 def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:

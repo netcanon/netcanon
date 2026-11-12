@@ -75,6 +75,7 @@ from .._helpers import (
     a_tag,
     keyword_stanza_rows,
     merge_trunk_allowed,
+    next_hop_elsewhere_rows,
     spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
@@ -134,7 +135,10 @@ _IP_ROUTE_RE = re.compile(
     # The ``(?=\s|$)`` boundary stops the distance group from biting a partial
     # digit run off a following token; every optional group keeps the plain
     # ``ip route <prefix> <next-hop>`` form byte-identical.
-    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
+    # ``egress-vrf <name>`` after the destination (group 4) names the VRF
+    # the next hop is in; the next hop then shifts to group 5.
+    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+"
+    r"(?:egress-vrf[ \t]+(\S+)[ \t]+)?(\S+)"
     r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
     re.MULTILINE,
 )
@@ -145,7 +149,9 @@ _IPV6_ROUTE_RE = re.compile(
     # the optional two-token gateway (``ipv6 route <prefix> <iface> <v6-gw>``);
     # it must contain a colon so a bare admin-distance integer (group 5) is not
     # mistaken for a gateway.  ``(?=\s|$)`` boundary as in the v4 form.
-    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    # ``egress-vrf <name>`` as in the v4 form (group 3).
+    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+"
+    r"(?:egress-vrf[ \t]+(\S+)[ \t]+)?(\S+)"
     r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
     re.MULTILINE,
 )
@@ -720,8 +726,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 seen_syslog.add(token)
                 intent.syslog_servers.append(token)
             break
+    # A route whose next hop is in another VRF (``egress-vrf``: Arista,
+    # "Static Inter-VRF Route") is one the tree has no form for: read
+    # with the keyword for its interface it was a route of its own VRF
+    # out an interface called ``egress-vrf``.  It is left out, and a row
+    # says how many; one that names its own VRF is read.
+    elsewhere = 0
     for route_m in _IP_ROUTE_RE.finditer(raw):
-        vrf, ip, prefix, next_hop, gw2, distance = route_m.groups()
+        vrf, ip, prefix, egress, next_hop, gw2, distance = route_m.groups()
+        if egress is not None and egress != (vrf or "default"):
+            elsewhere += 1
+            continue
         # A next hop is either an IP literal (gateway) or an interface name
         # (``Null0``, ``Ethernet1`` — an interface/connected route, ubiquitous
         # as a BGP aggregate anchor ``ip route <agg> Null0``).  Route it to the
@@ -753,7 +768,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             vrf=vrf or "",
         ))
     for route_m in _IPV6_ROUTE_RE.finditer(raw):
-        vrf, dest, next_hop, gw2, distance = route_m.groups()
+        vrf, dest, egress, next_hop, gw2, distance = route_m.groups()
+        if egress is not None and egress != (vrf or "default"):
+            elsewhere += 1
+            continue
         # Same gateway-or-interface split as the v4 branch.
         gateway = ""
         interface = ""
@@ -774,6 +792,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             metric=int(distance) if distance else 0,
             vrf=vrf or "",
         ))
+    intent.dropped_tier3_sections.extend(next_hop_elsewhere_rows(
+        "ip route", elsewhere,
+        "ip route [vrf <name>] <prefix> egress-vrf <name> <next hop>",
+    ))
 
     # --- VARP system-wide MAC (Wave C) -------------------------------
     # ``ip virtual-router mac-address 00:1c:73:00:dc:01`` — top-level

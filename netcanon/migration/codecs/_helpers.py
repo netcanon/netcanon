@@ -1949,6 +1949,39 @@ def one_interface_named(header: str) -> str:
     return name if name != words[0] else ""
 
 
+def next_hop_elsewhere_rows(head: str, count: int, form: str) -> list[str]:
+    """The row that says how many static routes are not translated
+    because their next hop is in another VRF.
+
+    A route of one VRF whose next hop is looked up in another (IOS
+    ``global`` and ``nexthop-vrf``, NX-OS ``vrf <name>`` after the next
+    hop, EOS ``egress-vrf``, IOS XR ``<prefix> vrf <name>``) is a
+    route the tree has no form for: a canonical route has one VRF.
+    Read as a route of its own VRF, it was written into that VRF on
+    every target, its next hop looked up where it is not, in a job
+    that said nothing.  The parser leaves it out, and one row says how
+    many and in what form, for the operator to find each line.  The
+    route is in force on the source, so the row is a section, not a
+    statement left out.
+
+    Args:
+        head: Where the routes are, as the row begins (``ip route``,
+            ``router static``).
+        count: How many routes were left out.
+        form: The form of such a line, as the platform writes it.
+
+    Returns:
+        One row, or none where *count* is 0.
+    """
+    if not count:
+        return []
+    return [
+        f"{head}: {count} route(s) whose next hop is in another VRF "
+        f"({form}): the tree has no form for a next hop outside the "
+        "route's own VRF; not translated"
+    ]
+
+
 def _without_stanzas(
     raw: str, takes_out: Callable[[str], bool],
 ) -> tuple[str, list[str]]:

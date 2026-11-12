@@ -353,6 +353,17 @@ translate it again from `show running-config` as the switch prints it.
   virtual gateway is not written.  Release 0.7.7 and earlier wrote
   nothing for such an address, and the job's validation report
   listed it as lossy.
+- **A route whose next hop is in another VRF is left out.**  NX-OS
+  writes `vrf <name>` after a route's next hop for "the VRF for the
+  next hop, if it is different from the present VRF" (Cisco, Nexus
+  9000 "Configuring Static Routing").  The tree has no form for such
+  a route: it is not translated, and one `ip route: <n> route(s)
+  whose next hop is in another VRF ...` row on the migrate banner
+  counts such routes.  A `vrf` that names the route's own VRF (`vrf
+  default` at the top level) is read past, and a preference written
+  after it is the route's.  ⚠️ Up to 0.7.7 the words were read past:
+  the route was written into its own VRF, its next hop looked up
+  where it is not, and a preference after them was lost.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line — a vPC peer link, usually —
   is read as a trunk of EVERY VLAN, the NX-OS default, and reaches

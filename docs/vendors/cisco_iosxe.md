@@ -715,6 +715,18 @@ translate it again from `show running-config` as the device prints it.
   <prefix>` row on the migrate banner (`ipv6 route` for an IPv6 one)
   says so.  ⚠️ Up to 0.7.7 it was translated as a route: onto IOS
   XR with distance 254, which that router installs.
+- **A route whose next hop is in another VRF is left out** (CLI
+  codec).  `global` after a VRF route's next hop says the next hop
+  is in the global table (Cisco, IOS IP Routing command reference,
+  `ip route vrf`; the IPv6 command reference's own example writes it
+  on an `ipv6 route`), and an IPv6 route's `nexthop-vrf <name>`
+  names the VRF it is in (`default` for the global table).  The tree
+  has no form for such a route: it is not translated, and one `ip
+  route: <n> route(s) whose next hop is in another VRF ...` row on
+  the migrate banner counts such routes.  A `nexthop-vrf` that names
+  the route's own table is read as the route.  ⚠️ Up to 0.7.7 the
+  words were read past: a VRF's default route to the Internet was
+  written as a route to a next hop of the VRF itself.
 - **`ip route <prefix> <mask> dhcp` keeps a word where a name
   goes** (CLI codec).  The keyword says the next hop is the default
   router a DHCP server hands out, and a translated route holds an
