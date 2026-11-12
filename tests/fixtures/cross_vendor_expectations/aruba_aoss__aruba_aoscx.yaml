@@ -361,9 +361,9 @@ per_field_expectation:
       by this corpus and should be checked by hand if your config uses them:
       aruba_aoss declares `/routing/static-route/metric` lossy and both sides
       declare `/routing/static-route/description` lossy, but every committed
-      route carries a zero metric and an empty description.  Both sides also
-      declare `/routing/static-route/vrf` unsupported — irrelevant here
-      because the source cannot emit a VRF at all.
+      route carries a zero metric and an empty description.  aruba_aoss
+      declares `/routing/static-route/vrf` unsupported — AOS-S has no VRF, so
+      no route arrives with one.
     references: [aoss-aoscx-surface]
 
   "routing_instances[].name":

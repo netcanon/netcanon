@@ -353,9 +353,9 @@ per_field_expectation:
       `/routing/static-route/description` lossy — "Render emits destination +
       next-hop only".  Forwarding is intact after cutover; the operator
       labelling on each route is not, so capture route descriptions before
-      migrating if they encode intent.  Separately, aruba_aoscx declares
-      `/routing/static-route/vrf` unsupported, but no cell on this pair binds
-      a route to a VRF, so that path is untested here.
+      migrating if they encode intent.  Separately, opnsense declares
+      `/routing/static-route/vrf` unsupported (it has no VRF), so no route
+      arrives with one.
     references: [opnsense-aoscx-surface]
 
   "routing_instances[].name":

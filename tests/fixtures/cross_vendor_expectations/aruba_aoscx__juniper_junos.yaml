@@ -342,9 +342,10 @@ per_field_expectation:
       juniper_junos declares `/routing/static-route/metric` and
       `/routing/static-route/description` lossy and
       `/routing/static-route/interface` unsupported (an interface-only,
-      gateway-less route is dropped outright).  aruba_aoscx additionally
-      declares `/routing/static-route/vrf` unsupported, so per-VRF statics
-      never leave the source.  Operationally: a floating/backup static loses
+      gateway-less route is dropped outright).  A route of a VRF crosses
+      into that routing instance: both sides declare
+      `/routing/static-route/vrf` supported (no committed cell has one).
+      Operationally: a floating/backup static loses
       the preference that made it floating and arrives equal-cost with the
       primary — re-apply route preference on the target before activating.
     references: [aoscx-junos-surface]

@@ -343,9 +343,10 @@ per_field_expectation:
       next-hop only").  On this corpus the declared loss does not fire.  Two
       caveats that rest on declarations rather than observations, because no
       committed route exercises them: `/routing/static-route/description` is
-      declared lossy on BOTH sides, and `/routing/static-route/vrf` is declared
-      unsupported on both — a per-VRF static route would be left out under a
-      `; review:` line, beside the whole-VRF drop recorded under
+      declared lossy on BOTH sides, and aruba_aoss declares
+      `/routing/static-route/vrf` unsupported (AOS-S has no VRF) — a route
+      aruba_aoscx reads in a VRF (`ip route ... vrf <name>`) is left out under
+      a `; review:` line, beside the whole-VRF drop recorded under
       `routing_instances[].name`.
     references: [aoscx-aoss-surface]
 

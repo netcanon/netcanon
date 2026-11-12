@@ -357,9 +357,8 @@ per_field_expectation:
       walk `intent.static_routes` and emits no
       `<network-instances>/<protocols>` subtree.  Recorded `unsupported`
       rather than `lossy` because the route record is absent, not degraded.
-      Note the source side is not blameless either: aruba_aoscx declares
-      `/routing/static-route/vrf` unsupported, so per-VRF route binding would
-      not have crossed even with a wired target render.
+      The source side carries a route's VRF (aruba_aoscx reads
+      `ip route ... vrf <name>`), so the loss is the target render's alone.
     references: [aoscx-iosxe-surface]
 
   "routing_instances[].name":

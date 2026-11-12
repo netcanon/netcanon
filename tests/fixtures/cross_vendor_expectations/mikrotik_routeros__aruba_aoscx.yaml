@@ -317,9 +317,10 @@ per_field_expectation:
       which route is the ISP default is lost; capture it before migrating.
       And on the one route whose next-hop is an interface name rather than an
       address, the value moves from the canonical `gateway` slot to the
-      `interface` slot; the next-hop itself is retained.  Both matrices also
-      declare `/routing/static-route/vrf` unsupported, so a per-VRF route
-      would lose its VRF binding — no committed cell exercises that.
+      `interface` slot; the next-hop itself is retained.  mikrotik_routeros
+      declares `/routing/static-route/vrf` unsupported: a route of another
+      routing table is left out, with a row on the migrate banner, so none
+      arrives with a VRF — no committed cell exercises that.
     references: [mikrotik-aoscx-surface]
 
   "routing_instances[].name":

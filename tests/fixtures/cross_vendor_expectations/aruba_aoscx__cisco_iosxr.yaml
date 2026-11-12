@@ -353,12 +353,10 @@ per_field_expectation:
       Preserved on both cells that populate it — 3 routes in, 3 out,
       destination and gateway intact.  cisco_iosxr declares
       `/routing/static-route` and `/routing/static-route/vrf` supported and
-      renders them under `router static`.  Two caveats that cost nothing
-      here: aruba_aoscx declares `/routing/static-route/vrf` unsupported as a
-      source, so every route arrives in the global table regardless of the
-      VRF it came from; and both sides declare
-      `/routing/static-route/description` lossy, though no committed cell on
-      this pair sets one.
+      renders them under `router static`, a route of a VRF in that VRF's
+      block (aruba_aoscx reads `ip route ... vrf <name>`; no committed cell
+      has one).  Both sides declare `/routing/static-route/description`
+      lossy, though no committed cell on this pair sets one.
     references: [aoscx-iosxr-surface]
 
   dhcp_servers:
