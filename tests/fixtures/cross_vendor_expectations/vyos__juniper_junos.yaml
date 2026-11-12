@@ -424,11 +424,10 @@ per_field_expectation:
       `/routing/static-route/interface` UNSUPPORTED — a gateway-less,
       interface-only route is dropped entirely — and no committed cell sets
       one (all 7 routes carry a gateway).  Both codecs also declare
-      `/routing/static-route/description` lossy and no cell sets one.  vyos
-      separately declares `/routing/static-route/vrf` unsupported while
-      juniper_junos declares it SUPPORTED, so per-VRF static routing would be
-      lost on the source side, not the target's — untested here, since all 7
-      routes carry an empty VRF.
+      `/routing/static-route/description` lossy and no cell sets one.  Both
+      declare `/routing/static-route/vrf` supported, so a per-VRF static
+      route is meant to keep its VRF — untested here, since all 7 routes
+      carry an empty VRF.
     references: [vyos-junos-surface]
 
   dhcp_servers:

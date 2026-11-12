@@ -443,8 +443,8 @@ per_field_expectation:
       description, vrf) and identical on every one, the IPv6 route on
       `kitchen_sink.conf` included.  fortigate_cli declares three supported
       paths under `/routing/static-route`.
-      Two caveats that are declared rather than observed.  Both codecs
-      declare `/routing/static-route/vrf` unsupported — per-VRF static-route
+      Two caveats that are declared rather than observed.  fortigate_cli
+      declares `/routing/static-route/vrf` unsupported — per-VRF static-route
       binding parses-and-ignores in v1 on the FortiGate side — and no
       committed cell sets a route VRF, so that gap is untested here.  vyos
       also declares `/routing/static-route/description` lossy ("Render emits

@@ -389,32 +389,18 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      This is the field most likely to be misread on this pair, so the
-      measurement comes first: all 7 routes across the 5 cells that populate
-      them SURVIVE — destination, gateway and metric intact, 7 in and 7 out.
-      A mechanical "do the records match?" pass reports the whole field
-      vanishing; that is an artifact of identity-matching, not a real drop.
-      What actually drifts is one attribute on 2 of the 7 routes, on 2
-      cells: `vrf` goes from `MGMT` to the empty string.  arista_eos
-      declares `/routing/static-route/vrf` SUPPORTED; vyos declares it
-      UNSUPPORTED because per-VRF static routes
-      (`vrf name <X> { protocols static route ... }`) are deferred past the
-      Phase-3 VRF wire-up, while the `vrf name` instances themselves are
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate it (5 committed inputs and the
+      synthetic kitchen sink): 8 routes in, 8 out, destination, gateway,
+      metric and VRF intact.  3 of the 8 are routes of a VRF (a management
+      VRF's default route on three committed inputs), and each comes back
+      in its VRF, written under `vrf name <X> protocols static`.  Both matrices
+      declare `/routing/static-route` and `/routing/static-route/vrf`
       supported.
-      The consequence is worse than the size of the drift suggests: a
-      default route that was scoped to the MANAGEMENT VRF re-appears in the
-      GLOBAL table.  That is not a lost route, it is a route pointed
-      somewhere else — a routing-correctness hazard on a device whose
-      management network was deliberately isolated.
-      Recorded `lossy`, not `unsupported`: the route records survive, 5 of
-      the 7 are untouched, and blocking the entire static-routing surface
-      would misdescribe a field that is mostly clean.  One caveat that is
-      declared rather than observed: both codecs also declare
-      `/routing/static-route/description` LOSSY, and no committed cell sets
-      a route description, so that sub-loss is untested here.
-      Audit the VRF column of every migrated route before cutover.
+      One caveat that is declared rather than observed: both codecs also
+      declare `/routing/static-route/description` LOSSY, and no committed
+      cell sets a route description, so that sub-loss is untested here.
     references: [arista-vyos-surface]
 
   dhcp_servers:

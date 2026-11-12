@@ -413,10 +413,10 @@ per_field_expectation:
       `gateway`, `/description` and `/metric` supported.
       Two caveats that are declared rather than observed: `vyos` declares
       `/routing/static-route/description` LOSSY and no committed cell sets
-      a route description, so that sub-loss is untested here; and BOTH
-      codecs declare `/routing/static-route/vrf` unsupported, so a
-      per-VRF static route would not cross — no cell sets one, and the
-      pair's only VRF drops anyway (see `routing_instances[].name`).
+      a route description, so that sub-loss is untested here; and
+      mikrotik_routeros declares `/routing/static-route/vrf` unsupported,
+      so a per-VRF static route would not keep its VRF — no cell sets one,
+      and the pair's only VRF drops anyway (see `routing_instances[].name`).
     references: [vyos-mikrotik-surface]
 
   dhcp_servers:

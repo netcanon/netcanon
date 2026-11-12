@@ -442,10 +442,8 @@ per_field_expectation:
       `config.xml` renderer emits no `<staticroutes>` block.  As a SOURCE,
       opnsense emits static routes just fine, and the round-trip proves it.
       Read a declaration in the direction it was written.
-      One caveat that is declared rather than observed: vyos declares
-      `/routing/static-route/vrf` UNSUPPORTED (per-VRF static routes are
-      deferred past the Phase-3 VRF wire-up), and no committed cell sets a
-      route VRF, so that particular sub-loss is untested here.
+      No committed cell sets a route VRF, so the VRF of a route is not
+      measured on this pair.
     references: [opnsense-vyos-surface]
 
   dhcp_servers:

@@ -1,5 +1,8 @@
 # NX-OS → VyOS: measured canonical surface
 
+<!-- a-vyos-route-keeps-its-vrf -->
+> **Update 2026-11-12 — a route of a VRF is written in its VRF, and read back.**  The VyOS render wrote every route into the global `protocols static` block, its parser read no route under `vrf name <X> protocols static`, and its matrix declared `/routing/static-route/vrf` unsupported.  It now writes a route of a VRF under `vrf name <X> protocols static` (declaring, with a table of its own, a VRF that a route names and the config does not), reads it back, and declares the path supported.  On this pair the routes of the `management` VRF and of a tenant VRF now arrive in their VRF: every cell that has a route preserves it, and `static_routes` is `good`.  Sentences below that quote the unsupported declaration, or say that a route of a VRF lands in the global table, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__vyos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/cisco_nxos__vyos.yaml`.
 

@@ -425,7 +425,7 @@ per_field_expectation:
       Recorded `lossy`, not `unsupported`: nothing vanishes, and a
       drift-shape reading that calls this field a total drop is wrong — the
       round-trip shows 4 in and 4 out.  One further caveat that is declared
-      rather than observed: BOTH matrices declare
+      rather than observed: mikrotik_routeros declares
       `/routing/static-route/vrf` unsupported, so a per-VRF static route
       would land in the global table.  No committed cell sets a route VRF,
       so that sub-loss is untested here.

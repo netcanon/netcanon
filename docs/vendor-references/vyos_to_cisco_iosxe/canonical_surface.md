@@ -1,5 +1,8 @@
 # VyOS → Cisco IOS-XE (NETCONF/OpenConfig): measured canonical surface
 
+<!-- a-vyos-route-keeps-its-vrf -->
+> **Update 2026-11-12 — a VyOS route of a VRF is read.**  The VyOS parser read no route under `vrf name <X> protocols static`, and its matrix declared `/routing/static-route/vrf` unsupported.  It now reads such a route into its VRF and declares the path supported.  No committed VyOS input has a route in a VRF, so no measurement of this pair moved.  Lists below that name `/routing/static-route/vrf` among the paths `vyos` declares unsupported describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__cisco_iosxe.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/vyos__cisco_iosxe.yaml`.
 

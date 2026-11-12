@@ -404,8 +404,10 @@ per_field_expectation:
     reason: >
       Every destination survives — 0 missing and 0 extra across the 6
       cells that populate routes, 39 destination-matched records out of
-      48 source records.  Three separate sub-losses ride on those
-      surviving records, and one of them is dangerous.
+      48 source records.  Two separate sub-losses ride on those
+      surviving records.  The one route of a VRF (`CUSTOMER-A`, on the
+      synthetic kitchen sink) comes back in its VRF, written under
+      `vrf name CUSTOMER-A protocols static`.
       NEXT-HOP KIND (interface empties on 30 records, gateway gains a
       token on 27): VyOS renders every next-hop with one grammar,
       `next-hop <token>`, so an IOS-XE interface next-hop is
@@ -415,13 +417,6 @@ per_field_expectation:
       which case the interface is dropped and the gateway kept.  The
       route still points somewhere; which KIND of thing it points at is
       no longer recorded.
-      VRF (1 record): `172.16.0.0/16` on `kitchen_sink.txt` loses
-      `CUSTOMER-A` and renders into the GLOBAL `protocols static` block.
-      `cisco_iosxe_cli` declares `/routing/static-route/vrf` SUPPORTED;
-      `vyos` declares it unsupported — "VyOS per-VRF static routes are
-      deferred past the Phase-3 VRF wire-up".  A tenant route leaking
-      into the global table is the reason this entry is not waved
-      through; diff routes per-VRF before cutover.
       DESCRIPTION (2 records, `bippety` and `UMBRELLA_SIG`): empties.
       Both codecs declare `/routing/static-route/description` lossy.
       Recorded `lossy` rather than `unsupported`: the route records

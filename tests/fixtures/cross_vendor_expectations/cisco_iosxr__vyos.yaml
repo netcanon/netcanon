@@ -387,30 +387,24 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      The routes survive; three things about them do not.  Measured on the
-      6 cells that populate static routing: 20 routes in, 20 out, and every
-      one of the 20 destinations matched on the target side — so this is
-      NOT a record loss.  8 of the 20 lose something:
-      (1) VRF SCOPE — 3 routes lose their `vrf` value (`AZURE`, `blue`,
-      `CUSTOMER-A` -> empty).  This is the one to act on: the route does not
-      vanish, it MOVES, from a customer VRF into the global table.  vyos
-      declares `/routing/static-route/vrf` unsupported and says why —
-      per-VRF static routes are deferred past the Phase-3 VRF wire-up,
-      while the `vrf name` instances themselves ARE supported.
-      (2) EGRESS INTERFACE — 4 routes with an interface-only next-hop
+      The routes survive; something about some of them does not.  Measured
+      on the 6 cells that populate static routing: 20 routes in, 20 out, and
+      every one of the 20 destinations matched on the target side — so this
+      is NOT a record loss.  The 3 routes of a VRF come back in their VRF,
+      written under `vrf name <X> protocols static`.  6 of the 20 lose
+      something:
+      (1) EGRESS INTERFACE — 4 routes with an interface-only next-hop
       (`Null0` x3, `BVI500` x1) come back with that value re-mounted onto
       the `gateway` field instead of `interface`; the identity survives,
       the field it lives in does not.  A further 2 routes that carried BOTH
       a gateway and an egress interface keep the gateway and lose the
       interface qualifier outright.
-      (3) `/routing/static-route/description` is declared LOSSY by both
+      (2) `/routing/static-route/description` is declared LOSSY by both
       codecs, but no committed cell sets one, so that sub-loss is declared
       here rather than observed.
       Recorded `lossy` and not `unsupported` because the destination and
       next-hop — the part that forwards traffic — survive on 20 of 20.
-      Re-scope the VRF routes on the target before cutover; a customer
-      prefix silently installed in the global table is a leak, not an
-      outage, which is why it is easy to miss.
+      Re-author the interface-only routes on the target before cutover.
     references: [iosxr-vyos-surface]
 
   dhcp_servers:
