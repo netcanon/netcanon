@@ -811,7 +811,7 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is a `vif` under its port, and a vif's number IS its tag: the port translator names it `eth1.200`, `vif 200`, so its unit number is not kept where it is not its tag, and two units of one port with one tag are one name (listed in `fused_ports`; the job is `partial`).  Only the port translator makes that name: the bare pipeline writes a sub-interface of another vendor's name under that name with no tag, beneath a `/* review */` line that says so.  An entry that names a unit with another number is a warning and a `/* review */` line.  A source's `vif 0` is left out with a row of the Tier-3 banner: VID 0 is a priority tag and no VLAN. |
 | `/vlans/vlan/{id,name,description,tagged-ports,untagged-ports,ipv4/address/ip}` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported.  Nothing held on a VLAN record is written as a VLAN's: neither its name, its description, its port lists nor its address.  ⚠️ Up to 0.7.7 only the id was declared. |
 | `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Lossy (warn) | VyOS writes a VRF as its name and its table only: its description, route distinguisher and route targets are not written. |
-| `/routing/static-route/interface` | Lossy (warn) | A route that names an interface and no gateway is written as `next-hop <interface>`, which is not a next hop VyOS takes (an interface route is `interface <name>`): the route is not written as one out of that interface. |
+| `/routing/static-route/interface` | Supported | A route out an interface is written `interface <name>` ("Next-hop IPv4 router interface", vyos-1x), a gateway's own interface `next-hop <address> { interface <name> }`, and a route to `Null0` `blackhole` ("Silently discard pkts when matched").  Each is read back, as is VyOS 1.3's `interface-route <prefix> { next-hop-interface <name> }`, and a `blackhole` is read as a route to `Null0`.  A route the tree has no form for is left out with a `protocols static:` row (see § B).  Up to 0.7.7 a route out an interface was written `next-hop <interface>`, which is not a next hop VyOS takes, and a gateway's interface was not written. |
 | `/snmp/trap-host` | Lossy (warn) | The codec writes no SNMP trap target: the trap hosts are dropped. |
 | Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/interfaces/interface/vrrp-groups/group/{virtual-ips,track-interfaces,virtual-mac}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, VRRP group, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/routing/static-route/vrf` | Supported | A route of a VRF is written under the VRF, as VyOS writes one (`set vrf name <name> protocols static ...`, VyOS, "VRF"), and read from there.  A VRF a route names and no instance declares (OS10 `management`, AOS-CX `mgmt`) is written after the declared ones, with a table id of its own (synthesised, as every VRF's is).  A next hop looked up in another VRF (`next-hop <address> vrf <name>`, as the same page's route-leaking and NAT examples write it; `vrf default` is the global table) has no form in the tree: such a route is left out, and one `protocols static:` row counts them.  A next hop VyOS holds disabled (`next-hop <address> disable`) installs nothing, and is left out with a `disabled:` row.  ⚠️ Up to 0.7.7 a route under `vrf name <X>` was read as a route of the global table, onto every target VyOS included, and VyOS as a target wrote every route into its global table, a route of another vendor's VRF included. |
@@ -987,7 +987,8 @@ and true of the same sentence — they are not in the output:
   vrf <name> <next hop>` (`vrf default` from a VRF's block is the
   global table), IOS-XE `global` after a VRF route's next hop and
   IPv6 `nexthop-vrf <name>`, NX-OS `vrf <name>` after the next hop,
-  EOS `egress-vrf <name>`, VyOS `next-hop <address> vrf <name>`.
+  EOS `egress-vrf <name>`, VyOS `next-hop <address> vrf <name>` and
+  `interface <name> vrf <name>`.
   The tree has no form for it, and the route is left out:
   written into the route's own table it would carry traffic the
   source keeps apart.  One that names the route's own VRF is read as
@@ -1040,6 +1041,20 @@ and true of the same sentence — they are not in the output:
   written as an address).  The tree has a form for none of them,
   and they are left out: each is in force on the switch, and the
   row says so.  Write them on the target by hand.
+* **`protocols static: <n> reject route(s) ...`**, **`protocols
+  static: <n> route(s) through the gateway DHCP gives an interface
+  ...`**, **`protocols static: <n> route(s) of a routing table
+  other than the main one ...`** and **`protocols static: <n>
+  route(s) through SRv6 segments ...`** (VyOS) — a route that
+  discards with an ICMP error to the sender (`reject`, "Emit an
+  ICMP unreachable when matched", vyos-1x), a route whose gateway
+  is what DHCP gives an interface (`dhcp-interface <name>`), a
+  route of `protocols static table <id>`, a table only policy
+  routing sends traffic to, and an IPv6 next hop steered over SRv6
+  (`segments`).  The tree has a form for none of them, and they are
+  left out.  The one discard the tree holds is a route to `Null0`,
+  which is what a `blackhole` route is read as.  Write them on the
+  target by hand.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
