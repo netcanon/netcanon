@@ -155,7 +155,7 @@ def _onto(target: str) -> tuple[MigrationJobStatus, list[tuple[str, str]]]:
 #: table.  Each says it: the validation report holds the job for
 #: ``/routing/static-route/vrf``, which its matrix declares unsupported.
 #: Still open; the change that mends one takes it out of this set.
-_INTO_THE_GLOBAL_TABLE = {"fortigate_cli", "mikrotik_routeros", "vyos"}
+_INTO_THE_GLOBAL_TABLE = {"fortigate_cli", "mikrotik_routeros"}
 
 #: The targets whose renderer writes no static route of any table (each
 #: says so: the job is not ``completed``).

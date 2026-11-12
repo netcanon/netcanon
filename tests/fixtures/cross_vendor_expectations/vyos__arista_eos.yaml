@@ -389,14 +389,13 @@ per_field_expectation:
       IPv6 route on the kitchen sink (`ipv6 route 2001:db8:ffff::/48 …`) and
       a metric-bearing route (`ip route 10.99.0.0/16 10.10.10.254 20`).
       Both matrices declare `/routing/static-route` supported.
-      Two caveats that are declared rather than observed, stated so the
+      Two things that are declared rather than observed, stated so the
       coverage is not overread.  Both codecs declare
       `/routing/static-route/description` LOSSY, and 0 of the 7 committed
-      routes set a description, so that sub-loss is untested here.  And vyos
-      declares `/routing/static-route/vrf` unsupported, so a VyOS route
-      inside a routing instance never reaches the canonical tree at all —
-      arista_eos declares the same path SUPPORTED, so VRF routes must be
-      re-authored on the target.
+      routes set a description, so that sub-loss is untested here.  And
+      both declare `/routing/static-route/vrf` supported (VyOS reads a
+      route under `vrf name <X> protocols static` into its VRF), but 0 of
+      the 7 committed routes are in a VRF, so that is untested here too.
     references: [vyos-arista-surface]
 
   dhcp_servers:

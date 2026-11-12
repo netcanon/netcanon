@@ -34,7 +34,13 @@ via `dropped_tier3_sections`, **not** translated.
   addresses, `dhcp` / `dhcpv6` client, per-interface VRF binding.
   802.1Q VLANs are `vif <vid>` sub-interfaces, modelled as
   `ethN.<vid>` interfaces (there is **no** top-level VLAN database).
-- Static routes — default VRF (with administrative `distance`)
+- Static routes — of the global table and of a VRF (`vrf name <X> {
+  protocols { static { … } } }`), with administrative `distance`.
+  Only the `next-hop <address>` form is read: a route `interface
+  <name>`, `blackhole`, `reject` or `dhcp-interface` is not, and
+  nothing says so yet — re-create it on the target.  A next hop in
+  another VRF, and a next hop held `disable`, are left out and said
+  (see the gotchas)
 - NTP servers (`system ntp` / `service ntp`, bare + block form)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
@@ -155,9 +161,6 @@ visible, not silent):
   its port lists nor its address
 - **First-hop redundancy** — no VRRP group is written, so neither
   are its virtual IPs, its tracked interfaces or its virtual MAC
-- **Per-VRF static routes** — the `vrf name <X>` instances + the
-  per-interface binding are supported, but `vrf name <X> { protocols
-  static route … }` is deferred past the Phase-3 VRF wire-up
 - **VXLAN control plane** — per-VNI EVPN RD/RT and symmetric-IRB
   **L3VNI**; the L2 VLAN↔VNI binding itself IS supported
 
@@ -205,6 +208,28 @@ real set-form) capture are welcomed via
 
 ## Common gotchas
 
+- **A route of a VRF is in its VRF, both ways.**  VyOS writes a
+  route of a VRF under the VRF (`set vrf name <name> protocols static
+  ...`, VyOS, "VRF"), and it is read from there and written there,
+  a route of another vendor's VRF included.  A VRF that a route names
+  and no instance declares — OS10 `management`, AOS-CX `mgmt` — is
+  written after the declared VRFs, with a table id of its own; every
+  VRF's table id is synthesised (`100` up), so set the ones the
+  device needs.  ⚠️ Up to 0.7.7 a route under `vrf name <X>` was read
+  as a route of the global table, onto every target VyOS included, in
+  a job that said `completed`, and VyOS as a target wrote every route
+  into its global table: re-check the routes of a VRF on a device
+  migrated from or onto VyOS with an earlier release.
+- **A next hop in another VRF, or held `disable`, is left out and
+  said.**  `next-hop <address> vrf <name>` looks the next hop up in
+  another VRF (as the route-leaking and NAT examples of VyOS's "VRF"
+  page write it; `vrf default` is the global table), which the tree
+  has no form for: the route is left out, and one `protocols
+  static:` row of the Tier-3 banner counts such routes.  A next hop that names the route's own
+  table is read as the route.  `next-hop <address> disable` ("Disable
+  the route via the specified next-hop IP address", VyOS, "Static")
+  installs nothing, and is left out with a `disabled:` row that names
+  it.
 - **A user or community whose NAME holds white space is left out as
   a target.**  `user <name> {` and `community <name> {` are tag
   nodes, one word, so such a record is left out with a `/* review */`

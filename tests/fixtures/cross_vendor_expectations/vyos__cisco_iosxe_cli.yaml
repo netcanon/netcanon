@@ -394,13 +394,12 @@ per_field_expectation:
       (`0.0.0.0/0`, `10.99.0.0/16` with metric 20, `2001:db8:ffff::/48`).
       Both matrices declare `/routing/static-route` supported.
       Two caveats that are declared rather than observed, stated so this
-      `good` is not read wider than it is measured.  vyos declares
-      `/routing/static-route/vrf` UNSUPPORTED — no committed cell sets a
-      route VRF (all 7 carry `vrf=""`), so per-VRF static routing is untested
-      on this pair and would not survive if it were exercised.  Both codecs
-      also declare `/routing/static-route/description` lossy, and no
-      committed cell sets a route description, so that sub-loss is untested
-      too.
+      `good` is not read wider than it is measured.  Both codecs declare
+      `/routing/static-route/vrf` supported, but no committed cell sets a
+      route VRF (all 7 carry `vrf=""`), so per-VRF static routing is
+      untested on this pair.  Both codecs also declare
+      `/routing/static-route/description` lossy, and no committed cell sets
+      a route description, so that sub-loss is untested too.
     references: [vyos-iosxe-cli-surface]
 
   dhcp_servers:

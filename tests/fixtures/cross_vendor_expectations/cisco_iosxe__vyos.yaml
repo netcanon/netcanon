@@ -415,12 +415,11 @@ per_field_expectation:
       `<network-instances>` protocol subtree — so nothing reaches the target.
       Measured empty on both sides.
       vyos declares `/routing/static-route` SUPPORTED, so routes re-authored
-      on the target will stick.  Two target-side caveats, declared rather
-      than observed because no cell exercises them: vyos declares
+      on the target will stick.  One target-side caveat, declared rather
+      than observed because no cell exercises it: vyos declares
       `/routing/static-route/description` LOSSY (render emits destination,
-      next-hop and distance only) and `/routing/static-route/vrf`
-      UNSUPPORTED (per-VRF static routes are deferred past the Phase-3 VRF
-      wire-up).
+      next-hop and distance only).  vyos declares
+      `/routing/static-route/vrf` supported.
     references: [iosxe-vyos-surface]
 
   dhcp_servers:

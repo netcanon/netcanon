@@ -412,7 +412,7 @@ per_field_expectation:
       Destination, gateway, metric and VRF all survive.  Both matrices
       declare `/routing/static-route` supported.
       Two caveats that are declared rather than observed: both codecs declare
-      `/routing/static-route/description` LOSSY and both declare
+      `/routing/static-route/description` LOSSY and aruba_aoss declares
       `/routing/static-route/vrf` UNSUPPORTED, and no committed cell sets
       either — every route on this corpus carries an empty description and an
       empty VRF, so those sub-losses are untested here.  aruba_aoss also

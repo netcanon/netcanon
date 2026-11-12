@@ -2112,7 +2112,13 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # (`GigabitEthernet0/0/0/0` is `ether1`, `TenGigE0/0/0/0`
     # `sfp-sfpplus1`): the one job onto RouterOS that was `completed`
     # lists a port 0 and a port 1 on one name (+1).
-    "cisco_iosxr": (19, 0, 13, 1, 1, 4),
+    # And from (19, 0, 13, 1, 1, 4): VyOS writes a route of a VRF in
+    # its VRF, and `/routing/static-route/vrf` is supported there.
+    # Onto VyOS the job of a capture whose routes are in a VRF had
+    # been `partial` for that path alone; the validation report
+    # passes it now, and its management port, which VyOS has no
+    # name for, holds it (+1 hardware port dropped).
+    "cisco_iosxr": (19, 0, 14, 1, 1, 4),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
@@ -2143,7 +2149,14 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # or `ae0` beside `ae1`, is two names on one (+4), and three jobs
     # that listed a name left as the source has it list one such pair
     # as well (-3 left, +3 several).
-    "juniper_junos": (4, 0, 9, 0, 2, 7),
+    # And from (4, 0, 9, 0, 2, 7): VyOS writes a route of a VRF in
+    # its VRF, and `/routing/static-route/vrf` is supported there.
+    # Onto VyOS the job of a capture whose routes are in a routing
+    # instance had been `partial` for that path alone; the
+    # validation report passes it now, and its management port,
+    # which VyOS has no name for, holds it (+1 hardware port
+    # dropped).
+    "juniper_junos": (4, 0, 10, 0, 2, 7),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -2251,8 +2264,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [86, 0, 72, 5, 62, 49]
-        assert sum(by_reason) == 274
+        assert by_reason == [86, 0, 74, 5, 62, 49]
+        assert sum(by_reason) == 276
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

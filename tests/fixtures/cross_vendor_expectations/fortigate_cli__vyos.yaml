@@ -433,7 +433,7 @@ per_field_expectation:
       trap-host gap, and one for a codec change rather than for this file.
       Recorded `unsupported` rather than `lossy` because half the records
       vanish outright with no target grammar to land in (#436).  Also
-      declared but untested here: both codecs declare
+      declared but untested here: fortigate_cli declares
       `/routing/static-route/vrf` unsupported and vyos declares
       `/routing/static-route/description` LOSSY; no committed cell sets
       either.

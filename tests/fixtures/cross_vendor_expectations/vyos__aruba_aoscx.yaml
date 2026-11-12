@@ -381,12 +381,12 @@ per_field_expectation:
       `ipv6 route 2001:db8:ffff::/48 2001:db8::2`; the one route carrying a
       non-default administrative distance (`10.99.0.0/16`, metric 20) keeps
       it.  Both matrices declare `/routing/static-route` supported.
-      Two declared sub-losses are UNTESTED on this corpus and stated rather
-      than implied: both codecs declare `/routing/static-route/description`
-      lossy and `/routing/static-route/vrf` unsupported, and all 7 committed
-      routes carry an empty description and an empty VRF.  A VyOS config with
-      per-VRF static routes or named routes would lose those; nothing here
-      measures it.
+      Two declarations are UNTESTED on this corpus and stated rather than
+      implied: both codecs declare `/routing/static-route/description`
+      lossy and `/routing/static-route/vrf` supported, and all 7 committed
+      routes carry an empty description and an empty VRF.  A VyOS config
+      with named routes would lose the names, and one with per-VRF static
+      routes is meant to keep their VRF; nothing here measures either.
     references: [vyos-aoscx-surface]
 
   dhcp_servers:

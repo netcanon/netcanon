@@ -410,7 +410,7 @@ per_field_expectation:
       `10.10.10.254`, metric 20) renders as `ip route … distance 20` and
       re-parses with `metric: 20` intact.
       Two caveats that are declared rather than observed: both codecs declare
-      `/routing/static-route/description` lossy and
+      `/routing/static-route/description` lossy, aruba_aoss declares
       `/routing/static-route/vrf` unsupported, and no committed cell sets a
       route description or a per-VRF route — so those two sub-losses are
       untested on this pair.

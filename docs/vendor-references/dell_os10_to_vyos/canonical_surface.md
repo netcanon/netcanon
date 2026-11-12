@@ -1,5 +1,8 @@
 # Dell OS10 → VyOS: measured canonical surface
 
+<!-- a-vyos-route-keeps-its-vrf -->
+> **Update 2026-11-12 — a route of a VRF is written in its VRF, and read back.**  The VyOS render wrote every route into the global `protocols static` block, its parser read no route under `vrf name <X> protocols static`, and its matrix declared `/routing/static-route/vrf` unsupported.  It now writes a route of a VRF under `vrf name <X> protocols static` (declaring, with a table of its own, a VRF that a route names and the config does not), reads it back, and declares the path supported.  On this pair the routes of a VRF, the `management` VRF's included, now arrive in their VRF, and `static_routes` is `good`.  The `management` VRF, which the OS10 source declares no instance for, is declared on the target, so `routing_instances` gains it and is `lossy` (a gain, not a loss).  Sentences below that quote the unsupported declaration, or say that a route of a VRF lands in the global table, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/dell_os10__vyos.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/dell_os10__vyos.yaml`.
 

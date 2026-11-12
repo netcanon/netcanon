@@ -449,34 +449,15 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      A raw drift-shape reading calls this a total drop.  It is not: 23
-      routes in, 23 routes out, on all 9 cells that carry any, with
-      destination and next-hop intact.  What empties is the VRF binding,
-      on 5 records across 4 cells — `0.0.0.0/0 -> 10.0.0.2` out of
-      `mgmt_junos` on two cells, `0.0.0.0/0 -> 192.168.100.1` out of
-      `mgmt_junos` and `10.0.0.3/32 -> 192.168.98.1` out of `ISP-2` on
-      `jnprautomate_mnha_vsrx_a_junos.set`, and
-      `10.99.0.0/16 -> 10.0.0.99` out of `TENANT_A` on
-      `kitchen_sink.set`.
-      juniper_junos declares `/routing/static-route` and
-      `/routing/static-route/vrf` supported.  vyos declares the route
-      itself supported and `/routing/static-route/vrf` UNSUPPORTED,
-      stating that per-VRF statics are deferred past the Phase-3 VRF
-      wire-up while `vrf name` instances themselves are supported.  So
-      the VRFs arrive and their routes arrive in the wrong table.
-      Recorded `lossy` rather than `unsupported` because the record
-      survives and the part the target genuinely models is intact —
-      calling the whole field unsupported would falsely claim VyOS
-      cannot hold static routes.  The consequence is not minor: three of
-      those five are a management-VRF default route landing in the global
-      table, which is a route leak, not a cosmetic loss.  Diff the
-      target's global table against the source's before cutover.
-      Two further cells (`ksator_labmgmt_qfx10k2_junos173.set`,
-      `ksator_labmgmt_qfx5100_junos173.set`) differ only in route
-      ORDERING; the comparator normalises that and it is not counted as
-      drift here either.
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it (8 committed inputs and the
+      synthetic kitchen sink): 23 routes in, 23 out, destination, next-hop
+      and VRF intact.  5 of the 23, on 4 cells, are routes of a routing
+      instance -- a management instance's default route among them -- and
+      each comes back in its VRF, written under
+      `vrf name <X> protocols static`.  Both matrices declare
+      `/routing/static-route` and `/routing/static-route/vrf` supported.
       Declared but untested on this corpus: both codecs declare
       `/routing/static-route/description` lossy and juniper_junos also
       declares `/metric` lossy and `/interface` unsupported.  No

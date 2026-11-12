@@ -989,6 +989,7 @@ class TestFreeTextQuoteSanitise:
     "/interfaces/interface/config/mtu",
     "/interfaces/interface/dhcp-client-v6",
     "/routing/static-route",
+    "/routing/static-route/vrf",
     # Phase 2
     "/local-users/user/name",
     "/local-users/user/hashed-password",
@@ -1033,7 +1034,6 @@ def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/vlans/vlan/id",
-    "/routing/static-route/vrf",
     "/vxlan-vnis/l2vni-route-target",
     "/routing-protocols/bgp",
     "/nat",

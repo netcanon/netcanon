@@ -421,31 +421,16 @@ per_field_expectation:
   # -- Routing ---------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      This is the field most likely to be misread on this pair, so the
-      measurement comes first: all 13 routes across the 8 cells that populate
-      them SURVIVE — destination, next-hop and distance intact, 13 in and 13
-      out.  A mechanical "did the records match?" pass reports the whole field
-      vanishing; that is an artifact of identity-matching, not a real drop.
-      What actually drifts is one attribute on 6 of the 13 routes, across 4
-      cells: `vrf` goes from a named instance (`management`, `TENANT-A`) to
-      the empty string, and the render places the route under the global
-      `protocols static` block.  cisco_nxos declares
-      `/routing/static-route/vrf` SUPPORTED; vyos declares it UNSUPPORTED
-      because per-VRF static routes
-      (`vrf name <X> { protocols static route ... }`) are deferred past the
-      Phase-3 VRF wire-up, while the `vrf name` instances themselves are
-      supported.
-      The consequence is worse than the size of the drift suggests: a default
-      route that was scoped to the out-of-band management VRF re-appears in
-      the GLOBAL table.  That is not a lost route, it is a route pointed
-      somewhere else — a routing-correctness hazard on a device whose
-      management network was deliberately isolated.
-      Recorded `lossy`, not `unsupported`: the route records survive, 7 of the
-      13 are untouched, and blocking the entire static-routing surface would
-      misdescribe a field that is mostly clean.  One caveat that is declared
-      rather than observed: BOTH codecs declare
+    disposition: good
+    note: >
+      Preserved on all 8 cells that populate it (7 committed inputs and the
+      synthetic kitchen sink): 13 routes in, 13 out, destination, next-hop,
+      distance and VRF intact.  6 of the 13, on 4 cells, are routes of a
+      VRF -- the out-of-band `management` VRF's default route among them --
+      and each comes back in its VRF, written under
+      `vrf name <X> protocols static`.  Both matrices declare
+      `/routing/static-route` and `/routing/static-route/vrf` supported.
+      One caveat that is declared rather than observed: BOTH codecs declare
       `/routing/static-route/description` LOSSY and no committed route sets
       one, so that sub-loss is untested here.
     references: [nxos-vyos-surface]

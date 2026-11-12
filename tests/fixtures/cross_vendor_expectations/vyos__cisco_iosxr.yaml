@@ -379,9 +379,9 @@ per_field_expectation:
       Both matrices declare `/routing/static-route` supported.
       Two caveats that are declared rather than observed, stated so a
       migration report can repeat them: both codecs declare
-      `/routing/static-route/description` LOSSY, and vyos additionally
-      declares `/routing/static-route/vrf` unsupported.  No committed cell
-      sets a route description or a per-VRF route, so neither sub-loss is
+      `/routing/static-route/description` LOSSY, and both declare
+      `/routing/static-route/vrf` supported.  No committed cell sets a
+      route description or a per-VRF route, so neither is
       exercised here.  A source that used VRF-scoped statics would not be
       covered by this measurement.
     references: [vyos-iosxr-surface]

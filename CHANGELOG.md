@@ -1401,6 +1401,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A VyOS route of a VRF is no longer a route of the global table,
+  and VyOS as a target writes a route of a VRF in its VRF.**  VyOS
+  writes a route of a VRF under the VRF (`vrf name <X> protocols
+  static`), and the parser matched a route by the last words of its
+  path: every such route was a route of the global table onto every
+  target, VyOS itself included, in a job that said `completed`.  The
+  renderer wrote every route into the global `protocols static`, a
+  route of another vendor's VRF included.  Both are mended, and the
+  matrix declares `/routing/static-route/vrf` supported.  A next hop
+  looked up in another VRF (`next-hop <address> vrf <name>`) was read
+  as an ordinary next hop, and a next hop held `disable` as a route in
+  force: the first is left out with one `protocols static:` row that
+  counts such routes, the second with a `disabled:` row.  FortiOS and
+  RouterOS as targets still write a route of another vendor's VRF
+  into their one table; the job is `partial` and says so.  A VyOS
+  route `interface <name>`, `blackhole`, `reject` or `dhcp-interface`
+  is still not read, and nothing says so; the vendor page says it.
+
 - **An AOS-CX route of a VRF is no longer a route of the global
   table.**  AOS-CX writes the VRF after a route's next hop (`ip route
   <destination> <next hop> vrf <name>`), and the parser read past it:
@@ -1412,8 +1430,9 @@ timestamp if your timezone matters for an audit.
   as a target writes a route of a VRF, which it left out before, and
   a distance as `distance <n>` rather than the bare number it wrote,
   which no AOS-CX printout or guide shows (it is still read).
-  FortiOS, VyOS and RouterOS as targets still write a route of another
-  vendor's VRF into their one table; the job is `partial` and says so.
+  FortiOS and RouterOS as targets still write a route of another
+  vendor's VRF into their one table; the job is `partial` and says so
+  (VyOS: the entry above).
 
 - **An IOS-XE, NX-OS or EOS route whose next hop is in another VRF is
   no longer translated as a route of its own VRF.**  IOS-XE `global`

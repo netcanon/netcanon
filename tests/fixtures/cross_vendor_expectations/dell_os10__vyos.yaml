@@ -268,25 +268,41 @@ per_field_expectation:
     references: [os10-vyos-surface]
 
   routing_instances:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      The target GAINS a `management` VRF that the OS10 source does not
+      declare, on the 2 committed inputs that put a `management route` in
+      the built-in `management` VRF with no `ip vrf management` line
+      (0 -> 1).  The 3 other cells that populate VRFs preserve them; the
+      synthetic kitchen sink states `ip vrf management`, and its instance
+      is kept as it is.  VyOS cannot hold a route in a VRF it does not
+      declare, so its render declares one (`vrf name management`, with a
+      table of its own) and its parser reads that instance back.
+      NOTE this is a GAIN, not a loss -- no operator-authored VRF is
+      dropped.  The taxonomy has no class for a materialised record, so
+      `lossy` is the closest available disposition rather than an exact
+      one.  The OS10 management port is not written (VyOS has no name for
+      it, and the job says so), so the VRF holds the route and no
+      interface: bind the port the target is managed through to it.
     references: [os10-vyos-surface]
 
   routing_instances[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (1 of 1 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      Follows `routing_instances`: the materialised `management` VRF has no
+      description, so the subfield registers as drifted on the same 2
+      cells.  A GAIN, not a loss.
     references: [os10-vyos-surface]
 
   routing_instances[].name:
     disposition: good
     note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+      Every VRF the source declares arrives under its own name, on the 3
+      cells where it declares one.  On 2 other cells the source declares
+      none and the target holds the `management` VRF it declares for a
+      `management route` (see `routing_instances`), which the harness
+      reads as a structural difference in the set of names, not as a name
+      that drifted.
     references: [os10-vyos-surface]
 
   snmp.community:
@@ -327,15 +343,19 @@ per_field_expectation:
     references: [os10-vyos-surface]
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0. Sample drift: {"static_routes[0]
-      {'destination': '0.0.0.0/0'}": {'vrf': {'source': 'management',
-      'target': ''}}, "static_routes[2] {'destination':
-      '10.50.0.0/16'}": {'vrf': {'source': 'TENANT-A', 'target':
-      ''}}}.
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it (4 committed inputs and the
+      synthetic kitchen sink): 7 routes in, 7 out, destination, gateway,
+      metric and VRF intact.  4 of the 7 are routes of a VRF, the
+      `management` VRF's among them, and each comes back in its VRF: VyOS
+      writes such a route under `vrf name <X> protocols static`, and
+      declares a VRF that a route names and the config does not (see
+      `routing_instances`).  Both matrices declare `/routing/static-route`
+      and `/routing/static-route/vrf` supported.
+      One caveat that is declared rather than observed: vyos declares
+      `/routing/static-route/description` lossy, and no committed route
+      sets a description.
     references: [os10-vyos-surface]
 
   syslog_servers:

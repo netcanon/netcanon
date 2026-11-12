@@ -409,14 +409,14 @@ per_field_expectation:
       destination, next-hop and metric intact (including a distance-200 route
       that survives as VyOS `distance 200`).  Both matrices declare
       `/routing/static-route` supported.
-      Two caveats that are declared rather than observed, because no committed
+      Two things that are declared rather than observed, because no committed
       route exercises either: both codecs declare
-      `/routing/static-route/description` LOSSY, and BOTH declare
-      `/routing/static-route/vrf` UNSUPPORTED — vyos notes that per-VRF static
-      routes are deferred past its Phase-3 VRF wire-up.  Every committed route
-      here is in the global table with an empty description, so a VRF-scoped
-      static route on a real box would NOT migrate even though
-      `routing_instances[].name` is `good`.
+      `/routing/static-route/description` LOSSY, and both declare
+      `/routing/static-route/vrf` supported (AOS-CX reads
+      `ip route ... vrf <name>`, and VyOS writes such a route under
+      `vrf name <X> protocols static`).  Every committed route here is in
+      the global table with an empty description, so neither is measured
+      on this pair.
     references: [aoscx-vyos-surface]
 
   dhcp_servers:

@@ -87,9 +87,16 @@ always emits curly-brace ``config.boot`` (the native backup form); a
 Deferred to later phases (parse-and-ignore for now): the remaining
 ``service`` management-plane blocks (SSH / DHCP / syslog / DNS), the
 VXLAN-to-bridge L2 VLAN binding (``interfaces bridge`` membership) +
-single-device SVD ``vlan-to-vni``, per-VRF static routes (``vrf name
-<X> { protocols static ... }``), and the Tier-3 ``protocols bgp/ospf``
-/ ``nat`` / ``firewall`` / ``policy`` blocks.
+single-device SVD ``vlan-to-vni``, and the Tier-3 ``protocols
+bgp/ospf`` / ``nat`` / ``firewall`` / ``policy`` blocks.
+
+A static route is read at the top of the config (the global table)
+and under ``vrf name <X>`` (a route of VRF X: VyOS, "VRF", ``set
+vrf name <name> protocols static ...``).  A next hop that names
+another VRF (``next-hop <address> vrf <name>``, the route leaking of
+the same page) and a next hop VyOS holds disabled (``next-hop
+<address> disable``: "Disable the route via the specified next-hop
+IP address") are left out, and a row says so.
 """
 
 from __future__ import annotations
@@ -98,6 +105,7 @@ import ipaddress
 import logging
 import re
 
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -112,7 +120,13 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from ...limits import charge, ticked
-from .._helpers import Uniques, _is_link_local_v6, a_tag, unread_tags_row
+from .._helpers import (
+    Uniques,
+    _is_link_local_v6,
+    a_tag,
+    next_hop_elsewhere_rows,
+    unread_tags_row,
+)
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -756,6 +770,26 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             cur_route["metric"] = int(value)
             continue
 
+        # ``vrf <name>`` under a next hop: the VRF the next hop is
+        # looked up in (``next-hop <address> vrf <name>``; ``default``
+        # is the global table).  Read past, a route that leaks to
+        # another VRF was a route through a next hop of its own, on
+        # every target.  The tree has no form for it: where the VRF is
+        # not the route's own, the route is left out (below).  And
+        # ``disable``: VyOS installs nothing through that next hop.
+        if (
+            cur_route is not None
+            and stack and stack[-1][0] == "next-hop"
+        ):
+            if key == "vrf" and value:
+                looked_up_in = "" if value == "default" else value
+                if looked_up_in != cur_route["vrf"]:
+                    cur_route["elsewhere"] = True
+                continue
+            if key == "disable" and not value:
+                cur_route["disabled"] = True
+                continue
+
         # ── Phase 2: bond mode (interfaces / bonding bondN / mode <m>) ──
         # `802.3ad` is LACP -> "active"; a bond whose peer needs no
         # aggregate (active-backup, transmit-load-balance,
@@ -929,9 +963,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             destination=r["destination"],
             gateway=r["gateway"],
             metric=r["metric"],
+            vrf=r["vrf"],
         )
         for r in static_routes
+        if not r["disabled"] and not r["elsewhere"]
     ]
+    # A next hop held disabled is a statement the source does not
+    # run, so its row is a left-out row; a route whose next hop is
+    # in another VRF is in force there, so its row is a section.
+    routes_left_out = [
+        ("disabled-route", r["path"]) for r in static_routes if r["disabled"]
+    ]
+    routes_elsewhere = sum(
+        1 for r in static_routes if r["elsewhere"] and not r["disabled"]
+    )
 
     # ── Phase 2 surfaces ──
     intent.local_users = [
@@ -1000,7 +1045,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             )
         )
     intent.vxlan_vnis = sorted(vxlan_vnis, key=lambda v: v.vni)
-    intent.dropped_tier3_sections = list(vif_s_rows)
+    intent.dropped_tier3_sections = [
+        *vif_s_rows,
+        *left_out_rows(routes_left_out, rest="disabled-route"),
+        *next_hop_elsewhere_rows(
+            "protocols static", routes_elsewhere,
+            "next-hop <address> vrf <name>",
+        ),
+    ]
 
     logger.debug(
         "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "
@@ -1020,19 +1072,40 @@ def _open_route(
     """Create a static-route scratch when a ``next-hop`` block opens.
 
     Expects the stack path ``protocols / static / route <CIDR> /
-    next-hop <gw>`` (``route6`` accepted for IPv6).  Returns the new
-    scratch dict (so the caller can attach a ``distance`` metric) or
-    None when the path doesn't match.
+    next-hop <gw>`` (``route6`` accepted for IPv6), at the top of the
+    config (a route of the global table) or under ``vrf / name <X>``
+    (a route of VRF X).  Matched on the last frames alone, a route
+    of a VRF was a route of the global table on every target, VyOS
+    included, in a job that said ``completed``.  Returns the new
+    scratch dict (so the caller can attach a ``distance`` metric, the
+    VRF its next hop is looked up in, or ``disable``) or None when
+    the path doesn't match.
     """
+    if len(stack) == 4:
+        vrf = ""
+    elif (
+        len(stack) == 6
+        and stack[0][0] == "vrf"
+        and stack[1][0] == "name"
+        and stack[1][1]
+    ):
+        vrf = stack[1][1]
+    else:
+        return None
     if (
-        len(stack) >= 4
-        and stack[-4][0] == "protocols"
+        stack[-4][0] == "protocols"
         and stack[-3][0] == "static"
         and stack[-2][0] in ("route", "route6")
     ):
         dest = stack[-2][1]
         if dest:
-            route = {"destination": dest, "gateway": gateway, "metric": 0}
+            route = {
+                "destination": dest, "gateway": gateway, "metric": 0,
+                "vrf": vrf, "elsewhere": False, "disabled": False,
+                "path": [
+                    word for frame in stack for word in frame if word
+                ],
+            }
             routes.append(route)
             return route
     return None

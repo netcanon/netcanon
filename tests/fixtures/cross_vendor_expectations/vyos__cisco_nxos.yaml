@@ -403,12 +403,10 @@ per_field_expectation:
       Two caveats that are declared rather than observed, because no committed
       cell exercises either: both codecs declare
       `/routing/static-route/description` LOSSY, and no route in the corpus
-      carries one; and vyos declares `/routing/static-route/vrf` UNSUPPORTED
-      (per-VRF statics are deferred past its Phase-3 VRF wire-up) while
-      cisco_nxos declares it supported, so a VyOS config with routes inside a
-      `vrf name <X>` block would lose their VRF binding on the SOURCE side
-      before NX-OS ever saw them.  No corpus route sets a VRF, so that is a
-      warning, not a measurement.
+      carries one; and both declare `/routing/static-route/vrf` supported,
+      so a VyOS config with routes inside a `vrf name <X>` block is meant
+      to keep their VRF binding.  No corpus route sets a VRF, so that is a
+      declaration, not a measurement.
     references: [vyos-nxos-surface]
 
   dhcp_servers:
