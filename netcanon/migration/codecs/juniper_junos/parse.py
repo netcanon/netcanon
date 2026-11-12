@@ -37,10 +37,15 @@ is said as well (:func:`_a_unit_the_tree_holds`).
 
 A static route the tree has no form for -- one whose next hop is
 looked up in another table (``next-table``), one that forwards to
-no next hop (``discard``, ``reject``, ``receive``), and a
-``qualified-next-hop``, a next hop with a preference of its own --
-is left out, and one row a kind counts them
-(:func:`_static_routes_not_held_rows`).  A static route is read
+no next hop (``discard``, ``reject``, ``receive``), a next hop at
+a preference the tree does not hold, and a qualified next hop
+with a metric of its own at the preference of another next hop
+of the route -- is left out, and one row a kind counts them
+(:func:`_static_routes_not_held_rows`).  A route's preference
+is its distance: a ``qualified-next-hop`` is a next hop at a
+preference of its own, and a ``preference`` of the route, or of
+the block's ``defaults``, is the preference of the rest
+(:func:`_resolve_static_preferences`).  A static route is read
 from ``routing-options static`` and from ``routing-options rib
 inet.0`` / ``rib inet6.0`` (``rib <instance>.inet.0`` /
 ``<instance>.inet6.0`` in a routing instance), where Juniper's
@@ -77,6 +82,8 @@ Internal helpers (``_split_words``, ``_tokenise_set``, ``_dispatch_set``,
 ``_apply_vlans``, ``_apply_switch_options``,
 ``_apply_routing_instances``, ``_apply_routing_options``,
 ``_apply_static_route``, ``_apply_rib_static_route``,
+``_apply_static_defaults``, ``_preference``,
+``_resolve_static_preferences``,
 ``_static_routes_not_held_rows``, ``_routes_of_other_tables_row``,
 ``_apply_snmp``, ``_apply_snmp_v3``, ``_get_or_create_v3_user``,
 ``drop_session_lines``, ``_looks_like_blockform``,
@@ -497,6 +504,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
             vlan_by_id, vlan_by_name, found,
         )
+    # A route's preference is stated on lines of their own, in any
+    # order, a group's among them: it is resolved once every line
+    # has been read.
+    _resolve_static_preferences(intent, found)
 
     # GAP 9b: preserve both the apply-groups STATEMENT and the
     # GROUP CONTENT so render can re-emit `set groups <G> ...`
@@ -2094,11 +2105,24 @@ class _Found:
         # to may not be made yet when the line is read.
         self.vlan_descriptions: dict[str, str] = {}
         # The static routes the tree has no form for, by kind, each
-        # once by VRF, destination and (for a qualified next hop) its
-        # address (:func:`_static_routes_not_held_rows`).
+        # once by VRF, destination and (for a next hop left out by
+        # its preference) its address
+        # (:func:`_static_routes_not_held_rows`).
         self.routes_not_held: dict[str, set[tuple[str, str, str]]] = {
-            kind: set() for kind in _STATIC_ROUTE_KINDS_NOT_HELD.values()
+            kind: set() for kind in (
+                *_STATIC_ROUTE_KINDS_NOT_HELD.values(),
+                "qualified-next-hop", "preference",
+            )
         }
+        # What the lines state of a route's preference: the route's
+        # own, by VRF and destination; a static block's
+        # ``defaults``, by VRF and family; and each qualified next
+        # hop, by VRF, destination and address, as [its own
+        # preference or None, whether it states a metric of its own]
+        # (:func:`_resolve_static_preferences`).
+        self.route_preferences: dict[tuple[str, str], int] = {}
+        self.static_defaults: dict[tuple[str, str], int] = {}
+        self.qualified: dict[tuple[str, str, str], list] = {}
         # The static routes of a ``rib`` other than the main tables,
         # each once by VRF, table and destination
         # (:func:`_apply_rib_static_route`).
@@ -3778,11 +3802,13 @@ def _apply_routing_instances(
     # so cisco -> junos round-trips must not conjure one.  A VRF that
     # ALSO carries instance-type / RD / RT / interface / a non-static
     # ``routing-options`` line still materialises via those paths
-    # (Junos set-lines are order-independent).  next-hop form only —
-    # ``next-table``, ``discard`` / ``reject`` / ``receive`` and
-    # ``qualified-next-hop`` are left out and counted, as in the global
-    # routing table (:func:`_apply_static_route`).  (v0.2.0 — graduates
-    # /routing/static-route/vrf from lossy to supported.)
+    # (Junos set-lines are order-independent).  A next hop, a
+    # qualified next hop and a route's preference are read;
+    # ``next-table`` and ``discard`` / ``reject`` / ``receive`` are
+    # left out and counted, as in the global routing table
+    # (:func:`_apply_static_route`), and so is the preference of the
+    # block's ``defaults`` (:func:`_apply_static_defaults`).  (v0.2.0
+    # — graduates /routing/static-route/vrf from lossy to supported.)
     # The same of ``routing-options rib <name>.inet.0`` and
     # ``<name>.inet6.0`` (:func:`_apply_rib_static_route`).
     if head == "routing-options" and (
@@ -3791,6 +3817,10 @@ def _apply_routing_instances(
             and rest[1] == "static"
             and rest[2] == "route"
             and _apply_static_route(rest[3:], ri_name, intent, found)
+        )
+        or (
+            rest[1:3] == ["static", "defaults"]
+            and _apply_static_defaults(rest[3:], ri_name, "inet", found)
         )
         or (
             rest[1:2] == ["rib"]
@@ -3903,9 +3933,12 @@ def _apply_routing_options(
 ) -> None:
     """``set routing-options static route <dest>/<prefix> next-hop <gw>``
     (:func:`_apply_static_route`), and the same under ``rib inet.0``
-    or ``rib inet6.0`` (:func:`_apply_rib_static_route`)."""
+    or ``rib inet6.0`` (:func:`_apply_rib_static_route`); ``static
+    defaults preference <n>`` (:func:`_apply_static_defaults`)."""
     if len(tokens) >= 4 and tokens[0] == "static" and tokens[1] == "route":
         _apply_static_route(tokens[2:], "", intent, found)
+    elif tokens[:2] == ["static", "defaults"]:
+        _apply_static_defaults(tokens[2:], "", "inet", found)
     elif tokens[:1] == ["rib"]:
         _apply_rib_static_route(tokens[1:], "", intent, found)
 
@@ -3929,15 +3962,20 @@ def _apply_rib_static_route(
     tree holds: it is counted on *found*, once by VRF, table and
     destination, and left out (:func:`_routes_of_other_tables_row`).
     Up to 0.7.7 no ``rib`` line was read, and such a route of the
-    main tables was lost with nothing said.
+    main tables was lost with nothing said.  The ``static defaults``
+    of a main table are read as those of ``static`` are, for the
+    table's family (:func:`_apply_static_defaults`).
 
     Returns:
-        Whether the line was a next hop the tree holds.
+        Whether the line was a line of a route the tree holds.
     """
-    if len(words) < 4 or words[1] != "static" or words[2] != "route":
+    if len(words) < 4 or words[1] != "static" or words[2] not in ("route", "defaults"):
         return False
     own = f"{vrf}." if vrf else ""
-    if words[0] in (f"{own}inet.0", f"{own}inet6.0"):
+    family = {f"{own}inet.0": "inet", f"{own}inet6.0": "inet6"}.get(words[0])
+    if words[2] == "defaults":
+        return family is not None and _apply_static_defaults(words[3:], vrf, family, found)
+    if family is not None:
         return _apply_static_route(words[3:], vrf, intent, found)
     if found is not None and "/" in words[3]:
         found.routes_of_other_tables.add((vrf, words[0], words[3]))
@@ -3951,16 +3989,35 @@ def _apply_rib_static_route(
 #: route cannot name; ``discard`` and ``reject`` "do not forward
 #: packets addressed to this destination", and ``receive`` sends them
 #: to the Routing Engine, none of which a route with no next hop says
-#: on another platform; a ``qualified-next-hop`` is a next hop with a
-#: preference of its own, commonly a backup, and read as a next hop
-#: it would carry traffic beside the route's own.
+#: on another platform.  (A ``qualified-next-hop`` is read: it is a
+#: next hop at a preference of its own, :func:`_apply_static_route`.)
 _STATIC_ROUTE_KINDS_NOT_HELD: dict[str, str] = {
     "next-table": "next-table",
     "discard": "no-next-hop",
     "reject": "no-next-hop",
     "receive": "no-next-hop",
-    "qualified-next-hop": "qualified-next-hop",
 }
+
+#: The preference of a static route that states none (Juniper,
+#: "preference (Routing Options)": "Default: 5 (for static
+#: routes)").
+_STATIC_DEFAULT_PREFERENCE = 5
+
+#: The distances the tree holds.  Junos takes a preference of 0 to
+#: 4,294,967,295; 0 is "not stated" in the tree, and the other
+#: platforms take a distance of at most 255, which a Cisco router
+#: does not install (and IOS XR does not take), where Junos
+#: installs any preference.
+_LOWEST_HELD_PREFERENCE = 1
+_HIGHEST_HELD_PREFERENCE = 254
+
+
+def _preference(word: str) -> int:
+    """A preference as the line states it, or -1 for a word that is
+    no preference Junos takes (which no distance of the tree is)."""
+    if word.isascii() and word.isdigit() and len(word) <= 10:
+        return int(word)
+    return -1
 
 
 def _apply_static_route(
@@ -3970,23 +4027,41 @@ def _apply_static_route(
     """One ``static route`` line of the global table (*vrf* empty) or
     of a routing instance: *words* are what follows ``route``.
 
-    ``<dest> next-hop <gw>`` is read.  A route of a form the tree has
-    no form for (:data:`_STATIC_ROUTE_KINDS_NOT_HELD`) is counted on
-    *found*, once by VRF, destination and qualified next hop, and is
-    left out.  Any other line of a route (``preference``, ``tag``,
-    ``no-readvertise``) is not read.
+    ``<dest> next-hop <gw>`` and ``<dest> qualified-next-hop <gw>``
+    are read as a next hop; what a qualified next hop states of its
+    own preference and metric, and the route's ``preference <n>``,
+    are kept on *found* for :func:`_resolve_static_preferences`.  A
+    route of a form the tree has no form for
+    (:data:`_STATIC_ROUTE_KINDS_NOT_HELD`) is counted on *found*,
+    once by VRF and destination, and is left out.  Any other line of
+    a route (``tag``, ``metric``, ``no-readvertise``) is not read.
 
     Returns:
-        Whether the line was a next hop the tree holds.
+        Whether the line was a line of a route the tree holds.
     """
     dest = words[0]
     if "/" not in dest or len(words) < 2:
         return False
     form = words[1]
-    if form == "next-hop":
+    if form == "preference":
+        if len(words) < 3:
+            return False
+        if found is not None:
+            found.route_preferences[(vrf, dest)] = _preference(words[2])
+        return True
+    if form in ("next-hop", "qualified-next-hop"):
         if len(words) < 3:
             return False
         gateway = words[2]
+        if form == "qualified-next-hop" and found is not None:
+            # "The qualified next-hop preference and metric override
+            # the route preference and metric" (Juniper, "Static
+            # Route Preferences and Qualified Next Hops").
+            own = found.qualified.setdefault((vrf, dest, gateway), [None, False])
+            if words[3:4] == ["preference"] and len(words) >= 5:
+                own[0] = _preference(words[4])
+            elif words[3:4] == ["metric"]:
+                own[1] = True
         # De-dup: if GAP 8's two-pass parse or GAP 9b's group-
         # content render replays the same route at both levels,
         # we don't want to double up in the canonical list.
@@ -4000,9 +4075,102 @@ def _apply_static_route(
         return True
     kind = _STATIC_ROUTE_KINDS_NOT_HELD.get(form)
     if kind is not None and found is not None:
-        address = words[2] if kind == "qualified-next-hop" and len(words) >= 3 else ""
-        found.routes_not_held[kind].add((vrf, dest, address))
+        found.routes_not_held[kind].add((vrf, dest, ""))
     return False
+
+
+def _apply_static_defaults(
+    words: list[str], vrf: str, family: str, found: _Found | None = None,
+) -> bool:
+    """One ``static defaults`` line of the global table (*vrf* empty)
+    or of a routing instance, of the routes of *family* (``inet`` or
+    ``inet6``): *words* are what follows ``defaults``.
+
+    ``preference <n>`` is the preference of a route of the block that
+    states none of its own ("default attributes inherited by all
+    newly created static routes", Juniper, "static (Routing
+    Options)").
+    It is kept on *found* for :func:`_resolve_static_preferences`;
+    any other default is not read.
+
+    Returns:
+        Whether the line was read.
+    """
+    if words[:1] != ["preference"] or len(words) < 2:
+        return False
+    if found is not None:
+        found.static_defaults[(vrf, family)] = _preference(words[1])
+    return True
+
+
+def _resolve_static_preferences(intent: CanonicalIntent, found: _Found) -> None:
+    """Give each static route of *intent* the distance its lines state.
+
+    A next hop's preference is the qualified next hop's own, else the
+    route's ``preference``, else the block's ``defaults``.  Where no
+    next hop of a route states one, each keeps the tree's "not
+    stated" (0), which a target writes as its own default; where
+    some do and some do not, the others are given Junos's own
+    default for a static route, 5, so that which of them is the
+    backup is the same on every target.
+
+    Two kinds of next hop are left out, and counted on *found*:
+
+    * one at a preference the tree does not hold
+      (:data:`_LOWEST_HELD_PREFERENCE` to
+      :data:`_HIGHEST_HELD_PREFERENCE`);
+    * a qualified next hop that states a metric of its own, at the
+      preference of another next hop of the route (the route's own
+      next hops are one): the tree holds no such metric, and
+      Juniper says that it overrides the route's metric without
+      saying whether it decides which next hop of one preference
+      is used, so neither reading is written.
+    """
+    if not (found.route_preferences or found.static_defaults or found.qualified):
+        return
+    groups: dict[tuple[str, str], list[CanonicalStaticRoute]] = {}
+    for route in ticked(intent.static_routes):
+        groups.setdefault((route.vrf, route.destination), []).append(route)
+    left_out: set[int] = set()
+    for (vrf, dest), routes in ticked(groups.items()):
+        family = "inet6" if ":" in dest else "inet"
+        stated = found.route_preferences.get(
+            (vrf, dest), found.static_defaults.get((vrf, family)),
+        )
+        owns = [found.qualified.get((vrf, dest, route.gateway)) for route in routes]
+        preferences = [
+            own[0] if own is not None and own[0] is not None else stated
+            for own in owns
+        ]
+        if None in preferences and any(p is not None for p in preferences):
+            preferences = [
+                _STATIC_DEFAULT_PREFERENCE if p is None else p for p in preferences
+            ]
+        # How many next hops are at each preference, the route's own
+        # next hops counted once.
+        at: dict[int | None, int] = {}
+        own_counted = False
+        for own, preference in zip(owns, preferences, strict=True):
+            if own is None:
+                if own_counted:
+                    continue
+                own_counted = True
+            at[preference] = at.get(preference, 0) + 1
+        for route, own, preference in zip(routes, owns, preferences, strict=True):
+            if preference is not None and not (
+                _LOWEST_HELD_PREFERENCE <= preference <= _HIGHEST_HELD_PREFERENCE
+            ):
+                found.routes_not_held["preference"].add((vrf, dest, route.gateway))
+                left_out.add(id(route))
+            elif own is not None and own[1] and at[preference] > 1:
+                found.routes_not_held["qualified-next-hop"].add((vrf, dest, route.gateway))
+                left_out.add(id(route))
+            else:
+                route.metric = preference or 0
+    if left_out:
+        intent.static_routes = [
+            route for route in intent.static_routes if id(route) not in left_out
+        ]
 
 
 def _routes_of_other_tables_row(routes: set[tuple[str, str, str]]) -> list[str]:
@@ -4040,9 +4208,18 @@ def _static_routes_not_held_rows(
     if routes_not_held["qualified-next-hop"]:
         rows.append(
             f"{head}: {len(routes_not_held['qualified-next-hop'])} "
-            "qualified next hop(s) (qualified-next-hop <address>): a "
-            "next hop with a preference of its own, which the tree "
-            "does not hold; not translated"
+            "qualified next hop(s) with a metric of their own at the "
+            "preference of another next hop of the route "
+            "(qualified-next-hop <address> metric <n>): the tree holds "
+            "no such metric, and whether it decides which of them Junos "
+            "uses is not established; not translated"
+        )
+    if routes_not_held["preference"]:
+        rows.append(
+            f"{head}: {len(routes_not_held['preference'])} next hop(s) "
+            "at a preference the tree does not hold (preference 0, or "
+            "255 and above): the tree holds a distance of 1 to 254; "
+            "not translated"
         )
     return rows
 

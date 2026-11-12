@@ -341,10 +341,11 @@ per_field_expectation:
       declarations are worth recording as untested rather than as safe: both
       codecs declare `/routing/static-route/description` lossy (IOS-XR renders
       destination + next-hop only) and juniper_junos additionally declares
-      `/routing/static-route/metric` lossy and
       `/routing/static-route/interface` unsupported.  No committed cell sets a
-      description, a metric or an interface next-hop, so those paths are not
-      exercised on this pair and this `good` does not vouch for them.
+      description, a preference or an interface next-hop, so those paths are
+      not exercised on this pair and this `good` does not vouch for them.  A
+      Junos `preference` of 1 to 254 is read as the route's distance, which
+      IOS-XR writes; the Junos parser's own tests pin that path.
     references: [junos-iosxr-surface]
 
   # -- Services -------------------------------------------------------------

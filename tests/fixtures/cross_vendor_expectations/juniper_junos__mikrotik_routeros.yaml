@@ -549,13 +549,11 @@ per_field_expectation:
       ``set routing-options static route X/N next-hop Y`` ->
       RouterOS's ``/ip route add dst-address=X/N gateway=Y``.  IPv6
       default route (`::/0`) supported on both via the same CIDR
-      shape.  Lossy bits: (1) Junos's ``preference`` and RouterOS's
-      ``distance`` are vendor-specific AD scalars not 1:1 with
-      canonical ``metric`` (which is the operator-visible metric,
-      not preference / AD) — drift on round-trip; (2) Junos's
-      ``qualified-next-hop`` (weighted multi-NH) flattens to
-      multiple canonical entries and expands to multiple RouterOS
-      records; (3) per-VRF static routes (`routing-instances X
+      shape.  A Junos ``preference``, and a
+      ``qualified-next-hop``'s own, are read as the route's
+      distance and written ``distance=<N>``, a floating backup as
+      a second record (no committed Junos input states either).
+      Lossy bit: per-VRF static routes (`routing-instances X
       routing-options static`) are left out under a ``# review:``
       line, since the mikrotik_routeros output makes no VRF or
       routing table: 5 routes on 4 cells.  Up to 0.7.7 they were
@@ -896,9 +894,9 @@ per_field_expectation:
 #     non-global routes flatten into the global table on the
 #     mikrotik_routeros target.  Lands alongside VRF wire-up.
 #
-#   * Junos `qualified-next-hop` weighted multi-NH preservation —
-#     canonical model is single-NH-only; flattens to multiple
-#     entries.
+#   * A Junos `qualified-next-hop`'s own `metric` — the tree holds a
+#     distance only, and a hop whose metric decides between it and
+#     another next hop at one preference is left out with a row.
 #
 #   * Junos firewall filters / policy-statements — Tier-3 by design;
 #     remain in raw_sections.  Operator hand-translation required.

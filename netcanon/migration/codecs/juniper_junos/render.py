@@ -91,7 +91,7 @@ from ..._usm_keys import (
     user_usm_is_migratable,
     user_usm_kind,
 )
-from ...canonical.intent import CanonicalIntent, CanonicalInterface
+from ...canonical.intent import CanonicalIntent, CanonicalInterface, CanonicalStaticRoute
 from ...canonical.port_names import UNIT_MAX_DIGITS, split_unit
 from ...canonical.transforms import (
     TRUNK_ALLOWED_SPECIFICITY_BOUND,
@@ -1175,32 +1175,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # table name must include the routing instance name", rib
     # (Routing Options)).  Up to 0.7.7 it was written under
     # ``routing-options static``, as an IPv4 route is.
-    for route in tree.static_routes:
-        if not route.gateway:
-            # Junos requires a next-hop for static routes; skip
-            # connected/blackhole entries we can't express.
-            continue
-        if ":" in route.destination:
-            table = f"{route.vrf}.inet6.0" if route.vrf else "inet6.0"
-            static = f"rib {_quote_if_needed(table)} static"
-        else:
-            static = "static"
-        if route.vrf:
-            # Per-VRF static routes nest under the routing-instance
-            # (v0.2.0 — graduated /routing/static-route/vrf to
-            # supported).  Junos accepts set-lines in any order, so
-            # emitting here (rather than inside the routing-instances
-            # block) round-trips cleanly.
-            out.append(
-                f"set routing-instances {_quote_if_needed(route.vrf)} "
-                f"routing-options {static} route {route.destination} "
-                f"next-hop {route.gateway}"
-            )
-        else:
-            out.append(
-                f"set routing-options {static} route {route.destination} "
-                f"next-hop {route.gateway}"
-            )
+    # A route's distance is its preference: the next hops of a
+    # destination at its first distance are its ``next-hop``s, under
+    # the route's ``preference``, and each other one is a
+    # ``qualified-next-hop`` at a preference of its own (Juniper,
+    # static (Routing Options)), as a floating static route is
+    # written on Junos.
+    out.extend(_static_route_lines(tree.static_routes))
 
     # --- snmp ---
     if tree.snmp is not None:
@@ -1367,6 +1348,59 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _static_route_lines(routes: list[CanonicalStaticRoute]) -> list[str]:
+    """The ``routing-options`` lines of *routes*, in their order.
+
+    The next hops of one destination (in one VRF) are one route.  Its
+    preference is the distance of the next hops written ``next-hop``:
+    none, where one of them states no distance (the tree's 0, which
+    is Junos's own default), else the least.  A next hop at another
+    distance is a ``qualified-next-hop <gw> preference <distance>``.
+    A route with no next hop is not written: Junos requires one.
+    """
+    primary: dict[tuple[str, str], int] = {}
+    for route in routes:
+        if route.gateway:
+            key = (route.vrf, route.destination)
+            metric = max(route.metric, 0)
+            primary[key] = min(primary.get(key, metric), metric)
+    lines: list[str] = []
+    written: set[tuple[str, str]] = set()
+    for route in routes:
+        if not route.gateway:
+            continue
+        if ":" in route.destination:
+            table = f"{route.vrf}.inet6.0" if route.vrf else "inet6.0"
+            static = f"rib {_quote_if_needed(table)} static"
+        else:
+            static = "static"
+        if route.vrf:
+            # Per-VRF static routes nest under the routing-instance
+            # (v0.2.0 — graduated /routing/static-route/vrf to
+            # supported).  Junos accepts set-lines in any order, so
+            # emitting here (rather than inside the routing-instances
+            # block) round-trips cleanly.
+            head = (
+                f"set routing-instances {_quote_if_needed(route.vrf)} "
+                f"routing-options {static} route {route.destination}"
+            )
+        else:
+            head = f"set routing-options {static} route {route.destination}"
+        key = (route.vrf, route.destination)
+        metric = max(route.metric, 0)
+        if metric == primary[key]:
+            lines.append(f"{head} next-hop {route.gateway}")
+        else:
+            lines.append(
+                f"{head} qualified-next-hop {route.gateway} preference {metric}"
+            )
+        if key not in written:
+            written.add(key)
+            if primary[key]:
+                lines.append(f"{head} preference {primary[key]}")
+    return lines
 
 
 def _emit_vrrp_groups_for_address(

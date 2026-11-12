@@ -326,8 +326,8 @@ per_field_expectation:
       fixture on this pair carries a secondary address.
     references: [nxos-junos-surface]
 
-  # -- Static routes.  Top-level key omitted: the routes survive; only the
-  # administrative distance drops. --
+  # -- Static routes.  Top-level key omitted: each attribute has a cell of
+  # its own. --
 
   "static_routes[].destination":
     disposition: good
@@ -347,15 +347,16 @@ per_field_expectation:
     references: [nxos-junos-surface]
 
   "static_routes[].metric":
-    disposition: lossy
-    reason: >
-      Junos renders destination + next-hop only, so the administrative
-      distance is dropped and re-parses as 0 (kitchen-sink: 200 -> 0); its
-      matrix declares `/routing/static-route/metric` lossy.  This changes
-      forwarding, not just documentation: a FLOATING static route authored as
-      a backup path arrives with default preference and competes with the
-      primary instead of standing by.  Re-apply `preference <N>` on the target
-      for every route whose source metric was non-default.
+    disposition: good
+    note: >
+      The administrative distance arrives as a Junos `preference`, on the one
+      cell that sets one (the kitchen sink's distance of 200 reads back at
+      200).  A route whose next hops share a distance is written `next-hop
+      <gw>` and `route <dest> preference <N>`, and a floating backup to the
+      same destination `qualified-next-hop <gw> preference <N>`, so that it
+      stands by rather than competing with the primary.  Up to 0.7.7 the
+      Junos render wrote destination and next-hop only, and the distance
+      came back as 0.
     references: [nxos-junos-surface]
 
   "static_routes[].interface":
@@ -374,7 +375,8 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Both matrices declare `/routing/static-route/description` lossy -- NX-OS
-      carries the route name, Junos renders destination + next-hop only.  No
+      carries the route name, Junos renders destination, next-hop and
+      preference only.  No
       fixture on this pair populates it, so this rests on the two matrices.
       Operator-authored route names will not survive the migration.
     references: [nxos-junos-surface]

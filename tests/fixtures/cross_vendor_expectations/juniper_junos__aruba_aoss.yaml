@@ -519,8 +519,11 @@ per_field_expectation:
     reason: >
       Default-VRF static routes round-trip cleanly (Junos's CIDR ->
       Aruba's CIDR or dotted-mask via ``_dest_mask_to_cidr``
-      helper).  Junos's ``preference`` and ``qualified-next-hop``
-      attributes have no Aruba analogue and drop on render.
+      helper).  A Junos ``preference``, and a
+      ``qualified-next-hop``'s own, are read as the route's
+      distance and written ``distance <N>``, a floating backup as
+      a second ``ip route`` line (no committed Junos input states
+      either; the Junos parser's own tests pin them).
       Per-routing-instance static routes (``set routing-instances X
       routing-options static``) drop on Aruba render — Aruba has
       no VRF concept (see ``vrf_unsupported.md``).  An IPv6 static

@@ -404,21 +404,14 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Populated on 4 of 13 cells — 7 routes in, 7 out, every record surviving
-      with its destination and next-hop, IPv4 and IPv6 alike.  Exactly one
-      sub-value is lost, on one cell: on `kitchen_sink.conf` the route
-      `10.99.0.0/16` comes back with metric 20 -> 0.
-      juniper_junos already declares `/routing/static-route/metric` lossy and
-      states the cause — "Render emits destination + next-hop only; the
-      static-route administrative distance (metric) is dropped".  The render
-      confirms it: `set routing-options static route 10.99.0.0/16 next-hop
-      10.10.10.254`, with no metric or preference clause.
-      Recorded `lossy` and not `unsupported`: no route vanishes, the
-      forwarding entry is intact, and only the administrative distance is
-      gone.  That still changes route selection where a floating static was
-      the point, so re-apply preferences on the target.
+      with its destination, next-hop and distance, IPv4 and IPv6 alike.  A
+      stated distance arrives as a Junos `preference`: the kitchen sink's
+      route with a distance of 20 is written `route <dest> preference 20`
+      and reads back at 20.  Up to 0.7.7 the Junos render wrote destination
+      and next-hop only, and that distance came back as 0.
       Two adjacent caveats are declared rather than observed, stated so this
       row is not read wider than it is measured.  juniper_junos declares
       `/routing/static-route/interface` UNSUPPORTED — a gateway-less,

@@ -1,7 +1,7 @@
 """A Junos static route the tree has no form for is left out and said.
 
 The parser read a static route of one form, ``<dest> next-hop <gw>``,
-and passed over every other line of a route.  Four forms are a route
+and passed over every other line of a route.  Three forms are a route
 in force that the tree cannot hold (Juniper, "static (Routing
 Options)"):
 
@@ -11,15 +11,15 @@ Options)"):
 * ``discard`` and ``reject`` -- "Do not forward packets addressed to
   this destination", ``reject`` with an ICMP unreachable -- and
   ``receive``, which sends the packets to the Routing Engine: a route
-  that forwards to no next hop;
-* ``qualified-next-hop <address>`` -- a next hop with a preference of
-  its own, commonly a backup: read as a next hop, it would carry
-  traffic beside the route's own.
+  that forwards to no next hop.
 
 Each was missing from every output, in a job that said nothing of it.
 Each is left out, as before, and one section row a kind counts them,
 in the global table and in a routing instance alike, in both forms the
-device prints.
+device prints.  (A ``qualified-next-hop`` was left out here too, as a
+next hop with a preference of its own; it is read now, with the
+route's preference, and the next hops a preference leaves out have
+rows of their own: ``test_a_routes_preference.py``.)
 """
 
 from __future__ import annotations
@@ -57,11 +57,11 @@ def _no_next_hop_row(count: int) -> str:
     )
 
 
-def _qualified_row(count: int) -> str:
+def _preference_row(count: int) -> str:
     return (
-        f"routing-options static: {count} qualified next hop(s) "
-        "(qualified-next-hop <address>): a next hop with a preference of "
-        "its own, which the tree does not hold; not translated"
+        f"routing-options static: {count} next hop(s) at a preference "
+        "the tree does not hold (preference 0, or 255 and above): the "
+        "tree holds a distance of 1 to 254; not translated"
     )
 
 
@@ -86,8 +86,6 @@ _NOT_HELD = [
         ("discard", _no_next_hop_row(1)),
         ("reject", _no_next_hop_row(1)),
         ("receive", _no_next_hop_row(1)),
-        ("qualified-next-hop 192.0.2.9", _qualified_row(1)),
-        ("qualified-next-hop 192.0.2.9 preference 7", _qualified_row(1)),
     )
 ]
 
@@ -103,24 +101,19 @@ class TestTheParse:
         routes, rows = _read(
             f"{_GLOBAL} next-hop 192.0.2.1",
             f"{_IN_RED} next-hop 198.51.100.1",
-            f"{_GLOBAL} qualified-next-hop 192.0.2.9 preference 7",
             "set routing-options static route 10.8.0.0/16 discard",
         )
         assert routes == [
             ("", "10.9.0.0/16", "192.0.2.1"), ("RED", "10.9.0.0/16", "198.51.100.1"),
         ]
-        assert rows == [_no_next_hop_row(1), _qualified_row(1)]
+        assert rows == [_no_next_hop_row(1)]
 
     def test_each_route_is_counted_once(self) -> None:
-        """The lines of one qualified next hop are one; two next hops
-        of a route are two; a route of RED and one of the global table
-        with the same destination are two."""
+        """A route of each kind is counted once by VRF and destination:
+        a route of RED and one of the global table with the same
+        destination are two."""
         _, rows = _read(
-            f"{_GLOBAL} qualified-next-hop 192.0.2.9",
-            f"{_GLOBAL} qualified-next-hop 192.0.2.9 preference 7",
-            f"{_GLOBAL} qualified-next-hop 192.0.2.9 metric 3",
-            f"{_GLOBAL} qualified-next-hop 192.0.2.10 preference 8",
-            f"{_IN_RED} qualified-next-hop 192.0.2.9",
+            "set routing-options static route 10.1.0.0/16 discard",
             "set routing-options static route 10.1.0.0/16 discard",
             "set routing-options static route 10.2.0.0/16 reject",
             "set routing-options static route 10.3.0.0/16 receive",
@@ -130,7 +123,6 @@ class TestTheParse:
         assert rows == [
             next_hop_elsewhere_rows("routing-options static", 2, "next-table <table>")[0],
             _no_next_hop_row(3),
-            _qualified_row(3),
         ]
 
     def test_the_block_form_says_the_same(self) -> None:
@@ -148,12 +140,12 @@ class TestTheParse:
             "    }\n}\n"
         )
         tree = get_codec("juniper_junos").parse(text)
-        assert [(r.destination, r.gateway) for r in tree.static_routes] == [
-            ("10.3.0.0/16", "192.0.2.1"),
+        # The qualified next hop is read at its own preference, and the
+        # route's own next hop at Junos's default for a static route.
+        assert [(r.destination, r.gateway, r.metric) for r in tree.static_routes] == [
+            ("10.3.0.0/16", "192.0.2.1", 5), ("10.3.0.0/16", "192.0.2.9", 7),
         ]
-        assert tree.dropped_tier3_sections == [
-            _TABLE_ROW, _no_next_hop_row(1), _qualified_row(1),
-        ]
+        assert tree.dropped_tier3_sections == [_TABLE_ROW, _no_next_hop_row(1)]
 
     def test_a_deactivated_one_is_not_counted_twice(self) -> None:
         """A route the device holds and does not run is left out by its
@@ -168,7 +160,7 @@ class TestTheParse:
     def test_the_rows_are_sections(self) -> None:
         """Each route is in force on the device: its row is not one of
         a statement left out."""
-        for row in (_TABLE_ROW, _no_next_hop_row(2), _qualified_row(2)):
+        for row in (_TABLE_ROW, _no_next_hop_row(2), _preference_row(2)):
             assert not is_left_out_row(row)
 
 
@@ -178,7 +170,8 @@ def _job(target: str) -> MigrationJob:
         "set routing-options static route 0.0.0.0/0 next-hop 192.0.2.1",
         "set routing-options static route 203.0.113.0/24 next-table RED.inet.0",
         "set routing-options static route 203.0.113.64/26 discard",
-        "set routing-options static route 203.0.113.128/26 qualified-next-hop 192.0.2.9",
+        "set routing-options static route 203.0.113.128/26 next-hop 192.0.2.9",
+        "set routing-options static route 203.0.113.128/26 preference 0",
         "set routing-instances RED routing-options static route 203.0.113.192/26 reject",
     ))
     job = run_plan_with_checked_names(
@@ -194,7 +187,7 @@ class TestTheOutput:
         job = _job(target)
         assert "203.0.113." not in job.rendered, target
         assert job.dropped_tier3_sections[-3:] == [
-            _TABLE_ROW, _no_next_hop_row(2), _qualified_row(1),
+            _TABLE_ROW, _no_next_hop_row(2), _preference_row(1),
         ], target
 
     def test_the_route_with_a_next_hop_is_written(self) -> None:

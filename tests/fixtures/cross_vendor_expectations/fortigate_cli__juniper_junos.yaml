@@ -514,9 +514,9 @@ per_field_expectation:
       Destination and gateway round-trip via the codec's mask <->
       CIDR conversions on both cells that carry a route, and a
       FortiOS route that states no ``set dst`` is the default route.
-      The outgoing interface (``set device``) does not come back, and
-      a stated distance comes back as none: the Junos counterpart is
-      ``preference``.  FortiGate ``set comment "<text>"`` parses into
+      The outgoing interface (``set device``) does not come back.  A
+      stated distance arrives as Junos ``preference`` (up to 0.7.7
+      it came back as none).  FortiGate ``set comment "<text>"`` parses into
       canonical ``description``; no committed cell holds one.  A
       FortiOS route of a VRF other than 0 (``set vrf <id>``), a
       blackhole route and a route to an address object are left out
