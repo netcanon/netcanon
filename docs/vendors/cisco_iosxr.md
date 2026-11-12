@@ -77,10 +77,27 @@ translatable with caveats:
   `l2vpn` / `evpn` surface.
 - **`/interfaces/interface/4th-port-segment`** — IOS-XR port names
   have **4 segments** (rack/slot/module/port) while the
-  cross-vendor `PortIdentity` supports 3 (stack/module/port).  Slot,
-  module and port are carried; the **rack** is kept for the same-vendor
-  round-trip only and is not carried cross-vendor (it is `0` on every
-  non-clustered system).  Verify port mappings via the rename modal.
+  cross-vendor `PortIdentity` supports 3 (stack/module/port).  The
+  **rack** is kept for the same-vendor round-trip only and is not
+  carried cross-vendor (it is `0` on every non-clustered system).
+  Slot, module and port are carried onto IOS-XE, NX-OS and Junos
+  (`Gi0/0/0/1` → `GigabitEthernet0/0/1`, `Ethernet0/0/1`,
+  `ge-0/0/1`).  Onto every other target ports of two cards can come
+  out as one name (`Gi0/0/0/1` and `Gi0/1/0/1` are both `eth1` on
+  VyOS), and a target that counts
+  ports from 1 (EOS, AOS-CX, OS10, AOS-S, FortiOS, RouterOS) writes
+  port 0 and port 1 of a card as one port as well (`Ethernet1` on
+  EOS).  Such a job is `partial` and lists the ports in
+  `fused_ports`.  A sub-interface is on its port whether or not the
+  config has a line for the port: a unit of port 1 beside an address
+  on port 0 is two ports on one name too.  Verify port mappings via
+  the rename modal.
+  ⚠️ Up to and including v0.7.7 a unit of a port the config has no
+  line for was not counted as on its port: onto a target that counts
+  ports from 1 it came out as a unit of port 0's port — port 1's
+  VLAN on port 0 — in a job that said `completed`, and with both
+  devices declared the unit was given that name and held the job as
+  a name of no inventory.
   ⚠️ Releases up to and including v0.7.6 parked the *port* instead:
   every port on a card translated to the **same** cross-vendor name
   (`Gi0/0/0/0`, `/5` and `/17` all became `ge-0/0/0`).  This page

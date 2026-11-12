@@ -393,12 +393,18 @@ class CiscoIOSXRCodec(CodecBase):
                 reason=(
                     "IOS-XR port names use 4 segments (rack/slot/"
                     "module/port) while the cross-vendor PortIdentity "
-                    "supports only 3 (stack/module/port).  Slot, module "
-                    "and port are carried; the RACK segment is kept in "
-                    "PortIdentity.meta['iosxr_rack'] for the same-vendor "
-                    "round-trip and is not carried cross-vendor (it is 0 "
-                    "on every non-clustered system).  Operators must "
-                    "verify port mappings via the rename modal."
+                    "supports only 3 (stack/module/port).  The RACK "
+                    "segment is kept in PortIdentity.meta['iosxr_rack'] "
+                    "for the same-vendor round-trip and is not carried "
+                    "cross-vendor (it is 0 on every non-clustered "
+                    "system).  Slot, module and port are carried onto "
+                    "IOS-XE, NX-OS and Junos; on every other target "
+                    "ports of two cards can share one name, and a target "
+                    "that counts ports from 1 writes port 0 and port 1 "
+                    "of a card as one port -- the job is partial and "
+                    "lists them in fused_ports, a sub-interface with its "
+                    "port.  Operators must verify port mappings via the "
+                    "rename modal."
                 ),
                 severity="warn",
             ),

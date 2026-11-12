@@ -659,6 +659,7 @@ def run_plan_with_overrides(  # noqa: C901
         build_port_rename_transform,
         collect_hardware_port_names,
         collect_port_names,
+        stated_sub_interfaces,
     )
     from ..migration.canonical.snmp_names import (
         build_snmp_community_rename_transform,
@@ -767,6 +768,9 @@ def run_plan_with_overrides(  # noqa: C901
             captured["other_names"] = [
                 name for name in collect_port_names(tree) if name not in hardware
             ]
+            captured["stated_units"] = {
+                name: port for name, (port, _unit) in stated_sub_interfaces(tree).items()
+            }
         return tree
 
     override_transforms.append(_capture_source_shape)
@@ -900,6 +904,7 @@ def run_plan_with_overrides(  # noqa: C901
     job.source_hostname = captured.get("hostname", "") or ""
     job.source_ports = list(captured.get("ports", []))
     job.source_other_names = list(captured.get("other_names", []))
+    job._stated_units = dict(captured.get("stated_units", {}))
 
     # Post-run DEBUG summary — mirrors the per-category outcome
     # fields the UI will read.  Useful for post-hoc debugging when
@@ -981,6 +986,7 @@ def _shared_final_names(
     rendered: Mapping[str, int],
     fold_source: bool,
     fold_target: bool,
+    source: CodecBase | None = None,
 ) -> dict[str, list[str]]:
     """Names of the output that more than one source name ended on,
     each with those names, read from the finished run.
@@ -1006,6 +1012,11 @@ def _shared_final_names(
     of a routing instance, and on ``Loopback0`` beside ``lo0`` it is
     two interfaces in one.
 
+    A unit is on its port, whether or not the config has a line for
+    the port (:func:`_ports_units_are_on`): a sub-interface of port 1
+    beside an addressed port 0 that both end on ``Ethernet1`` is port
+    1's VLAN on port 0, though ``Ethernet1.100`` is a name of its own.
+
     Nothing else is set aside, and nothing else needs to be.  A VLAN
     interface on a target that writes one from its VLAN (AOS-S) keeps
     its own name in the tree and shares it with nothing; a name the
@@ -1018,14 +1029,24 @@ def _shared_final_names(
             interfaces the tree holds under it.
         fold_source: Source names compare without regard to case.
         fold_target: Target names do.
+        source: The source codec, whose classifier says which ports
+            carry units (:func:`_carries_units`).
     """
     from ..migration.canonical.port_names import split_unit
     from ..migration.port_mapping import fused_targets, name_key
 
+    names = [*job.source_ports, *job.source_other_names]
+    renames = dict(job.port_renames)
+    for port, on in _ports_units_are_on(
+        names, job.port_renames, job.port_drops, fold_source, job._stated_units,
+        source=source,
+    ).items():
+        names.append(port)
+        if on != port:
+            renames[port] = on
     shared: dict[str, list[str]] = {}
     groups = fused_targets(
-        [*job.source_ports, *job.source_other_names],
-        job.port_renames, job.port_drops,
+        names, renames, job.port_drops,
         fold_source=fold_source, fold_target=fold_target,
     )
     for final, sources in groups.items():
@@ -1046,6 +1067,199 @@ def _shared_final_names(
         if len(counted) > 1:
             shared[final] = counted
     return shared
+
+
+def _carries_units(codec: CodecBase, name: str) -> bool:
+    """*codec*'s classifier reads *name* as a port that carries
+    sub-interfaces (``UNIT_PARENT_KINDS``: a physical port, a breakout
+    lane, an aggregate).  A classifier that cannot read it, or fails
+    on it, says no: a Junos ``irb`` or ``vlan`` is the carrier of VLAN
+    interfaces, and ``irb.100`` a unit of no port."""
+    from ..migration.canonical.port_names import UNIT_PARENT_KINDS
+
+    return _classified_kind(codec, name) in UNIT_PARENT_KINDS
+
+
+def _port_of_unit(name: str, stated: Mapping[str, str]) -> str | None:
+    """The source port the unit *name* rides on, or None if it is no
+    unit: the port its config states (*stated*,
+    ``MigrationJob._stated_units``), or else the port part of its
+    name -- an OPNsense ``vlan0.10`` whose ``<if>`` is ``ixl0`` is on
+    ``ixl0``, an IOS XR ``TenGigE0/0/0/1.100`` on ``TenGigE0/0/0/1``."""
+    from ..migration.canonical.port_names import split_unit
+
+    if name in stated:
+        return stated[name]
+    split = split_unit(name)
+    return None if split is None else split[0]
+
+
+def _ports_units_are_on(
+    names: Iterable[str],
+    port_renames: Mapping[str, str],
+    port_drops: Iterable[str],
+    fold_source: bool,
+    stated: Mapping[str, str] | None = None,
+    *,
+    source: CodecBase | None = None,
+) -> dict[str, str]:
+    """For each unit among *names* whose port is not among them, the
+    port and the name of the output the unit's move put it on.
+
+    A unit goes where its port goes, so a unit is on a port of the
+    output whether or not the config states the port.  Where it does
+    not, the port is in no list of names and nothing compared it with
+    the others: an IOS XR port 0 with an address beside a
+    sub-interface of port 1 came out on EOS as ``Ethernet1`` and
+    ``Ethernet1.100`` -- port 1's VLAN on port 0 -- in a job that said
+    ``completed``.  The port a unit is on is the port part of its new
+    name.  A unit whose new name is no unit (unit 0 written as its
+    port) names no port of the output, and none is given for it; nor
+    is one for a unit that was dropped.  A unit's own port is the one
+    its config states, where it states one (:func:`_port_of_unit`).
+    With *source*, a port is given only where it is one that carries
+    units (:func:`_carries_units`): Junos ``irb.100`` and ``vlan.5``
+    are VLAN interfaces, and both are ``vlan0.<tag>`` on OPNsense,
+    which is no port.
+
+    Args:
+        names: The source names the check looks at.
+        port_renames: ``MigrationJob.port_renames``.
+        port_drops: ``MigrationJob.port_drops``.
+        fold_source: Source names compare without regard to case.
+        stated: ``MigrationJob._stated_units``.
+        source: The source codec.  Where no list of the source's ports
+            is given -- with no devices declared -- its classifier is
+            what says a name is a port.
+
+    Returns:
+        ``{port: the port it is on}``, in the order the units are
+        given; a port that kept its name is on itself.
+    """
+    from ..migration.canonical.port_names import split_unit
+    from ..migration.port_mapping import name_key
+
+    stated = stated or {}
+    known = {name_key(name, fold_source) for name in names}
+    dropped = set(port_drops)
+    ports: dict[str, str] = {}
+    for name in names:
+        port = _port_of_unit(name, stated)
+        if name in dropped or port is None:
+            continue
+        key = name_key(port, fold_source)
+        on = split_unit(port_renames.get(name, name))
+        if key in known or on is None:
+            continue
+        if source is not None and not _carries_units(source, port):
+            continue
+        known.add(key)
+        ports[port] = on[0]
+    return ports
+
+
+def _with_the_ports_of_units(
+    used: list[str], own_names: Iterable[str], fold_source: bool,
+    stated: Mapping[str, str],
+) -> list[str]:
+    """*used*, with the port of each unit in it put before the unit,
+    where the port is one of *own_names* and not already in *used*.
+
+    A sub-interface is on its port, so a config that has a unit of a
+    port uses the port, whether or not it has a line for the port
+    itself.  Without one the port was in no list the pairing is made
+    for: the unit was a name off the inventory, left to the name-shape
+    translator, and an IOS XR unit of port 1 beside an addressed port
+    0 came out on the port 0 was paired to.  Counted as used, the port
+    is paired and the unit follows it, as it does when the port has a
+    line.  Only a port of the declared source is added: the port part
+    of ``lo0.2`` is no hardware.
+
+    Args:
+        used: The hardware names the config uses
+            (:func:`~netcanon.migration.canonical.port_names.collect_hardware_port_names`).
+        own_names: The ports of the declared source, as the config
+            names them.
+        fold_source: Source names compare without regard to case.
+        stated: Each unit whose config states its port, with the port
+            (:func:`_port_of_unit`).
+
+    Returns:
+        A new list; the port is spelled as the unit's name, or its
+        config, spells it.
+    """
+    from ..migration.port_mapping import name_key
+
+    own = {name_key(name, fold_source) for name in own_names}
+    have = {name_key(name, fold_source) for name in used}
+    out: list[str] = []
+    for name in used:
+        port = _port_of_unit(name, stated)
+        if port is not None:
+            key = name_key(port, fold_source)
+            if key in own and key not in have:
+                have.add(key)
+                out.append(port)
+        out.append(name)
+    return out
+
+
+def _with_where_units_put_their_ports(
+    every: list[str], used: list[str], job: MigrationJob, fold_source: bool,
+) -> tuple[list[str], dict[str, str], list[str]]:
+    """The names, renames and drops of a finished run, with each port
+    the config has no line for and uses for its units
+    (:func:`_with_the_ports_of_units`).
+
+    The run keeps a record only of what the tree holds, and such a
+    port is not in it: a plan settled from the record alone would
+    report it kept under its source name while its units went with
+    it, and would not see that an entry sent another port onto the
+    port its units are on -- port 1's VLAN on port 0, in a job that
+    said ``completed``.  Such a port is where its units are
+    (:func:`_ports_units_are_on`), and is dropped when every unit of
+    it was.
+
+    Args:
+        every: Every name the config references
+            (:func:`~netcanon.migration.canonical.port_names.collect_port_names`).
+        used: The hardware names the plan was made for.
+        job: The finished run.
+        fold_source: Source names compare without regard to case.
+
+    Returns:
+        ``(names, port_renames, port_drops)``: *every* and the job's
+        own, each with those ports added.
+    """
+    from ..migration.port_mapping import name_key
+
+    have = {name_key(name, fold_source) for name in every}
+    unstated = [name for name in used if name_key(name, fold_source) not in have]
+    renames = dict(job.port_renames)
+    drops = list(job.port_drops)
+    if not unstated:
+        return list(every), renames, drops
+    on = {
+        name_key(port, fold_source): where
+        for port, where in _ports_units_are_on(
+            every, job.port_renames, job.port_drops, fold_source, job._stated_units,
+        ).items()
+    }
+    units: dict[str, list[str]] = {}
+    for name in every:
+        port = _port_of_unit(name, job._stated_units)
+        if port is not None:
+            units.setdefault(name_key(port, fold_source), []).append(name)
+    gone = set(job.port_drops)
+    for port in unstated:
+        key = name_key(port, fold_source)
+        where = on.get(key)
+        if where is not None:
+            if where != port:
+                renames[port] = where
+        elif units.get(key) and all(unit in gone for unit in units[key]):
+            drops.append(port)
+    return [*every, *unstated], renames, drops
 
 
 def _undecided_drops(
@@ -1416,7 +1630,8 @@ def run_plan_with_checked_names(
       entry of *port_rename_map* that sends two names to one name on
       purpose is reported as well, since two interfaces are one
       either way.  Unit 0 of an interface beside the interface is
-      one interface and is not counted
+      one interface and is not counted, and a unit is on its port,
+      whether or not the config has a line for the port
       (:func:`_shared_final_names`);
     * **a name the translator dropped** that no entry of
       *port_rename_map* names: a hardware port, or a logical name --
@@ -1559,7 +1774,7 @@ def run_plan_with_checked_names(
             **job._taken_with_drops.model_dump(),
         ))
 
-    fused = _shared_final_names(job, rendered, fold_source, fold_target)
+    fused = _shared_final_names(job, rendered, fold_source, fold_target, source)
     dropped = _undecided_drops(job, port_rename_map, fold_source)
     # The translator lists a name only where no entry decided it.
     # Of those, the ones that are a foreign name on this target.
@@ -1657,7 +1872,7 @@ def _names_the_pairing_leaves(
     fused = {
         final: names
         for final, names in _shared_final_names(
-            job, rendered, fold_source, fold_target,
+            job, rendered, fold_source, fold_target, source,
         ).items()
         if not any(name_key(name, fold_source) in ports for name in names)
     }
@@ -1827,7 +2042,13 @@ def _units_that_followed(
             unit, same_codec=False, named_by_tag=named_by_tag, largest_unit=largest_unit,
         ):
             unit = str(tags[name])
-        where = f"{job.port_renames.get(port, port)}.{unit}"
+        on = job.port_renames.get(port)
+        if on is None:
+            # A port the config has no line for is in no record of the
+            # run (_with_the_ports_of_units): it is where it was given.
+            given = names.get(port)
+            on = given if isinstance(given, str) else port
+        where = f"{on}.{unit}"
         if job.port_renames.get(name, name) == where:
             followed[name] = where
     return followed
@@ -1911,19 +2132,24 @@ def _undecided_clashes(
     return sorted(losers)
 
 
-def _reads_as_a_port(codec: CodecBase, name: str) -> bool:
-    """*codec*'s classifier reads *name* as a hardware port.  A
-    classifier that cannot read it, or fails on it, says no: naming a
-    doubt is a courtesy to the plan, and must not be able to fail the
-    job."""
-    from ..migration.canonical.port_names import HARDWARE_PORT_KINDS
-
+def _classified_kind(codec: CodecBase, name: str) -> str | None:
+    """The kind *codec*'s classifier reads *name* as, or ``None`` where
+    it reads none or fails on it: a question about a name is a courtesy
+    to the plan, and must not be able to fail the job."""
     classify = getattr(codec, "classify_port_name", None)
     try:
         identity = classify(name) if classify is not None else None
     except Exception:
-        return False
-    return identity is not None and identity.kind in HARDWARE_PORT_KINDS
+        return None
+    return identity.kind if identity is not None else None
+
+
+def _reads_as_a_port(codec: CodecBase, name: str) -> bool:
+    """*codec*'s classifier reads *name* as a hardware port
+    (:func:`_classified_kind`)."""
+    from ..migration.canonical.port_names import HARDWARE_PORT_KINDS
+
+    return _classified_kind(codec, name) in HARDWARE_PORT_KINDS
 
 
 def _unlisted_landings(
@@ -2866,11 +3092,15 @@ def run_plan_with_models(
         # names it, whatever the codec's classifier makes of the name;
         # only a name OUTSIDE the inventory can be set aside as
         # "positively not hardware" (a loopback, a tunnel, an SVI).
-        used = collect_hardware_port_names(
-            tree,
-            classify=getattr(source, "classify_port_name", None),
-            always=own_names,
-            fold=fold_source,
+        used = _with_the_ports_of_units(
+            collect_hardware_port_names(
+                tree,
+                classify=getattr(source, "classify_port_name", None),
+                always=own_names,
+                fold=fold_source,
+            ),
+            own_names, fold_source,
+            {name: port for name, (port, _unit) in stated_sub_interfaces(tree).items()},
         )
         plan = plan_port_mapping(
             source_inventory, target_inventory, used, known_as=known_as,
@@ -3000,6 +3230,10 @@ def run_plan_with_models(
                 untagged[name] = where
 
     dropped, taken = _taken_with_dropped_ports(tree, job.port_drops)
+    # A port used only for its units is in no record of the run.
+    run_names, run_renames, run_drops = _with_where_units_put_their_ports(
+        every, used, job, fold_source,
+    )
 
     # Where the binder put a port is what the TREE says; whether a line
     # of the output finds the port there is asked of the output.  And
@@ -3012,7 +3246,7 @@ def run_plan_with_models(
         listed = {name_key(name, fold_target) for name in target_names}
         gone = set(job.port_drops)
         for pairing in plan.used_pairings:
-            landed = job.port_renames.get(pairing.source, pairing.source)
+            landed = run_renames.get(pairing.source, pairing.source)
             if (
                 pairing.source not in gone and pairing.source not in hardware
                 and name_key(landed, fold_target) not in listed
@@ -3024,9 +3258,9 @@ def run_plan_with_models(
         plan,
         operator_map=operator_map,
         used_names=used,
-        every_name=every,
-        port_renames=job.port_renames,
-        port_drops=job.port_drops,
+        every_name=run_names,
+        port_renames=run_renames,
+        port_drops=run_drops,
         target_names=target_names,
         displaced=displaced,
         sub_interfaces={

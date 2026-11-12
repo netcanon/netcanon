@@ -16,7 +16,10 @@ IOS-XR diverges from IOS-XE in two ways that matter here:
   the RACK (``meta["iosxr_rack"]``), which is 0 on every non-clustered
   system.  Slot, module and port are carried as stack / module / port.
   (Until 2026-10 it was the PORT that was parked, which collapsed every
-  port on a card onto one cross-vendor name.)  A legacy 3-segment XR
+  port on a card onto one cross-vendor name.)  Onto a target other
+  than IOS-XE, NX-OS and Junos two ports can still come out as one
+  name; the job says so (``MigrationJob.fused_ports``), counting a
+  sub-interface as on its port.  A legacy 3-segment XR
   form (older CRS) is also accepted defensively.
 * **``Bundle-Ether<N>`` LAGs** (not ``Port-channel<N>``) and
   **``MgmtEth0/RP0/CPU0/0``** management ports.

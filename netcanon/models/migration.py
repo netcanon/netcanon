@@ -943,6 +943,14 @@ class MigrationJob(BaseModel):
     #: plan says it.  ``None`` where the translator did not run.
     _taken_with_drops: Any = PrivateAttr(default=None)
 
+    #: Each sub-interface of the source whose config states the port
+    #: it rides on apart from its name, with that port
+    #: (``stated_sub_interfaces``): an OPNsense ``vlan0.10`` is on
+    #: the ``ixl0`` its ``<if>`` names, not on a ``vlan0``.  Handed
+    #: over the same way, to whichever entry asks which port a unit
+    #: is on.
+    _stated_units: dict[str, str] = PrivateAttr(default_factory=dict)
+
     #: The positional port pairing made when the request declared both
     #: device models (:func:`run_plan_with_models`): every pair, every
     #: source port that had no place on the target, every name that is
