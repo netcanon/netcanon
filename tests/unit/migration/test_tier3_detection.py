@@ -1106,14 +1106,14 @@ class TestRowsForStatementsLeftOut:
     #: The word a kind's row begins with where it is not the kind's
     #: name: a subnet an EOS server disables serves nothing, as a
     #: server that is not enabled does, and a RouterOS route held
-    #: ``disabled=yes`` installs nothing; each is said with the same
-    #: word and a reason of its own.
-    _WORD = {"disabled-subnet": "disabled", "disabled-route": "disabled"}
+    #: ``disabled=yes`` and an IOS-XE route of distance 255 install
+    #: nothing; each is said with the same word and a reason of its own.
+    _WORD = {"disabled-subnet": "disabled", "disabled-route": "disabled", "distance-255": "disabled"}
 
     def test_the_kinds(self) -> None:
         assert self._KINDS == [
-            "delete", "disabled", "disabled-route", "disabled-subnet", "inactive", "incomplete",
-            "preconfigure", "untagged",
+            "delete", "disabled", "disabled-route", "disabled-subnet", "distance-255", "inactive",
+            "incomplete", "preconfigure", "untagged",
         ]
 
     def test_each_kind_gives_its_own_reason(self) -> None:

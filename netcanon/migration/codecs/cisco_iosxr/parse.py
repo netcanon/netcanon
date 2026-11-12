@@ -27,7 +27,11 @@ Phase 1 surface (see ``docs/v0.2.0-planning/04-iosxr-codec/``):
   sub-interface of a port or a bundle that states no tag (``untagged:
   interface <name> ...``), which the router does not bring up.
 * ``router static / address-family ipv4 unicast / <CIDR> <next-hop>+``
-  (default VRF) → :class:`CanonicalStaticRoute`.
+  (default VRF) → :class:`CanonicalStaticRoute`.  An interface whose
+  type and number are written apart (``Bundle-Ether 10``) is one name
+  there too.  A route whose next hop is in another VRF (``<CIDR> vrf
+  <name> <next-hop>``) is not translated, and one row of
+  ``dropped_tier3_sections`` counts such routes.
 
 Phase 2 surface (this commit):
 
@@ -304,6 +308,12 @@ _STATIC_VRF_RE = re.compile(r"^vrf\s+(\S+)", re.IGNORECASE)
 #: family is discriminated by the enclosing ``address-family`` block.
 _STATIC_LEAF_RE = re.compile(
     r"^([0-9A-Fa-f:.]+/\d+)\s+(.+)$",
+)
+#: A static-route leaf whose next hop is in the VRF it names:
+#: ``<dest>/<prefix> vrf <name> <next-hop>`` (``vrf default`` is the
+#: global table).  Group 1 is the VRF.
+_NEXT_HOP_VRF_RE = re.compile(
+    r"^[0-9A-Fa-f:.]+/\d+[ \t]+vrf[ \t]+(\S+)", re.IGNORECASE,
 )
 
 # ── VRF top-level stanza + route-target blocks (Phase 2) ──
@@ -759,7 +769,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.vlans = _parse_dot1q_vlans(raw)
 
     # Static routes — default-VRF + per-VRF (``router static / vrf X``).
-    intent.static_routes = _parse_router_static(raw)
+    intent.static_routes, route_rows = _parse_router_static(raw)
+    intent.dropped_tier3_sections.extend(route_rows)
 
     # Bundle-Ether LAGs + local users (Phase 2).
     intent.lags = _parse_lags(raw)
@@ -1215,6 +1226,15 @@ def _indent(line: str) -> int:
     return len(line) - len(line.lstrip())
 
 
+def _is_address(word: str) -> bool:
+    """Whether *word* is an IPv4 or IPv6 address."""
+    try:
+        ipaddress.ip_address(word)
+    except ValueError:
+        return False
+    return True
+
+
 def _parse_static_leaf(
     text: str, vrf: str = "",
 ) -> CanonicalStaticRoute | None:
@@ -1226,6 +1246,13 @@ def _parse_static_leaf(
     ``0.0.0.0/0 1.2.3.4`` only a gateway).  An IPv4-parseable token is
     the gateway; the first non-IP token is the egress interface.  *vrf*
     tags the route's routing-table membership (empty = default VRF).
+
+    An interface in the first place may be a type and its number
+    written apart (``Bundle-Ether 10``): the two are one name
+    (``spaced_port_name``).  Read a word at a time, the interface was
+    ``Bundle-Ether`` and its number the route's distance, in every
+    target's output.  An address is no number: in ``Bundle-Ether
+    198.51.100.10`` the second word is the gateway.
     """
     m = _STATIC_LEAF_RE.match(text)
     if not m:
@@ -1267,7 +1294,12 @@ def _parse_static_leaf(
                 # ``<dest> <distance> <gw>`` (invalid CLI).
                 metric = int(tok)
             elif not iface:
-                iface = tok
+                number = None
+                if t == 0 and t + 1 < len(tokens) and not _is_address(tokens[t + 1]):
+                    number = tokens[t + 1]
+                iface = spaced_port_name(tok, number)
+                if iface != tok:
+                    t += 1
         t += 1
     return CanonicalStaticRoute(
         destination=dest, gateway=gateway, interface=iface,
@@ -1275,7 +1307,7 @@ def _parse_static_leaf(
     )
 
 
-def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
+def _parse_router_static(raw: str) -> tuple[list[CanonicalStaticRoute], list[str]]:
     """Extract routes from the ``router static`` block (default + per-VRF).
 
     The default address-family routes sit directly under ``address-family
@@ -1284,8 +1316,23 @@ def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
     ``vrf=<name>``.  Block-relative scope is driven by the ``!``
     terminators IOS-XR always emits — ``in_af`` gates leaf harvesting and
     ``current_vrf`` discriminates the routing table.
+
+    A route whose next hop is in another VRF (``<CIDR> vrf <name>
+    <next-hop>``; ``vrf default`` from a VRF's block is the global
+    table) is left out: the canonical route has no form for a next
+    hop outside its own table, and read a word at a time the next hop
+    was an interface called ``vrf``.  Written into the route's own
+    table it would carry traffic the source keeps apart.  One row
+    counts such routes.  A leaf that names its own VRF is read as
+    the route it is.
+
+    Returns:
+        ``(routes, rows)``: the routes, and the row for
+        ``dropped_tier3_sections`` that counts the routes left out
+        (none when there are none).
     """
     routes: list[CanonicalStaticRoute] = []
+    elsewhere = 0
     in_block = False
     base_indent = 0
     current_vrf = ""
@@ -1326,10 +1373,24 @@ def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
                 current_vrf = ""
             continue
         if in_af:
+            hop = _NEXT_HOP_VRF_RE.match(stripped)
+            if hop:
+                if hop.group(1) != (current_vrf or "default"):
+                    elsewhere += 1
+                    continue
+                words = stripped.split()
+                stripped = " ".join([words[0], *words[3:]])
             r = _parse_static_leaf(stripped, vrf=current_vrf)
             if r:
                 routes.append(r)
-    return routes
+    rows = []
+    if elsewhere:
+        rows.append(
+            f"router static: {elsewhere} route(s) whose next hop is in "
+            "another VRF (<prefix> vrf <name> <next hop>): the tree has no "
+            "form for a next hop outside the route's own VRF; not translated"
+        )
+    return routes, rows
 
 
 # ---------------------------------------------------------------------------

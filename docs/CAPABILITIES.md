@@ -898,8 +898,10 @@ DHCP server is not enabled is listed as `disabled: dhcp-server pool
 a range nor a static binding, as `incomplete: dhcp-server pool
 <name>`: neither served anything.  A FortiGate DHCP server of `status
 disable` is listed as `disabled: config system dhcp server edit <id>`,
-and is not translated, and a RouterOS route held `disabled=yes` as
-`disabled: ip route <destination>`.  The banner counts only the sections,
+and is not translated, and a RouterOS route held `disabled=yes`, and
+an IOS-XE route of administrative distance 255, which IOS does not
+install, as `disabled: ip route <destination>` (`ipv6 route` for an
+IPv6 one).  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
@@ -953,6 +955,19 @@ and true of the same sentence — they are not in the output:
   no interface`** (OPNsense) — a DHCP pool keyed by a zone no
   device is assigned to.  It has no interface to be on, and is
   left out.
+* **`/ip route: <n> route(s) in a routing table other than main
+  ...`** and **`/ip route: <n> blackhole, unreachable or prohibit
+  route(s) ...`** (RouterOS) — the routes of a VRF, and the routes
+  that discard what they match.  The tree has a form for neither,
+  and they are left out.  Write them on the target by hand, a VRF's
+  routes in that VRF.
+* **`router static: <n> route(s) whose next hop is in another VRF
+  ...`** (IOS XR) — `<prefix> vrf <name> <next hop>`, a next hop
+  resolved in the table of another VRF (`vrf default` from a VRF's
+  block is the global table).  The tree has no form for it, and the
+  route is left out: written into the route's own table it would
+  carry traffic the source keeps apart.  A leaf that names its own
+  VRF is read as the route it is.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):

@@ -518,6 +518,11 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "disabled: ",
         "a route the source holds disabled, so it installs nothing; not translated",
     ),
+    "distance-255": (
+        "disabled: ",
+        "a route of administrative distance 255, which the source does not "
+        "install; not translated",
+    ),
     "disabled-subnet": (
         "disabled: ",
         "a subnet the source's DHCP server disables (a range outside it or "
@@ -569,7 +574,9 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             server that is not enabled, a FortiOS DHCP server of
             ``status disable``, or a RouterOS ``/ip dhcp-server`` of
             ``disabled=yes``) or ``"disabled-route"`` (a RouterOS
-            ``/ip route`` of ``disabled=yes``) or ``"incomplete"`` (an AOS-S
+            ``/ip route`` of ``disabled=yes``) or ``"distance-255"``
+            (an IOS-XE ``ip route`` of administrative distance 255,
+            which IOS does not install) or ``"incomplete"`` (an AOS-S
             DHCP pool the server discards) or ``"disabled-subnet"``
             (an EOS DHCP server's subnet that EOS disables).
         path: The words of the statement's path, outermost first.
