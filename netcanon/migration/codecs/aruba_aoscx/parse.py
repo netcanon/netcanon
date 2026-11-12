@@ -39,8 +39,9 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
   (Phase 2) → :class:`CanonicalLocalUser` (``group`` → role;
   administrators → priv 15, else 1; the keyword, not the value's shape,
   says which kind of secret it is).
-* top-level ``ip route <dest>/<prefix> <gw> [<dist>]`` (default VRF only)
-  → :class:`CanonicalStaticRoute`.
+* top-level ``ip route <dest>/<prefix> <gw> [<dist>] [vrf <name>]``
+  → :class:`CanonicalStaticRoute`, its VRF from ``vrf <name>`` and its
+  distance from a bare number or ``distance <n>`` (:func:`_route_tail`).
 
 Where this codec diverges from ``cisco_nxos`` (its closest template) —
 see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
@@ -295,25 +296,36 @@ _VLAN_TOP_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _VLAN_DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 
-#: ``ip route <dest>/<prefix> <gw> [<dist>]`` — top-level (default VRF)
-#: static route.  AOS-CX uses CIDR destinations.
+#: ``ip route <dest>/<prefix> <gw> ...`` — a static route.  AOS-CX uses
+#: CIDR destinations.  Group 4 is the gateway of a two-token next hop
+#: (``ip route <dest> <iface> <gw>``); group 5 is the rest of the line,
+#: read a word at a time by :func:`_route_tail`.
 _STATIC_ROUTE_RE = re.compile(
-    # Optional group 4 = two-token gateway (``ip route <dest> <iface> <gw>``);
-    # group 5 = admin distance.  ``(?=\s|$)`` boundary stops the distance group
-    # from biting a partial digit run off the gateway (HEAD-review L1-9).
     r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
-    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+)(?=\s|$))?(.*)$",
     re.IGNORECASE,
 )
-#: ``ipv6 route <prefix>/<len> <nh> [<dist>]`` — the IPv6 form uses the
-#: ``ipv6 route`` keyword (does not overlap ``^ip route``).
+#: ``ipv6 route <prefix>/<len> <nh> ...`` — the IPv6 form uses the
+#: ``ipv6 route`` keyword (does not overlap ``^ip route``).  Group 3 is
+#: the gateway of a two-token next hop (it must hold a colon, so that a
+#: bare distance is not taken for it); group 4 is the rest of the line.
 _STATIC_ROUTE_V6_RE = re.compile(
-    # Optional group 3 = two-token IPv6 gateway (must contain a colon so a bare
-    # distance integer in group 4 is not mistaken for it).
     r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
-    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
+    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*)(?=\s|$))?(.*)$",
     re.IGNORECASE,
 )
+#: The words HPE documents after a route's next hop, each with the
+#: number of words it takes: ``distance <1-255>``, ``vrf <name>``,
+#: ``name <text>``, ``tag <n>``, ``track <n>`` and ``bfd``.  Only the
+#: distance and the VRF are read; the rest are passed over whole, so
+#: that a word they take is never read as one of these.
+_ROUTE_TAIL_WORDS = {
+    "distance": 1, "vrf": 1, "name": 1, "tag": 1, "track": 1, "bfd": 0,
+}
+#: A distance, in the digits ``int`` is sure to take: HPE's range is 1
+#: to 255, and a longer run (or a digit of another script) is no
+#: distance of the switch's.
+_ROUTE_DISTANCE_RE = re.compile(r"[0-9]{1,10}")
 
 #: ``interface vlan <N>`` SVI name (post-capture; the canonical name is
 #: the space-separated ``vlan N``).
@@ -1270,22 +1282,59 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
             once.add(existing.ipv4_addresses, addr, address_key)
 
 
-def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
-    """Extract top-level ``ip route`` lines (default VRF) from AOS-CX text.
+def _route_tail(rest: str) -> tuple[int, str]:
+    """The distance and the VRF of a route, from the words after its next hop.
 
-    AOS-CX form: ``ip route <dest>/<prefix> <gw> [<dist>]``.  The trailing
-    integer (if present) is the administrative distance and maps to
-    :attr:`CanonicalStaticRoute.metric`.  A next-hop that parses as an
-    IPv4 address becomes ``gateway``; otherwise it's an egress
-    ``interface``.  Per-VRF static routes are deferred (declared
-    unsupported).
+    HPE documents ``distance <1-255>`` and ``vrf <name>`` there ("If no
+    VRF name is specified, the route is applied to the default VRF"),
+    and the switch prints a route of a VRF ``ip route <dest> <gw> vrf
+    <name>``.  A bare number right after the next hop is read as the
+    distance too, as it always was (the form this codec's renderer
+    wrote up to 0.7.7; no AOS-CX printout or guide shows it).  ``vrf
+    default`` is the global table.  A word this does not know is
+    passed over, as the rest of the line always was.
+
+    Args:
+        rest: The line after the next hop (and its gateway, if two).
+
+    Returns:
+        The distance (``0`` where none is stated) and the VRF (``""``
+        for the global table).
+    """
+    distance = 0
+    vrf = ""
+    words = iter(rest.split())
+    for n, word in enumerate(words):
+        if n == 0 and _ROUTE_DISTANCE_RE.fullmatch(word):
+            distance = int(word)
+            continue
+        takes = _ROUTE_TAIL_WORDS.get(word.lower())
+        if not takes:
+            continue
+        value = next(words, "")
+        if word.lower() == "distance" and _ROUTE_DISTANCE_RE.fullmatch(value):
+            distance = int(value)
+        elif word.lower() == "vrf":
+            vrf = "" if value.lower() == "default" else value
+    return distance, vrf
+
+
+def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+    """Extract top-level ``ip route`` / ``ipv6 route`` lines from AOS-CX text.
+
+    AOS-CX form: ``ip route <dest>/<prefix> <gw> [<dist>] [vrf <name>]``.
+    The distance (a bare number, or ``distance <n>``) maps to
+    :attr:`CanonicalStaticRoute.metric` and the VRF to
+    :attr:`CanonicalStaticRoute.vrf` (:func:`_route_tail`).  A next-hop
+    that parses as an IPv4 address becomes ``gateway``; otherwise it's
+    an egress ``interface``.
     """
     routes: list[CanonicalStaticRoute] = []
     for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
-            dest, gw_or_iface, gw2, metric_str = m6.groups()
-            metric = int(metric_str) if metric_str else 0
+            dest, gw_or_iface, gw2, rest = m6.groups()
+            metric, vrf = _route_tail(rest)
             gateway = ""
             iface = ""
             if gw2:
@@ -1303,13 +1352,14 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                 gateway=gateway,
                 interface=iface,
                 metric=metric,
+                vrf=vrf,
             ))
             continue
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue
-        dest_ip, prefix, gw_or_iface, gw2, metric_str = m.groups()
-        metric = int(metric_str) if metric_str else 0
+        dest_ip, prefix, gw_or_iface, gw2, rest = m.groups()
+        metric, vrf = _route_tail(rest)
         gateway = ""
         iface = ""
         if gw2:
@@ -1328,6 +1378,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             gateway=gateway,
             interface=iface,
             metric=metric,
+            vrf=vrf,
         ))
     return routes
 

@@ -225,8 +225,9 @@ class ArubaAOSCXCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/vlans/vlan/description",
-            # Static routes (default VRF)
+            # Static routes, of the global table and of a VRF
             "/routing/static-route",
+            "/routing/static-route/vrf",   # ``ip route ... vrf <name>``
             # VRF — name only (Phase 1)
             "/routing-instances/instance/name",
             # ── Phase 2: L2 switchport + VLAN port membership ──
@@ -702,13 +703,6 @@ class ArubaAOSCXCodec(CodecBase):
             UnsupportedPath(
                 path="/routing-instances/instance/rt-exports",
                 reason="VRF route-targets live under the deferred `evpn` block.",
-            ),
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "Phase 1; only default-VRF `ip route` is wired."
-                ),
             ),
             # ── FHRP VRRP (later phase — distinct from active-gateway) ──
             UnsupportedPath(

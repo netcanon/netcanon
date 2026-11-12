@@ -1,5 +1,8 @@
 # Junos → AOS-CX: measured canonical surface
 
+<!-- an-aoscx-route-keeps-its-vrf -->
+> **Update 2026-11-12 — a route of a VRF is written, and an AOS-CX `vrf <name>` after a next hop is read.**  The AOS-CX render left out every route of a VRF, its parser read past the `vrf <name>` the switch prints after a route's next hop, and its matrix declared `/routing/static-route/vrf` unsupported.  It now writes `ip route <destination> <next hop> [distance <n>] [vrf <name>]`, reads the line back, and declares the path supported.  On this pair the route of `TENANT_A` now arrives in its VRF: every cell that has a route preserves it, and `static_routes` is `good`.  Sentences below that quote the unsupported declaration, or say that a route of a VRF vanishes, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__aruba_aoscx.yaml`.
+
 <!-- an-address-beside-sub-interfaces -->
 > **Update 2026-11-12 — a port's own address beside its sub-interfaces is not written.**  HPE gives a port or an L3 LAG that has sub-interfaces no address of its own.  The AOS-CX render now writes such an address in a `! review:` line of the port's stanza instead, and the job is `partial` (`/interfaces/interface/address-beside-sub-interfaces`, declared unsupported); it also writes each sub-interface's tag (`encapsulation dot1q <id>`), which it wrote for none up to 0.7.7.  Measured after the change: `interfaces[].ipv4_addresses` drifts on two cells, one interface with units on each, beside the `irb` records of one of them; the YAML says why.  The tables below are from before it.
 

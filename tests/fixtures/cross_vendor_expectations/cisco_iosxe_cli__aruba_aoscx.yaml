@@ -346,17 +346,14 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      A partial loss, verified by round-trip rather than inferred: 4 cells
-      preserve their routes intact, 3 drift.  Two distinct causes, both
-      declared.  (1) VRF-bound routes vanish — on the kitchen-sink cell the
-      count goes 6 -> 5 and the one that disappears is
-      `172.16.0.0/16 vrf=CUSTOMER-A`; aruba_aoscx declares
-      `/routing/static-route/vrf` unsupported because only default-VRF
-      `ip route` is wired in Phase 1.  (2) The route description drops
-      (`UMBRELLA_SIG` -> `''`), declared lossy by both codecs.  Default-VRF
-      IPv4 and IPv6 routes with a next-hop or egress interface survive
-      unchanged.  Audit the source for `ip route vrf ...` lines before
-      cutover; those are the ones that will silently not arrive.
+      A partial loss, verified by round-trip rather than inferred: 2 cells
+      drift, 5 preserve their routes intact, and the one field that drifts
+      is the route's description (`name <X>` on IOS-XE), declared lossy by
+      both codecs: AOS-CX's renderer writes no route name.  The routes of
+      a VRF are carried (`ip route <dest> <next hop> vrf <name>` on the
+      target).  Up to 0.7.7 every route of a VRF was left out by the
+      target's renderer, and an AOS-CX `vrf <name>` after a next hop was
+      read past.
     references: [iosxecli-aoscx-surface]
 
   "routing_instances[].name":

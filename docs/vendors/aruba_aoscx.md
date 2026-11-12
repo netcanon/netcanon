@@ -41,7 +41,12 @@ distributed gateway), and VXLAN L2VNI bindings.
   list, trunk native VLAN, `lag` membership
 - VLANs — ID, name, description, tagged/untagged port lists, and an
   address held on the VLAN record (see Common gotchas)
-- Static routes — default VRF (`ip route`)
+- Static routes — of the global table and of a VRF (`ip route
+  <destination> <next hop> [distance <n>] [vrf <name>]`, and `ipv6
+  route`; see Common gotchas).  ⚠️ Up to 0.7.7 a route of a VRF was
+  read as a route of the global table, and written so onto every
+  target: the management default route (`vrf mgmt`) was the
+  switch's default route.  Look for one in an old output.
 - VRFs — name (a bare `vrf <name>` stanza in v1)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
@@ -137,10 +142,9 @@ is visible, not silent):
 - **Management plane** — `domain`, `timezone`, DNS / NTP / syslog
   servers, DHCP server pools, RADIUS servers (host + secret), SNMP
   trap-hosts (`snmp-server host`)
-- **VRF detail** — VRF description, route-distinguisher, route-target,
-  and per-VRF static routes (these live under the deferred `evpn` /
-  `router bgp` blocks; only the bare `vrf <name>` + default-VRF `ip
-  route` are wired)
+- **VRF detail** — VRF description, route-distinguisher and
+  route-target (these live under the deferred `evpn` / `router bgp`
+  blocks; only the bare `vrf <name>` is wired)
 - **VRRP** (FHRP) and **IPv6 active-gateway** — and so no field of
   either: a group's virtual IPs, tracked interfaces and virtual MAC,
   and the MAC of an IPv6 gateway
@@ -396,6 +400,20 @@ translate it again from `show running-config` as the switch prints it.
   warning ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A
   trunk's allowed list is not what I wrote").  The vendors'
   own sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
+- **A static route's VRF and distance come after its next hop.**
+  HPE's form is `ip route <destination> <next hop> [distance <n>]
+  [vrf <name>]`; with no VRF the route is the default VRF's, and
+  `vrf default` names that VRF.  As a target a distance is written
+  `distance <n>`, before the VRF (no HPE page shows the two
+  together, so the order is not established); HPE gives a range of
+  1 to 255, and the 6200 takes no distance.  A source's management
+  VRF keeps its name: a route of NX-OS's `management` is written
+  into a VRF of that name, not into the switch's own `mgmt`, and
+  `mgmt` is written as it stands onto every target.  `name`, `tag`,
+  `track` and `bfd` are read past: a tracked route is translated as
+  a route that is always installed.  ⚠️ Up to 0.7.7 a distance was
+  written as a bare number after the next hop, a form no AOS-CX
+  printout or guide shows; it is still read.
 - **AOS-CX is L3-by-default; `no routing` opts into L2.**  This is the
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2

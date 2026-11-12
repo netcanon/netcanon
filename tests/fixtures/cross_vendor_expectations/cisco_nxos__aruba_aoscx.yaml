@@ -33,7 +33,7 @@
 # render errors, 0 re-parse errors), resolved through the audit's own
 # `actual_disposition()` so this file and the ratchet cannot disagree.  Where
 # the total-drop heuristic and the target matrix disagreed
-# (`anycast_gateway_mac`, `vlans[].ipv4_addresses`, `static_routes`), the call
+# (`anycast_gateway_mac`, `vlans[].ipv4_addresses`), the call
 # was settled by parsing the fixture and reading the rendered output, and the
 # entry says which signal won and why.
 #
@@ -352,27 +352,15 @@ per_field_expectation:
   # -- Routing ---------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Drifts on 4 of the 8 non-trivial cells, and the cause is identical on
-      all four: EVERY route that vanishes is VRF-bound, every default-VRF
-      route survives verbatim.  `kitchen_sink` keeps `0.0.0.0/0` and
-      `10.100.0.0/16` (vrf `''`) and loses `10.50.0.0/16` (vrf `TENANT-A`);
-      `busterswt_spine_leaf_xk32_1` keeps the global `0.0.0.0/0` and loses the
-      `management`-VRF twin.  The target declares
-      `/routing/static-route/vrf` unsupported — "Per-VRF static-route binding
-      parses-and-ignores in Phase 1; only default-VRF `ip route` is wired".
-      Read the two "all N dropped" cells carefully: on
-      `akarneliuk_evpn_vxlan_mcast_leaf_c1l1` and `batfish_nxos_n9kv_ebgp_r1`
-      the source's ENTIRE route table was management-VRF-bound, so those
-      devices render with an empty routing table — the failure is total on
-      those boxes even though the pair-level disposition is lossy.
-      Lossy rather than unsupported: unlike the #436 opnsense case, this
-      target declares `/routing/static-route` supported at the exact path and
-      demonstrably emits `ip route` lines, so validate_against warning is the
-      correct signal.  Re-author every VRF-scoped route on the target by hand,
-      and check the out-of-band path first — the management default route is
-      the one most likely to be missing.
+    disposition: good
+    note: >
+      Preserved on 8 of 8 non-trivial cells, the routes of the `management`
+      VRF among them: they are written into a VRF of that name
+      (`ip route <dest> <next hop> vrf management`), not into the
+      switch's own `mgmt` VRF.  Rename the VRF on the target if the
+      management default route is meant for `mgmt`.  Up to 0.7.7 every
+      route of a VRF was left out by the target's renderer, and an AOS-CX
+      `vrf <name>` after a next hop was read past.
     references: [nxos-aoscx-surface]
 
   "routing_instances[].name":

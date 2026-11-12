@@ -366,20 +366,13 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Preserved on 5 cells and drifting on 4 — a conditional loss with a
-      clean rule behind it.  aruba_aoscx declares `/routing/static-route/vrf`
-      unsupported ("Per-VRF static-route binding parses-and-ignores in
-      Phase 1; only default-VRF `ip route` is wired"), and the kitchen-sink
-      round-trip shows exactly that: 4 source routes become 3, and the one
-      that disappears is `10.99.0.0/16` bound to VRF `TENANT_A`, while
-      `0.0.0.0/0`, `10.50.0.0/16` and `::/0` all render as plain
-      `ip route` lines with destination and next-hop intact.  Recorded
-      `lossy` rather than `unsupported` because default-VRF routing genuinely
-      survives; the loss is scoped to VRF-bound routes.  Inventory your
-      per-VRF static routes before cutover — they will be missing, not
-      mis-rendered.
+    disposition: good
+    note: >
+      Preserved on 9 of 9 non-trivial cells, the route of a routing
+      instance among them (`ip route <dest> <next hop> vrf <name>` on the
+      target).  Up to 0.7.7 every
+      route of a VRF was left out by the target's renderer, and an AOS-CX
+      `vrf <name>` after a next hop was read past.
     references: [junos-aoscx-surface]
 
   "routing_instances[].name":

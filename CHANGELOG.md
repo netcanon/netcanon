@@ -1401,6 +1401,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX route of a VRF is no longer a route of the global
+  table.**  AOS-CX writes the VRF after a route's next hop (`ip route
+  <destination> <next hop> vrf <name>`), and the parser read past it:
+  every such route was a route of the global table onto every target,
+  AOS-CX itself included, and the management default route
+  (`vrf mgmt`) was the switch's default route, in a job that said
+  `completed`.  A distance written as HPE's guides write it
+  (`distance 4`) was lost the same way.  Both are read now, and AOS-CX
+  as a target writes a route of a VRF, which it left out before, and
+  a distance as `distance <n>` rather than the bare number it wrote,
+  which no AOS-CX printout or guide shows (it is still read).
+  FortiOS, VyOS and RouterOS as targets still write a route of another
+  vendor's VRF into their one table; the job is `partial` and says so.
+
 - **An IOS-XE, NX-OS or EOS route whose next hop is in another VRF is
   no longer translated as a route of its own VRF.**  IOS-XE `global`
   after a VRF route's next hop (the next hop is in the global table)
