@@ -1006,6 +1006,13 @@ in rendered output find every such site.
      digest was emitted under the target's cleartext marker on 14 of 14
      VyOS records.  Bare crypt forms and vendor ciphertext blobs are now
      classified by prefix, and an unmodelled `$id$` shape fails closed.
+     A Cisco type number the policy did not know took the same path:
+     an IOS-XE `password 6 <ciphertext>` (AES under the source
+     device's master key, which no config shows) was written as the
+     account's password onto VyOS, FortiOS, RouterOS and AOS-S.  Cisco
+     types 4 and 6 are refused on every target, IOS-XE included, and
+     any other type number fails closed -- a typed password from
+     another platform that begins with digits and a space with it.
   2. Until #461, **`aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos`
      emitted local users WITHOUT calling the gate**, so as targets they
      accepted any hash.  Measured on the corpus before that change: 61
@@ -1095,7 +1102,10 @@ in rendered output find every such site.
      `remote` template, a FortiOS remote administrator), an OPNsense
      `<user>` with no `<password>`, a VyOS user with no
      `authentication` and every user of a RouterOS export, which
-     prints no passwords, are added on the device by hand.
+     prints no passwords, are added on the device by hand.  An EOS
+     or IOS-XE `nopassword` account is read as such an account (the
+     IOS-XE parser used to read nothing of it, and the account was in
+     no output and no job).
   8. A role is a name that a device looks up among the roles it
      has (EOS, NX-OS and OS10 `role`, AOS-CX and IOS XR `group`,
      Junos `class`, FortiOS `accprofile`), so it crosses only

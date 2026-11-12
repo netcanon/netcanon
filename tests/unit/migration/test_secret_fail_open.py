@@ -539,3 +539,184 @@ def test_new_emit_forms_round_trip_through_their_own_parser(target, secret) -> N
     codec = get_codec(target)
     back = codec.parse(codec.render(_intent_with_users(secret)))
     assert [u.hashed_password for u in back.local_users] == [secret]
+
+
+# ---------------------------------------------------------------------------
+# A Cisco type number the policy does not model
+# ---------------------------------------------------------------------------
+#
+# The Cisco parsers keep a type number in front of the value (``6 <blob>``).
+# Type 6 -- AES under the source device's master key, which no config
+# shows -- was not a number the classifier knew, so it fell through to the
+# plaintext default: onto VyOS, FortiOS, RouterOS and AOS-S the ciphertext
+# was written as the account's password, in a job that said ``completed``.
+# Types 4 and 6 are recognised and refused on every target, IOS-XE's own
+# included, and any other type number is refused as unknown.
+
+_BODY = "Q" * 44
+_TYPE6 = "6 " + _BODY
+_TYPE4 = "4 " + _BODY
+
+_IOSXE_TYPE6 = (
+    "hostname zq\n"
+    f"username zqsix privilege 15 password 6 {_BODY}\n"
+    "!\n"
+    "end\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("hashed", "expected"),
+    [
+        (_TYPE6, "cisco_type6"),
+        (_TYPE4, "cisco_type4"),
+        ("3 " + _BODY, "unknown"),
+        ("42 " + _BODY, "unknown"),
+    ],
+)
+def test_a_cisco_type_no_target_takes_is_refused_everywhere(hashed, expected) -> None:
+    from netcanon.migration._user_secrets import _TARGET_ACCEPTS
+
+    assert classify_hash(hashed)[0] == expected
+    for target in _TARGET_ACCEPTS:
+        assert not is_migratable(hashed, target), (
+            f"{hashed[:2]!r}-typed secret is migratable to {target}"
+        )
+
+
+def test_no_accept_set_lists_a_cisco_type_no_target_takes() -> None:
+    from netcanon.migration._user_secrets import (
+        _CISCO_TYPES_NO_TARGET_TAKES,
+        _TARGET_ACCEPTS,
+    )
+
+    for target, accepted in _TARGET_ACCEPTS.items():
+        assert not accepted & set(_CISCO_TYPES_NO_TARGET_TAKES.values()), target
+
+
+@pytest.mark.parametrize("typed", ["123456", "2024summer", "h0rse"])
+def test_a_typed_password_that_begins_with_digits_is_still_typed(typed) -> None:
+    """Only a type number FOLLOWED BY A SPACE is a Cisco type."""
+    assert classify_hash(typed) == ("plaintext", typed)
+
+
+def _type6_written(target: str) -> list[str]:
+    """What of the type-6 value *target* writes, and whether it said so.
+
+    Returns the lines that hold the ciphertext, and a line ``no review``
+    when the account has no review line, so that a render that never
+    reached the account cannot pass.
+    """
+    from netcanon.migration.codecs.registry import get_codec
+
+    tree = get_codec("cisco_iosxe_cli").parse(_IOSXE_TYPE6)
+    out = get_codec(target).render(tree)
+    found = [line.strip() for line in out.splitlines() if _BODY in line]
+    if not any("zqsix" in c and "review" in c for c in out.splitlines()):
+        found.append("no review")
+    return found
+
+
+@pytest.mark.parametrize("target", _USER_RENDERING_TARGETS)
+def test_a_type_6_password_is_written_on_no_target(target) -> None:
+    """The ciphertext is in no line of any output, and the account is
+    left out under a review line -- IOS-XE's own output included."""
+    assert _type6_written(target) == []
+
+
+def test_the_type_6_check_fails_on_the_old_classifier(monkeypatch) -> None:
+    """Handed the classifier as it was, the check above fails."""
+    import netcanon.migration._user_secrets as secrets
+
+    real = secrets.classify_hash
+
+    def old(hashed: str) -> tuple[str, str]:
+        if hashed.startswith("6 "):
+            return "plaintext", hashed
+        return real(hashed)
+
+    monkeypatch.setattr(secrets, "classify_hash", old)
+    for target in ("vyos", "fortigate_cli", "mikrotik_routeros", "aruba_aoss"):
+        assert _type6_written(target), target
+
+
+def test_the_iosxe_parser_keeps_the_type_number() -> None:
+    """What the policy reads: the type number in front of the value."""
+    from netcanon.migration.codecs.registry import get_codec
+
+    tree = get_codec("cisco_iosxe_cli").parse(_IOSXE_TYPE6)
+    assert [u.hashed_password for u in tree.local_users] == [_TYPE6]
+
+
+# ---------------------------------------------------------------------------
+# A typed password reaches IOS-XE as typed, never with its tag
+# ---------------------------------------------------------------------------
+#
+# ``_split_cisco_hash`` wrote the whole canonical value after ``secret 0``,
+# so an EOS ``secret 0 <pw>`` (``arista:plaintext:<pw>``) reached IOS-XE as
+# ``secret 0 arista:plaintext:<pw>``: a password nobody typed.
+
+
+@pytest.mark.parametrize(
+    "secret", ["arista:plaintext:Typed-pw1", "plaintext:Typed-pw1", "Typed-pw1"],
+)
+def test_a_typed_password_reaches_ios_xe_as_typed(secret) -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    out = get_codec("cisco_iosxe_cli").render(_intent_with_users(secret))
+    lines = [line for line in out.splitlines() if line.startswith("username u0")]
+    assert lines == ["username u0 privilege 15 secret 0 Typed-pw1"]
+
+
+def test_an_eos_secret_0_reaches_ios_xe_as_typed() -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    tree = get_codec("arista_eos").parse(
+        "hostname zq\n"
+        "username zqe privilege 15 role network-admin secret 0 Typed-pw1\n"
+        "!\nend\n"
+    )
+    out = get_codec("cisco_iosxe_cli").render(tree)
+    assert "username zqe privilege 15 secret 0 Typed-pw1" in out.splitlines()
+    assert "plaintext:" not in out
+
+
+# ---------------------------------------------------------------------------
+# IOS-XE ``nopassword`` is read, as an account with no secret
+# ---------------------------------------------------------------------------
+#
+# The parser's pattern asked for ``secret`` or ``password``, so
+# ``username <name> privilege 15 nopassword`` matched nothing: the account
+# was in no output and no job.  It is read as an account that holds no
+# secret, which every target writes as a review line in its place
+# (``test_an_account_with_no_password.py`` holds the targets to that).
+
+
+@pytest.mark.parametrize(
+    ("line", "privilege"),
+    [
+        ("username zqnp privilege 15 nopassword", 15),
+        ("username zqnp nopassword", 1),
+        ("username zqnp privilege 15 nopassword  ", 15),
+    ],
+)
+def test_the_iosxe_parser_reads_nopassword(line, privilege) -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    tree = get_codec("cisco_iosxe_cli").parse(f"hostname zq\n{line}\n!\nend\n")
+    assert [(u.name, u.privilege_level, u.hashed_password)
+            for u in tree.local_users] == [("zqnp", privilege, "")]
+
+
+@pytest.mark.parametrize("target", _USER_RENDERING_TARGETS)
+def test_an_iosxe_nopassword_account_is_a_review_line_everywhere(target) -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    tree = get_codec("cisco_iosxe_cli").parse(
+        "hostname zq\nusername zqnp privilege 15 nopassword\n!\nend\n"
+    )
+    out = get_codec(target).render(tree)
+    said = [c for c in out.splitlines() if "zqnp" in c and "review" in c]
+    assert said, f"{target} says nothing of the account"
+    written = [line for line in _outside_comments(out) if "zqnp" in line]
+    assert written == [], f"{target} wrote the account: {written[:2]}"

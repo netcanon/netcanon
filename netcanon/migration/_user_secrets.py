@@ -12,6 +12,9 @@ the synthetic round-trip fixtures are:
 * ``"alg:hash"``  (single colon, e.g. ``sha1:abc``)    -> ("alg", "hash")
 * ``"vendor:alg:hash"`` (e.g. ``arista:sha512:$6$..``) -> ("alg", "hash")
 * ``"<digit> <payload>"`` (e.g. ``9 $9$..``, ``5 $1$..``)  -> ("<digit>", "payload")
+* a Cisco type no target takes (``6 <blob>``, ``4 <blob>``)
+  -> (:data:`_CISCO_TYPES_NO_TARGET_TAKES`, "payload")
+* any other ``"<digits> <payload>"``                   -> (:data:`_UNKNOWN`, ...)
 * bare crypt(3) / vendor ciphertext (e.g. ``$6$..``, ``AQB..``)
   -> ("<algorithm>", "<whole string>") via :data:`_STRUCTURED_PREFIXES`
 * structured but unmodelled (any other ``$id$`` shape)  -> (:data:`_UNKNOWN`, ...)
@@ -29,7 +32,12 @@ used to catch everything unrecognised, including bare crypt strings —
 so ``$6$..`` classified as plaintext, ``is_migratable`` returned True,
 and the Arista render emitted it under ``secret 0``, EOS's cleartext
 marker: the digest became the password, on 14 of 14 VyOS records.  Only
-genuinely unstructured values reach it now.  Guarded by
+genuinely unstructured values reach it now.  An IOS-XE ``password 6``
+reached it as well -- the Cisco parsers keep a type number in front of
+the value, and ``6`` was not one the classifier knew -- so onto VyOS,
+FortiOS, RouterOS and AOS-S the AES ciphertext was written as the
+account's password.  A value that begins with a type number is a Cisco
+secret, and one whose type is not modelled is refused.  Guarded by
 ``tests/unit/migration/test_secret_fail_open.py``.
 
 Each target vendor codec calls :func:`is_migratable` before emitting
@@ -198,6 +206,19 @@ _STRUCTURED_PREFIXES: tuple[tuple[str, str], ...] = (
 #: hole.
 _UNKNOWN = "unknown"
 
+#: Cisco type numbers whose secret no target can take, its own platform
+#: included.  Type 6 is AES under the device's master key (``key
+#: config-key password-encrypt``), which no config shows: the value is
+#: salted to its source device, and only a device with the same master
+#: key reads it.  Type 4 is the unsalted SHA-256 form Cisco withdrew;
+#: no accept set lists it.  Each has a name of its own, so that the
+#: review line says which form it was.  Neither is in any entry of
+#: :data:`_TARGET_ACCEPTS`.
+_CISCO_TYPES_NO_TARGET_TAKES: dict[str, str] = {
+    "4": "cisco_type4",
+    "6": "cisco_type6",
+}
+
 #: Tags that are a vendor ENVELOPE rather than an algorithm.  The Junos parser
 #: stores every account secret as ``junos:<value>`` whatever the value is —
 #: ``$1$`` MD5 crypt, ``$6$`` SHA-512 crypt, or a sanitisation placeholder —
@@ -285,7 +306,12 @@ def classify_hash(hashed: str) -> tuple[str, str]:
       ``(alg, payload)`` with the vendor tag dropped.
     * ``alg:payload`` — single-colon tagged form.  Returns ``(alg, payload)``.
     * ``<digit> <payload>`` — bare-digit Cisco form (``5 $1$..``,
-      ``9 $9$..``).  Returns ``("<digit>", "<payload>")``.
+      ``9 $9$..``).  Returns ``("<digit>", "<payload>")``.  Types 4
+      and 6 return their name in :data:`_CISCO_TYPES_NO_TARGET_TAKES`;
+      any other type number returns :data:`_UNKNOWN`.
+    * A bare crypt(3) string or vendor ciphertext returns its
+      algorithm (:data:`_STRUCTURED_PREFIXES`); any other ``$`` shape
+      returns :data:`_UNKNOWN`.
     * Anything else (no separator, unknown shape) is treated as a
       literal plaintext password and returns ``("plaintext", hashed)``.
       The empty string returns ``("plaintext", "")``.
@@ -330,6 +356,15 @@ def classify_hash(hashed: str) -> tuple[str, str]:
         if head == "5" and tail.startswith("$6$"):
             return "sha512", tail
         return head, tail
+    if sep and head in _CISCO_TYPES_NO_TARGET_TAKES:
+        return _CISCO_TYPES_NO_TARGET_TAKES[head], tail
+    # Any other type number.  The Cisco parsers keep the number in front
+    # of the value, and a type nobody modelled used to fall through to
+    # the plaintext default below: ``6 <ciphertext>`` was written as the
+    # password.  Fail CLOSED.  The cost is a typed password from another
+    # platform that begins with digits and a space, which is refused too.
+    if sep and head.isascii() and head.isdigit():
+        return _UNKNOWN, hashed
 
     # Structured secret carrying no algorithm tag of its own: a bare crypt
     # string or a vendor ciphertext blob.

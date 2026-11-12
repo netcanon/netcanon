@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **A Cisco type 6 password is no longer written as a password.**
+  The Cisco parsers keep a secret's type number in front of it, and
+  the policy that decides where a local user's secret may go knew
+  types 5, 7, 8, 9 and 10 only.  An IOS-XE `username <name> password
+  6 <ciphertext>` -- AES under the source device's master key, which
+  no config shows -- was taken for a password as typed: onto VyOS,
+  FortiOS, RouterOS and AOS-S the ciphertext was written as the
+  account's password, in a job that said `completed`, and onto the
+  other targets, IOS-XE's own included, the account was left out
+  under a review line that gave white space as the reason.  Types 4
+  and 6 are now recognised and refused on every target, with a
+  review line that names the form, and any other type number is
+  refused as unknown, as an unmodelled `$id$` crypt string is.  A
+  typed password from another platform that begins with digits and
+  a space is refused too.  Guarded by
+  `tests/unit/migration/test_secret_fail_open.py`.
+
 - **A row of the sections not translated shows no secret.**  The
   rows of `dropped_tier3_sections` are painted on the migrate page
   and returned in every job's answer.  A detector that takes a
@@ -1384,6 +1401,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A typed password reaches IOS-XE as it was typed.**  An EOS
+  `secret 0 <password>`, and a typed password from AOS-S or VyOS,
+  was written onto IOS-XE as `secret 0` followed by the value with
+  the tag the parser had put on it (`arista:plaintext:<password>`):
+  a password nobody typed, in a job that said `completed`.  It is
+  written `secret 0 <password>`.  Look for such a line in an old
+  output.
+- **An IOS-XE `nopassword` account is read.**  `username <name>
+  privilege 15 nopassword` matched nothing in the parser: the
+  account was in no output and no job.  It is read as an account
+  with no password, which every target writes as a review line in
+  its place, as it does for EOS's own `nopassword`.
 - **An NX-OS or EOS interface header names one interface, or none.**
   Both platforms take a type and its number written apart where a
   name goes (`interface ethernet 2/1`, `interface ethernet 1`), and a

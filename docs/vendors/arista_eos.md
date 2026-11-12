@@ -289,7 +289,9 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
 - **`secret 0 <password>` is read as a password as typed**, and is
   written so onto every target that takes one.  Up to 0.7.7 it was
   read as an algorithm `0` that no target takes, and the account was
-  left out everywhere, EOS included.  A printed EOS config holds no
+  left out everywhere, EOS included.  Up to 0.7.7 it reached IOS-XE
+  as `secret 0 arista:plaintext:<password>`, a password nobody typed;
+  it is written `secret 0 <password>`.  A printed EOS config holds no
   `secret 0`: the switch hashes the password when it is entered.
 - **A tag statement is read whole.**  `encapsulation dot1q vlan 20
   inner 30` is a sub-interface of two tags, and reaches IOS-XE, IOS XR,
