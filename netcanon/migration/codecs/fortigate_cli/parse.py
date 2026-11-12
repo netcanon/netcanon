@@ -679,6 +679,14 @@ def _apply_system_interface(  # noqa: C901
                 prev = iface_by_name.get(m)
                 if prev is not None and prev.lag_member_of is None:
                     prev.lag_member_of = name
+        elif type_value in _TYPE_IT_STATES:
+            # A port, a loopback or a tunnel is what its ``set type``
+            # says, whatever its name: FortiOS names a loopback or a
+            # tunnel freely (Fortinet's own loopback is
+            # ``Lo-BGP-RID``).  Read by the name's shape, a loopback
+            # called ``port1.5`` was a port, and went as a unit of
+            # ``port1``.
+            iface.interface_type = _TYPE_IT_STATES[type_value]
         else:
             iface.interface_type = _infer_iface_type(name)
 
@@ -808,6 +816,17 @@ def _link_lag_members(intent: CanonicalIntent) -> None:
                 CanonicalInterface(name=m, lag_member_of=lag_name),
             )
 
+
+#: What an interface is typed, by the ``set type`` of its own edit,
+#: where that type is one the tree has (a VLAN interface, an aggregate
+#: and a redundant interface are read above).  Any other type --
+#: ``switch``, ``vap-switch``, ``vdom-link`` and the like -- is typed
+#: by the name's shape, as before.
+_TYPE_IT_STATES = {
+    "physical": "ianaift:ethernetCsmacd",
+    "loopback": "ianaift:softwareLoopback",
+    "tunnel": "ianaift:tunnel",
+}
 
 #: What a parent read as a port is typed, by the type its own edit
 #: states.

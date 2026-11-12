@@ -284,8 +284,8 @@ per_field_expectation:
       Both matrices already declare `/interfaces/interface/config/type`
       LOSSY and both state the cause: vyos "declares no IANA ifType; the
       codec infers it from the interface-name shape … Best-effort", and
-      fortigate_cli "has no IANA ifType; inferred from `type vlan`
-      sub-setting or name shape".
+      fortigate_cli "has no IANA ifType; read from 'set type' ... and
+      otherwise inferred from the name's shape".
       Recorded `lossy`, not `unsupported`: nothing vanishes and the
       interface record, its addressing and its admin state are unaffected.
       The operational consequence is a fidelity one — a downstream consumer

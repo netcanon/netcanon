@@ -47,6 +47,23 @@ firewall translation is your primary need, see
   cabling and L2 role.  Same-vendor round-trip preserves the name, so no
   advisory fires.  The bare aggregate (`internal` / `lan` with no
   number) has no cross-vendor equivalent at all and warns separately.
+- **A loopback or a tunnel is what its `set type` says, whatever its
+  name.**  FortiOS names both freely (Fortinet's own loopback example
+  is `Lo-BGP-RID`; an IPsec tunnel interface takes the name of its
+  phase 1), so the parser reads `set type loopback` and `set type
+  tunnel`, and the renderer writes them ahead of the address, for a
+  loopback or a tunnel of any vendor.  A tunnel is written under a
+  `# review:` line: FortiOS makes a tunnel interface from the `config
+  vpn ipsec phase1-interface` or `config system gre-tunnel` entry of
+  the same name, which the output does not have.  The tunnels FortiOS
+  adds of itself to every VDOM (`ssl.root`, `naf.root`, `l2t.root`)
+  have no such line.  A loopback named like a unit of a port
+  (`port1.5`) is not sent after the port as its unit.  ⚠️ Up to 0.7.7
+  a loopback or a tunnel named freely was a port in the tree: it came
+  back with no type between two FortiOS configs, was looked up as an
+  Ethernet port onto RouterOS and typed `ethernetCsmacd` onto IOS-XE
+  over NETCONF; and a loopback or a tunnel of another vendor was
+  written onto FortiOS with no `set type`.
 - VLANs — VLAN sub-interface form (`config system interface` →
   `set type vlan` + `set vlanid <N>`), on the interface its
   `set interface` names, with the tag its `set vlanid` states --

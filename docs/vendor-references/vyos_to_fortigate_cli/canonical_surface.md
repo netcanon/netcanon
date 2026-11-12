@@ -151,11 +151,12 @@ does not round-trip.
 - target after re-parse, on the 46 survivors: **43** `ianaift:ethernetCsmacd`,
   **2** `ianaift:l3ipvlan`, **1** `ianaift:ieee8023adLag`
 
-The FortiGate parser infers the type from the rendered name shape and the
-`set type vlan` / `set type aggregate` sub-settings. Both matrices already
-declare `/interfaces/interface/config/type` lossy and both say why — VyOS
-"declares no IANA ifType", FortiOS "has no IANA ifType; inferred from
-`type vlan` sub-setting or name shape".
+The FortiGate parser reads the type from the rendered `set type` sub-setting
+(`vlan`, `aggregate`, `loopback`, `tunnel`) and otherwise infers it from the
+rendered name shape. Both matrices already declare
+`/interfaces/interface/config/type` lossy and both say why — VyOS "declares no
+IANA ifType", FortiOS "has no IANA ifType; read from 'set type' ... and
+otherwise inferred from the name's shape".
 
 The operational point is worth stating plainly: the migrated intent will show
 a type claim that **came from the target's name-shape inference, not from the

@@ -1365,6 +1365,34 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiOS loopback or tunnel is what its `set type` says, whatever
+  its name.**  FortiOS names both freely -- Fortinet's own loopback
+  example is `Lo-BGP-RID`, and an IPsec tunnel interface takes the
+  name of its phase 1 -- and the parser typed every interface by the
+  shape of its name, so each such loopback or tunnel was a port in the
+  tree, and the renderer wrote none of them a `set type`.  Between two
+  FortiOS configs a loopback or a tunnel came back with no type; onto
+  RouterOS each was looked up as an Ethernet port (`set [ find
+  default-name=... ]`, a lookup no device matches) and onto IOS-XE over
+  NETCONF typed `ethernetCsmacd`; a loopback the operator named like a
+  unit of a port (`port1.5`) went after `port1` as its unit 5, onto
+  whatever port `port1` became; and a loopback or a tunnel of another
+  vendor (IOS-XE `Loopback0`, `Tunnel0`, Junos `lo0`, `st0`) was
+  written onto FortiOS with no `set type`, in jobs that said
+  `completed`.  The parser now reads `set type physical`, `loopback`
+  and `tunnel`, and the renderer writes `set type loopback` and `set
+  type tunnel` ahead of the address.  A tunnel is written under a `#
+  review:` line, since FortiOS makes a tunnel interface from the
+  `config vpn ipsec phase1-interface` or `config system gre-tunnel`
+  entry of the same name, which the output does not have -- except the
+  tunnels FortiOS adds of itself to every VDOM (`ssl.<vdom>`,
+  `naf.<vdom>`, `l2t.<vdom>`).  The port translator does not send an
+  interface its source states is a loopback or a tunnel after a port
+  as the port's unit.  A job that lists such a name now says that
+  declaring both devices pairs only the hardware ports among the names
+  it lists.  Guarded by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_loopback_is_what_its_type_says.py`,
+  which reads each output as text.
 - **With both devices declared, a name the pairing does not decide
   holds the job as it does with none.**  The pairing by position
   decides hardware ports.  A loopback, a tunnel, a VLAN interface or

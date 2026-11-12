@@ -215,6 +215,54 @@ _NO_PARENT_REVIEW = (
 #: The interface types that carry no frames, so no VLAN rides on them.
 _CARRIES_NO_FRAMES = frozenset({"ianaift:softwareLoopback", "ianaift:tunnel"})
 
+#: The ``set type`` a loopback and a tunnel are written with.  A new
+#: interface that states no type is a VLAN interface, which takes a
+#: parent (``set interface``), so a loopback written with none is not
+#: a loopback on a FortiGate.
+_TYPE_LINE = {
+    "ianaift:softwareLoopback": "loopback",
+    "ianaift:tunnel": "tunnel",
+}
+
+#: What a tunnel interface is written with: FortiOS makes a tunnel
+#: interface from the entry of the same name in ``config vpn ipsec
+#: phase1-interface`` or ``config system gre-tunnel``, and this output
+#: writes neither.
+_TUNNEL_REVIEW = (
+    '        # review: a tunnel interface; FortiOS makes it from the '
+    '"config vpn ipsec phase1-interface" or "config system gre-tunnel" '
+    'entry of the same name, which this output does not have'
+)
+
+#: The tunnels FortiOS adds of itself, one of each in every VDOM and
+#: named for it (``ssl.root``): the SSL VPN's, the one NAT46 and NAT64
+#: traffic is processed on, and (from 7.0.1) the one L2TP traffic is
+#: carried on.  No entry of this output makes one, so none of them is
+#: written with :data:`_TUNNEL_REVIEW`.
+_TUNNELS_FORTIOS_ADDS = frozenset({"ssl", "naf", "l2t"})
+
+
+def _fortios_adds_it(name: str) -> bool:
+    """Whether *name* is a tunnel FortiOS adds of itself to a VDOM
+    (``ssl.root``, ``naf.root``, ``l2t.<vdom>``)."""
+    kind, dot, vdom = name.partition(".")
+    return bool(dot and vdom) and "." not in vdom and kind.lower() in _TUNNELS_FORTIOS_ADDS
+
+
+def _type_line(iface: CanonicalInterface) -> str | None:
+    """The ``set type`` *iface* is written with when it is a loopback
+    or a tunnel, or ``None``.
+
+    By its type, which says what it is whatever its name (a FortiOS
+    loopback can be called ``port1.5``); and, where the source parser
+    gives no type at all (VyOS, OPNsense), by the name this output
+    writes it under.
+    """
+    if iface.interface_type:
+        return _TYPE_LINE.get(iface.interface_type)
+    kind = classify_port_name(iface.name).kind
+    return kind if kind in ("loopback", "tunnel") else None
+
 
 def _may_carry_a_vlan(iface: CanonicalInterface) -> bool:
     """Whether a VLAN interface may be written on *iface*: not a
@@ -610,9 +658,9 @@ def _iface_is_empty_stub(iface: CanonicalInterface) -> bool:
     tunnel / ethernetCsmacd / etc.) means the source codec made a
     deliberate choice about what this iface is, and intra-vendor
     round-trip stability requires us to preserve it -- e.g. FortiGate
-    source ``ssl.root`` / ``l2t.root`` / ``default-mesh`` parse with
-    ``interface_type="ianaift:ethernetCsmacd"`` and zero per-iface
-    attrs; eliding them would silently drop the SD-WAN / SSL-VPN /
+    source ``ssl.root`` / ``l2t.root`` (``set type tunnel``) and
+    ``default-mesh`` parse with a type and zero per-iface attrs;
+    eliding them would silently drop the SD-WAN / SSL-VPN /
     wireless-mesh objects from a FortiGate -> FortiGate round-trip.
     """
     if iface.interface_type:
@@ -814,7 +862,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # A routed sub-interface is a VLAN interface on its port
             # whatever its name: an entry can name it anything.
             is_sub = lag is None and iface.dot1q_vlan is not None
-            is_vlan = lag is None and (
+            # And a loopback or a tunnel is what its type says,
+            # whatever its name: ``port1.5`` is a name.
+            type_line = _type_line(iface) if lag is None else None
+            is_vlan = lag is None and type_line is None and (
                 iface.interface_type == "ianaift:l3ipvlan"
                 or is_sub
                 or _looks_like_vlan_iface(iface.name)
@@ -929,6 +980,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         )
                     elif not no_port and not stated:
                         out.append(_NO_PARENT_REVIEW.format(vid=vid))
+            elif type_line is not None:
+                out.append(f"        set type {type_line}")
+                if type_line == "tunnel" and not _fortios_adds_it(iface.name):
+                    out.append(_TUNNEL_REVIEW)
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
             # virtual_gateway_address, and emitting ``set ip  <mask>`` is
