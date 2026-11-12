@@ -584,7 +584,7 @@ translated; so is a piece of it in a form the parser does not read
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/routing/static-route/vrf` | Unsupported | No VRF is read or written.  A RouterOS route of another routing table (`routing-table=`, `routing-mark=`), or with a gateway resolved in one (`<gateway>@<table>`), is left out, with a row; a route of another vendor's VRF is written into the main table.  ⚠️ Up to 0.7.7 a RouterOS route of another table was read as a route of the main table. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
 | `/interfaces/interface/dot1q-vlan` | Supported | A routed sub-interface of another vendor (`encapsulation dot1Q 10`, Junos `unit 10 vlan-id 10`) is written as RouterOS's own VLAN interface on its port, `/interface vlan add interface=ether2 name=ether2.10 vlan-id=10`, with its description, MTU and admin state.  RouterOS writes a VLAN interface on a port and on a bridge with the same line, and the parser tells them apart by the parent: on a port or a bond it is a sub-interface of it (read back as one, and, from a RouterOS config, sent onto another vendor where its port goes, named by its tag), on a bridge a VLAN interface and a VLAN.  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a `# review:` line that says so.  A sub-interface of two tags (`/interfaces/interface/dot1q-inner-vlan`, supported) is a VLAN interface on the VLAN interface of its port with its outer tag -- Q-in-Q, "adding one VLAN interface over another" -- made, `<port>.<outer>`, where the source has none, and is read back as two tags; from a RouterOS config, a VLAN interface on a sub-interface of a port is one, named by its inner tag onto another vendor.  One that says `use-service-tag=yes` (802.1ad) on a port, a bond or a VLAN interface, and one on a VLAN interface that is not one 802.1Q tag on a port, is left out with a row of the Tier-3 banner, and so is one whose `vlan-id=` is no VLAN id (0, 4095, or nothing after the `=`).  One that states no `vlan-id=` is VLAN 1, MikroTik's default, which an export leaves out. |
 | `/vlans/vlan/id` | Lossy | RouterOS has no VLAN apart from an `/interface vlan` on a parent.  A VLAN on a bridge is read back as a VLAN; one another platform carries on a port or a LAG is written as an `/interface vlan` on it, which the parser reads back as a routed sub-interface of the port (its tag the VLAN's id), with no VLAN record. |
@@ -898,7 +898,8 @@ DHCP server is not enabled is listed as `disabled: dhcp-server pool
 a range nor a static binding, as `incomplete: dhcp-server pool
 <name>`: neither served anything.  A FortiGate DHCP server of `status
 disable` is listed as `disabled: config system dhcp server edit <id>`,
-and is not translated.  The banner counts only the sections,
+and is not translated, and a RouterOS route held `disabled=yes` as
+`disabled: ip route <destination>`.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
@@ -2365,10 +2366,9 @@ What you get back, on the job's `port_mapping_plan`:
 * **`stale_next_hops`** — destinations of static routes whose next
   hop still names an interface that has another name in the output,
   or is not in it: a
-  RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
-  suffix (`ether3@main`), or — across vendors — a Junos unit
-  (`next-hop et-0/0/24.0`).  A next hop that is exactly an
-  interface's name follows it and is not listed; nor is a list whose
+  RouterOS list of gateways (`gateway=ether1,ether2`) or — across
+  vendors — a Junos unit (`next-hop et-0/0/24.0`).  A next hop that
+  is exactly an interface's name follows it and is not listed; nor is a list whose
   members only changed places among themselves.  A next hop naming a
   port of the declared source that the config has no interface
   record for is listed.  The job is `partial` while this is not
@@ -2597,16 +2597,16 @@ nothing, as before.
   holds it is written as a string, and read back whole.)  A placed
   port under such a name is reported (`a,b`, `,a`, `a%b,c`), whether
   or not a line of its own finds it.  It is not where no piece of
-  the name is read back as a name — a next hop that begins with `@`
-  (`@a`: what follows is read as a routing table) — nor where the
-  name has a line break in it: the entry of a port with no interface
-  is then listed in `off_target` only, and a next hop by a port that
-  has one is not reported at all.
+  the name is read back as a name — a next hop that holds an `@` not
+  followed by `main` (`@a`, `x@a`: what follows is read as a routing
+  table, and a route of a table other than `main` is left out) — nor
+  where the name has a line break in it: the entry of a port with no
+  interface is then listed in `off_target` only, and a next hop by a
+  port that has one is not reported at all.
 * **A next hop that is not exactly an interface's name is not
   followed** when the interface moves: a RouterOS route with several
-  gateways or a routing-table suffix, and — across vendors — a Junos
-  unit next hop.  The plan lists the route (`stale_next_hops`) and the
-  job is `partial`.
+  gateways, and — across vendors — a Junos unit next hop.  The plan
+  lists the route (`stale_next_hops`) and the job is `partial`.
 * A FortiGate VLAN interface the codec reads as a physical port
   (`DMZ` beside a port `dmz`) or as a management port (`MGMT`), and
   its stock `fortilink` aggregate,

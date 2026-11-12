@@ -1401,6 +1401,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS route of a VRF, a disabled route and a route that
+  discards are no longer written as routes in force.**  The `/ip
+  route` parser read `dst-address`, `gateway`, `distance` and
+  `comment` and nothing else.  A route of another routing table
+  (`routing-table=` on RouterOS 7, `routing-mark=` on 6), or with a
+  gateway resolved in one (`192.0.2.9@vrf1`) -- a VRF's route -- was
+  a route of the main table on every target, RouterOS included,
+  carrying traffic the source keeps apart; a route held
+  `disabled=yes` was installed; a `blackhole` route (and RouterOS 6's
+  `type=blackhole`, `unreachable` and `prohibit`) was a route with no
+  next hop, or, with a gateway, one that forwards; and
+  `192.0.2.9@main` was written as a next hop of that spelling, in
+  jobs that said `completed`.  Each such route is now left out and
+  said: a `disabled: ip route <destination>` row for a disabled route
+  (a statement the source holds and does not run), one row that
+  counts the routes of a VRF, and one that counts the routes that
+  discard.  `@main` is taken off a gateway: `main` is where a gateway
+  that names no table is resolved (MikroTik's VRF page).  A list of
+  gateways (an ECMP route) is still one route, written as it is:
+  onto another vendor it is one next hop that no other target reads,
+  in a job that says `completed` -- a route a gateway is many routes
+  from few bytes, and no limit counts routes yet.  One check sees
+  less for it: with both devices declared, a port you give a name
+  that holds an `@` not followed by `main` is written as a next hop
+  that RouterOS resolves in another routing table, and since that
+  route is no longer read back, the port is no longer listed in
+  `unbound_ports` (a name that begins with `@` was not listed
+  before either).  The output of every public codec for a config
+  with these forms is held to its output for the same config
+  without them.  No job of a committed input moves.
+
 - **A sub-interface is on its port, whether or not the config has a
   line for the port.**  The translator writes a unit of a port as a
   unit of the name it gives the port, and the check that no two

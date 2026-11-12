@@ -4722,26 +4722,29 @@ add dst-address=10.25.0.0/16 gateway=192.0.2.1
 
 class TestANextHopTheRewriteDoesNotReach:
     """A next hop that is exactly an interface name follows the
-    interface.  A list of them, a routing-table suffix, and -- across
-    vendors -- a unit of an interface are left as written.  The job
-    used to be ``completed`` with the route still naming a port that
-    had moved; it now says which routes, and is ``partial``."""
+    interface.  A list of them and -- across vendors -- a unit of an
+    interface are left as written.  The job used to be ``completed``
+    with the route still naming a port that had moved; it now says
+    which routes, and is ``partial``.  (A gateway resolved in the main
+    table, ``ether3@main``, is read as that gateway, and follows.)"""
 
-    def test_a_list_and_a_table_suffix_are_reported(self) -> None:
+    def test_a_list_is_reported(self) -> None:
         mikrotik = get_codec("mikrotik_routeros")
         job = run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS_HOP_FORMS, _profile(_CRS310), _profile(_CCR2004),
         )
         plan = job.port_mapping_plan
         assert "gateway=ether1,ether2" in job.rendered
-        assert 'gateway="ether3@main"' in job.rendered
-        # The plain one followed, and an address is never a port.
+        # The plain one followed, and so did the one resolved in main;
+        # an address is never a port.
+        assert "dst-address=10.23.0.0/16 gateway=sfp-sfpplus3" in job.rendered
         assert "dst-address=10.24.0.0/16 gateway=sfp-sfpplus4" in job.rendered
-        assert plan.stale_next_hops == ["0.0.0.0/0", "10.23.0.0/16"]
+        assert "@main" not in job.rendered
+        assert plan.stale_next_hops == ["0.0.0.0/0"]
         assert not plan.is_clean
         assert job.status == MigrationJobStatus.partial
-        assert "2 static route(s) still name, as next hop" in job.error
-        assert any("0.0.0.0/0, 10.23.0.0/16" in w for w in job.warnings)
+        assert "1 static route(s) still name, as next hop" in job.error
+        assert any("(0.0.0.0/0)" in w for w in job.warnings)
 
     def test_nothing_is_reported_while_the_named_ports_stay_where_they_are(self) -> None:
         mikrotik = get_codec("mikrotik_routeros")
@@ -6172,7 +6175,10 @@ class TestAPortTheOutputDoesNotLookUp:
         at ``@`` and ``%`` as well; a list is a string where a name in
         it holds white space, and is read whole.  A port with no
         interface under such a name is judged by the parts that are
-        read."""
+        read.  ``up@link`` is a gateway ``up`` resolved in the routing
+        table ``link``, a route the parser leaves out: no part of the
+        name is read back, and it is not caught -- a limit the
+        documents state, which the oracle of these tests looks past."""
         job = SimpleNamespace(rendered=_OUTPUT_THAT_REFERS_TO_ODD_NAMES, port_drops=[], port_renames={
             "1": "my port", "3": "a,b", "5": "up@link", "7": "to core", "9": "a%b", "11": "not used",
             "13": ",x",
@@ -6183,7 +6189,7 @@ class TestAPortTheOutputDoesNotLookUp:
         # among those it uses, and that is not a use of this one.
         assert migration_pipeline._unbound_hardware(
             get_codec("mikrotik_routeros"), job, {}, expected, list(expected),
-        ) == (["1", "3", "5", "7", "9"], True)
+        ) == (["1", "3", "7", "9"], True)
 
     def test_a_logical_name_on_the_ports_hardware_does_not_vouch_either(self) -> None:
         """The name that ended on the port's hardware need not be a
@@ -6726,7 +6732,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
         ("port", "name", "line"),
         [
             ("GigabitEthernet1/0/3", "my port", 'gateway="my port"'),
-            ("GigabitEthernet1/0/3", "up@link", 'gateway="up@link"'),
+            ("GigabitEthernet1/0/3", "up@main", 'gateway="up@main"'),
             ("GigabitEthernet1/0/3", "a%b", "gateway=a%b"),
             ("GigabitEthernet1/0/5", "to core", 'gateway="10.0.5.2%to core"'),
             # Judged by every piece: nothing is ahead of the first.
@@ -7300,9 +7306,11 @@ class TestTheWrapperAppliesEveryCheck:
                 _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004), port_rename_map=entry,
             )
 
-    def test_the_oracle_looks_past_the_engines_own_rule(self) -> None:
-        """A next hop that begins with ``@`` is read back as a route
-        with no gateway, in the routing table ``q``.  The engine judges
+    @pytest.mark.parametrize("name", ["@q", "up@link"])
+    def test_the_oracle_looks_past_the_engines_own_rule(self, name: str) -> None:
+        """A next hop that holds an ``@`` is read back as a route in
+        the routing table after it (``q``, ``link``), which the parser
+        leaves out.  The engine judges
         a name by the pieces the parser gives back of it; this one has
         none that is a name, and is not reported -- a limit the
         documents state.  The oracle looks in the text, whatever is odd
@@ -7316,7 +7324,7 @@ class TestTheWrapperAppliesEveryCheck:
                 get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
                 _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
                 _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
-                port_rename_map={"GigabitEthernet1/0/3": "@q"},
+                port_rename_map={"GigabitEthernet1/0/3": name},
             )
 
     def test_a_name_in_double_quotes_is_reported(self) -> None:

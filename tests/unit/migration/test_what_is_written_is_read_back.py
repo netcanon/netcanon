@@ -154,7 +154,16 @@ def test_routeros_splits_an_address_pinned_to_an_interface() -> None:
     assert (route.gateway, route.interface) == ("192.0.2.1", "ether1")
 
 
-@pytest.mark.parametrize("gateway", ["192.0.2.1,192.0.2.2", "192.0.2.1@main"])
-def test_routeros_keeps_a_form_the_tree_has_no_field_for_as_written(gateway: str) -> None:
+def test_routeros_keeps_a_form_the_tree_has_no_field_for_as_written() -> None:
+    route = _route("192.0.2.1,192.0.2.2")
+    assert (route.gateway, route.interface) == ("192.0.2.1,192.0.2.2", "")
+
+
+@pytest.mark.parametrize(
+    ("gateway", "read"),
+    [("192.0.2.1@main", ("192.0.2.1", "")), ("ether1@main", ("", "ether1"))],
+)
+def test_routeros_takes_the_main_table_off_a_gateway(gateway: str, read: tuple[str, str]) -> None:
+    """``main`` is where a gateway that names no table is resolved."""
     route = _route(gateway)
-    assert (route.gateway, route.interface) == (gateway, "")
+    assert (route.gateway, route.interface) == read

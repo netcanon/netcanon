@@ -152,6 +152,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # exports where ``/ip address`` precedes ``/interface vrrp``.
     vrrp_scratch: dict[str, dict[str, Any]] = {}
     ntp_once = Uniques()
+    routes_left_out = _RoutesLeftOut()
     for section, lines in sections:
         if section == "/interface vrrp":
             _parse_interface_vrrp(lines, vrrp_scratch)
@@ -192,7 +193,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         elif section == "/ipv6 address":              # GAP-EVPN-3
             _parse_ipv6_address(lines, iface_by_name, vrrp_scratch)
         elif section == "/ip route":
-            _parse_ip_route(lines, intent)
+            _parse_ip_route(lines, intent, routes_left_out)
         elif section == "/snmp":
             _parse_snmp_root(lines, intent)
         elif section == "/snmp community":
@@ -212,6 +213,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dhcp_servers, dhcp_rows, dhcp_left_out = dhcp.read()
     intent.dropped_tier3_sections.extend(dhcp_rows)
     intent.dropped_tier3_sections.extend(left_out_rows(dhcp_left_out, rest="disabled"))
+    intent.dropped_tier3_sections.extend(routes_left_out.rows())
 
     # VRRP post-pass — materialise scratch records into
     # CanonicalVRRPGroup entries on the parent interface.  Iterate in
@@ -1867,8 +1869,80 @@ def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
                 intent.snmp.community = name
 
 
-def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
-    """Parse ``add dst-address=... gateway=...`` static routes."""
+#: The routing table every route is in, and every gateway resolved
+#: in, where none is named: "By default, all services use the main
+#: table", and a gateway with no table "appended @name after the
+#: gateway IP" is resolved there (MikroTik, VRF:
+#: https://manual.mikrotik.com/docs/7.25/user-guides/routing-and-networking-protocols/vrf/).
+_MAIN_TABLE = "main"
+
+#: RouterOS 6's ``type=`` for a route that discards what it matches
+#: (``blackhole``, ``unreachable``, ``prohibit``); RouterOS 7 writes a
+#: ``blackhole`` flag instead.
+_DISCARDING_TYPES = frozenset({"blackhole", "unreachable", "prohibit"})
+
+
+class _RoutesLeftOut:
+    """The routes of ``/ip route`` the parser reads and does not
+    translate, and the rows that say so.
+
+    * ``disabled=yes`` -- the router holds the route and does not
+      install it: left out, a row of :func:`left_out_rows` each.
+    * A route in a routing table other than ``main`` (``routing-table=``
+      on RouterOS 7, ``routing-mark=`` on 6), or with a gateway
+      resolved in one (``<gateway>@<table>``) -- a VRF's route.  The
+      parser reads no VRF of a RouterOS config, and in the one table of
+      the output such a route would carry traffic the source keeps
+      apart (MikroTik warns that a gateway resolved in another VRF
+      leaks traffic between them).  One row counts them.
+    * A route that discards (RouterOS 7's ``blackhole``, RouterOS 6's
+      ``type=blackhole|unreachable|prohibit``) -- the tree has no form
+      for one, and without its flag it is a route to nowhere, or, with
+      a gateway, a route that forwards.  One row counts them.
+    """
+
+    def __init__(self) -> None:
+        self.disabled: list[tuple[str, list[str]]] = []
+        self.elsewhere = 0
+        self.discarding = 0
+
+    def rows(self) -> list[str]:
+        """The rows, in a bounded number: the disabled routes through
+        :func:`left_out_rows`, the others one row a kind."""
+        rows = left_out_rows(self.disabled, rest="disabled-route")
+        if self.elsewhere:
+            rows.append(
+                f"/ip route: {self.elsewhere} route(s) in a routing table "
+                "other than main, or with a gateway resolved in one "
+                "(gateway=<address>@<table>): the routes of a VRF, and no "
+                "VRF of a RouterOS config is read; not translated"
+            )
+        if self.discarding:
+            rows.append(
+                f"/ip route: {self.discarding} blackhole, unreachable or "
+                "prohibit route(s): the tree has no form for a route that "
+                "discards; not translated"
+            )
+        return rows
+
+
+def _parse_ip_route(
+    lines: list[str], intent: CanonicalIntent, left_out: _RoutesLeftOut,
+) -> None:
+    """Parse ``add dst-address=... gateway=...`` static routes.
+
+    A route the tree cannot hold as the router holds it is left out
+    and said (:class:`_RoutesLeftOut`).  A gateway resolved in the main
+    table (``192.0.2.1@main``) is that gateway: ``main`` is where a
+    gateway that names no table is resolved.  A list of gateways
+    (``gateway=10.0.0.1,10.0.0.2``) is an ECMP route -- "ECMP (Equal
+    cost multi-path) routes have multiple gateways (next-hop) values"
+    (MikroTik, IP Routing:
+    https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing)
+    -- and is kept as one value, each gateway once, as it was: the tree
+    holds one next hop a route, and a route a gateway is many routes
+    from few bytes, which no limit counts yet.
+    """
     for line in ticked(lines):
         if not line.startswith("add"):
             continue
@@ -1876,53 +1950,113 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
         dest = kv.get("dst-address")
         if not dest:
             continue
-        gateway_raw = kv.get("gateway", "")
+        if kv.get("disabled", "").lower() in ("yes", "true"):
+            left_out.disabled.append(("disabled-route", ["ip", "route", dest]))
+            continue
+        table = kv.get("routing-table") or kv.get("routing-mark") or _MAIN_TABLE
+        if table != _MAIN_TABLE:
+            left_out.elsewhere += 1
+            continue
+        if _discards(line, kv):
+            left_out.discarding += 1
+            continue
+        gateways = _gateways(kv.get("gateway", ""))
+        if gateways is None:
+            left_out.elsewhere += 1
+            continue
         # RouterOS admin distance (``distance=<n>``, default 1).  Landed on
         # CanonicalStaticRoute.metric so a floating static (e.g.
         # ``distance=250``) round-trips instead of silently reparsing to 0.
         distance_raw = kv.get("distance", "")
         metric = int(distance_raw) if distance_raw.isdigit() else 0
-        # (#9) RouterOS combines an IP next-hop and an egress interface
-        # into one ``gateway=<ip>%<iface>`` argument (also the shape of an
-        # IPv6 link-local scoped next-hop, ``fe80::1%ether1``).  render.py
-        # emits exactly this form, but parse used to store the whole token
-        # in ``gateway`` — so cross-vendor targets got an invalid next-hop
-        # (`ip route 0.0.0.0 0.0.0.0 192.168.88.1%ether1`) and the codec's
-        # own emission reparsed asymmetrically.  Split on ``%`` into the
-        # two canonical fields we already expose.
-        gw, sep, egress = gateway_raw.partition("%")
-        if sep:
-            route = CanonicalStaticRoute(
-                destination=dest,
-                gateway=gw,
-                interface=egress,
-                metric=metric,
-                description=kv.get("comment", ""),
-            )
-        elif _names_an_interface(gateway_raw):
-            # A bare interface name: a route out of that interface, with
-            # no next hop -- the form the renderer writes for a route
-            # that has an ``interface`` and no ``gateway``.  Kept in
-            # ``gateway`` it was a next hop another vendor writes as an
-            # address, and the port translator rewrote it only where
-            # the tree had an interface of that name.
-            route = CanonicalStaticRoute(
-                destination=dest,
-                interface=gateway_raw,
-                metric=metric,
-                description=kv.get("comment", ""),
-            )
-        else:
-            # An address, or a form the tree holds no field for (a list
-            # of gateways, ``<ip>@<table>``): kept in ``gateway`` as it
-            # is written.
-            route = CanonicalStaticRoute(
-                destination=dest,
-                gateway=gateway_raw,
-                metric=metric,
-                description=kv.get("comment", ""),
-            )
-        intent.static_routes.append(route)
+        intent.static_routes.append(_the_route(
+            dest, ",".join(gateways), metric, kv.get("comment", ""),
+        ))
+
+
+def _discards(line: str, kv: dict[str, str]) -> bool:
+    """Whether the ``add`` line is a route that discards what it
+    matches: RouterOS 7's ``blackhole`` flag (a word of the line that is
+    no ``key=value``, or ``blackhole=yes``), or RouterOS 6's
+    ``type=blackhole|unreachable|prohibit``."""
+    if kv.get("type", "").lower() in _DISCARDING_TYPES:
+        return True
+    if kv.get("blackhole", "").lower() in ("yes", "true"):
+        return True
+    return "blackhole" in _KV_RE.sub(" ", line).split()
+
+
+def _gateways(gateway_raw: str) -> list[str] | None:
+    """The gateways of a route's ``gateway=`` value, each once, without
+    the ``@main`` a gateway resolved in the main table may carry; or
+    ``None`` where one is resolved in another table.
+
+    An empty value is one gateway, empty: a route with no next hop, as
+    before.  An empty place in a list (``a,,b``) names no gateway.
+    """
+    if not gateway_raw:
+        return [""]
+    gateways: list[str] = []
+    seen: set[str] = set()
+    for written in gateway_raw.split(","):
+        gateway, at, table = written.rpartition("@") if "@" in written else (written, "", "")
+        if at and table != _MAIN_TABLE:
+            return None
+        if gateway and gateway not in seen:
+            seen.add(gateway)
+            gateways.append(gateway)
+    return gateways or [""]
+
+
+def _the_route(
+    dest: str, gateway_raw: str, metric: int, description: str,
+) -> CanonicalStaticRoute:
+    """The route to *dest* through its ``gateway=`` value."""
+    if "," in gateway_raw:
+        # A list of gateways: kept in ``gateway`` as it is written
+        # (:func:`_parse_ip_route`).
+        return CanonicalStaticRoute(
+            destination=dest,
+            gateway=gateway_raw,
+            metric=metric,
+            description=description,
+        )
+    # (#9) RouterOS combines an IP next-hop and an egress interface
+    # into one ``gateway=<ip>%<iface>`` argument (also the shape of an
+    # IPv6 link-local scoped next-hop, ``fe80::1%ether1``).  render.py
+    # emits exactly this form, but parse used to store the whole token
+    # in ``gateway`` — so cross-vendor targets got an invalid next-hop
+    # (`ip route 0.0.0.0 0.0.0.0 192.168.88.1%ether1`) and the codec's
+    # own emission reparsed asymmetrically.  Split on ``%`` into the
+    # two canonical fields we already expose.
+    gw, sep, egress = gateway_raw.partition("%")
+    if sep:
+        return CanonicalStaticRoute(
+            destination=dest,
+            gateway=gw,
+            interface=egress,
+            metric=metric,
+            description=description,
+        )
+    if _names_an_interface(gateway_raw):
+        # A bare interface name: a route out of that interface, with
+        # no next hop -- the form the renderer writes for a route
+        # that has an ``interface`` and no ``gateway``.  Kept in
+        # ``gateway`` it was a next hop another vendor writes as an
+        # address, and the port translator rewrote it only where
+        # the tree had an interface of that name.
+        return CanonicalStaticRoute(
+            destination=dest,
+            interface=gateway_raw,
+            metric=metric,
+            description=description,
+        )
+    return CanonicalStaticRoute(
+        destination=dest,
+        gateway=gateway_raw,
+        metric=metric,
+        description=description,
+    )
 
 
 def _names_an_interface(gateway: str) -> bool:
@@ -1931,10 +2065,10 @@ def _names_an_interface(gateway: str) -> bool:
     A route's gateway is an IP address or an interface, and an ECMP
     route has several (RouterOS manual, IP Routing); ``<ip>%<interface>``
     pins an address to an interface, and is split by the caller.  One
-    value that is not an address, with no ``,`` (a list) and no ``@`` (a
-    routing table), is an interface's name.
+    value that is not an address, with no ``,`` (a list), is an
+    interface's name.
     """
-    if not gateway or "," in gateway or "@" in gateway:
+    if not gateway or "," in gateway:
         return False
     try:
         ipaddress.ip_address(gateway)

@@ -373,8 +373,8 @@ per_field_expectation:
       The VRF binding blanks on 6 records (`management` -> `''`) while the
       route itself survives — so a route that was confined to the management
       VRF is installed in the GLOBAL table on the target.  Matrix:
-      "Per-VRF static-route binding parses-and-ignores in v1" (wire-up
-      scheduled for v0.2.0).  This is the dangerous shape of loss: the config
+      "a route of another vendor's VRF is written into the main table".
+      This is the dangerous shape of loss: the config
       looks complete and the route is present, but its scope silently
       widened.  Review every route that had a VRF before enabling forwarding.
     references: [nxos-routeros-surface]
