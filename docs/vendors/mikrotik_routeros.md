@@ -248,8 +248,11 @@ can appear BEFORE `/interface vrrp` in the source.
   from the privilege level from any source, a RouterOS one included: a
   custom group is read as privilege 1 and written `read`.
 - **Tunnels** — `/interface gre`, `/interface eoip`,
-  `/interface ipip`.  The canonical model holds no tunnel endpoints,
-  so a tunnel is written with a placeholder `remote-address=0.0.0.0`
+  `/interface ipip`.  The parser reads no tunnel end and the
+  renderer writes none (the three paths of a tunnel's ends are
+  declared unsupported: a job whose source states one, as an IOS-XE
+  config can, is `partial` and lists them), so a tunnel is written
+  with a placeholder `remote-address=0.0.0.0`
   (with a `review:` comment when it has no description of its own);
   set `local-address` / `remote-address` before it carries anything.
   A tunnel that is shut on the source is written `disabled=yes`

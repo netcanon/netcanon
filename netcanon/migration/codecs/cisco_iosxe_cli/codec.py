@@ -177,6 +177,10 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
+            # A tunnel's two ends: `tunnel source`, `tunnel destination`.
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
             "/interfaces/interface/dot1q-vlan",              # GAP 7: routed-subif `encapsulation dot1Q N`
             "/interfaces/interface/dot1q-inner-vlan",        # `encapsulation dot1Q N second-dot1q M`
             "/interfaces/interface/dot1q-native",            # `encapsulation dot1Q N native`

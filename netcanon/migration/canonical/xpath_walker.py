@@ -168,6 +168,14 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             yield "/interfaces/interface/dhcp-client-v6"
         if iface.tunnel_type:
             yield "/interfaces/interface/tunnel-type"
+        # A tunnel's two ends.  Each is its own path: a codec can write
+        # an address and have no form for an interface.
+        if iface.tunnel_source_address:
+            yield "/interfaces/interface/tunnel-source-address"
+        if iface.tunnel_source_interface:
+            yield "/interfaces/interface/tunnel-source-interface"
+        if iface.tunnel_destination:
+            yield "/interfaces/interface/tunnel-destination"
         if iface.mtu is not None:
             yield "/interfaces/interface/config/mtu"
         if iface.ip_mtu is not None:

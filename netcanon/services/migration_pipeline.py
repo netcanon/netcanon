@@ -2127,9 +2127,10 @@ def _taken_with_dropped_ports(
     """What the ports a run dropped took with them.
 
     The translator removes a route or a DHCP pool that names a dropped
-    port, a dropped member from its LAG, a VRRP track entry and a VTEP
-    source; the job reports only the port.  Read here from the parsed
-    SOURCE tree and the job's drop list, so the plan can say it.
+    port, a dropped member from its LAG, a VRRP track entry, a VTEP
+    source and a tunnel's source; the job reports only the port.  Read
+    here from the parsed SOURCE tree and the job's drop list, so the
+    plan can say it.
 
     Returns:
         The dropped names, and the outcome lists keyed as
@@ -2186,6 +2187,11 @@ def _taken_with_dropped_ports(
         "lost_vtep_sources": sorted({
             vx.source_interface for vx in tree.vxlan_vnis
             if vx.source_interface and vx.source_interface in dropped
+        }),
+        "lost_tunnel_sources": sorted({
+            iface.name for iface in tree.interfaces
+            if iface.name not in dropped
+            and iface.tunnel_source_interface in dropped
         }),
     }
 
@@ -2762,8 +2768,8 @@ def run_plan_with_models(
     ``stale_next_hops``, ``unbound_ports``, ``sub_interfaces``,
     ``untagged_units``, ``unvouched_units``, and what a dropped port
     took with it (``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
-    ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``) —
-    so no client has to read it out of prose.
+    ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``,
+    ``lost_tunnel_sources``) — so no client has to read it out of prose.
 
     The source is parsed here first, to learn which ports it uses, and
     again inside :func:`run_plan_with_overrides` — a third time when a

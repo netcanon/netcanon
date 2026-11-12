@@ -504,6 +504,7 @@ def settle_plan(
     lost_dhcp_pools: Iterable[str] = (),
     lost_tracking: Iterable[str] = (),
     lost_vtep_sources: Iterable[str] = (),
+    lost_tunnel_sources: Iterable[str] = (),
     management_forms: Mapping[str, str] | None = None,
     fold_source: bool = True,
     fold_target: bool = True,
@@ -540,7 +541,7 @@ def settle_plan(
     ``stale_next_hops``, ``ignored_overrides``,
     ``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
     ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``,
-    ``unused_target``, ``unresolved_ports``),
+    ``lost_tunnel_sources``, ``unused_target``, ``unresolved_ports``),
     sets every used unplaced port's ``dropped`` and ``landed`` to what
     happened to it, takes a followed sub-interface out of
     ``off_inventory``, and rebuilds ``warnings``.  ``pairings`` and
@@ -571,6 +572,8 @@ def settle_plan(
         lost_dhcp_pools: DHCP pools removed with a port.
         lost_tracking: Interfaces that lost a VRRP track entry.
         lost_vtep_sources: VTEP source interfaces that were dropped.
+        lost_tunnel_sources: Tunnels whose source interface was
+            dropped.
         management_forms: For each source management port the target
             model has no place for, the name the ordinary translation
             gives one on the target (``oobm`` on AOS-S).  An override
@@ -652,6 +655,7 @@ def settle_plan(
     plan.lost_dhcp_pools = list(lost_dhcp_pools)
     plan.lost_tracking = sorted(lost_tracking)
     plan.lost_vtep_sources = sorted(lost_vtep_sources)
+    plan.lost_tunnel_sources = sorted(lost_tunnel_sources)
     plan.stale_next_hops = list(stale_next_hops)
     # A name the operator has since decided, or that went, is no longer
     # a landing nobody looked at.
@@ -780,6 +784,7 @@ def what_went_lines(
     lost_dhcp_pools: Sequence[str] = (),
     lost_tracking: Sequence[str] = (),
     lost_vtep_sources: Sequence[str] = (),
+    lost_tunnel_sources: Sequence[str] = (),
     dropped: str = "port",
 ) -> list[str]:
     """A line for each kind of thing that went with a dropped name.
@@ -799,6 +804,8 @@ def what_went_lines(
         lost_dhcp_pools: The DHCP pools removed.
         lost_tracking: Interfaces whose VRRP group lost a track entry.
         lost_vtep_sources: The VXLAN source interfaces dropped.
+        lost_tunnel_sources: The tunnels whose source interface was
+            dropped.
         dropped: What the dropped names are called in the lines.
 
     Returns:
@@ -843,6 +850,12 @@ def what_went_lines(
             f"({_summary(lost_vtep_sources)}), so the VTEP is left "
             f"without the source it was bound to — give it one"
         )
+    if lost_tunnel_sources:
+        lines.append(
+            f"{prefix}: {len(lost_tunnel_sources)} tunnel(s) left from a "
+            f"dropped {dropped}, so the tunnel has no source on the target "
+            f"— give it one: {_summary(lost_tunnel_sources)}"
+        )
     return lines
 
 
@@ -857,6 +870,7 @@ def _loss_lines(plan: MappingPlan) -> list[str]:
         lost_dhcp_pools=plan.lost_dhcp_pools,
         lost_tracking=plan.lost_tracking,
         lost_vtep_sources=plan.lost_vtep_sources,
+        lost_tunnel_sources=plan.lost_tunnel_sources,
     )
     if plan.stale_next_hops:
         lines.append(

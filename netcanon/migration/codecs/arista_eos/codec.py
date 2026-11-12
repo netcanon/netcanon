@@ -421,6 +421,30 @@ class AristaEOSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-address",
+                reason=(
+                    "The codec writes a tunnel's mode and no `tunnel "
+                    "source` or `tunnel destination`: a tunnel interface "
+                    "is written without its ends."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-interface",
+                reason=(
+                    "The codec writes a tunnel's mode and no `tunnel "
+                    "source` or `tunnel destination`: a tunnel interface "
+                    "is written without its ends."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-destination",
+                reason=(
+                    "The codec writes a tunnel's mode and no `tunnel "
+                    "source` or `tunnel destination`: a tunnel interface "
+                    "is written without its ends."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/dot1q-native",
                 reason=(
                     "Which routed sub-interface takes the untagged frames of "

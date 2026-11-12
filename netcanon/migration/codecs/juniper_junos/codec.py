@@ -423,6 +423,30 @@ class JunosCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-address",
+                reason=(
+                    "The codec writes no `tunnel source` or `tunnel "
+                    "destination` under a unit: a tunnel interface is "
+                    "written without its ends."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-source-interface",
+                reason=(
+                    "The codec writes no `tunnel source` or `tunnel "
+                    "destination` under a unit: a tunnel interface is "
+                    "written without its ends."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/tunnel-destination",
+                reason=(
+                    "The codec writes no `tunnel source` or `tunnel "
+                    "destination` under a unit: a tunnel interface is "
+                    "written without its ends."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(
                     "This codec does not model Junos voice VLAN (VoIP / "

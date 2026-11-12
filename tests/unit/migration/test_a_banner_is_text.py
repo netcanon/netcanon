@@ -1047,7 +1047,12 @@ BEFORE: dict[str, str] = {
     "synthetic/aruba_aoss/kitchen_sink.cfg": "ea25a4c23fb5",
     "aruba_aoss/show_run_simple.txt": "8a4bc3fe9e9d",
     "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
-    "real/cisco_iosxe/batfish_cisco_interface.txt": "ac89fc3d7159",
+    # Moved on purpose, by its tunnels' ends and a row and nothing
+    # else: `tunnel source` and `tunnel destination` are read, and its
+    # `tunnel source dynamic` is listed among the sections not
+    # translated (codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py):
+    # was "ac89fc3d7159".
+    "real/cisco_iosxe/batfish_cisco_interface.txt": "8928d38b76db",
     "real/cisco_iosxe/batfish_cisco_ip_route.txt": "ab1f0cce8811",
     "real/cisco_iosxe/batfish_cisco_logging.txt": "b1aad8f82e94",
     "real/cisco_iosxe/batfish_cisco_snmp.txt": "ec27664e753c",
@@ -1060,7 +1065,10 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "c6fe61cfb3a2",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "879b0c3f72b4",
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "a4c84dfdfed7",
+    # Moved on purpose, by its tunnels' ends and nothing else
+    # (codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py): was
+    # "a4c84dfdfed7".
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "21b9bd47653a",
     # Moved on purpose, by a row and nothing else: `switch 1 provision
     # c9300-24ux` is listed among the sections not translated
     # (TestCatalystStack): was "7192fbc5fd5e".

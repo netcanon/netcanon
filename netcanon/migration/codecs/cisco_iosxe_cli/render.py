@@ -509,6 +509,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f" ! review: dhcp_client_v6={iface.dhcp_client_v6} "
                 f"has no IOS-XE equivalent"
             )
+        # A tunnel's two ends, ahead of its mode, where IOS prints
+        # them.  A source is an interface or an address; the tree
+        # holds at most one of the two.
+        tunnel_source = iface.tunnel_source_interface or iface.tunnel_source_address
+        if tunnel_source:
+            body.append(f" tunnel source {tunnel_source}")
+        if iface.tunnel_destination:
+            body.append(f" tunnel destination {iface.tunnel_destination}")
         # Tunnel-mode discriminator on Tunnel<N> stanzas.  The
         # canonical ``tunnel_type`` field disambiguates between GRE
         # (the IOS-XE default), IPIP, IPSEC, and VXLAN encap.  Empty

@@ -147,6 +147,7 @@ the same redacted value all 5 times).
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
 | RADIUS / SNMP-trap / NTP / syslog / DHCP gateway+range+subnet hosts | Public IPv4 / IPv6 → docs ranges; an FQDN NTP / syslog / trap / RADIUS target → `host-N.example.test`; private IP + bare single label preserved |
 | Interface IPv6 addresses | Public / global IPv6 → `2001:db8::`; ULA / link-local / loopback / multicast preserved |
+| A tunnel's source address and destination | Public IPv4 / IPv6 → docs ranges; a host-name destination → `host-N.example.test`; private IP and a source interface preserved |
 | VLAN-SVI IPv4 addresses (the VLAN interface's L3 config) | Public IPv4 → docs ranges; private preserved |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (v4 + v6) | Public → docs ranges; private / ULA preserved |
@@ -197,7 +198,8 @@ Full rules and limitations in the sanitiser's module docstring at
   an account, say so in the report and write its lines out by hand,
   with the name changed.
 - **FQDN host targets redacted; unmodelled host references not.**  The
-  modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets) now
+  modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets, a
+  tunnel's destination) now
   redact an FQDN to a stable `host-N.example.test` placeholder so the org
   domain does not re-leak; bare IPv4 / IPv6 literals → docs ranges and a
   bare single label (`localhost`) is preserved.  A host written into a

@@ -93,6 +93,16 @@ __all__ = ["MikroTikRouterOSCodec"]
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "A tunnel is written with a placeholder `remote-address=0.0.0.0` "
+        "and no `local-address`: its source and its destination are not "
+        "written.",
+        (
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
+        ),
+    ),
+    (
         "No IPv4 virtual gateway is written "
         "(`ipv4/address/virtual-gateway-address` is unsupported), so "
         "neither is the MAC that goes with one.",

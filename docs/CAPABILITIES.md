@@ -165,6 +165,17 @@ lossy where vendors disagree on representation.
 * `static_routes[].vrf` (v0.2.0 Wave A — per-VRF route
   discriminator; wired `supported` on `juniper_junos`, `arista_eos`,
   `cisco_iosxe_cli`, `cisco_nxos`, `cisco_iosxr`)
+* `interfaces[].tunnel_source_address` /
+  `tunnel_source_interface` / `tunnel_destination` -- a tunnel's two
+  ends (IOS-XE `tunnel source {address | interface}`, `tunnel
+  destination {address | host name}`).  Read and written by
+  `cisco_iosxe_cli` only: every other codec declares the three paths
+  `unsupported`, so a job onto it that holds one is `partial` and
+  lists them, where it does not drop the tunnel itself.  `tunnel
+  source dynamic` (or `destination`) has no form in the tree and is a
+  row of the sections not translated.  The source interface is a port
+  name: it follows its port, and a drop of that port is said
+  (`lost_tunnel_sources`, § G)
 * `interfaces[].ipv4_addresses[].virtual_gateway_address` /
   `virtual_gateway_mac` / `is_secondary` and the matching IPv6
   fields (v0.2.0 Wave C — anycast-gateway companion to the primary
@@ -2353,14 +2364,15 @@ What you get back, on the job's `port_mapping_plan`:
   `null` to drop).  A caller of the pipeline in Python that passes
   one has it set aside and listed here.
 * **`emptied_lags`**, **`shrunk_lags`**, **`lost_routes`**,
-  **`lost_dhcp_pools`**, **`lost_tracking`**, **`lost_vtep_sources`**
-  — what a dropped port took with it.  A LAG loses a dropped member;
+  **`lost_dhcp_pools`**, **`lost_tracking`**, **`lost_vtep_sources`**,
+  **`lost_tunnel_sources`** — what a dropped port took with it.  A LAG loses a dropped member;
   a static route or a DHCP pool that names a dropped port is removed
   whole, even if the route also has a next-hop address; an interface
   that stays loses a VRRP track entry that named the port
   (`lost_tracking` lists the interface); and a VXLAN source
   interface that was dropped leaves the VTEP without the source it
-  was bound to.
+  was bound to; a tunnel that stays loses the source interface it
+  left from (`lost_tunnel_sources` lists the tunnel).
 * **`unused_target`** — target ports nothing ended on.  Between two
   stacks that includes every port of a target member the source has
   no member for.

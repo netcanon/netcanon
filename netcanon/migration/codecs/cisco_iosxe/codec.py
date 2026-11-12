@@ -171,6 +171,16 @@ def _extract_version(raw: str) -> str:
 #: every walkable path.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "The NETCONF render writes no tunnel encapsulation (see "
+        "`/interfaces/interface/tunnel-type`), and no end of a tunnel: "
+        "its source and its destination are not written.",
+        (
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
+        ),
+    ),
+    (
         "The OpenConfig render writes no `<system><aaa>` subtree: every "
         "local user is dropped, with its name, role, privilege and "
         "password hash.",

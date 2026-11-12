@@ -81,6 +81,16 @@ __all__ = [
 #: test_a_supported_path_is_written.py`` holds the matrix to the render.
 _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "No tunnel is written (`/interfaces/interface/tunnel-type` is "
+        "unsupported), so neither is either end of one: its source and "
+        "its destination.",
+        (
+            "/interfaces/interface/tunnel-source-address",
+            "/interfaces/interface/tunnel-source-interface",
+            "/interfaces/interface/tunnel-destination",
+        ),
+    ),
+    (
         "No IPv4 virtual gateway is written "
         "(`ipv4/address/virtual-gateway-address` is unsupported), so "
         "neither is the MAC that goes with one.",

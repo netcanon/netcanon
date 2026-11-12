@@ -507,6 +507,9 @@ _PLACES: dict[str, Callable[[CanonicalIntent], list[tuple[Any, str]]]] = {
     "interfaces[].name": lambda t: [(i, "name") for i in t.interfaces],
     "interfaces[].lag_member_of": lambda t: [(i, "lag_member_of") for i in t.interfaces],
     "interfaces[].vlan_parent": lambda t: [(i, "vlan_parent") for i in t.interfaces],
+    "interfaces[].tunnel_source_interface": lambda t: [
+        (i, "tunnel_source_interface") for i in t.interfaces
+    ],
     "interfaces[].vrrp_groups[].track_interfaces": lambda t: [
         (g, "track_interfaces") for i in t.interfaces for g in i.vrrp_groups
     ],
@@ -622,6 +625,22 @@ vlan 10
 end
 """
 
+_IOS_TUNNEL = """hostname sw
+!
+interface Loopback0
+ ip address 192.0.2.1 255.255.255.255
+!
+interface Loopback1
+ ip address 192.0.2.2 255.255.255.255
+!
+interface Tunnel0
+ ip address 10.9.0.1 255.255.255.252
+ tunnel source Loopback1
+ tunnel destination 198.51.100.7
+!
+end
+"""
+
 #: For each place no committed capture catches: a small config that
 #: fills it, and the names to exchange in it.  (And the one of
 #: :data:`_KEPT`, which a capture has come to catch as well.)
@@ -645,6 +664,11 @@ _SMALL_CONFIGS: dict[str, tuple[str, str, dict[str, str]]] = {
     ),
     "vxlan_vnis[].source_interface": (
         "arista_eos", _EOS_VTEP, {"Loopback0": "Loopback1", "Loopback1": "Loopback0"},
+    ),
+    # The committed captures' tunnels leave from a name the experiment
+    # does not exchange.
+    "interfaces[].tunnel_source_interface": (
+        "cisco_iosxe_cli", _IOS_TUNNEL, {"Loopback0": "Loopback1", "Loopback1": "Loopback0"},
     ),
 }
 

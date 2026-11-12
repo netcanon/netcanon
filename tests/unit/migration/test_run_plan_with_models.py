@@ -4107,6 +4107,22 @@ ip route 10.8.0.0 255.255.0.0 Tunnel0
 end
 """
 
+_IOS_TUNNEL_ENDS = """hostname sw
+!
+interface GigabitEthernet1/0/1
+ description user
+!
+interface Loopback0
+ ip address 192.0.2.1 255.255.255.255
+!
+interface Tunnel0
+ ip address 10.9.0.1 255.255.255.252
+ tunnel source Loopback0
+ tunnel destination 198.51.100.7
+!
+end
+"""
+
 _EOS_VTEP = """hostname leaf
 !
 interface Ethernet1
@@ -4169,6 +4185,44 @@ class TestWhatElseADroppedPortTakes:
             line.strip() for line in job.rendered.splitlines()
         ]
         assert any("the VXLAN source interface was dropped (Loopback0)" in w for w in job.warnings)
+
+    def test_a_tunnels_source(self) -> None:
+        """The operator drops the loopback a tunnel leaves from: the
+        tunnel stays, without a source, and the plan says so."""
+        ios = get_codec("cisco_iosxe_cli")
+        same = _profile("cisco_iosxe/C9300-48P")
+        job = run_plan_with_models(
+            ios, ios, _IOS_TUNNEL_ENDS, same, same, port_rename_map={"Loopback0": None},
+        )
+        assert job.port_mapping_plan.lost_tunnel_sources == ["Tunnel0"]
+        assert "tunnel source" not in job.rendered
+        assert "tunnel destination 198.51.100.7" in job.rendered
+        (line,) = [w for w in job.warnings if "tunnel(s) left from" in w]
+        assert line == (
+            "port mapping: 1 tunnel(s) left from a dropped port, so the tunnel "
+            "has no source on the target — give it one: Tunnel0"
+        )
+
+    def test_a_tunnels_source_that_moves_follows(self) -> None:
+        ios = get_codec("cisco_iosxe_cli")
+        same = _profile("cisco_iosxe/C9300-48P")
+        job = run_plan_with_models(
+            ios, ios, _IOS_TUNNEL_ENDS, same, same, port_rename_map={"Loopback0": "Loopback9"},
+        )
+        assert job.port_mapping_plan.lost_tunnel_sources == []
+        assert " tunnel source Loopback9" in job.rendered.splitlines()
+
+    def test_a_tunnel_that_went_did_not_lose_its_source(self) -> None:
+        tree = _tree(interfaces=[
+            {"name": "Tunnel0", "tunnel_source_interface": "Loopback0"},
+            {"name": "Tunnel1", "tunnel_source_interface": "Loopback0"},
+            {"name": "Tunnel2", "tunnel_source_interface": "Loopback1"},
+            {"name": "Loopback0"},
+        ])
+        _dropped, taken = migration_pipeline._taken_with_dropped_ports(
+            tree, ["Loopback0", "Tunnel1"],
+        )
+        assert taken["lost_tunnel_sources"] == ["Tunnel0"]
 
     def test_a_lag_no_member_of_which_was_parsed_is_not_emptied(self) -> None:
         """A LAG with no members cannot have lost them all."""

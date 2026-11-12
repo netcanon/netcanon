@@ -1219,6 +1219,7 @@ on the canonical model:
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
 | RADIUS / SNMP-trap / NTP / syslog / DHCP gateway+range+subnet hosts (public IPv4 / IPv6) | RFC 5737 / RFC 3849 docs ranges; an FQDN NTP / syslog / trap / RADIUS target → `host-N.example.test` (bare single label preserved) |
+| A tunnel's source address and destination (public IPv4 / IPv6, or a host name) | RFC 5737 / RFC 3849 docs ranges; a host-name destination → `host-N.example.test`; a source interface is a port name and stays |
 | VLAN-SVI IPv4 addresses (public) | RFC 5737 docs ranges |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
@@ -1237,7 +1238,8 @@ substitution table for operator review before writing output.
 Known limitations are listed in
 [`BUG_REPORTING.md`](BUG_REPORTING.md) — IP-typed redaction covers both
 IPv4 and IPv6, FQDN-form NTP / syslog / SNMP-trap / RADIUS host targets
-are redacted to a `host-N.example.test` placeholder, and banner / comment
+and tunnel destinations are redacted to a `host-N.example.test`
+placeholder, and banner / comment
 text is parse-and-ignored rather than redacted.
 
 ---

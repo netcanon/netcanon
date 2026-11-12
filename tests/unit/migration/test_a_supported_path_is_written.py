@@ -253,6 +253,25 @@ def tunnel(at):
     return _tree(at, interfaces=[_routed(at, "Tunnel0", tunnel_type="gre", interface_type="ianaift:tunnel")])
 
 
+@_probe(f"{_I}/tunnel-source-address", f"{_I}/tunnel-destination")
+def tunnel_ends(at):
+    return _tree(at, interfaces=[_routed(
+        at, "Tunnel0", tunnel_type="gre", interface_type="ianaift:tunnel",
+        tunnel_source_address="192.0.2.1", tunnel_destination="198.51.100.7",
+    )])
+
+
+@_probe(f"{_I}/tunnel-source-interface")
+def tunnel_source_interface(at):
+    """A tunnel that leaves from the routed interface of the probe."""
+    source = _routed(at)
+    return _tree(at, interfaces=[source, _routed(
+        at, "Tunnel0", tunnel_type="gre", interface_type="ianaift:tunnel",
+        ipv4_addresses=[_a4("10.9.0.1", 30)],
+        tunnel_source_interface=source.name, tunnel_destination="198.51.100.7",
+    )])
+
+
 @_probe(f"{_I}/switchport-mode", f"{_I}/access-vlan", "/vlans/vlan/untagged-ports")
 def access(at):
     return _tree(at, interfaces=[_port(switchport_mode="access", access_vlan=10)],

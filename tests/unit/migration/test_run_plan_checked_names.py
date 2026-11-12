@@ -1871,8 +1871,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # 0 beside port 1 of the same module is two ports on one name
     # (+4).  The old IOS router's `Ethernet0`, left as the source has
     # it, had shared its name onto EOS with a port written `Ethernet0`,
-    # and is now only left (-1 several, +1 left).
-    "cisco_iosxe_cli": (12, 0, 0, 1, 4, 18),
+    # and is now only left (-1 several, +1 left).  And from (12, 0, 0,
+    # 1, 4, 18): a tunnel's two ends are read, and only IOS-XE writes
+    # them, so the batfish interface capture onto EOS (-1 left) and the
+    # umbrella capture onto EOS, FortiOS and RouterOS (-3 several) are
+    # `partial` for the tunnel paths before any name is checked.
+    "cisco_iosxe_cli": (12, 0, 0, 1, 3, 15),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     # And onto RouterOS a sub-interface is a VLAN interface on its
@@ -2035,8 +2039,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [86, 0, 72, 5, 63, 52]
-        assert sum(by_reason) == 278
+        assert by_reason == [86, 0, 72, 5, 62, 49]
+        assert sum(by_reason) == 274
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

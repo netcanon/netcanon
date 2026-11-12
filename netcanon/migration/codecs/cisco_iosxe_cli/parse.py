@@ -79,6 +79,7 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
+    a_few_named,
     a_tag,
     address_key,
     ip_mtu_read,
@@ -163,6 +164,19 @@ _IPV6_ADDRESS_AUTOCONFIG_RE = re.compile(
 # an ``interface Tunnel<N>`` stanza.
 _TUNNEL_MODE_RE = re.compile(
     r"^\s+tunnel\s+mode\s+(gre|ipip|ipsec|vxlan|ipv6ip)\b",
+    re.IGNORECASE,
+)
+# A tunnel's two ends.  Cisco's Interface and Hardware Component Command
+# Reference: ``tunnel source {ip-address | ipv6-address | interface-type
+# interface-number | dynamic}`` and ``tunnel destination {host-name |
+# ip-address | ipv6-address | dynamic}``.  The type and number of an
+# interface may be written apart, so a second word is taken here and
+# :func:`_read_tunnel_end` decides what the words are.  White space that
+# is not a newline, as the readers of this parser take for indentation
+# (a no-break space included).
+_TUNNEL_END_RE = re.compile(
+    r"^[^\S\n]+tunnel[^\S\n]+(source|destination)[^\S\n]+(\S+)"
+    r"(?:[^\S\n]+(\S+))?[^\S\n]*$",
     re.IGNORECASE,
 )
 
@@ -943,10 +957,13 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # Interfaces.  An HSRP statement the tree does not hold is said, a
     # row for each kind (``standby timers``, ``standby track``, ...).
+    # So is a tunnel's end that is not read.
     standby_unread = Unread("standby")
-    intent.interfaces = _parse_interfaces(raw, standby_unread)
+    unread_ends: dict[str, list[str]] = {}
+    intent.interfaces = _parse_interfaces(raw, standby_unread, unread_ends)
     intent.dropped_tier3_sections.extend(_one_native_per_port(intent.interfaces))
     intent.dropped_tier3_sections.extend(standby_unread.rows())
+    intent.dropped_tier3_sections.extend(_unread_end_rows(unread_ends))
 
     # VLANs (top-level `vlan N / name X` stanzas)
     intent.vlans = _parse_vlans(raw)
@@ -1279,7 +1296,9 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
 
 
 def _parse_interfaces(  # noqa: C901
-    raw: str, standby_unread: Unread | None = None,
+    raw: str,
+    standby_unread: Unread | None = None,
+    unread_ends: dict[str, list[str]] | None = None,
 ) -> list[CanonicalInterface]:
     """Extract interface stanzas from IOS config text.
 
@@ -1287,7 +1306,13 @@ def _parse_interfaces(  # noqa: C901
         raw: The config text.
         standby_unread: Given what each interface's ``standby`` lines
             did not read, for the rows the caller makes of it.
+        unread_ends: Given, by statement (``tunnel source dynamic``,
+            ``tunnel destination``), the interfaces whose tunnel states
+            an end that is not read, for the rows the caller makes of
+            it (:func:`_unread_end_rows`).
     """
+    if unread_ends is None:
+        unread_ends = {}
     # What each interface states about its trunk, by the name its
     # header writes: a stanza can be met twice, and the list is the
     # interface's.  So is its native VLAN, and the words that say a
@@ -1337,6 +1362,10 @@ def _parse_interfaces(  # noqa: C901
             "dhcp_client": False,
             "dhcp_client_v6": "",
             "tunnel_type": "",
+            # A tunnel's two ends (``_read_tunnel_end``).
+            "tunnel_source_address": "",
+            "tunnel_source_interface": "",
+            "tunnel_destination": "",
             # VRRP groups: dict keyed by group_id so multiple sub-
             # commands on the same VRID converge on the same scratch
             # record.  Materialised into list[CanonicalVRRPGroup] at
@@ -1466,17 +1495,7 @@ def _parse_interfaces(  # noqa: C901
             current["dhcp_client_v6"] = "slaac"
             return
 
-        # Tunnel-mode discriminator.  ``tunnel mode <encap>`` only
-        # appears inside an ``interface Tunnel<N>`` stanza; the
-        # canonical field is ignored on non-tunnel interfaces.
-        tmm = _TUNNEL_MODE_RE.match(line)
-        if tmm:
-            mode = tmm.group(1).lower()
-            # Map IOS-XE keywords to canonical tunnel_type values.
-            # ``ipv6ip`` (IPv6-over-IPv4) collapses to "ipip" — the
-            # canonical model doesn't separately track address-family
-            # for tunnel encap.
-            current["tunnel_type"] = "ipip" if mode == "ipv6ip" else mode
+        if _tunnel_line(line, current, unread_ends):
             return
 
         v6m = _IPV6_RE.match(line)
@@ -1618,6 +1637,102 @@ def _parse_interfaces(  # noqa: C901
     # another mode is given none, whatever trunk lines it keeps.
     trunks.settle()
     return interfaces
+
+
+def _tunnel_line(
+    line: str, current: dict[str, Any], unread_ends: dict[str, list[str]],
+) -> bool:
+    """Read a ``tunnel mode`` line, or a ``tunnel source`` or
+    ``tunnel destination`` line (:func:`_read_tunnel_end`), into the
+    stanza's scratch.
+
+    ``tunnel mode <encap>`` only appears inside an ``interface
+    Tunnel<N>`` stanza; the canonical field is ignored on non-tunnel
+    interfaces.
+
+    Returns:
+        Whether the line was one of them.
+    """
+    tmm = _TUNNEL_MODE_RE.match(line)
+    if tmm:
+        mode = tmm.group(1).lower()
+        # Map IOS-XE keywords to canonical tunnel_type values.
+        # ``ipv6ip`` (IPv6-over-IPv4) collapses to "ipip" — the
+        # canonical model doesn't separately track address-family
+        # for tunnel encap.
+        current["tunnel_type"] = "ipip" if mode == "ipv6ip" else mode
+        return True
+    tem = _TUNNEL_END_RE.match(line)
+    if tem:
+        _read_tunnel_end(current, tem.group(1), tem.group(2), tem.group(3), unread_ends)
+        return True
+    return False
+
+
+def _read_tunnel_end(
+    current: dict[str, Any],
+    end: str,
+    first: str,
+    second: str | None,
+    unread_ends: dict[str, list[str]],
+) -> None:
+    """Read a ``tunnel source`` or ``tunnel destination`` line into
+    the stanza's scratch.
+
+    A source is an address or an interface, and a destination an
+    address or a host name; each goes to its own field.  ``dynamic``
+    says the address is applied dynamically, which the tree has no
+    form for: it is no address and no interface.  An interface may be
+    its type and number written apart (``Loopback 0``,
+    :func:`spaced_port_name`); two words that are not one name, or a
+    destination of two words, are no form of the statement this
+    parser reads.  What is not read is said (*unread_ends*), never
+    left out in silence.  A later line of the same end replaces an
+    earlier one, as on the device.
+
+    Args:
+        current: The stanza's scratch.
+        end: ``source`` or ``destination``, as written.
+        first: The first word after it.
+        second: The word after that, or ``None``.
+        unread_ends: Interface names by statement, for the rows.
+    """
+    end = end.lower()
+    if first.lower() == "dynamic" and second is None:
+        unread_ends.setdefault(f"tunnel {end} dynamic", []).append(current["name"])
+        return
+    if end == "destination":
+        if second is None:
+            current["tunnel_destination"] = first
+            return
+    elif second is None and _is_an_address(first):
+        current["tunnel_source_address"] = first
+        current["tunnel_source_interface"] = ""
+        return
+    else:
+        name = spaced_port_name(first, second)
+        if second is None or name != first:
+            current["tunnel_source_interface"] = name
+            current["tunnel_source_address"] = ""
+            return
+    unread_ends.setdefault(f"tunnel {end}", []).append(current["name"])
+
+
+def _unread_end_rows(unread_ends: dict[str, list[str]]) -> list[str]:
+    """One row of ``dropped_tier3_sections`` for each form of a
+    tunnel's end that is not read: the statement, a few of the
+    interfaces that state it and how many more, and what is not
+    translated.  The words of the line are not quoted."""
+    return [
+        f"{statement}: {a_few_named(list(dict.fromkeys(names)))} -- "
+        + (
+            "the tree has no form for an end applied dynamically"
+            if statement.endswith(" dynamic")
+            else "a form of the line this parser does not read"
+        )
+        + ", so the tunnel is translated without it"
+        for statement, names in unread_ends.items()
+    ]
 
 
 def _fhrp_line(line: str, current: dict[str, Any]) -> bool:
@@ -1869,6 +1984,9 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         dhcp_client=raw.get("dhcp_client", False),
         dhcp_client_v6=raw.get("dhcp_client_v6", ""),
         tunnel_type=raw.get("tunnel_type", ""),
+        tunnel_source_address=raw.get("tunnel_source_address", ""),
+        tunnel_source_interface=raw.get("tunnel_source_interface", ""),
+        tunnel_destination=raw.get("tunnel_destination", ""),
         vrrp_groups=vrrp_groups,
     )
 

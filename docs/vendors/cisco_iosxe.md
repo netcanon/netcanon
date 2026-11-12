@@ -75,6 +75,14 @@ vendors (or vice versa), use `cisco_iosxe_cli`.
   `hostname` options are not read) — ⚠️ written and not read up to
   0.7.7, so an IOS-XE interface that takes its address by DHCP was an
   interface with no address on every target.
+- A tunnel's two ends: `tunnel source` (an address, or an interface,
+  its type and number together or apart) and `tunnel destination` (an
+  address or a host name) -- ⚠️ not read up to 0.7.7, so a tunnel was
+  written with no ends, onto IOS-XE itself as well.  Only
+  `cisco_iosxe_cli` writes them: onto any other target the three paths
+  are listed unsupported and the job is `partial`.  `tunnel source
+  dynamic` (or `destination`) is not read, and is a row of the sections
+  not translated.
 - VLANs — ID, name, tagged/untagged port lists, SVI L3 (via
   VLAN-centric projection from the `switchport` per-interface form)
 - Static routes

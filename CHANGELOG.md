@@ -1365,6 +1365,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A tunnel's two ends are read and written on IOS-XE, and said
+  everywhere else.**  No parser read `tunnel source` or `tunnel
+  destination`, so an IOS-XE tunnel was written with no ends onto
+  every target, IOS-XE itself included, in jobs that said
+  `completed`.  The tree holds the ends in three fields
+  (`tunnel_source_address`, `tunnel_source_interface`,
+  `tunnel_destination`).  The IOS-XE CLI parser reads Cisco's forms
+  (`tunnel source {ip-address | ipv6-address | interface-type
+  interface-number}`, the type and number together or apart, and
+  `tunnel destination {host-name | ip-address | ipv6-address}`), and
+  its renderer writes them back.  `dynamic`, which the tree has no
+  form for, and a line of a form the parser does not read are each a
+  row of the sections not translated, naming the tunnels.  Every other
+  public codec declares the three paths unsupported, so a job onto it
+  whose source states an end is `partial` and lists them, where it
+  does not drop the tunnel itself.  The source interface is a port
+  name: the port translator moves it with its port, and a drop of that
+  port clears it and says so (`lost_tunnel_sources`, on the plan and
+  in the job's warnings).  The sanitiser redacts a public source
+  address and destination, and a host-name destination to
+  `host-N.example.test`.  Guarded by
+  `tests/unit/migration/codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py`.
 - **An AOS-CX output states each sub-interface's tag, and gives the
   port it rides on no address of its own.**  The parser read
   `encapsulation dot1q <VLAN-ID>` under an AOS-CX sub-interface
@@ -6519,6 +6541,9 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A tunnel's ends are carried between IOS-XE CLI configs only.**
+  No other parser reads a tunnel end, and no other renderer writes
+  one: onto any other target the three paths are listed unsupported.
 - **A LAG's hashing is not carried, and an OPNsense `none` lagg is a
   static aggregate.**  A LAG is translated as what its peer must be
   (LACP, a static aggregate, or nothing), not as how it spreads
