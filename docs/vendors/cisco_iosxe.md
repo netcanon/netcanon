@@ -100,8 +100,9 @@ translatable with caveats:
 - DHCP server pools (network, range, the interface that serves the
   pool, default router, DNS servers, domain name and lease; not an
   option or a manual binding -- see "Lossy paths")
-- Local users with hashed passwords — `$5$` / `$6$` / `$8$` / `$9$`
-  form-preserving cross-vendor migration
+- Local users, where the target takes the secret's form (see
+  "Hash portability" under "Common gotchas"); a `nopassword`
+  account is a review line on every target
 
 ## L3 redundancy: VRRP + SD-Access anycast-gateway
 
@@ -847,11 +848,20 @@ translate it again from `show running-config` as the device prints it.
   is reported as off-inventory too, and a VRRP `track <object
   number>` is read as a port name.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
-- **Type-7 hashes** are Cisco-proprietary and **migration-blocked**
-  when targeting non-Cisco vendors — Netcanon emits a review-comment
-  in the rendered output rather than translating to plaintext.
-  Type-9 hashes round-trip cleanly within Cisco; type-5/6 hashes
-  translate via the cross-vendor crypt-form mapping.
+- **Hash portability.**  A local user keeps its secret where the
+  target takes that form, and is otherwise left out under a
+  `review:` line in the output (the job still says `completed`):
+  type 5 (`$1$`) onto EOS, NX-OS, IOS-XR, Junos and VyOS; type 7, 8
+  and 9 onto IOS-XR (and back onto IOS-XE); a typed password
+  (`password 0`) onto every target that takes one.  IOS-XE takes no
+  `$5$` or `$6$` hash from another platform.  A type 6 password (AES
+  under the device's master key) and a type 4 secret are left out on
+  every target, IOS-XE included: up to 0.7.7 a type 6 value was
+  taken for a typed password, and onto VyOS, FortiOS, RouterOS and
+  AOS-S the ciphertext was written as the account's password.  Look
+  for such an account in an old output.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) "Hash-portability
+  policy".
 - **Backup-side**: `cisco_more_paging: true` in the device-definition
   YAML — see [`../../netcanon/definitions/library/cisco/`](../../netcanon/definitions/library/cisco/)
   for the canonical examples.

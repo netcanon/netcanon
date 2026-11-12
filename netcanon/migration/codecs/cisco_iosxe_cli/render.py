@@ -1230,7 +1230,11 @@ def _split_cisco_hash(hashed: str) -> tuple[str, str]:
         map to their corresponding type digit.
       * ``$1$...`` raw — md5crypt → emit ``5 $1$...``
       * ``$8$...`` / ``$9$...`` raw — emit ``8 ..`` / ``9 ..``
-      * Anything else — treat as plaintext → ``secret 0 <literal>``.
+      * A typed password, tagged (``arista:plaintext:<pw>``) or not
+        → ``secret 0 <pw>``: the payload, never the tag.  It used to
+        be the whole string, so an EOS ``secret 0 <pw>`` reached
+        IOS-XE as ``secret 0 arista:plaintext:<pw>``, a password
+        nobody typed.
     """
     if not hashed:
         return ("0", "")
@@ -1238,6 +1242,8 @@ def _split_cisco_hash(hashed: str) -> tuple[str, str]:
     # ``9:$9$..``).  Use classify_hash for normalisation so we don't
     # duplicate parsing logic.
     algorithm, payload = classify_hash(hashed)
+    if algorithm == "plaintext":
+        return ("0", payload)
     if algorithm in {"5", "md5crypt"}:
         return ("5", payload or hashed)
     if algorithm == "7":

@@ -1026,7 +1026,8 @@ to the code's.
 `netcanon/services/migration_pipeline.py` (`run_plan`),
 `netcanon/tools/sanitize.py`, `netcanon/migration/codecs/_scanner.py`,
 `netcanon/migration/codecs/fortigate_cli/parse.py`,
-`netcanon/migration/_user_secrets.py` (`holds_no_secret`)
+`netcanon/migration/_user_secrets.py` (`holds_no_secret`,
+`classify_hash`)
 
 A translation writes the source config's text values -- descriptions,
 names, comments -- into the target's config, which an operator then
@@ -1102,6 +1103,18 @@ password or only printed none; the job has a warning for each.
 Guarded by `tests/unit/migration/test_an_account_with_no_password.py`,
 which reads every target's output for the account with a reader of
 the target's grammar of its own as well as with the target's parser.
+
+Nor is a secret written as a password unless the policy knows its
+form (`classify_hash`).  The Cisco parsers keep a secret's type
+number in front of it, and a type the policy did not know fell
+through to "a password as typed": an IOS-XE `password 6` -- AES
+under the source device's master key, which no config shows -- was
+written as the account's password onto VyOS, FortiOS, RouterOS and
+AOS-S, in a job that said `completed`.  Cisco types 4 and 6 are
+refused on every target, IOS-XE's own included, and any other type
+number is refused as unknown, as an unmodelled `$id$` crypt string
+is.  Guarded by `tests/unit/migration/test_secret_fail_open.py`,
+which reads every target's output for the ciphertext.
 
 ---
 

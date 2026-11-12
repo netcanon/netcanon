@@ -544,13 +544,18 @@ _CISCO_LAG_MODE_MAP = {
 #             it verbatim so the target codec can tell a plaintext
 #             default from a real hash.
 #   group 5 = hash payload itself
+#   group 6 = ``nopassword`` -- an account with no password (Cisco:
+#             "No password is required for this user to log in"),
+#             read as one that holds no secret, so that every target
+#             writes a review line in its place.  It used to match
+#             nothing, and the account was in no output and no job.
 # ``secret`` is preferred on IOS-XE (strong hashing); ``password`` is
 # legacy + reversible and should trigger a lossy-path warning on
 # render targets that refuse weak hashes.
 _LOCAL_USER_RE = re.compile(
     r"^username\s+(\S+)"
     r"(?:\s+privilege\s+(\d+))?"
-    r"\s+(secret|password)\s+(?:(\d+)\s+)?(\S.*)$",
+    r"\s+(?:(secret|password)\s+(?:(\d+)\s+)?(\S.*)|(nopassword)\s*)$",
     re.IGNORECASE,
 )
 
@@ -2526,6 +2531,11 @@ def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
 def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     """Extract ``username NAME privilege N secret|password ...`` lines.
 
+    ``username NAME [privilege N] nopassword`` is an account with no
+    secret, and is read as one (an empty ``hashed_password``): every
+    target writes a review line in its place
+    (:func:`netcanon.migration._user_secrets.holds_no_secret`).
+
     Cisco IOS privilege scale is 1-15 (15 = full admin).  We map that
     to CanonicalLocalUser.privilege_level verbatim and set the
     canonical ``role`` to ``admin`` for privilege 15, ``operator`` for
@@ -2557,7 +2567,8 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
         # path always normalises to "secret" (IOS-XE-preferred form) on
         # re-emit, so the canonical model does not distinguish them.
         hash_type = m.group(4) or ""
-        hash_payload = m.group(5).strip()
+        # ``nopassword``: no secret at all (group 5 is then empty).
+        hash_payload = (m.group(5) or "").strip()
         # Preserve the type digit as part of the opaque hash so the
         # target codec's render can reconstruct if needed.  Type 0
         # ("password 0 X" / "secret 0 X") is Cisco's wire-explicit
