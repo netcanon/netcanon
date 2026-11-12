@@ -1365,6 +1365,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX LAG's sub-interface is a sub-interface, not a second
+  record of the LAG.**  HPE documents sub-interfaces of an L3 LAG
+  (`interface lag 1.201`).  The parser read that header as `lag 1`,
+  so the sub-interface was a second record of the LAG with the
+  sub-interface's address: onto EOS the address was on `interface
+  Port-Channel1`, and onto AOS-CX `interface lag 1` was written
+  twice, in jobs that said `completed`.  An AOS-CX output that has
+  one (`interface lag 1.10`, from an NX-OS or EOS LAG's unit) was
+  read back the same way.  It is read as sub-interface `lag 1.201`
+  with the tag its `encapsulation dot1q` states, and goes where its
+  LAG goes (`Port-Channel1.201`, `ae1` unit 201, `bond1` `vif 10`).
+  A split port's sub-interface (`1/1/1:1.201`), which HPE documents
+  too, is not read as one: the classifier does not read the split
+  port's name, and the job lists it and is `partial`.  Guarded by
+  `tests/unit/migration/test_an_aoscx_sub_interface_states_its_tag.py`.
 - **An AOS-CX sub-interface is the tag its `encapsulation dot1q`
   states.**  HPE documents routed sub-interfaces on AOS-CX:
   `interface 1/1/1.201` with `encapsulation dot1q 10` (one VLAN id,

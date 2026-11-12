@@ -11,6 +11,12 @@ FortiOS ``set vlanid 201``), in jobs that said ``completed`` with one
 warning each.  Onto AOS-CX itself the tag was lost the same way, and
 nothing said so.
 
+A LAG's sub-interface (``interface lag 1.201``, which HPE documents on
+an L3 LAG) is one as well.  Its header was read as ``lag 1``: the
+sub-interface was a second record of the LAG, its address on the LAG
+itself (``interface Port-Channel1`` with the address, on EOS), in jobs
+that said ``completed``.
+
 The source is HPE's example, typed by hand.  Each output is read as text
 by a reader of the test's own per target, since a target's parser can
 read a VLAN interface back where the output wrote a sub-interface
@@ -20,6 +26,8 @@ check is handed the defect it is for.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -76,17 +84,21 @@ def _job(target: str, text: str = SOURCE) -> MigrationJob:
     )
 
 
-def tree_problems(text: str = SOURCE) -> list[str]:
-    """What is wrong with the parse of *text*: the sub-interface's tag
-    is 10, and nothing else in the tree has a tag."""
+def tree_problems(text: str = SOURCE, unit: str = "1/1/1.201") -> list[str]:
+    """What is wrong with the parse of *text*: the sub-interface *unit*
+    has tag 10 and the address, and nothing else in the tree has a tag
+    or that address."""
     tree = get_codec("aruba_aoscx").parse(text)
     tags = {i.name: i.dot1q_vlan for i in tree.interfaces}
     problems = []
-    if tags.get("1/1/1.201") != 10:
-        problems.append(f"the sub-interface's tag is {tags.get('1/1/1.201')}")
-    others = {n: t for n, t in tags.items() if n != "1/1/1.201" and t is not None}
+    if tags.get(unit) != 10:
+        problems.append(f"the sub-interface's tag is {tags.get(unit)}")
+    others = {n: t for n, t in tags.items() if n != unit and t is not None}
     if others:
         problems.append(f"another interface has a tag: {others}")
+    holders = [i.name for i in tree.interfaces if any(a.ip == "198.51.100.1" for a in i.ipv4_addresses)]
+    if holders != [unit]:
+        problems.append(f"the sub-interface's address is on {holders}")
     return problems
 
 
@@ -146,9 +158,7 @@ def test_the_matrices_say_which() -> None:
     assert set(WRITES_THE_TAG) | HOLDS_THE_JOB | {"aruba_aoss"} == set(classes)
 
 
-#: Stanzas the tag is not read from: a port's own, and -- for now -- a
-#: LAG's sub-interface, whose header the header reader takes for the
-#: LAG's (``interface lag 1.10`` for ``lag 1``).
+#: Stanzas the tag is not read from: a port's own, and a LAG's own.
 NOT_A_SUB_INTERFACE = {
     "a port": (
         "interface 1/1/1\n    no shutdown\n    routing\n    encapsulation dot1q 10\n"
@@ -156,8 +166,7 @@ NOT_A_SUB_INTERFACE = {
         "1/1/1",
     ),
     "a LAG": (
-        "interface lag 1\n    no shutdown\n    routing\n"
-        "interface lag 1.10\n    encapsulation dot1q 10\n",
+        "interface lag 1\n    no shutdown\n    routing\n    encapsulation dot1q 10\n",
         "lag 1",
     ),
 }
@@ -187,6 +196,62 @@ def test_a_statement_not_read_whole_leaves_it_out(statement: str) -> None:
     ) in tree.dropped_tier3_sections
 
 
+# -- A LAG's sub-interface ------------------------------------------------
+
+#: HPE's example on an L3 LAG: sub-interface 201 of ``lag 1``, tag 10.
+LAG_SOURCE = (
+    "hostname sw1\n"
+    "interface lag 1\n    no shutdown\n    routing\n"
+    "interface lag 1.201\n    no shutdown\n    encapsulation dot1q 10\n"
+    "    ip address 198.51.100.1/24\n"
+    "interface 1/1/1\n    no shutdown\n    lag 1\n"
+    "interface 1/1/2\n    no shutdown\n    routing\n    ip address 192.0.2.1/24\n"
+)
+
+
+def lag_problems(text: str = LAG_SOURCE) -> list[str]:
+    """What is wrong with the LAGs the parse of *text* holds: one,
+    ``lag 1``, with its member -- the sub-interface is none."""
+    tree = get_codec("aruba_aoscx").parse(text)
+    lags = [(lag.name, lag.members) for lag in tree.lags]
+    return [] if lags == [("lag 1", ["1/1/1"])] else [f"the LAGs are {lags}"]
+
+
+def test_a_lags_sub_interface_is_one() -> None:
+    assert tree_problems(LAG_SOURCE, "lag 1.201") == []
+    assert lag_problems() == []
+    names = [i.name for i in get_codec("aruba_aoscx").parse(LAG_SOURCE).interfaces]
+    assert names.count("lag 1") == 1
+
+
+@pytest.mark.parametrize("target", sorted(WRITES_THE_TAG))
+def test_each_target_writes_a_lag_units_tag(target: str) -> None:
+    assert output_problems(target, _job(target, LAG_SOURCE)) == []
+
+
+@pytest.mark.parametrize("target", sorted(HOLDS_THE_JOB))
+def test_a_lags_unit_holds_a_target_with_no_form(target: str) -> None:
+    job = _job(target, LAG_SOURCE)
+    assert job.status == MigrationJobStatus.partial
+    assert TAG in [u.path for u in job.validation.unsupported_paths]
+
+
+def test_a_split_ports_sub_interface_is_said() -> None:
+    """HPE documents a sub-interface of a split child of a port too
+    (``1/1/1:1.201``).  The classifier does not read the split child's
+    name, so its tag is not read onto it, and the name is left to the
+    port translator: the job lists it, and is ``partial``."""
+    text = (
+        "hostname sw1\n"
+        "interface 1/1/1:1\n    no shutdown\n    routing\n"
+        "interface 1/1/1:1.201\n    no shutdown\n    encapsulation dot1q 10\n"
+        "    ip address 198.51.100.1/24\n"
+    )
+    job = _job("arista_eos", text)
+    assert job.status == MigrationJobStatus.partial
+    assert "1/1/1:1.201" in job.untranslated_ports
+
+
 # -- Each check is handed the defect it is for ---------------------------
 
 
@@ -203,6 +268,33 @@ def test_the_tree_check_sees_a_port_given_the_tag(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(aoscx_parse, "_is_a_sub_interface", lambda _name: True)
     text, _name = NOT_A_SUB_INTERFACE["a port"]
     assert tree_problems(SOURCE + text.replace("1/1/1", "1/1/3")) != []
+
+
+def test_the_checks_see_the_header_read_as_the_lags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the header read as before (``interface lag 1.201`` as
+    ``lag 1``), the sub-interface is a second record of the LAG with
+    its address: the tree check fails, and the output checks."""
+    monkeypatch.setattr(
+        aoscx_parse, "_IFACE_RE",
+        re.compile(r"^interface\s+(\S+)(?:\s+(\d+))?\b", re.IGNORECASE),
+    )
+    assert tree_problems(LAG_SOURCE, "lag 1.201") != []
+    for target in sorted(WRITES_THE_TAG):
+        assert output_problems(target, _job(target, LAG_SOURCE)) != [], target
+
+
+def test_the_tree_check_sees_a_lags_unit_with_no_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With only a port's sub-interface read as one."""
+    real = aoscx_parse._is_a_sub_interface
+    monkeypatch.setattr(
+        aoscx_parse, "_is_a_sub_interface", lambda name: real(name) and not name.startswith("lag"),
+    )
+    assert tree_problems(LAG_SOURCE, "lag 1.201") != []
+
+
+def test_the_lag_check_sees_the_unit_taken_for_a_lag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(aoscx_parse, "_A_LAG_NAME_RE", re.compile(r"lag\s+\S+", re.IGNORECASE))
+    assert lag_problems() != []
 
 
 def test_the_output_check_sees_the_number_as_the_tag() -> None:
