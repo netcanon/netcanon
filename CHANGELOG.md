@@ -1378,8 +1378,9 @@ timestamp if your timezone matters for an audit.
   IOS-XE, IOS XR, EOS and Junos parsers do: a statement that is not
   one VLAN id (`0`, `4095`, `10 20`) leaves its sub-interface out,
   with a row that says the statement.  A LAG's sub-interface
-  (`interface lag 1.10`), a form HPE does not document, is not read
-  as one.  The renderer writes no tag yet, so a job onto AOS-CX --
+  (`interface lag 1.201`, which HPE documents on an L3 LAG) is not
+  read as one yet: the parser reads its header as `lag 1`.  The
+  renderer writes no tag yet, so a job onto AOS-CX --
   from AOS-CX itself as from another vendor -- lists
   `/interfaces/interface/dot1q-vlan` and is `partial`.  Guarded by
   `tests/unit/migration/test_an_aoscx_sub_interface_states_its_tag.py`,

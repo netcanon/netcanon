@@ -146,9 +146,9 @@ def test_the_matrices_say_which() -> None:
     assert set(WRITES_THE_TAG) | HOLDS_THE_JOB | {"aruba_aoss"} == set(classes)
 
 
-#: Stanzas the tag is not read from: a port's own, and a LAG's, whose
-#: sub-interface HPE does not document (the header reader takes
-#: ``interface lag 1.10`` for ``lag 1``).
+#: Stanzas the tag is not read from: a port's own, and -- for now -- a
+#: LAG's sub-interface, whose header the header reader takes for the
+#: LAG's (``interface lag 1.10`` for ``lag 1``).
 NOT_A_SUB_INTERFACE = {
     "a port": (
         "interface 1/1/1\n    no shutdown\n    routing\n    encapsulation dot1q 10\n"

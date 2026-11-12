@@ -733,10 +733,10 @@ def _is_a_sub_interface(name: str) -> bool:
     the part before the dot a name the classifier reads as a port
     (``1/1/1.201``).
 
-    HPE documents a sub-interface of a port.  A LAG's
-    (``interface lag 1.10``) is not established: the header reader
-    takes that line for ``lag 1``, and a tag statement there is not
-    read onto the LAG.
+    A LAG's (``interface lag 1.201``, which HPE documents on an L3
+    LAG) is not read as one yet: the header reader takes that line
+    for ``lag 1``, and a tag statement there is not read onto the
+    LAG.
     """
     port, dot, unit = name.rpartition(".")
     return (

@@ -443,9 +443,10 @@ translate it again from `show running-config` as the switch prints it.
   output has `interface 1/1/1.201` with its address and no
   `encapsulation dot1q`, and the job is `partial`, its validation
   listing `/interfaces/interface/dot1q-vlan`.  Set the tag on the
-  target by hand.  A LAG's sub-interface (`interface lag 1.10`) is a
-  form HPE does not document: the parser reads its header as
-  `lag 1`, and its tag is not read.
+  target by hand.  A LAG's sub-interface (`interface lag 1.201`,
+  which HPE documents on an L3 LAG) is not read as one yet: the
+  parser reads its header as `lag 1`, so its lines are read onto the
+  LAG, and its tag is not read.
 - **A port under a name AOS-CX cannot read gets no VLAN line.**  As
   a target, AOS-CX writes a port's `vlan access` / `vlan trunk`
   lines only where the port's name reads as a port or a LAG
