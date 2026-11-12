@@ -1577,9 +1577,8 @@ class TestAUnitWithNoTag:
         reports it: no warning, no validation line, no status.
         Known, and pinned as it is so that the documents which say
         so stay true; a parser that learns to read the tag has to
-        come and take this away.  (The AOS-CX parser has: its
-        renderer writes no tag yet, and a job from AOS-CX to itself
-        lists the tag as a drop --
+        come and take this away.  (The AOS-CX parser has, and its
+        renderer writes the tag --
         ``test_an_aoscx_sub_interface_states_its_tag.py``.)"""
         codec = get_codec(codec_name)
         assert "encapsulation dot1q 300" in text

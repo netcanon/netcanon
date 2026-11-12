@@ -29,7 +29,14 @@ classifies the (actual, expected) tuple into one of:
                               anycast path unsupported — the matrix is the
                               source of truth; the per-pair YAML can't say
                               "good EXCEPT the anycast sub-attribute".  See
-                              :func:`_target_anycast_declaration`.
+                              :func:`_target_anycast_declaration`.  And
+                              when every address the drift is in is that
+                              of an interface another is a sub-interface
+                              of, dropped whole, onto a target whose
+                              matrix declares
+                              ``/interfaces/interface/address-beside-sub-interfaces``
+                              unsupported (or ``EXPECTED_LOSSY``, lossy):
+                              :func:`_drift_is_on_sub_interface_ports`.
 * ``METHODOLOGY_ISSUE_under``— preserved against {lossy/unsupported/N-A}
                               expectation (codec doing more than docs claim,
                               OR Phase 1 false-positive: source had no
@@ -544,6 +551,31 @@ _ANYCAST_ADDR_ATTRS: tuple[str, ...] = (
 
 
 @cache
+def _target_path_declaration(target_codec: str, path: str) -> str | None:
+    """Return ``"unsupported"`` / ``"lossy"`` if *target_codec*'s capability
+    matrix declares *path* at that level, else ``None`` (the codec does not
+    declare it so, or its matrix can't be loaded).
+
+    Reads the live codec ``_CAPS``.  The import is lazy + cached so the
+    reconciler stays importable and the importlib-loaded building-block
+    unit tests don't pay the codec-registry import unless a cell asks.
+    """
+    try:
+        from netcanon.migration.codecs.registry import get_codec
+
+        caps = get_codec(target_codec).capabilities
+    except Exception:
+        return None
+    if path in {
+        getattr(u, "path", None) for u in getattr(caps, "unsupported", [])
+    }:
+        return "unsupported"
+    if path in {getattr(lo, "path", None) for lo in getattr(caps, "lossy", [])}:
+        return "lossy"
+    return None
+
+
+@cache
 def _target_anycast_declaration(target_codec: str, family: str) -> str | None:
     """Return ``"unsupported"`` / ``"lossy"`` if *target_codec*'s capability
     matrix declares the per-family anycast-gateway virtual-address path
@@ -563,20 +595,10 @@ def _target_anycast_declaration(target_codec: str, family: str) -> str | None:
     importlib-loaded building-block unit tests don't pay the codec-registry
     import unless a real anycast cell exercises it.
     """
-    path = f"/interfaces/interface/{family}/address/virtual-gateway-address"
-    try:
-        from netcanon.migration.codecs.registry import get_codec
-
-        caps = get_codec(target_codec).capabilities
-    except Exception:
-        return None
-    if path in {
-        getattr(u, "path", None) for u in getattr(caps, "unsupported", [])
-    }:
-        return "unsupported"
-    if path in {getattr(lo, "path", None) for lo in getattr(caps, "lossy", [])}:
-        return "lossy"
-    return None
+    return _target_path_declaration(
+        target_codec,
+        f"/interfaces/interface/{family}/address/virtual-gateway-address",
+    )
 
 
 def _addr_list_without_anycast(addr_list: Any) -> list[Any] | None:
@@ -622,6 +644,56 @@ def _drift_is_anycast_companion_only(drift_detail: dict[str, Any]) -> bool:
             return False
         expected = _addr_list_without_anycast(slice_.get("source"))
         if expected is None or expected != slice_.get("target"):
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Capability-aware reclassification — an address beside sub-interfaces
+# ---------------------------------------------------------------------------
+#
+# A target that gives an interface with sub-interfaces no address of its own
+# (AOS-CX, by HPE's guide) writes none: the output gives the address in a
+# review line, and the job is partial, its validation listing the path below.
+# The per-pair YAML says ``good`` for ``interfaces[].ipv4_addresses`` on such
+# a pair and cannot say "good EXCEPT on a port that has sub-interfaces", so
+# the matrix is read here, as for anycast.  Which interfaces those are is the
+# mesh's record of the SOURCE tree (the cell's ``sub_interface_ports``), made
+# by the one rule the walker and the renderer read
+# (``ports_with_sub_interfaces`` in ``canonical/transforms.py``).
+_ADDRESS_BESIDE_SUB_INTERFACES = (
+    "/interfaces/interface/address-beside-sub-interfaces"
+)
+
+
+def _drift_is_on_sub_interface_ports(
+    drift_detail: dict[str, Any], ports: frozenset[str],
+) -> bool:
+    """True iff every per-record address drift in *drift_detail* is that of
+    an interface of *ports* whose every address the target dropped.
+
+    A record of another interface, a record the target kept any address
+    of, or a drift with no per-record slice makes this ``False``: an
+    address that changed, or one dropped from a port with no
+    sub-interfaces, is never masked.
+
+    Args:
+        drift_detail: The sub-field's drift detail.
+        ports: The source's interfaces that another is a sub-interface
+            of, by name.
+
+    Returns:
+        Whether the drift is confined to such addresses.
+    """
+    per_record = drift_detail.get("per_record")
+    if not isinstance(per_record, dict) or not per_record or not ports:
+        return False
+    for key, slice_ in per_record.items():
+        if not isinstance(slice_, dict):
+            return False
+        if _record_identity(key).get("name") not in ports:
+            return False
+        if not slice_.get("source") or slice_.get("target"):
             return False
     return True
 
@@ -1040,6 +1112,10 @@ def reconcile_cell(
         return out
 
     per_field = expectation.get("per_field_expectation") or {}
+    carriers = frozenset(
+        p for p in (cell.get("sub_interface_ports") or ())
+        if isinstance(p, str)
+    )
     field_variances: dict[str, Any] = {}
     counts: Counter[str] = Counter()
     severity_counts: Counter[str] = Counter()
@@ -1145,6 +1221,39 @@ def reconcile_cell(
                     f"drift confined to anycast-gateway companion "
                     f"(virtual_gateway_*); target {tgt!r} declares the "
                     f"anycast capability path {anycast_decl}"
+                )
+
+        # Capability-aware reclassification: an address beside
+        # sub-interfaces.  A CODEC_BUG on an interface address field whose
+        # every per-record drift is an interface another is a sub-interface
+        # of (the mesh's ``sub_interface_ports``), every address of it gone,
+        # is EXPECTED when the TARGET's matrix declares
+        # /interfaces/interface/address-beside-sub-interfaces unsupported /
+        # lossy.  A record of another interface, or one the target kept an
+        # address of, leaves the CODEC_BUG as it was.
+        if (
+            variance == VAR_CODEC_BUG
+            and yaml_field_key
+            in ("interfaces[].ipv4_addresses", "interfaces[].ipv6_addresses")
+            and isinstance(drift_detail, dict)
+            and _drift_is_on_sub_interface_ports(drift_detail, carriers)
+        ):
+            beside_decl = _target_path_declaration(
+                tgt, _ADDRESS_BESIDE_SUB_INTERFACES,
+            )
+            if beside_decl in ("unsupported", "lossy"):
+                variance = (
+                    VAR_EXPECTED_UNSUPPORTED
+                    if beside_decl == "unsupported"
+                    else VAR_EXPECTED_LOSSY
+                )
+                severity = "ok"
+                drift_detail = dict(drift_detail)
+                drift_detail["reclassified_from"] = VAR_CODEC_BUG
+                drift_detail["reclassified_reason"] = (
+                    f"drift confined to the addresses of interfaces another "
+                    f"is a sub-interface of; target {tgt!r} declares "
+                    f"{_ADDRESS_BESIDE_SUB_INTERFACES} {beside_decl}"
                 )
 
         record: dict[str, Any] = {

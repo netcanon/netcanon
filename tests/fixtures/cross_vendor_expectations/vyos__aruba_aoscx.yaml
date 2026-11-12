@@ -218,11 +218,17 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 56 of 56 records across the 9 cells that carry IPv4 — 21
-      addresses in, 21 out.  This is the field the migration most depends on
-      and it is clean.  Both matrices declare
+      Preserved on 55 of 56 records across the 9 cells that carry IPv4 — 21
+      addresses in, 20 out.  This is the field the migration most depends on
+      and, but for that record, it is clean.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
-      supported.
+      supported.  The record is `eth1` of the synthetic kitchen sink, which
+      has sub-interfaces (`eth1.100`, `eth1.200`): HPE gives such
+      an interface no address of its own, so the AOS-CX render writes the
+      address in a `! review:` line of its stanza instead, and the job is
+      `partial` (`/interfaces/interface/address-beside-sub-interfaces`,
+      declared unsupported).  The
+      reconciler reads that declaration, so the cell is not a codec bug.
       One caveat that belongs to `lags`, not here: the address that sits on
       `bond0` survives on an interface still called `bond0`, which after the
       round-trip is no longer the bundle.  The address is preserved; what it

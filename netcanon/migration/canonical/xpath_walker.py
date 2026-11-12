@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from .intent import CanonicalDHCPPool, CanonicalIntent
+from .transforms import ports_with_sub_interfaces
 
 
 def _walk_dhcp_pool(pool: CanonicalDHCPPool) -> Iterable[str]:
@@ -101,6 +102,7 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
         yield "/system/timezone"
     for _ in intent.syslog_servers:
         yield "/system/syslog-server"
+    carriers = ports_with_sub_interfaces(intent)
     for iface in intent.interfaces:
         yield "/interfaces/interface/name"
         if iface.description:
@@ -197,6 +199,10 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             yield "/interfaces/interface/dot1q-inner-vlan"
         if iface.dot1q_native:
             yield "/interfaces/interface/dot1q-native"
+        # An address of its own on a port or a LAG that has
+        # sub-interfaces, which AOS-CX does not take.
+        if iface.name in carriers and (iface.ipv4_addresses or iface.ipv6_addresses):
+            yield "/interfaces/interface/address-beside-sub-interfaces"
         if iface.trunk_allowed_vlans:
             yield "/interfaces/interface/trunk-allowed-vlans"
         if iface.trunk_native_vlan is not None:

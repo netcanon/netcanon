@@ -1144,6 +1144,109 @@ def test_drift_is_anycast_companion_only_predicate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Capability-aware reclassification: an address beside sub-interfaces
+#
+# AOS-CX gives an interface with sub-interfaces no address of its own (HPE),
+# and declares /interfaces/interface/address-beside-sub-interfaces
+# unsupported.  An address dropped whole from such an interface -- one the
+# mesh lists in the cell's ``sub_interface_ports`` -- is EXPECTED there, not
+# a CODEC_BUG.  Nothing else is.
+# ---------------------------------------------------------------------------
+
+
+def _carrier_cell(target_codec, name, source_addrs, target_addrs, ports):
+    """A reconcile_cell input with one interfaces[] record, *name*, whose
+    ipv4_addresses drifted from source_addrs to target_addrs; *ports* is
+    the mesh's ``sub_interface_ports`` (``None``: not recorded)."""
+    cell = _anycast_cell(target_codec, source_addrs, target_addrs)
+    drift = cell["field_disposition"]["interfaces"]["drift"]
+    (record,) = drift.values()
+    drift.clear()
+    drift[f"interfaces[0] {{'name': '{name}'}}"] = record
+    cell["source_codec"] = "cisco_iosxr"
+    if ports is not None:
+        cell["sub_interface_ports"] = ports
+    return cell
+
+
+def test_the_matrices_this_rests_on() -> None:
+    """AOS-CX declares the path unsupported, EOS does not declare it."""
+    path = recon._ADDRESS_BESIDE_SUB_INTERFACES
+    assert recon._target_path_declaration("aruba_aoscx", path) == "unsupported"
+    assert recon._target_path_declaration("arista_eos", path) is None
+
+
+def test_an_address_dropped_from_a_port_with_units_is_expected() -> None:
+    cell = _carrier_cell(
+        "aruba_aoscx", "Bundle-Ether1",
+        source_addrs=[_addr(ip="10.0.0.1")], target_addrs=[],
+        ports=["Bundle-Ether1"],
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_EXPECTED_UNSUPPORTED
+    assert fv["severity"] == "ok"
+    assert fv["drift_detail"]["reclassified_from"] == recon.VAR_CODEC_BUG
+    assert "address-beside-sub-interfaces" in (
+        fv["drift_detail"]["reclassified_reason"]
+    )
+    assert result["summary"][recon.VAR_CODEC_BUG] == 0
+
+
+@pytest.mark.parametrize(
+    ("target", "name", "kept", "ports"),
+    [
+        # The interface is not one another is a sub-interface of.
+        ("aruba_aoscx", "Bundle-Ether2", [], ["Bundle-Ether1"]),
+        # The mesh recorded no such interface.
+        ("aruba_aoscx", "Bundle-Ether1", [], None),
+        # The target kept an address of it: not the drop the matrix says.
+        ("aruba_aoscx", "Bundle-Ether1", [_addr(ip="10.0.0.1")], ["Bundle-Ether1"]),
+        # The target's matrix does not declare the path.
+        ("arista_eos", "Bundle-Ether1", [], ["Bundle-Ether1"]),
+    ],
+)
+def test_any_other_address_drift_stays_a_codec_bug(target, name, kept, ports) -> None:
+    cell = _carrier_cell(
+        target, name,
+        source_addrs=[_addr(ip="10.0.0.1"), _addr(ip="10.0.1.1", is_secondary=True)],
+        target_addrs=kept,
+        ports=ports,
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_CODEC_BUG
+    assert fv["severity"] == "high"
+
+
+def test_drift_is_on_sub_interface_ports_predicate() -> None:
+    ports = frozenset({"et1"})
+    one = {"source": [_addr(ip="10.0.0.1")], "target": []}
+    assert recon._drift_is_on_sub_interface_ports(
+        {"per_record": {"interfaces[0] {'name': 'et1'}": one}}, ports,
+    ) is True
+    # Any record off the list makes the whole drift a bug.
+    assert recon._drift_is_on_sub_interface_ports(
+        {"per_record": {
+            "interfaces[0] {'name': 'et1'}": one,
+            "interfaces[1] {'name': 'et2'}": one,
+        }}, ports,
+    ) is False
+    # A record with nothing on the source side is not a drop.
+    assert recon._drift_is_on_sub_interface_ports(
+        {"per_record": {"interfaces[0] {'name': 'et1'}": {
+            "source": [], "target": [_addr(ip="10.0.0.1")]}}}, ports,
+    ) is False
+    # Wholesale structural string, or no list at all.
+    assert recon._drift_is_on_sub_interface_ports(
+        {"drift_summary": "count drift: 6 -> 9"}, ports,
+    ) is False
+    assert recon._drift_is_on_sub_interface_ports(
+        {"per_record": {"interfaces[0] {'name': 'et1'}": one}}, frozenset(),
+    ) is False
+
+
+# ---------------------------------------------------------------------------
 # _slim_for_commit — the committed latest.json mirror carries full
 # aggregates + only the high-severity CODEC_BUG ("investigate first")
 # cells, eliding the lower-severity bulk (the regen-churn source) with a

@@ -191,9 +191,16 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells — the single largest surface that round-trips
+      Preserved on 11 of 12 cells — the single largest surface that round-trips
       cleanly on this pair.  Both sides declare
       `/interfaces/interface/ipv4/address/ip` + `prefix-length` supported.
+      On the twelfth, the synthetic kitchen sink, `GigabitEthernet0/0/0/1`
+      has sub-interfaces: HPE gives such
+      an interface no address of its own, so the AOS-CX render writes the
+      address in a `! review:` line of its stanza instead, and the job is
+      `partial` (`/interfaces/interface/address-beside-sub-interfaces`,
+      declared unsupported).  The reconciler
+      reads that declaration, so the cell is not a codec bug.
     references: [iosxr-aoscx-surface]
 
   "interfaces[].interface_type":

@@ -173,7 +173,7 @@ digits: a renderer that makes a number of the unit in a name
 (FortiOS, VyOS) is not handed one longer than that from another
 vendor's config by the orchestrator.  A codec whose vendor states the
 highest number a sub-interface takes says so in its class body
-(`largest_unit`; Junos, 16,384): across vendors a unit numbered above
+(`largest_unit`; Junos, 16,384; AOS-CX, 4,094): across vendors a unit numbered above
 it goes after its port named by its 802.1Q tag, and one with no tag
 is not sent after its port.  A codec that leaves it `None` is handed
 every number (`tests/unit/migration/test_a_unit_the_target_cannot_number.py`
@@ -888,6 +888,19 @@ the policy locally:
   after the first are marked `is_secondary`.
   `tests/unit/migration/test_a_vlan_records_address_is_written.py`
   reads each of the four outputs as text and with its parser.
+
+* **`netcanon/migration/canonical/transforms.py::ports_with_sub_interfaces`**
+  — the interfaces another is a sub-interface of by its name
+  (`Ethernet1` beside `Ethernet1.10`, `lag 1` beside `lag 1.201`).
+  One rule for the walker, which yields
+  `/interfaces/interface/address-beside-sub-interfaces` for such an
+  interface that has an address of its own, and for the `aruba_aoscx`
+  renderer, which writes no such address (HPE takes none there) and
+  gives it in a `! review:` line: read off the names alone, so that
+  the job and the output agree on any vendor's names.
+  `tests/unit/migration/test_an_aoscx_sub_interface_states_its_tag.py`
+  holds the two together, and makes the walker miss the path to see
+  the job check fail.
 
 * **`netcanon/migration/canonical/transforms.py::_natural_port_sort_key`**
   — natural-sort key for port-name strings (`1/1, 1/2, 1/10` rather

@@ -95,6 +95,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 # Side-effect imports register every codec with the registry.
 from netcanon.migration.canonical.intent import CanonicalIntent  # noqa: E402
+from netcanon.migration.canonical.transforms import (  # noqa: E402
+    ports_with_sub_interfaces,
+)
 from netcanon.migration.codecs import (  # noqa: E402, F401
     arista_eos,
     aruba_aoscx,
@@ -868,6 +871,13 @@ def process_cell(
         pristine_source, canonical_target, target_unsupported,
     )
     cell["field_disposition"] = field_disposition
+    # The source's interfaces that another is a sub-interface of by its
+    # name: the reconciler reads an address dropped from one of them
+    # against the target's matrix
+    # (/interfaces/interface/address-beside-sub-interfaces).
+    carriers = ports_with_sub_interfaces(pristine_source)
+    if carriers:
+        cell["sub_interface_ports"] = sorted(carriers)
     cell["summary"] = _summary_counts(field_disposition)
     cell["duration_ms"] = int((time.perf_counter() - t0) * 1000)
     return cell

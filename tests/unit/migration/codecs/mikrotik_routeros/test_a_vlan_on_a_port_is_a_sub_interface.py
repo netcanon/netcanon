@@ -76,7 +76,7 @@ add address=10.3.0.1/24 interface=ether3
 #: Targets that have no form for a sub-interface's tag (its
 #: ``/interfaces/interface/dot1q-vlan`` is unsupported there).  Typed
 #: by hand, and compared with what the jobs report.
-_NO_FORM_FOR_THE_TAG = {"aruba_aoscx", "cisco_iosxe", "dell_os10"}
+_NO_FORM_FOR_THE_TAG = {"cisco_iosxe", "dell_os10"}
 
 #: Targets that route on a VLAN and have no sub-interface: each is
 #: written as the VLAN of its tag, tagged on its port, and the job is
@@ -84,6 +84,14 @@ _NO_FORM_FOR_THE_TAG = {"aruba_aoscx", "cisco_iosxe", "dell_os10"}
 #: VLAN is the switch's, not the port's).  Typed by hand, and compared
 #: with what the jobs report.
 _A_VLAN_OF_ITS_TAG = {"aruba_aoss"}
+
+#: Targets that write each sub-interface with its tag and give the port
+#: it rides on no address of its own (HPE, for AOS-CX): the port's
+#: address is in a ``review:`` line, and the job is ``partial``
+#: (``/interfaces/interface/address-beside-sub-interfaces``).  The
+#: source gives such a port an address.  Typed by hand, and compared
+#: with what the jobs report.
+_NO_ADDRESS_BESIDE_ITS_UNITS = {"aruba_aoscx"}
 
 
 def _job(target: str, text: str = _ON_PORTS):
@@ -155,13 +163,17 @@ class TestOntoAnotherVendor:
         assert {"wan", "wan-isp"} <= set(job.untranslated_ports)
 
     def test_where_the_target_has_no_form_for_the_tag(self) -> None:
-        reported, a_vlan = set(), set()
+        reported, a_vlan, beside = set(), set(), set()
         for target in list_public_codecs():
             job = _job(target)
             paths = {u.path for u in job.validation.unsupported_paths}
             if "/interfaces/interface/dot1q-vlan" in paths:
                 reported.add(target)
                 assert job.status == MigrationJobStatus.partial, target
+            if "/interfaces/interface/address-beside-sub-interfaces" in paths:
+                beside.add(target)
+                assert job.status == MigrationJobStatus.partial, target
+                assert "! review: the source gives " in job.rendered, target
             if any(
                 p.path == "/interfaces/interface/dot1q-vlan" and p.severity == "error"
                 for p in job.validation.lossy_paths
@@ -170,11 +182,16 @@ class TestOntoAnotherVendor:
                 assert job.status == MigrationJobStatus.partial, target
         assert reported == _NO_FORM_FOR_THE_TAG
         assert a_vlan == _A_VLAN_OF_ITS_TAG
+        assert beside == _NO_ADDRESS_BESIDE_ITS_UNITS
 
     def test_every_other_target_says_completed(self) -> None:
         """Each was ``partial``: ``gn-mgmt`` was a name nobody
         decided, left as it was in another vendor's config."""
-        for target in set(list_public_codecs()) - _NO_FORM_FOR_THE_TAG - _A_VLAN_OF_ITS_TAG:
+        others = (
+            set(list_public_codecs()) - _NO_FORM_FOR_THE_TAG - _A_VLAN_OF_ITS_TAG
+            - _NO_ADDRESS_BESIDE_ITS_UNITS
+        )
+        for target in others:
             job = _job(target)
             assert job.status == MigrationJobStatus.completed, (target, job.error)
             assert job.untranslated_ports == [], target

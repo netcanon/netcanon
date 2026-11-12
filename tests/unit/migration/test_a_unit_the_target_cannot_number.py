@@ -149,7 +149,7 @@ def test_the_codecs_that_state_a_largest_unit() -> None:
         name: get_codec(name).largest_unit for name in list_public_codecs()
         if get_codec(name).largest_unit is not None
     }
-    assert stated == {_JUNOS: 16384}
+    assert stated == {_JUNOS: 16384, "aruba_aoscx": 4094}
 
 
 @pytest.mark.parametrize(
@@ -287,6 +287,34 @@ def test_an_entry_decides() -> None:
     )
     assert job.status == MigrationJobStatus.completed, job.error
     assert _units(job.rendered)[("ge-0/0/1", "300")][0] == "vlan-id 200"
+
+
+def _onto_aoscx(text: str):
+    return run_plan_with_checked_names(
+        get_codec("cisco_iosxe_cli"), get_codec("aruba_aoscx"), text, port_rename_map={},
+    )
+
+
+def test_onto_aoscx_the_bound_is_4094() -> None:
+    """HPE numbers an AOS-CX sub-interface 1 to 4094: unit 4094 keeps
+    its number, and 4095 goes by its tag, which the output states."""
+    job = _onto_aoscx(_iosxe(("4094", 10, "198.51.100.1"), ("4095", 11, "203.0.113.1")))
+    assert job.status == MigrationJobStatus.completed, job.error
+    assert {k: v for k, v in job.port_renames.items() if "." in k} == {
+        "GigabitEthernet0/0/1.4094": "1/1/1.4094",
+        "GigabitEthernet0/0/1.4095": "1/1/1.11",
+    }
+    lines = job.rendered.splitlines()
+    for header, tag in (("interface 1/1/1.4094", 10), ("interface 1/1/1.11", 11)):
+        at = lines.index(header)
+        assert f"    encapsulation dot1q {tag}" in lines[at + 1:at + 4], header
+
+
+def test_onto_aoscx_a_unit_above_the_bound_with_no_tag_holds_the_job() -> None:
+    job = _onto_aoscx(_iosxe(("5000", None, "198.51.100.1")))
+    assert job.status == MigrationJobStatus.partial
+    assert job.untranslated_ports == ["GigabitEthernet0/0/1.5000"]
+    assert "interface 1/1/1.5000" not in job.rendered.splitlines()
 
 
 def test_between_two_configs_of_one_codec_a_unit_keeps_its_number() -> None:

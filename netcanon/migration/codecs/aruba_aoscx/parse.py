@@ -738,21 +738,10 @@ def _on_tag_line(current: dict, line: str) -> bool:
 
 
 def _is_a_sub_interface(name: str) -> bool:
-    """Whether *name* is a sub-interface of a port or a LAG:
-    ``<parent>.<n>``, the part before the dot a name the classifier
-    reads as a port or a LAG (``1/1/1.201``, ``lag 1.201``).
-
-    HPE documents sub-interfaces of physical ports, of split children
-    of physical ports and of L3 LAGs.  A split child's
-    (``1/1/1:1.201``) is not read as one: the classifier does not read
-    the port's name, so the tag is not read onto it, and the name is
-    left to the port translator, which says so.
-    """
-    port, dot, unit = name.rpartition(".")
-    return (
-        bool(dot) and unit.isascii() and unit.isdigit()
-        and _port_names.classify_port_name(port).kind in ("physical", "lag")
-    )
+    """Whether *name* is a sub-interface of a port or a LAG
+    (:func:`.port_names.is_a_sub_interface`, which the renderer asks
+    too)."""
+    return _port_names.is_a_sub_interface(name)
 
 
 def _new_iface_scratch(name: str) -> dict:

@@ -229,6 +229,9 @@ class FortiGateCLICodec(CodecBase):
             # "port1"`), which the parser reads back as a
             # sub-interface of the port.
             "/interfaces/interface/dot1q-vlan",
+            # A port's own address beside its VLAN interfaces: `set ip`
+            # on the port, read back on the port.
+            "/interfaces/interface/address-beside-sub-interfaces",
             "/routing/static-route",
             "/routing/static-route/gateway",     # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/interface",   # run3 — `set device <iface>`

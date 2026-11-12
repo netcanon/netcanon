@@ -182,9 +182,12 @@ def _maximal_intent() -> CanonicalIntent:
             description="uplink-redundancy",
             track_interfaces=["Ethernet2"])],
     )
+    # An address of its own beside its sub-interface walks
+    # ``address-beside-sub-interfaces``.
     iface2 = CanonicalInterface(
         name="Ethernet2", enabled=True,
         interface_type="ianaift:ethernetCsmacd",
+        ipv4_addresses=[CanonicalIPv4Address(ip="10.0.2.1", prefix_length=24)],
     )
     # The sub-interface that takes its port's untagged frames walks
     # ``dot1q-native`` (one tag; Ethernet1's Q-in-Q unit cannot say it).

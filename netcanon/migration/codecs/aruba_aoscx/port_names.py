@@ -101,6 +101,25 @@ def classify_port_name(name: str) -> PortIdentity:
     return PortIdentity(kind="unknown", original=name)
 
 
+def is_a_sub_interface(name: str) -> bool:
+    """Whether *name* is a sub-interface of a port or a LAG:
+    ``<parent>.<n>``, the part before the dot a name the classifier
+    reads as a port or a LAG (``1/1/1.201``, ``lag 1.201``).
+
+    HPE documents sub-interfaces of physical ports, of split children
+    of physical ports and of L3 LAGs.  A split child's
+    (``1/1/1:1.201``) is not read as one: the classifier does not read
+    the port's name, so the tag is not read onto it, and the name is
+    left to the port translator, which says so.  The parser reads a
+    tag, and the renderer writes one, under such a name only.
+    """
+    port, dot, unit = name.rpartition(".")
+    return (
+        bool(dot) and unit.isascii() and unit.isdigit()
+        and classify_port_name(port).kind in ("physical", "lag")
+    )
+
+
 def format_port_identity(identity: PortIdentity) -> str | None:
     """Render a :class:`PortIdentity` as an Aruba AOS-CX port name.
 

@@ -229,6 +229,13 @@ def dot1q(at):
         _port("Ethernet2"), _routed(at, "Ethernet2.100", dot1q_vlan=100, interface_type="")])
 
 
+@_probe(f"{_I}/address-beside-sub-interfaces")
+def address_beside_units(at):
+    return _tree(at, interfaces=[
+        _port("Ethernet2", ipv4_addresses=[_a4("10.7.9.1")]),
+        _routed(at, "Ethernet2.100", dot1q_vlan=100, interface_type="")])
+
+
 @_probe(f"{_I}/dot1q-inner-vlan")
 def qinq(at):
     return _tree(at, interfaces=[_port("Ethernet2"), _routed(
@@ -659,6 +666,7 @@ OWNER: dict[str, str | None] = {
     f"{_I}/lag-member-of": "/lags/lag/name",
     f"{_I}/config/vrf": "/routing-instances/instance",
     f"{_I}/config/ip-mtu-beside-mtu": f"{_I}/config/ip-mtu",
+    f"{_I}/address-beside-sub-interfaces": f"{_I}/ipv4/address/ip",
     "/vlans/vlan/": "/vlans/vlan/id",
     "/vlans/vlan/id": "/vlans",
     "/vlans/vlan/ipv4/address/": "/vlans/vlan/ipv4/address/ip",
