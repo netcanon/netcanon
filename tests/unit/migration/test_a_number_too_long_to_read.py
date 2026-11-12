@@ -47,6 +47,18 @@ _NOT_CONFIG = {".md", ".json", ".yaml", ".yml", ".py", ".pyc"}
 #: A codec whose committed inputs are not under ``real/``.
 _OTHER_INPUTS = {"cisco_iosxe": [FIXTURES / "iosxe" / "get_config_simple.xml"]}
 
+#: The text :meth:`TestTheText.test_the_check_sees_the_old_reading`
+#: reads for a codec in place of its smallest capture.  The one line
+#: of FortiOS's smallest capture its parser read as a number was the
+#: ``set distance`` of a blackhole route, which is left out now before
+#: its distance is read; with no line that reaches the limit, every
+#: line of that capture is parsed in turn, thousands of parses and
+#: minutes.  The kitchen sink holds lines the parser reads as numbers
+#: (a DHCP lease, a VLAN interface's parent).
+_OLD_READING_INPUTS = {
+    "fortigate_cli": FIXTURES / "synthetic" / "fortigate_cli" / "kitchen_sink.conf",
+}
+
 
 @pytest.fixture(autouse=True)
 def _the_default_limit() -> Iterator[None]:
@@ -123,14 +135,16 @@ class TestTheText:
         parsers: the interpreter's ``ValueError``, not a ``ParseError``.
 
         The lines are tried from the last.  Each try parses the whole
-        capture, and the one line of the FortiGate capture that reaches
-        the limit is near its end, after thousands of lines that hold a
-        number: tried from the first, this test took minutes."""
+        text, and a capture of thousands of lines that hold a number,
+        none of which reaches the limit, takes minutes: such a codec
+        reads a text of its own (:data:`_OLD_READING_INPUTS`)."""
         monkeypatch.setattr(base, "first_long_run_line", lambda raw: None)
         failed: set[str] = set()
         for codec in _CODECS:
             parser = get_codec(codec)
-            for _, text in _with_one_line_long(_smallest_capture(codec), from_the_last=True):
+            own = _OLD_READING_INPUTS.get(codec)
+            whole = own.read_text(encoding="utf-8") if own else _smallest_capture(codec)
+            for _, text in _with_one_line_long(whole, from_the_last=True):
                 try:
                     parser.parse(text)
                 except ParseError:

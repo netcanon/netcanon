@@ -26,7 +26,7 @@
 # structural loss is not counted six times.
 #
 # The real losses on this pair are the LAG surface, the VLAN database,
-# blackhole static routes, DHCP pools, RADIUS, SNMP trap hosts, the IANA
+# the egress interface of a static route, DHCP pools, RADIUS, SNMP trap hosts, the IANA
 # interface type hint, SNMPv3 algorithm strength — and local-user roles,
 # which fail OPEN while the passwords survive intact.
 #
@@ -55,8 +55,9 @@ meta:
     its descriptions, MTU, admin state and IPv4/IPv6 addressing, SNMP
     community/location/contact, local account names and their stored
     credentials all survive.  What does not is the LAG surface, the VLAN
-    database and its 802.1Q tags, FortiOS blackhole routes and the
-    egress-interface binding on the routes that do survive, DHCP scopes,
+    database and its 802.1Q tags, the egress-interface binding of a
+    static route (a FortiOS blackhole route is left out on the source
+    side, with a row), DHCP scopes,
     RADIUS, SNMP trap hosts, SNMPv3 algorithm strength, the IANA interface
     type hint — and every local-user role, which is flattened to `admin`.
   certainty: medium
@@ -409,42 +410,29 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      Two different failure modes, both measured, and the mix is why the
-      numbers should not be read as a uniform drop.  4 canonical routes
-      enter the pair across the 3 cells that carry any.
-      MODE 1 — the record vanishes.  On `kevinguenay_fgt_70g_branch.conf`
-      and `kevinguenay_fgt_vm_hub.conf` the surviving canonical route is a
-      FortiOS `set blackhole enable` discard route: no gateway, no device,
-      distance 254.  The VyOS render emits routes as
-      `route <dst> { next-hop <gw> { } }`, so with no gateway there is
-      nothing to emit and no `protocols static` node appears in the render
-      at all.  The discard semantics were already gone one step earlier —
-      `CanonicalStaticRoute` has no blackhole flag — so the route reaches
-      the renderer indistinguishable from one whose next-hop failed to
-      parse.
-      MODE 2 — the record survives, the egress binding does not.  On
-      `kitchen_sink.conf` both routes come back with destination and gateway
-      intact while `interface` goes `port1` -> `""` and `agg1` -> `""`.
+      The record survives, the egress binding does not.  3 canonical routes
+      enter the pair across the 2 cells that carry any, and each comes back
+      with destination, gateway and distance intact while `interface` goes
+      to `""` (`port1` and `agg1` on `kitchen_sink.conf`).
       fortigate_cli declares `/routing/static-route/interface` SUPPORTED;
       vyos declares NO path for the route interface at any level while
       dropping it — a target under-declaration, the same shape as the
       trap-host gap, and one for a codec change rather than for this file.
-      Recorded `unsupported` rather than `lossy` because half the records
-      vanish outright with no target grammar to land in (#436).  Also
-      declared but untested here: fortigate_cli declares
-      `/routing/static-route/vrf` unsupported and vyos declares
-      `/routing/static-route/description` LOSSY; no committed cell sets
-      either.
+      Also declared but untested here: vyos declares
+      `/routing/static-route/description` LOSSY; no committed cell sets a
+      route comment.
       Stated so the counts are not over-read: the source parser reduces the
-      FortiOS block before this pair sees it — `kevinguenay_fgt_vm_hub.conf`
-      carries five `config router static` stanzas and yields ONE canonical
-      route, the rest using named address-group destinations or carrying no
-      `set dst`.  That is a source-side property, not a loss this pair
-      causes, and it is not counted as one.
-      Re-author discard routes as VyOS `blackhole` next-hops by hand, and
-      re-add the egress-interface binding on the routes that do survive.
+      FortiOS block before this pair sees it.  A route the tree cannot hold
+      — a blackhole, a route of a VRF other than 0, a destination given as
+      an address object or an Internet service — is left out with a row in
+      `dropped_tier3_sections`: `kevinguenay_fgt_vm_hub.conf` carries five
+      `config router static` stanzas and yields ONE canonical route (its
+      default route, which states no `set dst`), and the blackhole routes of
+      `kevinguenay_fgt_70g_branch.conf` yield none.  That is a source-side
+      property, not a loss this pair causes, and it is not counted as one.
+      Re-add the egress-interface binding on the routes by hand.
     references: [fgt-vyos-surface]
 
   dhcp_servers:

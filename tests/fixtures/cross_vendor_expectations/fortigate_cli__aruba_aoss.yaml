@@ -256,22 +256,21 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      Default-VRF static routes round-trip cleanly via dotted-mask
+      Destination, gateway and distance round-trip via dotted-mask
       <-> CIDR conversions: FortiOS ``set dst 10.0.0.0
-      255.255.0.0`` -> Aruba ``ip route 10.0.0.0/16``.
+      255.255.0.0`` -> Aruba ``ip route 10.0.0.0/16``, and a FortiOS
+      route that states no ``set dst`` is the default route.
       AOS-S names only an address, ``vlan <id>`` or ``blackhole`` as
       a next hop: a route's ``interface`` beside a gateway is not
-      written (``port1``, ``agg1`` on the kitchen-sink cell), and a
-      route with neither a gateway nor an interface -- which a
-      FortiOS ``set blackhole enable`` route parses to, the discard
-      itself lost on parse -- is left out under a ``; review:`` line.
+      written (``port1``, ``agg1`` on the kitchen-sink cell).
+      A FortiOS blackhole route, a route of a VRF other than 0
+      (AOS-S has no VRF either) and a route to an address object are
+      left out on the source side, each with a row in
+      ``dropped_tier3_sections``, so none reaches AOS-S.
       Metric semantics differ (FortiGate distance / AD-ordering vs
       Aruba per-route preference) so the integer preserves but its
-      meaning differs.  Description / comment (FortiGate ``set
-      comment``) is not currently parsed.  Per-VRF static routes
-      (FortiGate ``set vrf <id>``) are unsupported on this pair —
-      the fortigate_cli codec does not parse ``set vrf`` into
-      ``CanonicalStaticRoute.vrf``, AND Aruba has no VRF concept.
+      meaning differs.  A route's ``set comment`` is read and not
+      written on AOS-S; no committed cell holds one.
       Aruba's legacy
       ``ip default-gateway`` form synthesises from a 0.0.0.0/0
       canonical record on render.

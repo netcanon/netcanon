@@ -73,7 +73,9 @@ served anything, and each is left out for that reason.  **Action:**
 none, unless the target is to serve the pool — then write it there by
 hand.  A `disabled: ip route <destination>` row is a RouterOS route
 held `disabled=yes`, or an IOS-XE route of administrative distance
-255, which IOS does not install; neither installs anything.
+255, which IOS does not install, and a `disabled: config router
+static edit <id>` row (`static6` for IPv6) a FortiGate route of
+`status disable`; none installs anything.
 **Action:** none, unless
 the route is to be in force on the target — then write it there by
 hand.
@@ -96,7 +98,11 @@ prohibit route(s) ...` for RouterOS routes of a VRF or that discard
 `router static: <n> route(s) whose next hop is in another VRF ...`
 (IOS XR) or `ip route: <n> route(s) whose next hop is in another VRF
 ...` (IOS-XE, NX-OS, EOS) for routes whose next hop is resolved in
-another VRF's table (the same).  See
+another VRF's table (the same), and `router static: <n> route(s) of
+a VRF other than 0 ...`, `router static: <n> blackhole route(s)
+...` and the like for FortiOS routes of a VRF, that discard, to an
+address object, with a gateway from DHCP or PPP, or of SD-WAN (write
+them on the target by hand).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"

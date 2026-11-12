@@ -333,14 +333,18 @@ per_field_expectation:
   static_routes:
     disposition: good
     note: >
-      Preserved on all 3 cells that populate them — destination, gateway,
+      Preserved on both cells that populate them — destination, gateway,
       outgoing interface and metric all survive into `router static /
       address-family ipv4 unicast / <prefix> <iface> <gw>`, including the
-      metric 254 route on the branch cell.  Two declared caveats that this
-      corpus does not exercise: cisco_iosxr declares
-      `/routing/static-route/description` lossy, and fortigate_cli declares
-      `/routing/static-route/vrf` unsupported.  No cell carries a named or
-      per-VRF static route, so neither was tested here.
+      stated distance of one cell's default route (a FortiOS route that
+      states no `set dst`).  The blackhole routes of the branch cell are
+      left out on the source side now, with a row in
+      `dropped_tier3_sections`.  Two declared caveats that this corpus does
+      not exercise: cisco_iosxr declares `/routing/static-route/description`
+      lossy, and fortigate_cli declares `/routing/static-route/vrf`
+      unsupported (a FortiOS route of a VRF other than 0 is left out with a
+      row).  No cell carries a named or per-VRF static route, so neither was
+      tested here.
     references: [fortigate-iosxr-surface]
 
   # -- Services -------------------------------------------------------------

@@ -161,7 +161,22 @@ firewall translation is your primary need, see
   not read up to 0.7.7, so a FortiOS interface that takes its address
   by DHCP was an interface with no address on every target.  `set
   mode pppoe` is not read.
-- Static routes (`config router static`)
+- Static routes (`config router static`, `config router static6`):
+  destination, gateway, device, distance and comment.  A route
+  printed with no `set dst` is a default route (`show` leaves out a
+  setting at its default, `0.0.0.0 0.0.0.0` and `::/0`), and `set
+  gateway 0.0.0.0` (`::`) is no gateway.  A route of `status disable`
+  is left out with a `disabled:` row, and one the tree cannot hold is
+  left out with a row of the Tier-3 banner that counts them: a route
+  of a VRF other than 0 (`set vrf <id>`), a blackhole (`set blackhole
+  enable`), a route to an address object or an Internet service
+  (`set dstaddr`, `set internet-service`), one whose gateway is
+  learned from DHCP or PPP (`set dynamic-gateway enable`), and an
+  SD-WAN route with neither a gateway nor a device.  ⚠️ Up to 0.7.7 a
+  route printed with no `set dst` and a route to an address object
+  were missing from every output with nothing said, a blackhole route
+  was a route with no next hop, and a disabled route or a route of
+  another VRF was written as a route in force in the global table.
 - LAGs (`config system interface` with `set type aggregate` +
   member lists; a member with no `edit` of its own, as in a pasted
   fragment, is given a port record)

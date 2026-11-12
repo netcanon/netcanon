@@ -247,24 +247,21 @@ per_field_expectation:
     references: [vlans]
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Default-VRF static routes round-trip cleanly via dotted-mask
-      <-> CIDR conversions: FortiOS ``set dst 10.99.0.0
-      255.255.0.0`` -> Arista ``ip route 10.99.0.0/16 <gw>``.
-      Outgoing-interface field requires the rename mesh to map
-      FortiGate's ``port1`` to an Arista-shape interface name.
-      Metric semantics differ (FortiGate distance / AD-ordering vs
-      Arista per-route preference / default 1) so the integer
-      preserves but its meaning shifts on the target.  Description
-      / comment (FortiGate ``set comment``) parse coverage may be
-      inconsistent in v1.  Per-VRF static routes (FortiGate ``set
-      vrf <id>``) are unsupported on this pair — the fortigate_cli
-      codec does not currently parse ``set vrf`` into
-      ``CanonicalStaticRoute.vrf``.  IPv6 static
-      routes live under ``config router static6`` on FortiOS
-      (separate edit-table; not currently wired through the
-      canonical static_routes list).
+    disposition: good
+    note: >
+      Preserved on both cells that carry a route: destination, gateway,
+      outgoing interface and distance survive FortiOS ``set dst 10.99.0.0
+      255.255.0.0`` -> Arista ``ip route 10.99.0.0/16 <iface> <gw>``, and a
+      FortiOS route that states no ``set dst`` is the default route on
+      both sides.  A FortiOS route the tree cannot hold -- a blackhole, a route of a VRF
+      other than 0, a destination given as an address object or an
+      Internet service, a dynamic gateway -- is left out on the source side
+      with a row in ``dropped_tier3_sections``, so it reaches no target.
+      Caveats this corpus does not exercise: a route's ``set comment``
+      is not written on Arista, and a FortiOS route that states no
+      distance (the device's default, 10) is read with none, so the Arista
+      route takes Arista's default.  IPv6 routes (``config router
+      static6``) are read by the same rules; no committed cell holds one.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

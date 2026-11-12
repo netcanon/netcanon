@@ -511,17 +511,17 @@ per_field_expectation:
       FortiOS ``config router static / edit N / set dst A.B.C.D MASK
       / set gateway G / set device IFNAME`` -> Junos
       ``set routing-options static route A.B.C.D/N next-hop G``.
-      Default-VRF routes round-trip cleanly via the codec's mask <->
-      CIDR conversions.  ``device`` field requires the rename mesh
-      to map ``port1`` -> ``ge-0/0/N``.  Metric semantics differ
-      (FortiGate distance / AD-ordering vs Junos preference) so the
-      integer preserves but its meaning differs.  FortiGate
-      ``set comment "<text>"`` now parses into canonical
-      ``description``.  Per-VRF static routes (FortiGate
-      ``set vrf <id>``) are unsupported — the fortigate_cli parser
-      does not harvest ``set vrf``, so the VRF binding drops on the
-      source (parse) side (``CanonicalStaticRoute.vrf`` exists but
-      stays empty).
+      Destination and gateway round-trip via the codec's mask <->
+      CIDR conversions on both cells that carry a route, and a
+      FortiOS route that states no ``set dst`` is the default route.
+      The outgoing interface (``set device``) does not come back, and
+      a stated distance comes back as none: the Junos counterpart is
+      ``preference``.  FortiGate ``set comment "<text>"`` parses into
+      canonical ``description``; no committed cell holds one.  A
+      FortiOS route of a VRF other than 0 (``set vrf <id>``), a
+      blackhole route and a route to an address object are left out
+      on the source side, each with a row in
+      ``dropped_tier3_sections``, so none reaches Junos.
     references: [fortios-static-routes, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──

@@ -399,9 +399,10 @@ per_field_expectation:
   "static_routes[].destination":
     disposition: good
     note: >
-      Preserved on all 3 populated cells.  The FortiOS dotted-mask form (`set
+      Preserved on both populated cells.  The FortiOS dotted-mask form (`set
       dst 10.100.0.0 255.255.0.0`) converts to the NX-OS CIDR form
-      (`ip route 10.100.0.0/16 ...`) and back without loss.
+      (`ip route 10.100.0.0/16 ...`) and back without loss, and a FortiOS
+      route that states no `set dst` is the default route on both sides.
     references: [fg-nxos-surface]
 
   "static_routes[].gateway":
@@ -410,47 +411,44 @@ per_field_expectation:
     references: [fg-nxos-surface]
 
   "static_routes[].interface":
-    disposition: lossy
-    reason: >
-      Drifts on 2 cells, and the target value is fabricated rather than
-      dropped: a GATEWAY-LESS route with a non-default distance comes back
-      with `interface: "" -> "254"`.  The NX-OS render emits destination +
-      next-hop + metric; with an empty next-hop the metric token slides into
-      the next-hop position and the re-parse reads it as an outgoing INTERFACE
-      name.  The migrated route therefore points at an interface called `254`
-      that does not exist -- delete or re-author every gateway-less static
-      route on the target.  Routes that carry a real next-hop are unaffected.
+    disposition: good
+    note: >
+      Preserved on both populated cells.  The two cells that drifted here
+      held FortiGate blackhole routes -- no gateway, no device, distance 254
+      -- whose distance the NX-OS render wrote where the next hop belongs, so
+      that the re-parse read it as an interface called `254`.  Such a route
+      is left out on the source side now, with a row in
+      `dropped_tier3_sections`, and no route reaches NX-OS without a next
+      hop or an interface.
     references: [fg-nxos-surface]
 
   "static_routes[].metric":
-    disposition: lossy
-    reason: >
-      The other half of the same defect, drifting on the same 2 cells:
-      `metric: 254 -> 0`.  FortiOS `set distance 254` is how an operator
-      de-preferences a floating / backup static route; after the migration it
-      comes back at the NX-OS default distance, so a backup path can win
-      against the primary it was meant to sit behind.  Re-apply the intended
-      administrative distance on the target for every route whose source
-      metric was not the default.
+    disposition: good
+    note: >
+      Preserved on both populated cells, the stated distance of one cell's
+      default route included.  It drifted (`254 -> 0`) only on the blackhole
+      routes now left out on the source side.  A caveat this corpus does not
+      exercise: a FortiOS route that states no distance (the device's
+      default, 10) is read with none, so the NX-OS route takes NX-OS's
+      default.
     references: [fg-nxos-surface]
 
   "static_routes[].description":
-    disposition: not_applicable
-    note: >
-      Source-side absence: the fortigate_cli matrix carries no
-      `/routing/static-route/description` path -- FortiOS `set comment` is not
-      parsed into canonical -- so the NX-OS-side loss declared at that xpath
-      is never reached.  Never populated on any of the 4 cells.
+    disposition: lossy
+    reason: >
+      FortiOS `set comment` is read into the route's description, and the
+      NX-OS render writes no `name` for a route, so the comment does not come
+      back.  Never populated on any of the 4 cells: no committed FortiGate
+      route carries a comment.
     references: [fg-nxos-surface]
 
   "static_routes[].vrf":
     disposition: not_applicable
     note: >
       Source-side absence: the fortigate_cli matrix declares
-      `/routing/static-route/vrf` UNSUPPORTED (FortiOS `set vrf <id>` is not
-      parsed).  NX-OS declares it supported and renders per-VRF routes inside
-      a `vrf context` block, so this row would move once the FortiGate parse
-      side is wired.
+      `/routing/static-route/vrf` UNSUPPORTED.  A FortiOS route of a VRF other
+      than 0 (`set vrf <id>`) is left out on the source side with a row in
+      `dropped_tier3_sections`, so no route reaches NX-OS with a VRF.
     references: [fg-nxos-surface]
 
   dhcp_servers:

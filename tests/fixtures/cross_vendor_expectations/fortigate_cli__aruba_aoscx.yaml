@@ -307,21 +307,19 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Drifts on 2 of 4 cells, preserved exactly on 1, empty on 1 — and the two
-      drifting cells carry the same shape, verified by round-tripping the
-      fixtures rather than inferred from the drift.  Both are FortiGate
-      BLACKHOLE routes (`set blackhole enable` with `set distance 254` and no
-      gateway).  The canonical model has no discard discriminator — the
-      gateway is simply empty — so the render emits `ip route <dst> 254`,
-      putting the administrative distance where the next hop belongs; the
-      re-parse then reads metric 0 and interface "254".  Routes that carry a
-      real gateway round-trip exactly (`ip route 0.0.0.0/0 port1
-      198.51.100.1`).  Re-author discard routes by hand and re-check
-      administrative distance on every migrated route.  fortigate_cli
-      declares `/routing/static-route/vrf` unsupported, so no route arrives
-      with a VRF; no committed cell exercises that.
+    disposition: good
+    note: >
+      Preserved on both cells that carry a route: destination, gateway,
+      outgoing interface and distance round-trip (`ip route 0.0.0.0/0 1/1/1
+      198.51.100.1`), the default route of a FortiOS route that states no
+      `set dst` included.  The two cells that drifted here held FortiGate
+      blackhole routes, which the render wrote as `ip route <dst> 254`;
+      such a route is left out on the source side now, with a row in
+      `dropped_tier3_sections`, as is a route of a VRF other than 0 and a
+      route to an address object.  Caveats this corpus does not exercise:
+      a route's `set comment` is not written on AOS-CX, and a FortiOS route
+      that states no distance (the device's default, 10) is read with none,
+      so the AOS-CX route takes AOS-CX's default.
     references: [fgt-aoscx-surface]
 
   "routing_instances[].name":

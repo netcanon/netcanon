@@ -2125,8 +2125,15 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # `/dhcp-servers/pool` is supported there.  Onto AOS-S the job of
     # a capture with one pool had been `partial` for that path alone;
     # the validation report passes it now, and the names it listed
-    # before, unchanged, hold it (+1 several).
-    "fortigate_cli": (0, 0, 0, 0, 0, 12),
+    # before, unchanged, hold it (+1 several).  Then (0, 0, 0, 0, 0, 12):
+    # a FortiOS route printed with no `set dst` is read as the default
+    # route it is, and a blackhole route is left out.  Onto AOS-S and
+    # Junos the job of the capture with such a default route is
+    # `partial` for the route's interface in the validation report as
+    # well, and no longer counts (-2 several); onto OPNsense the job of
+    # the capture whose only routes were blackholes has no route to
+    # report, and the names hold it alone (+1 several).
+    "fortigate_cli": (0, 0, 0, 0, 0, 11),
     # From (0, 0, 7, 0, 5, 7): no record is made for a bare `irb`
     # or `st0` that no line configures, so it is no longer a name
     # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
@@ -2264,8 +2271,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [86, 0, 74, 5, 62, 49]
-        assert sum(by_reason) == 276
+        assert by_reason == [86, 0, 74, 5, 62, 48]
+        assert sum(by_reason) == 275
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
