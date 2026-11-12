@@ -2438,8 +2438,10 @@ nothing, as before.
 
 **Known limitations**
 
-* Model families ship for a first set of Aruba AOS-S switches and
-  for the Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
+* Model families ship for the Aruba 2920, 2930F and 2930M on AOS-S
+  (a 2920's names are graded `inferred`, except those of the
+  standalone J9729A that a committed config proves), and for the
+  Cisco Catalyst 9300, 9300X, 9200, 9200L, 3850, 3650, 9300L,
   9300LM, 2960-X, 2960-XR, 2960-S, 3750-X and 9500 (UADP 2.0), for
   the Aruba CX 6300 and 6200, for the Arista 7050X, 7050X3,
   7060X, 7260X and 7280R3, and for the Cisco Nexus 9300 (the first

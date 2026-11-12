@@ -1,0 +1,177 @@
+# HP / Aruba 2920 switch series (ArubaOS-Switch, WB firmware branch)
+#
+# A fixed-port access switch with TWO rear expansion bays, lettered `A`
+# and `B`, each for a two-port 10G module, and a separate slot for a
+# backplane stacking module.  All three ship EMPTY.  Three facts decide
+# every port name on it:
+#
+#   * The fixed panel is numbered 1-24 or 1-48 with no gaps.  Four of
+#     those ports are dual-personality (an RJ-45 jack and an SFP cage
+#     that share a number), so a 24-port model has exactly 24 fixed
+#     names.  HPE's own wording for the 740W model says so outright:
+#     "44 RJ-45 autosensing ... ports" and "4 RJ-45 dual-personality
+#     ... ports".
+#   * A module's ports take the bay letter and restart at 1: `A1`,
+#     `A2`, `B1`, `B2`.  With a bay empty it has no ports.
+#   * Stacking decides whether names carry a member number.  With
+#     stacking enabled every port is `<member>/<port>` -- `1/48`,
+#     `2/B1`.  With stacking disabled the same ports are `48` and `B1`.
+#     A 2920 first powered on without a stacking module has stacking
+#     disabled, and that is saved in its configuration; after a module
+#     is fitted it has to be enabled with `stacking enable`.  The module
+#     is an option, so standalone is this family's default mode.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   QS    HP QuickSpecs "HP 2920 Switch Series", DA-14499, Worldwide
+#         Version 10 (December 9, 2013): the five models, their ports
+#         ("Build To Order" blocks), the rear of the switch (two 10G
+#         Expansion Module slots and a Stacking Module Slot), the
+#         Ethernet Modules (two per switch: J9731A and J9732A) and the
+#         stacking module (one per switch: J9733A), "Stacking capability
+#         with a total of four switches".
+#   IGSG  HP 2920 Switches Installation and Getting Started Guide
+#         (manualslib manual 1210105): "Expansion Module Slots" (two
+#         slots, each taking either 10G module) and "Stacking Information
+#         and Topologies" (up to four switches; stacking disabled, and
+#         saved, when first powered on without a stacking module;
+#         `stacking enable`).
+#
+# No HPE document that PRINTS a 2920's port names was read: HPE's 2920
+# management and traffic guides could not be fetched.  The names below
+# rest on the AOS-S rule HPE documents for the 2930M (see
+# aruba_aoss_2930m.yaml) and on public device output of the 2920 that
+# agrees with it (HPE community threads, by title and post date):
+#
+#   "Help on OOBE and A1-A2, B1-B2 interface ports - HP-2920",
+#       23 Mar 2016 -- a J9726A, ports 1-24, A1-A2, B1-B2
+#   "LACP Trunk Across Ports on Stacked 2920s?", 1 May 2017 -- two
+#       members, ports 1/B1 and 2/B1
+#
+# so the naming facts are graded `inferred`, and the committed capture
+# of a standalone J9729A retires that for its own deployment.
+#
+# Where the dual-personality ports SIT within the numbering (21-24,
+# 45-48) is not stated in QS or IGSG either; it is read from public
+# posts about a J9727A (ports 21-24) and a 48-port model (45T / 45S ..
+# 48T / 48S).  It decides a port's `cage`, never its name, and each
+# model says so in its `caveat`.
+#
+# Not modules of this switch, and deliberately absent: J9733A (the
+# stacking module -- its two ports are not interfaces), and any
+# management port (AOS-S out-of-band management is the `oobm` context,
+# not an interface name).
+#
+# A 2920 stacks only with other 2920s.  A five-member stack is not a
+# 2920 stack: the stacked template among the committed inputs, whose
+# banner names a J9729A, has five members and is not claimed here.
+schema: 1
+vendor: aruba_aoss
+family: "2920"
+display_name: "HP / Aruba 2920"
+naming: aoss
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "stacking disabled (no stacking module at first power-up, the usual state)"
+    naming:
+      grade: inferred
+      ref: "HP 2920 Switches Installation and Getting Started Guide (manualslib manual 1210105), Stacking Information and Topologies (stacking is disabled, and saved, when first powered on without a stacking module); HPE community thread 'Help on OOBE and A1-A2, B1-B2 interface ports - HP-2920' (23 Mar 2016), a J9726A with ports 1-24, A1-A2 and B1-B2"
+      caveat: "No HPE document that prints a 2920's port names was read. The bare numbers and the A/B bay letters rest on the ArubaOS-Switch rule HPE documents for the 2930M and on public 2920 configurations that agree with it."
+    caveat: "With stacking enabled every port gains the member number as a prefix (48 becomes 1/48, A1 becomes 1/A1)."
+  stacked:
+    label: "stacking enabled (J9733A stacking module fitted)"
+    member_ids: [1, 4]
+    naming:
+      grade: inferred
+      ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series (stacking of up to four switches); HP 2920 Switches Installation and Getting Started Guide (manualslib manual 1210105), Stacking Information and Topologies; HPE community thread 'LACP Trunk Across Ports on Stacked 2920s?' (1 May 2017), two members with ports 1/B1 and 2/B1"
+      caveat: "No HPE document that prints a stacked 2920's port names was read. The member/port form rests on the ArubaOS-Switch backplane-stacking rule HPE documents for the 2930M and 3810M and on public 2920 stack output that agrees with it; that member ids run 1 to 4 rests on the four-member limit."
+    caveat: "Names carry the stack member number. A stack holds at most four 2920s. The stack's own configuration - the stacking stanza, its members and their priorities - is not translated (the job lists the stacking stanza among the sections it did not translate, by its word)."
+
+modules:
+  J9731A:
+    description: "2920 2-port 10GbE SFP+ module"
+    inventory: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Ethernet Modules (J9731A, up to two SFP+ transceivers); HP 2920 Switches Installation and Getting Started Guide (manualslib manual 1210105), Expansion Module Slots (two bays for SFP+ transceivers)"}
+    ports:
+      - {role: uplink, count: 2, speed: 10gig, cage: sfp+}
+  J9732A:
+    description: "2920 2-port 10GBASE-T module"
+    inventory: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Ethernet Modules (J9732A); HP 2920 Switches Installation and Getting Started Guide (manualslib manual 1210105), Expansion Module Slots (two 10GBASE-T RJ-45 connectors)"}
+    ports:
+      - {role: uplink, count: 2, speed: 10gig, cage: rj45}
+
+models:
+  # --- 24 ports: 1-24 -------------------------------------------------------
+  2920-24G:
+    skus: [J9726A]
+    display_name: "HP 2920-24G (J9726A)"
+    panel: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Build To Order (J9726A: 24 RJ-45 autosensing 10/100/1000 ports, 4 dual-personality ports) and rear view (two 10G Expansion Module slots)"}
+    caveat: "J9726A: the positions of the four dual-personality ports (21-24) are read from public posts, not from an HPE document. That decides the cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 20, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: gig, cage: combo, notes: "dual-personality: RJ-45 or SFP"}
+    bays:
+      A: {accepts: [J9731A, J9732A]}
+      B: {accepts: [J9731A, J9732A]}
+
+  2920-24G-PoEP:
+    skus: [J9727A]
+    display_name: "HP 2920-24G-PoE+ (J9727A)"
+    panel: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Build To Order (J9727A: 24 RJ-45 autosensing 10/100/1000 PoE+ ports, 4 dual-personality ports) and rear view (two 10G Expansion Module slots)"}
+    caveat: "J9727A: the positions of the four dual-personality ports (21-24) are read from public posts, not from an HPE document. That decides the cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 20, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or SFP"}
+    bays:
+      A: {accepts: [J9731A, J9732A]}
+      B: {accepts: [J9731A, J9732A]}
+
+  # --- 48 ports: 1-48 -------------------------------------------------------
+  2920-48G:
+    skus: [J9728A]
+    display_name: "HP 2920-48G (J9728A)"
+    panel: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Build To Order (J9728A: 48 RJ-45 autosensing 10/100/1000 ports, 4 dual-personality ports) and rear view (two 10G Expansion Module slots)"}
+    caveat: "J9728A: the positions of the four dual-personality ports (45-48) are read from public posts, not from an HPE document. That decides the cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 44, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: gig, cage: combo, notes: "dual-personality: RJ-45 or SFP"}
+    bays:
+      A: {accepts: [J9731A, J9732A]}
+      B: {accepts: [J9731A, J9732A]}
+
+  2920-48G-PoEP:
+    skus: [J9729A]
+    display_name: "HP 2920-48G-PoE+ (J9729A)"
+    panel: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Build To Order (J9729A: 48 RJ-45 autosensing 10/100/1000 PoE+ ports, 4 dual-personality ports) and rear view (two 10G Expansion Module slots)"}
+    caveat: "J9729A: the positions of the four dual-personality ports (45-48) are read from public posts, not from an HPE document. That decides the cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 44, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or SFP"}
+    bays:
+      A: {accepts: [J9731A, J9732A]}
+      B: {accepts: [J9731A, J9732A]}
+
+  2920-48G-PoEP-740W:
+    skus: [J9836A]
+    display_name: "HP 2920-48G-PoE+ 740W (J9836A)"
+    panel: {grade: vendor-doc, ref: "HP QuickSpecs DA-14499 V10, HP 2920 Switch Series, Build To Order (J9836A: 44 RJ-45 autosensing 10/100/1000 PoE+ ports, 4 RJ-45 dual-personality 10/100/1000 PoE+ ports) and rear view (two 10G Expansion Module slots)"}
+    caveat: "J9836A: the positions of the four dual-personality ports (45-48) are read from public posts about other 48-port 2920s, not from an HPE document; no output of a J9836A was seen. That decides the cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 44, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or SFP"}
+    bays:
+      A: {accepts: [J9731A, J9732A]}
+      B: {accepts: [J9731A, J9732A]}
+
+captures:
+  # A standalone J9729A with both bays empty: its banner and its chassis
+  # line name the model, and its ports are 1-48 with no bay port.
+  - fixture: tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg
+    marker: "module 1 type j9729a"
+    mode: standalone
+    members: [{model: 2920-48G-PoEP}]

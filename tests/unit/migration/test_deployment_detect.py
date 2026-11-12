@@ -404,14 +404,24 @@ class TestProposalsThatStopShort:
     reason said."""
 
     def test_a_part_number_no_family_describes(self) -> None:
-        proposal = propose_deployment(
-            AOSS, _capture("hpe_community_2920_wb1608_dhcp_snooping.cfg"), REGISTRY,
+        """A ProCurve 2848 (J4904A): a part the detector reads and no
+        shipped family describes."""
+        text = (
+            "; J4904A Configuration Editor; Created on release #I.10.107\n"
+            "\n"
+            'hostname "x"\n'
+            "module 1 type j4904a\n"
+            "vlan 1\n"
+            '   name "DEFAULT_VLAN"\n'
+            "   untagged 1-48\n"
+            "   exit\n"
         )
+        proposal = propose_deployment(AOSS, text, REGISTRY)
         assert proposal.stated
         assert proposal.deployment is None and proposal.consistent is None
-        assert proposal.unknown_parts == ["J9729A"]
+        assert proposal.unknown_parts == ["J4904A"]
         assert proposal.members[0].model == ""
-        assert any("No model family describes J9729A" in n for n in proposal.notes)
+        assert any("No model family describes J4904A" in n for n in proposal.notes)
 
     def test_a_config_that_states_nothing(self) -> None:
         proposal = propose_deployment(AOSS, "hostname x\n", REGISTRY)

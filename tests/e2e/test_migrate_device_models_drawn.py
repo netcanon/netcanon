@@ -2942,9 +2942,10 @@ class TestTheTableBeforeApplyIsInPortOrder:
 # Nothing paired is not said to be paired
 # ---------------------------------------------------------------------------
 
-#: An AOS-S config whose banner names a device no model family describes.
+#: An AOS-S config whose banner names a device no model family
+#: describes (a ProCurve 2848).
 _UNDESCRIBED = (
-    "; J9729A Configuration Editor; Created on release #WB.16.10.0009\n"
+    "; J4904A Configuration Editor; Created on release #I.10.107\n"
     'hostname "sw-edge-01"\n'
     'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-24\n   tagged 25-26\n   exit\n'
 )
@@ -3306,9 +3307,9 @@ class TestAReleaseThePageNeverSees:
         page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
 
 
-#: Two ports, and a banner no model family describes.
+#: Two ports, and a banner no model family describes (a ProCurve 2848).
 _TWO_PORTS = (
-    "; J9729A Configuration Editor; Created on release #WB.16.10.0009\n"
+    "; J4904A Configuration Editor; Created on release #I.10.107\n"
     'hostname "two"\n'
     "vlan 1\n   untagged 1-2\n   exit\n"
 )

@@ -1093,6 +1093,25 @@ timestamp if your timezone matters for an audit.
   for pairing no port by position
   (`why_the_names_do_not_say_which_port` in
   `migration/port_mapping.py`).
+- **HP / Aruba 2920 switches can be declared as a source or target
+  device.**  A model family, `2920`, of the five models HP's
+  QuickSpecs list: the 2920-24G (J9726A), 2920-24G-PoE+ (J9727A),
+  2920-48G (J9728A), 2920-48G-PoE+ (J9729A) and 2920-48G-PoE+ 740W
+  (J9836A), each a panel of 24 or 48 ports (four of them
+  dual-personality, which share a number with an RJ-45 jack) and two
+  rear bays, `A` and `B`, each empty or holding a J9731A (two SFP+) or
+  a J9732A (two 10GBASE-T).  Two modes: `standalone`, the default --
+  a 2920 first powered on without its stacking module has stacking
+  disabled -- and `stacked`, members 1 to 4.  The ports per model, the
+  bays, the modules and the four-member limit are graded `vendor-doc`
+  (the QuickSpecs and the 2920 Installation and Getting Started
+  Guide); the names themselves are `inferred`, since no HPE document
+  that prints them could be read, and rest on the rule HPE documents
+  for the 2930M and on public 2920 output that agrees with it.  The
+  committed 2920 config is the family's `capture` claim, a standalone
+  J9729A with both bays empty, so `detect-deployment` now proposes
+  that device for it (it named an unknown part before).  The J9733A
+  stacking module has no interface and is not a module of the family.
 - **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
   `unlimited`, or `small` -- chooses how much one config may expand to
   and how long one request may take.  One setting with a name on both

@@ -241,6 +241,10 @@ EXPECTED_CLAIMS: dict[str, tuple[str, str, str, list[tuple]]] = {
         "aruba_aoss/2930F", "standalone", "module 1 type jl258a",
         [("2930F-8G-PoEP-2SFPP", None, {})],
     ),
+    "tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": (
+        "aruba_aoss/2920", "standalone", "module 1 type j9729a",
+        [("2920-48G-PoEP", None, {})],
+    ),
     "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg": (
         "aruba_aoss/2930M", "stacked", 'member 1 type "jl323a"',
         [("2930M-40G-8SR-PoEP", 1, {"A": "JL083A"})],
@@ -507,6 +511,41 @@ for _access, _models in _2930M_PANELS.items():
             EXPECTED_INVENTORIES[(_F, _model, "stacked", _fitted)] = (
                 _run(1, _access, "1/"), [f"1/{n}" for n in _uplinks],
             )
+
+
+#: HP / Aruba 2920.  A fixed panel of 24 or 48 ports with no gaps (the
+#: four dual-personality ports are among them), and two rear bays, ``A``
+#: and ``B``, each empty or holding a two-port 10G module.  Every uplink
+#: comes from a bay, bay A's before bay B's.  Sources: HP QuickSpecs
+#: DA-14499 V10 (ports per J-number, two 10G Expansion Module slots,
+#: the J9731A and J9732A) and public 2920 output naming A1-A2, B1-B2.
+_2920_PANELS: dict[int, list[str]] = {
+    24: [
+        "2920-24G",                     # J9726A
+        "2920-24G-PoEP",                # J9727A
+    ],
+    48: [
+        "2920-48G",                     # J9728A
+        "2920-48G-PoEP",                # J9729A
+        "2920-48G-PoEP-740W",           # J9836A
+    ],
+}
+#: One bay: what each module contributes there.  ``None`` is the empty bay.
+_2920_BAY_MODULES = (None, "J9731A", "J9732A")   # 2 x SFP+, 2 x 10GBASE-T
+for _access, _models in _2920_PANELS.items():
+    for _model in _models:
+        for _in_a in _2920_BAY_MODULES:
+            for _in_b in _2920_BAY_MODULES:
+                _fitted = tuple(
+                    (bay, sku) for bay, sku in (("A", _in_a), ("B", _in_b)) if sku
+                )
+                _uplinks = (["A1", "A2"] if _in_a else []) + (["B1", "B2"] if _in_b else [])
+                EXPECTED_INVENTORIES[(_F, _model, "standalone", _fitted)] = (
+                    _run(1, _access), list(_uplinks),
+                )
+                EXPECTED_INVENTORIES[(_F, _model, "stacked", _fitted)] = (
+                    _run(1, _access, "1/"), [f"1/{n}" for n in _uplinks],
+                )
 
 
 #: Cisco Catalyst 9300, the higher-scale models included.  Switch 1 (the
@@ -2096,6 +2135,84 @@ class TestAruba2930F:
         )
 
 
+class TestAruba2920:
+    """A 2920 has two uplink bays, ``A`` and ``B``, each for a two-port
+    10G module, and a stacking slot; a stack holds at most four."""
+
+    FAMILY = REGISTRY.families["aruba_aoss/2920"]
+
+    def test_there_are_five_2920_models(self) -> None:
+        skus = sorted(m.skus[0] for m in self.FAMILY.models.values())
+        assert skus == ["J9726A", "J9727A", "J9728A", "J9729A", "J9836A"]
+
+    def test_every_model_has_bays_a_and_b_taking_the_two_modules(self) -> None:
+        """Two bays on every chassis, each taking the SFP+ or the
+        10GBASE-T module.  The J9733A is the stacking module and has no
+        interface."""
+        assert set(self.FAMILY.modules) == {"J9731A", "J9732A"}
+        for model in self.FAMILY.models.values():
+            assert list(model.bays) == ["A", "B"], model.model
+            for bay in ("A", "B"):
+                assert model.bays[bay].accepts == ["J9731A", "J9732A"], model.model
+
+    def test_the_fixed_panel_is_all_access_ports(self) -> None:
+        for model in self.FAMILY.models.values():
+            assert {g.role for g in model.ports} == {"access"}, model.model
+            assert sum(g.count for g in model.ports) in (24, 48), model.model
+
+    def test_standalone_is_the_default(self) -> None:
+        """A 2920 first powered on without a stacking module has
+        stacking disabled, and the module is an option."""
+        assert self.FAMILY.default_mode == "standalone"
+
+    def test_a_48_port_poe_with_both_modules_stacked_as_member_3(self) -> None:
+        inventory = _compile(
+            "aruba_aoss", "stacked",
+            {"model": "J9729A", "id": 3, "modules": {"A": "J9731A", "B": "J9732A"}},
+        )
+        assert inventory.names()[:2] == ["3/1", "3/2"]
+        assert inventory.names()[-5:] == ["3/48", "3/A1", "3/A2", "3/B1", "3/B2"]
+
+    def test_bay_b_alone_names_b1_and_b2(self) -> None:
+        """A module in bay B with bay A empty is ``B1``-``B2``, not
+        ``A1``-``A2``."""
+        inventory = _compile(
+            "aruba_aoss", "standalone", {"model": "J9726A", "modules": {"B": "J9731A"}},
+        )
+        assert inventory.names(role="uplink") == ["B1", "B2"]
+
+    def test_a_stack_holds_at_most_four(self) -> None:
+        four = [{"model": "J9728A"} for _ in range(4)]
+        inventory = _compile("aruba_aoss", "stacked", *four)
+        assert inventory.member_count == 4
+        assert inventory.names(member_rank=3) == _run(1, 48, "4/")
+        with pytest.raises(Exception, match="at most 4 members"):
+            _compile("aruba_aoss", "stacked", *four, {"model": "J9726A"})
+
+    def test_a_2920_and_a_2930m_cannot_share_a_deployment(self) -> None:
+        """A 2920 stacks only with other 2920s."""
+        with pytest.raises(Exception, match="cannot share a deployment"):
+            _compile("aruba_aoss", "stacked", {"model": "J9729A"}, {"model": "JL322A"})
+
+    def test_the_capture_covers_exactly_what_it_shows(self) -> None:
+        """The committed capture is a standalone J9729A with both bays
+        empty.  A J9836A -- the same port names -- is a different model;
+        the same J9729A with a module, or stacked, is a deployment the
+        capture does not show."""
+        captured = _compile("aruba_aoss", "standalone", {"model": "J9729A"})
+        assert {p.evidence for p in captured.ports} == {"capture"}
+        sibling = _compile("aruba_aoss", "standalone", {"model": "J9836A"})
+        assert sibling.names() == captured.names()
+        assert {p.evidence for p in sibling.ports} == {"inferred"}
+        with_module = _compile(
+            "aruba_aoss", "standalone", {"model": "J9729A", "modules": {"A": "J9731A"}},
+        )
+        assert {p.evidence for p in with_module.ports if not p.module} == {"capture"}
+        assert {p.evidence for p in with_module.ports if p.module} == {"inferred"}
+        stacked = _compile("aruba_aoss", "stacked", {"model": "J9729A", "id": 1})
+        assert "capture" not in {p.evidence for p in stacked.ports}
+
+
 class TestAruba2930M:
     """A 2930M has one uplink bay, ``A``, and names its ports with or
     without a member number depending on whether stacking is enabled —
@@ -2263,6 +2380,12 @@ EXPECTED_PART_NUMBERS: dict[tuple[str, str], str] = {
     ("aruba_aoss", "JL559A"): "2930F-48G-740W-PoEP-4SFPP-TAA",
     ("aruba_aoss", "JL692A"): "2930F-8G-PoEP-2SFPP-TAA",
     ("aruba_aoss", "JL693A"): "2930F-12G-PoEP-2G-2SFPP",
+    # HP / Aruba 2920
+    ("aruba_aoss", "J9726A"): "2920-24G",
+    ("aruba_aoss", "J9727A"): "2920-24G-PoEP",
+    ("aruba_aoss", "J9728A"): "2920-48G",
+    ("aruba_aoss", "J9729A"): "2920-48G-PoEP",
+    ("aruba_aoss", "J9836A"): "2920-48G-PoEP-740W",
     # Aruba 2930M
     ("aruba_aoss", "JL319A"): "2930M-24G",
     ("aruba_aoss", "JL320A"): "2930M-24G-PoEP",
@@ -2506,6 +2629,12 @@ KNOWN_INFERRED_PARTS: set[str] = {
     "mikrotik_routeros/CRS3xx / panel / CRS354-48P-4S+2Q+",
     "mikrotik_routeros/CRS5xx / panel / CRS510-8XS-2XQ",
     "mikrotik_routeros/CRS5xx / panel / CRS518-16XS-2XQ",
+    # A 2920's names, standalone and stacked: no HPE document that prints
+    # them was read, and they rest on the AOS-S rule HPE documents for
+    # the 2930M and on public 2920 output.  The committed standalone
+    # J9729A retires that for its own deployment only.
+    "aruba_aoss/2920 / mode naming / standalone",
+    "aruba_aoss/2920 / mode naming / stacked",
 }
 
 
