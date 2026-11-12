@@ -344,12 +344,12 @@ per_field_expectation:
     references: [os10-aoscx-surface]
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0. Sample drift: count drift: 3 → 1
-      (static_routes).
+    disposition: good
+    note: >
+      Preserved on 5 of 5 non-trivial cells, the routes of a VRF among
+      them (`ip route <dest> <next hop> vrf <name>` on the target).  Up to 0.7.7 every
+      route of a VRF was left out by the target's renderer, and an AOS-CX
+      `vrf <name>` after a next hop was read past.
     references: [os10-aoscx-surface]
 
   syslog_servers:

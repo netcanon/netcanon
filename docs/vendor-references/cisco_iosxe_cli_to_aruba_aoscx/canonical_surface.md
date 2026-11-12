@@ -1,5 +1,8 @@
 # Cisco IOS-XE CLI → Aruba AOS-CX: measured canonical surface
 
+<!-- an-aoscx-route-keeps-its-vrf -->
+> **Update 2026-11-12 — a route of a VRF is written, and an AOS-CX `vrf <name>` after a next hop is read.**  The AOS-CX render left out every route of a VRF, its parser read past the `vrf <name>` the switch prints after a route's next hop, and its matrix declared `/routing/static-route/vrf` unsupported.  It now writes `ip route <destination> <next hop> [distance <n>] [vrf <name>]`, reads the line back, and declares the path supported.  On this pair the routes of a VRF now arrive in their VRF; what still drifts, on two cells, is a route's description, which the render does not write, so `static_routes` stays `lossy`.  Sentences below that quote the unsupported declaration, or say that a route of a VRF vanishes, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__aruba_aoscx.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__aruba_aoscx.yaml`.
 

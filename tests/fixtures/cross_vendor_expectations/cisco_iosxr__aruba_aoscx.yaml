@@ -326,24 +326,12 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      The loss is exactly the VRF-bound subset, and the split is fully explained
-      by one declaration: aruba_aoscx supports `/routing/static-route` but
-      declares `/routing/static-route/vrf` UNSUPPORTED — "per-VRF static-route
-      binding parses-and-ignores in Phase 1; only default-VRF `ip route` is
-      wired" — while cisco_iosxr declares BOTH supported.  Measured by hand:
-      `iosxr_design_cst_pa3_xr752.cfg` has 12 routes, all default-VRF, and all
-      12 survive; `kitchen_sink.cfg` has 4 routes of which one is bound to
-      `vrf CUSTOMER-A`, and 3 survive; `batfish_vpnv4_pe1.txt` has a single
-      route bound to `vrf blue`, and 0 survive.
-      That last cell is why the aggregate reads as a total drop on 3 of 12
-      cells — those cells carry ONLY VRF-bound routes, so losing the subset
-      loses everything they had.  The field-level truth is still a subset loss,
-      which is why this is `lossy` and not `unsupported`: the pair stays
-      compatible and the default-VRF table migrates intact.  On an L3VPN PE the
-      practical impact is large — audit the per-VRF routing tables before
-      cutover, because they arrive empty and silently.
+    disposition: good
+    note: >
+      Preserved on 6 of 6 non-trivial cells, the routes of a VRF among
+      them (`ip route <dest> <next hop> vrf <name>` on the target).  Up to 0.7.7 every
+      route of a VRF was left out by the target's renderer, and an AOS-CX
+      `vrf <name>` after a next hop was read past.
     references: [iosxr-aoscx-surface]
 
   # -- Services -------------------------------------------------------------

@@ -347,24 +347,15 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: unsupported
-    reason: >
-      Conditional, and the condition is worth stating precisely.  Default-VRF
-      routes round-trip cleanly and are preserved on 3 of 6 cells — the
-      render emits `ip route 0.0.0.0/0 <next-hop>` and the re-parse reads it
-      back.  The 2 drifting cells each carry a single route bound to the
-      `MGMT` VRF, and for those the render emits NO `ip route` line at all:
-      the record vanishes with no trace.  aruba_aoscx declares
-      `/routing/static-route/vrf` unsupported ("only default-VRF `ip route`
-      is wired"), which is exactly what was measured.  Recorded `unsupported`
-      rather than `lossy` because the affected records vanish rather than
-      degrade (#436) and no operator-side input recovers them — unlike the
-      VLAN-membership case, this is a genuine target capability gap.  Audit
-      the source for VRF-bound static routes and re-author them on the
-      target; default-VRF routing needs no attention.
-      Also note `/routing/static-route/description` is declared lossy on both
-      sides; no committed cell sets a route description, so that path is
-      untested here.
+    disposition: good
+    note: >
+      Preserved on 6 of 6 non-trivial cells, the routes of the `MGMT` VRF
+      among them: the target writes `ip route <dest> <next hop> vrf <name>`
+      and the re-parse reads the VRF back.  `/routing/static-route/description`
+      is declared lossy on both sides; no committed cell sets a route
+      description, so that path is untested here.  Up to 0.7.7 every
+      route of a VRF was left out by the target's renderer, and an AOS-CX
+      `vrf <name>` after a next hop was read past.
     references: [arista-aoscx-surface]
 
   "routing_instances[].name":
