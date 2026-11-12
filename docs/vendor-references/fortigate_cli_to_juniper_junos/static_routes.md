@@ -1,5 +1,8 @@
 # Static routes: FortiGate FortiOS versus Juniper Junos
 
+<!-- fortios-interface-vrf -->
+> **Update 2026-11-12 — a FortiOS interface in a VRF other than 0 is not written into the global table.**  The FortiOS parser read no interface's `set vrf <id>`, so an interface in a VRF other than 0 was written with its addresses, its VRRP groups, the DHCP pool on it and the routes out it into the one table of the output, connected to every other interface.  It still reads no VRF.  It now keeps such an interface's record (description, state, MTU, type, tag) and leaves out its IPv4 and IPv6 addresses, DHCP client and VRRP groups, each DHCP pool on it and each route whose `set device` names it, each with a row in `dropped_tier3_sections`.  What the body below says of `set vrf <id>` being parsed and ignored, or dropped at parse, predates this.
+
 <!-- junos-route-preference -->
 > **Update 2026-11-12 — a route's distance is written as its Junos `preference`.**  Up to 0.7.7 the Junos render wrote destination and next hop only, so a route's distance was lost and a floating route came out as a second next hop of the same preference, carrying traffic beside the route it backs up.  The next hops at a destination's lowest distance are now written `next-hop <address>` with one `route <prefix> preference <n>` line, and each other next hop `qualified-next-hop <address> preference <n>` ("The qualified next-hop preference and metric override the route preference and metric", Juniper, "Static Route Preferences and Qualified Next Hops").  A destination whose next hops mix a stated and an unstated distance is a known limitation: the unstated one is written at the Junos default, 5.  What the body below says of the distance on this pair predates this.
 

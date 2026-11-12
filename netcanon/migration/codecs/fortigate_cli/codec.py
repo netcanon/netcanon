@@ -95,7 +95,10 @@ _NOT_RENDERED: tuple[tuple[str, tuple[str, ...]], ...] = (
         "No VRF is written (`/routing-instances/instance` is unsupported), "
         "so no field of one is and no interface is placed in one: its name, "
         "description, route distinguisher, route targets and L3 VNI go with "
-        "it, and so does each interface's VRF.",
+        "it, and so does each interface's VRF.  No VRF is read either: an "
+        "interface in a VRF other than 0 (`set vrf <id>`) is kept without "
+        "its addresses, DHCP client and VRRP groups, and the DHCP pools on "
+        "it and the routes out it are left out, each with a row.",
         (
             "/routing-instances/instance/name",
             "/routing-instances/instance/description",
@@ -698,8 +701,9 @@ class FortiGateCLICodec(CodecBase):
                 path="/routing/static-route/vrf",
                 reason=(
                     "No VRF is read or written.  A FortiOS route of a "
-                    "VRF other than 0 (`set vrf <id>`) is left out, with "
-                    "a row; a route of another vendor's VRF is left out "
+                    "VRF other than 0 (`set vrf <id>` on the route, or "
+                    "on the interface its `set device` names) is left "
+                    "out, with a row; a route of another vendor's VRF is left out "
                     "under a `# review:` line, since the output puts "
                     "nothing in a VRF.  It was written into the global "
                     "table, where it routed traffic the source routed "

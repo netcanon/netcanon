@@ -28,6 +28,13 @@ hold -- disabled, of a VRF other than 0, a blackhole, to an address
 object, with a gateway learned from DHCP or PPP, or with neither a
 gateway nor a device -- is left out and said (:class:`_RoutesNotHeld`).
 
+An interface in a VRF other than 0 (``set vrf <id>``) keeps its
+record, and its addresses, its DHCP client, its VRRP groups, the
+DHCP pools on it and the routes out it are left out and said
+(:func:`_out_of_their_vrf`): the parser reads no VRF, and in the
+global table of the output they would route traffic the source
+keeps apart.
+
 Wave B: also handles **VRRP groups** nested as ``config vrrp /
 edit N / set vrip X / set priority / set preempt / set adv-interval
 / set status / set authentication / next / end`` inside the
@@ -63,7 +70,7 @@ from __future__ import annotations
 import logging
 import re
 import shlex
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from typing import ClassVar
 
 from ..._bonds import ACTIVE_BACKUP
@@ -1160,8 +1167,9 @@ _NO_GATEWAY = frozenset({"0.0.0.0", "::"})
 #: The rows of :class:`_RoutesNotHeld`, a kind each, as each ends.
 _ROUTES_NOT_HELD: dict[str, str] = {
     "vrf": (
-        "route(s) of a VRF other than 0 (set vrf <id>): no VRF of a "
-        "FortiOS config is read; not translated"
+        "route(s) of a VRF other than 0 (set vrf <id> on the route, or "
+        "on the interface its set device names): no VRF of a FortiOS "
+        "config is read; not translated"
     ),
     "blackhole": (
         "blackhole route(s) (set blackhole enable): the tree has no form "
@@ -1193,7 +1201,9 @@ class _RoutesNotHeld:
       not install it: left out, a row of :func:`left_out_rows` each.
     * ``set vrf <id>`` other than 0 -- a VRF's route.  The parser reads
       no VRF of a FortiOS config, and in the global table of the output
-      such a route would carry traffic the source keeps apart.
+      such a route would carry traffic the source keeps apart.  So is a
+      route whose ``set device`` is an interface in such a VRF (see
+      :func:`_in_a_vrf`).
     * ``set blackhole enable`` -- the tree has no form for a route that
       discards; without its flag it is a route to nowhere.
     * ``set dstaddr`` / ``set internet-service`` -- the destination is
@@ -1247,13 +1257,23 @@ def _route_destination(tokens: list[str] | None, head: str) -> str | None:
     return None
 
 
-def _read_routes(block: _ConfigBlock, intent: CanonicalIntent) -> None:
+def _read_routes(
+    block: _ConfigBlock,
+    intent: CanonicalIntent,
+    in_a_vrf: Collection[str] = frozenset(),
+) -> None:
     """Read the routes of a ``config router static`` or ``static6``
     block, and say each the tree cannot hold (:class:`_RoutesNotHeld`).
 
     ``set comment "<text>"`` is the route's description; ``set
     distance <n>`` (administrative distance, FortiOS's default 10) is
     its metric, so that a floating static round-trips.
+
+    Args:
+        block: The ``config router static`` or ``static6`` block.
+        intent: The tree the routes are added to.
+        in_a_vrf: The interfaces in a VRF other than 0
+            (:func:`_in_a_vrf`): a route out one is that VRF's.
     """
     not_held = _RoutesNotHeld(block.config_path)
     for edit in ticked(block.edits):
@@ -1264,7 +1284,7 @@ def _read_routes(block: _ConfigBlock, intent: CanonicalIntent) -> None:
             ))
             continue
         vrf = _first(edit, "vrf")
-        if vrf and vrf != "0":
+        if (vrf and vrf != "0") or _first(edit, "device") in in_a_vrf:
             not_held.counts["vrf"] += 1
             continue
         if _first(edit, "blackhole").lower() == "enable":
@@ -1302,21 +1322,76 @@ def _read_routes(block: _ConfigBlock, intent: CanonicalIntent) -> None:
     intent.dropped_tier3_sections.extend(not_held.rows())
 
 
-def _apply_router_static(
-    block: _ConfigBlock, intent: CanonicalIntent,
-) -> None:
-    """Parse ``config router static`` (IPv4 static routes): see
-    :func:`_read_routes`."""
-    _read_routes(block, intent)
+def _in_a_vrf(blocks: list[_ConfigBlock]) -> set[str]:
+    """The interfaces whose ``set vrf`` names a VRF other than 0.
+
+    "VRFs are always enabled and, by default, all routing is done in
+    VRF 0"; an interface is put in another with ``set vrf <id>``, and
+    "all routes relating to that interface are isolated to that VRF
+    specific routing table" (Fortinet, FortiOS 7.0.1 Administration
+    Guide, "Implementing VRF").  A static route is put in a VRF by
+    the interface its ``set device`` names (Fortinet KB, "Configure
+    static routes and black hole routes to different VRFs": the VRF
+    is configured on the interface, and the route points at it).
+    Read from every block before any route: a block may come before
+    the interfaces it names.
+    """
+    names: set[str] = set()
+    for block in blocks:
+        if block.config_path != "system interface":
+            continue
+        for edit in ticked(block.edits):
+            vrf = _first(edit, "vrf")
+            if edit.edit_id and vrf and vrf != "0":
+                names.add(edit.edit_id)
+    return names
 
 
-def _apply_router_static6(
-    block: _ConfigBlock, intent: CanonicalIntent,
-) -> None:
-    """Parse ``config router static6`` (IPv6 static routes): see
-    :func:`_read_routes`.  ``set dst`` here is a single
-    ``<prefix>/<len>`` token (no dotted mask), read as written."""
-    _read_routes(block, intent)
+def _out_of_their_vrf(intent: CanonicalIntent, in_a_vrf: Collection[str]) -> list[str]:
+    """Leave out what each interface in a VRF other than 0 routes,
+    keep the interface, and say which.
+
+    The parser reads no VRF of a FortiOS config, and the output puts
+    nothing in one: an interface of :func:`_in_a_vrf` written with its
+    addresses is an interface of the global table, connected to every
+    other, where the source keeps it apart ("Interfaces in one VRF
+    cannot reach interfaces in a different VRF", the guide above).
+    Up to 0.7.7 it was, in jobs that said ``completed``.  So its
+    IPv4 and IPv6 addresses, its DHCP client and its VRRP groups are
+    left out, and the record is kept with what is not routing (its
+    description, state, MTU, type, tag and LAG).  FortiOS supports VRF
+    for IPv6 from 7.0.1 (Fortinet KB, "VRF Support for IPv6": before
+    it the IPv6 table showed no connected network of an interface in a
+    VRF); what a release before 7.0.1 does with such an interface's
+    IPv6 addresses is not established, and they are left out with the
+    rest on every release, the reading that carries less.  The DHCP pools
+    on such an interface are left out by
+    :func:`.dhcp_pools.pools_of`, and the routes out it by
+    :func:`_read_routes`.
+
+    Returns:
+        The row of ``dropped_tier3_sections``: one, naming a few of
+        the interfaces and counting the rest; none where no
+        interface of the tree is in a VRF.
+    """
+    names: list[str] = []
+    for iface in ticked(intent.interfaces):
+        if iface.name not in in_a_vrf:
+            continue
+        names.append(iface.name)
+        iface.ipv4_addresses = []
+        iface.ipv6_addresses = []
+        iface.dhcp_client = False
+        iface.dhcp_client_v6 = ""
+        iface.vrrp_groups = []
+    if not names:
+        return []
+    return [
+        f"config system interface edit {a_few_named(names)}: set vrf <id> "
+        "-- an interface in a VRF other than 0, and no VRF of a FortiOS "
+        "config is read; its addresses, DHCP client and VRRP groups are "
+        "not translated"
+    ]
 
 
 def _apply_system_admin(
@@ -1440,8 +1515,6 @@ _DISPATCH: ClassVar[dict[str, object]] = {
     "system dns": _apply_system_dns,
     "system ntp": _apply_system_ntp,
     "system interface": _apply_system_interface,
-    "router static": _apply_router_static,
-    "router static6": _apply_router_static6,
     "system snmp sysinfo": _apply_snmp_sysinfo,
     "system snmp community": _apply_snmp_community,
     "system snmp user": _apply_snmp_user,
@@ -1455,7 +1528,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     Unrecognised ``config`` paths fall through as silent drops; if you
     need tolerant-mode guarantees for a new path, add it to the
-    ``_DISPATCH`` table with an ``_apply_<path>`` function.
+    ``_DISPATCH`` table with an ``_apply_<path>`` function.  The
+    ``config router static`` and ``static6`` blocks are read by
+    :func:`_read_routes`, which is given the interfaces in a VRF.
 
     Raises:
         ParseError: On empty input or input that looks like a different
@@ -1488,7 +1563,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # scope).  DEBUG surface lets ops see what was dropped without
     # requiring a separate grep pass.
     ignored_paths: list[str] = []
+    in_a_vrf = _in_a_vrf(blocks)
     for block in ticked(blocks):
+        if block.config_path in ("router static", "router static6"):
+            _read_routes(block, intent, in_a_vrf)
+            continue
         applier = _DISPATCH.get(block.config_path)
         if applier is not None:
             applier(block, intent)
@@ -1499,12 +1578,13 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # Read after every block: a pool of ``dns-service local`` or
     # ``default`` gives its clients an interface's address or the
     # FortiGate's own DNS servers, which may be stated after it.
-    pools, pool_rows, pools_left_out = pools_of(blocks, intent.interfaces)
+    pools, pool_rows, pools_left_out = pools_of(blocks, intent.interfaces, in_a_vrf)
     intent.dhcp_servers.extend(pools)
     intent.dropped_tier3_sections.extend([
         *pool_rows, *left_out_rows(pools_left_out, rest="disabled"),
     ])
     intent.dropped_tier3_sections.extend(_tags_with_no_form(blocks, intent))
+    intent.dropped_tier3_sections.extend(_out_of_their_vrf(intent, in_a_vrf))
 
     logger.debug(
         "fortigate_cli parsed: hostname=%r ifaces=%d vlans=%d "
