@@ -2097,15 +2097,33 @@ class TestDetectDeployment:
     def test_a_device_no_family_describes_is_an_answer_not_an_error(
         self, client: TestClient,
     ) -> None:
+        # A ProCurve 2848 (J4904A), which no shipped family describes.
+        raw = (
+            "; J4904A Configuration Editor; Created on release #I.10.107\n"
+            'hostname "x"\n'
+            "module 1 type j4904a\n"
+            'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-48\n   exit\n'
+        )
+        resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": raw})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["stated"] is True
+        assert proposal["deployment"] is None and proposal["consistent"] is None
+        assert proposal["unknown_parts"] == ["J4904A"]
+
+    def test_the_committed_2920_config_proposes_its_own_device(
+        self, client: TestClient,
+    ) -> None:
         raw = (
             REPO_ROOT / "tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg"
         ).read_text(encoding="utf-8")
         resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": raw})
         assert resp.status_code == 200
         proposal = resp.json()
-        assert proposal["stated"] is True
-        assert proposal["deployment"] is None and proposal["consistent"] is None
-        assert proposal["unknown_parts"] == ["J9729A"]
+        assert proposal["unknown_parts"] == []
+        assert proposal["deployment"]["mode"] == "standalone"
+        assert [m["model"] for m in proposal["deployment"]["members"]] == ["2920-48G-PoEP"]
+        assert proposal["consistent"] is True
 
     def test_a_catalyst_is_read_from_its_provision_line(self, client: TestClient) -> None:
         raw = (

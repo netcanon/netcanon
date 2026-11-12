@@ -517,7 +517,9 @@ Provenance in
 - **`hpe_community_2920_wb1608_dhcp_snooping.cfg`** — 2920 on
   WB.16.08.0001 — different OS family (WB vs WC) and major version
   from the other captures.  `dhcp-snooping` with 13
-  `authorized-server` entries, NTP iburst, ACLs
+  `authorized-server` entries, NTP iburst, ACLs.  It is the `capture`
+  claim of the `2920` model family: a standalone J9729A, both bays
+  empty, ports `1`-`48`
 - **`hpe_community_2930f_wc1610_dhcp_server.cfg`** — 2930F on
   WC.16.10.0005 with `dhcp-server pool` grammar exercised across
   3 pools and 4 VLANs; each pool is read onto its VLAN
@@ -1033,9 +1035,14 @@ have.
   A stack's banner names no model, so a stack config pasted without
   its `stacking` or `vsf` stanza states no device; and a proposal
   lists a stack's members lowest number first.
-  The 2930F and 2930M series are modelled; a 3810M can be declared
-  through its target profile; a switch with neither cannot be declared
-  yet.  Only the port names are translated: a config that removes
+  The 2920, 2930F and 2930M series are modelled; a 3810M can be
+  declared through its target profile; a switch with neither cannot be
+  declared yet.  A 2920's port names are graded `inferred` -- no HPE
+  document that prints them was read -- except a standalone J9729A
+  with both bays empty, which the committed 2920 config proves; its
+  bays are `A` and `B`, each empty or holding a J9731A (two SFP+) or a
+  J9732A (two 10GBASE-T), and a 2920 stack holds at most four.
+  Only the port names are translated: a config that removes
   ports from VLAN 1 with `no untagged` gets that line back for the
   ports the output tags in some VLAN and lists untagged in none; a
   port it lists untagged in another VLAN gets none, and leaves VLAN 1
