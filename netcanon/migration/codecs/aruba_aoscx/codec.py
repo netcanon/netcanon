@@ -535,13 +535,14 @@ class ArubaAOSCXCodec(CodecBase):
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "AOS-CX has NO routed sub-interface construct (no "
-                    "`<parent>.<subid>` naming) — tagged L3 is done via "
-                    "SVIs (`interface vlan N`), not `encapsulation dot1q` "
-                    "sub-interfaces.  So the routed-subif 802.1Q tag (GAP "
-                    "7) is architecturally unsupported here, not merely "
-                    "un-wired: a cross-vendor source's tag is flagged as a "
-                    "drop rather than mis-rendered."
+                    "AOS-CX has routed sub-interfaces (`interface "
+                    "1/1/1.201` with `encapsulation dot1q 10`, HPE, on the "
+                    "6300/6400 from 10.08 and the 8100, 83xx and 10000 "
+                    "series), and the parser reads the tag; this codec's "
+                    "renderer does not write it yet.  So a tag onto "
+                    "AOS-CX, from another vendor or from AOS-CX itself, is "
+                    "reported as a drop: the output has the sub-interface "
+                    "with its address and no `encapsulation dot1q`."
                 ),
             ),
             UnsupportedPath(
@@ -549,19 +550,20 @@ class ArubaAOSCXCodec(CodecBase):
                 reason=(
                     "Which routed sub-interface takes the untagged frames of "
                     "its port (IOS-XE `encapsulation dot1Q N native`, Junos "
-                    "`native-vlan-id N` with the unit of that `vlan-id`): this "
-                    "codec writes no routed sub-interface (see "
-                    "`/interfaces/interface/dot1q-vlan`), so it has no form "
-                    "here either.  Declared so that it is reported as a drop."
+                    "`native-vlan-id N` with the unit of that `vlan-id`): HPE "
+                    "documents no such form for an AOS-CX sub-interface, and "
+                    "this codec writes no sub-interface's tag (see "
+                    "`/interfaces/interface/dot1q-vlan`).  Declared so that "
+                    "it is reported as a drop."
                 ),
             ),
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-inner-vlan",
                 reason=(
-                    "AOS-CX has no routed sub-interface construct (see "
-                    "`/interfaces/interface/dot1q-vlan`), so the inner tag of "
-                    "a Q-in-Q sub-interface has no form here either: a "
-                    "source's inner tag is reported as a drop."
+                    "HPE documents one tag for an AOS-CX sub-interface "
+                    "(`encapsulation dot1q <VLAN-ID>`), so the inner tag of "
+                    "a Q-in-Q sub-interface has no form here: a source's "
+                    "inner tag is reported as a drop."
                 ),
             ),
             UnsupportedPath(
@@ -791,8 +793,13 @@ class ArubaAOSCXCodec(CodecBase):
         # Surface Tier-3 stanza headers the parser deliberately drops
         # (BGP / OSPF / ACLs / class / policy).  Notification-only —
         # never read by any render-side code.  Read from the text the
-        # parser read: a banner's lines are text, not stanzas.
-        intent.dropped_tier3_sections = detect_tier3_sections_aoscx(without_banner_bodies(raw))
+        # parser read: a banner's lines are text, not stanzas.  After
+        # them, the rows the parser itself made: a sub-interface whose
+        # tag statement is not one VLAN id.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_aoscx(without_banner_bodies(raw)),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

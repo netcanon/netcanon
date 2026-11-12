@@ -181,7 +181,7 @@ holds the codecs that state one to a table typed by hand).  A parser that knows 
 role from
 context sets `CanonicalInterface.kind` (the IOS-XE `Mgmt-vrf` port
 is `mgmt`), and the orchestrator reads that ahead of the name.  A
-parser that reads no 802.1Q tag for a sub-interface (AOS-CX, OS10)
+parser that reads no 802.1Q tag for a sub-interface (OS10)
 leaves each such unit to be written without one on every target.
 The orchestrator reports that across vendors; in a job from such a
 codec to itself the tag is lost the same way and nothing reports

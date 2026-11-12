@@ -1365,6 +1365,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX sub-interface is the tag its `encapsulation dot1q`
+  states.**  HPE documents routed sub-interfaces on AOS-CX:
+  `interface 1/1/1.201` with `encapsulation dot1q 10` (one VLAN id,
+  1 to 4094; the 6300/6400 from 10.08 and the 8100, 83xx and 10000
+  series).  The parser read no such line, so every AOS-CX
+  sub-interface went onto another vendor with no tag (EOS, IOS-XE,
+  NX-OS, IOS XR, Junos) or with its number as its tag (VyOS `vif
+  201`, FortiOS `set vlanid 201`), in jobs that said `completed` with
+  one warning each; onto AOS-CX itself the tag was lost the same way,
+  and nothing said so.  The parser reads the tag whole, as the NX-OS,
+  IOS-XE, IOS XR, EOS and Junos parsers do: a statement that is not
+  one VLAN id (`0`, `4095`, `10 20`) leaves its sub-interface out,
+  with a row that says the statement.  A LAG's sub-interface
+  (`interface lag 1.10`), a form HPE does not document, is not read
+  as one.  The renderer writes no tag yet, so a job onto AOS-CX --
+  from AOS-CX itself as from another vendor -- lists
+  `/interfaces/interface/dot1q-vlan` and is `partial`.  Guarded by
+  `tests/unit/migration/test_an_aoscx_sub_interface_states_its_tag.py`,
+  which reads each output as text, and by
+  `tests/unit/migration/test_a_tag_is_a_vlan_id.py`; the tests that
+  took AOS-CX for a parser that reads no tag take OS10, whose parser
+  still reads none.
 - **A FortiOS loopback or tunnel is what its `set type` says, whatever
   its name.**  FortiOS names both freely -- Fortinet's own loopback
   example is `Lo-BGP-RID`, and an IPsec tunnel interface takes the

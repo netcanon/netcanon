@@ -767,11 +767,17 @@ _NO_TAG: dict[str, tuple[str, str, dict[str, str], str, str]] = {
         "set system host-name r1\nset interfaces ge-0/0/2 unit 100 family inet address 198.51.100.1/24\n",
         {"ge-0/0/2": "2"}, "2.100", "2",
     ),
-    "an AOS-CX unit, whose tag the parser does not read": (
+    "an AOS-CX unit": (
         "aruba_aoscx",
         "hostname r1\ninterface 1/1/2\n    no shutdown\n    routing\n"
-        "interface 1/1/2.100\n    encapsulation dot1q 100\n    ip address 198.51.100.1/24\n",
+        "interface 1/1/2.100\n    ip address 198.51.100.1/24\n",
         {"1/1/2": "2"}, "2.100", "2",
+    ),
+    "an OS10 unit, whose tag the parser does not read": (
+        "dell_os10",
+        "hostname r1\ninterface ethernet1/1/2\n no switchport\n!\n"
+        "interface ethernet1/1/2.100\n encapsulation dot1q 100\n ip address 198.51.100.1/24\n!\n",
+        {"ethernet1/1/2": "2"}, "2.100", "2",
     ),
     "a unit of a LAG": (
         "cisco_nxos",
@@ -922,7 +928,10 @@ _A_TAG_AND_NO_VLAN: dict[str, str] = {
         "hostname r1\n!\ninterface Ethernet1\n   no switchport\n!\ninterface Ethernet1.100\n"
         "   encapsulation dot1q vlan 100\n   ip address 198.51.100.1/24\n!\n"
     ),
-    "aruba_aoscx": _NO_TAG["an AOS-CX unit, whose tag the parser does not read"][1],
+    "aruba_aoscx": (
+        "hostname r1\ninterface 1/1/1\n    no shutdown\n    routing\n"
+        "interface 1/1/1.100\n    encapsulation dot1q 100\n    ip address 198.51.100.1/24\n"
+    ),
     "dell_os10": (
         "hostname r1\ninterface ethernet1/1/1\n no switchport\n!\n"
         "interface ethernet1/1/1.100\n encapsulation dot1q 100\n ip address 198.51.100.1/24\n!\n"
@@ -1057,8 +1066,8 @@ def test_the_platforms_whose_vlans_are_their_tags() -> None:
     """``_VLANS_ARE_ITS_TAGS`` is the parsers that make a VLAN record of
     a sub-interface's tag where the config states no VLAN, on the
     sources typed here, one for each public codec but those named with
-    their reason (the AOS-CX and OS10 parsers read no tag, and are
-    typed all the same); and on every committed capture of theirs, each
+    their reason (the OS10 parser reads no tag, and is typed all the
+    same); and on every committed capture of theirs, each
     VLAN record is a tag's, as the parser makes it, and each tag has
     one."""
     public = set(list_public_codecs())
@@ -1066,7 +1075,7 @@ def test_the_platforms_whose_vlans_are_their_tags() -> None:
     assert not set(_A_TAG_AND_NO_VLAN) & set(_NO_SUB_INTERFACE_SOURCE)
     trees = {codec: get_codec(codec).parse(text) for codec, text in _A_TAG_AND_NO_VLAN.items()}
     tagged = {codec for codec, tree in trees.items() if any(i.dot1q_vlan == 100 for i in tree.interfaces)}
-    assert tagged == set(trees) - {"aruba_aoscx", "dell_os10"}
+    assert tagged == set(trees) - {"dell_os10"}
     made = {tree.source_vendor for tree in trees.values() if [vlan.id for vlan in tree.vlans] == [100]}
     assert made == set(vlan_interfaces._VLANS_ARE_ITS_TAGS)
     read = 0

@@ -339,8 +339,8 @@ left out is not written either, unless something written carries it:
 up to 0.7.7 it was an empty `vlan <id>` stanza.
 
 A unit of a port or a LAG that has no 802.1Q tag is not written
-either.  Every AOS-CX and OS10 sub-interface is one, since those
-parsers read no tag, and so is a unit whose config states none.  The
+either.  Every OS10 sub-interface is one, since that parser reads
+no tag, and so is a unit whose config states none.  The
 port translator sends it after its port as `2.100` or `Trk1.100`.
 Where it holds an address, a VRRP group, a description or an MTU, a
 `; review:` line and a warning say so; one that holds none of them

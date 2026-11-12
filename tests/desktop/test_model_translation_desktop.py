@@ -306,7 +306,7 @@ class TestModelTranslationServedByEmbeddedServer:
         unit = "\n".join([
             "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
             "interface 1/1/1", "    no shutdown", "    routing",
-            "interface 1/1/1.54", "    no shutdown", "    encapsulation dot1q 300",
+            "interface 1/1/1.54", "    no shutdown",
             "    ip address 10.54.0.1/24", "",
         ])
         with patch(

@@ -670,7 +670,7 @@ class MappingPlan(BaseModel):
     tag of a sub-interface is not in its name, so the output has
     an interface of that name and no tag from the source -- because
     the source platform's parser reads none for a sub-interface
-    (AOS-CX, OS10), because it did not read the line that states
+    (OS10), because it did not read the line that states
     one, or because the config states none.  Nothing
     else in the job says so (there is no tag for the validation
     report to list), so such a unit is not in
@@ -679,7 +679,7 @@ class MappingPlan(BaseModel):
     Never filled between two configs of one codec: there a unit
     moves with whatever the tree holds for it and nothing is
     asked.  (That is not a promise about the tag.  Where the
-    source platform's parser reads none -- AOS-CX, OS10 -- the
+    source platform's parser reads none -- OS10 -- the
     tree holds none on any path, a job from that platform to
     itself included, and nothing in such a job says so.)"""
 

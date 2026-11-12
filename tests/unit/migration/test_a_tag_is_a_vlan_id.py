@@ -14,6 +14,9 @@ sub-interface out with a row.  Four did not:
 * FortiOS made no VLAN of ``set vlanid 0`` and kept the interface, its
   address on an interface of no tag.
 
+The AOS-CX parser, which reads a tag now, reads it whole from the
+first.
+
 Each source here holds a sub-interface of tag 10 beside the one whose
 tag is no VLAN id, and the row each parser writes is typed by hand.
 """
@@ -24,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+from netcanon.migration.codecs.aruba_aoscx import parse as aoscx_parse
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.cisco_nxos import parse as nxos_parse
 from netcanon.migration.codecs.fortigate_cli import parse as fgt_parse
@@ -68,6 +72,17 @@ SOURCES = {
         "  encapsulation dot1q {tag}\n"
         "  ip address 203.0.113.1/24\n",
         "interface Ethernet1/1.20: encapsulation dot1q {tag}" + _ROW,
+    ),
+    "aruba_aoscx": (
+        "interface 1/1/1\n"
+        "    routing\n"
+        "interface 1/1/1.10\n"
+        "    encapsulation dot1q 10\n"
+        "    ip address 192.0.2.129/25\n"
+        "interface 1/1/1.20\n"
+        "    encapsulation dot1q {tag}\n"
+        "    ip address 203.0.113.1/24\n",
+        "interface 1/1/1.20: encapsulation dot1q {tag}" + _ROW,
     ),
     "mikrotik_routeros": (
         "/interface vlan\n"
@@ -212,9 +227,9 @@ def test_the_source_reads_a_vlan_id(codec: str) -> None:
 
 
 #: Where the neighbour of tag 10 is not in the output either, for a
-#: reason of its own: AOS-S has no name for the NX-OS port the units
-#: are on, and the job is ``partial`` with the unit listed.
-NEIGHBOUR_NOT_WRITTEN = {("cisco_nxos", "aruba_aoss")}
+#: reason of its own: AOS-S has no name for the NX-OS or AOS-CX port the
+#: units are on, and the job is ``partial`` with the unit listed.
+NEIGHBOUR_NOT_WRITTEN = {("cisco_nxos", "aruba_aoss"), ("aruba_aoscx", "aruba_aoss")}
 
 
 @pytest.mark.parametrize("codec", list(SOURCES))
@@ -282,6 +297,13 @@ def test_the_check_sees_nxos_read_tag_0(monkeypatch) -> None:
         nxos_parse, "without_unread_tags", lambda raw, _a, _b: (raw, []),
     )
     assert problems("cisco_nxos", "0") != []
+
+
+def test_the_check_sees_aoscx_read_tag_0(monkeypatch) -> None:
+    monkeypatch.setattr(
+        aoscx_parse, "without_unread_tags", lambda raw, _a, _b: (raw, []),
+    )
+    assert problems("aruba_aoscx", "0") != []
 
 
 def test_the_check_sees_routeros_refuse_the_config(monkeypatch) -> None:

@@ -704,10 +704,10 @@ kinds of name away from it:
   `partial` when the tree holds a tag for the validation report to
   list.  The tag is a field (`dot1q_vlan`), not part of the name: a
   unit that went with its port across vendors and has none in the
-  tree — the AOS-CX and OS10 parsers read none — is written without
+  tree — the OS10 parser reads none — is written without
   one, and the translator says so in a warning of its own.  Between
   two configs of one codec it says nothing, and such a tag is lost
-  there as on every path: a job from AOS-CX to AOS-CX writes the
+  there as on every path: a job from OS10 to OS10 writes the
   sub-interface without it, as parse and render alone do, and
   nothing reports it.
 

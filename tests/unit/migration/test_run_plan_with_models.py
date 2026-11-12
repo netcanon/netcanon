@@ -2708,8 +2708,7 @@ _IOS_UNIT_WITH_NO_TAG = "\n".join([
     "interface GigabitEthernet1/0/2", " description OTHER", "!", "end", "",
 ])
 
-#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
-#: parser reads none.
+#: An AOS-CX sub-interface, with tag 300, which is not its number.
 _AOSCX_UNIT = "\n".join([
     "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
     "interface 1/1/1", "    no shutdown", "    routing", "    description PARENT",
@@ -2717,6 +2716,9 @@ _AOSCX_UNIT = "\n".join([
     "    ip address 10.54.0.1/24",
     "interface 1/1/2", "    no shutdown", "    routing", "    ip address 10.2.0.1/24", "",
 ])
+
+#: The same, with a stanza that states no tag.
+_AOSCX_UNIT_WITH_NO_TAG = _AOSCX_UNIT.replace("    encapsulation dot1q 300\n", "")
 
 #: An IOS-XE unit typed in another letter case than its port, tagged.
 _IOS_UNIT_IN_ANOTHER_CASE = "\n".join([
@@ -3060,19 +3062,31 @@ class TestSubInterfaces:
         assert not [w for w in plan.warnings if "sub-interface" in w or "override" in w]
         assert job.status == MigrationJobStatus.completed
 
-    def test_a_parser_that_reads_no_tag(self) -> None:
-        """Not only a config that states none.  AOS-CX states the tag
-        and its parser reads none, so EVERY AOS-CX sub-interface is
-        such a unit -- onto a target that has tagged sub-interfaces
-        as much as onto one that has not."""
+    def test_a_unit_whose_tag_is_read_follows_with_it(self) -> None:
+        """The AOS-CX parser reads a sub-interface's tag (it read none,
+        and every AOS-CX unit was one that moved with no tag): the unit
+        follows its port with tag 300, which is not its number, and
+        nothing is asked."""
         aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
-        tags = {i.name: i.dot1q_vlan for i in aoscx.parse(_AOSCX_UNIT).interfaces}
-        assert "encapsulation dot1q 300" in _AOSCX_UNIT and tags["1/1/1.54"] is None, (
-            "the AOS-CX parser reads a sub-interface's tag now: this is no "
-            "longer a config with a unit that has none"
-        )
         job = run_plan_with_models(
             aoscx, eos, _AOSCX_UNIT, _profile("aruba_aoscx/6300M-48G-PoE4-SFP56"),
+            _profile("arista_eos/DCS-7050SX-64"),
+        )
+        plan = job.port_mapping_plan
+        assert plan.sub_interfaces == {"1/1/1.54": "Ethernet1.54"} and plan.untagged_units == {}
+        assert plan.unresolved_ports == []
+        assert job.status == MigrationJobStatus.completed
+        stanza = job.rendered.split("interface Ethernet1.54\n", 1)[1].split("!\n", 1)[0]
+        assert "   encapsulation dot1q vlan 300\n" in stanza
+        assert "   ip address 10.54.0.1/24\n" in stanza
+
+    def test_a_unit_that_states_no_tag(self) -> None:
+        """An AOS-CX unit whose stanza states no tag is such a unit --
+        onto a target that has tagged sub-interfaces as much as onto one
+        that has not."""
+        aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            aoscx, eos, _AOSCX_UNIT_WITH_NO_TAG, _profile("aruba_aoscx/6300M-48G-PoE4-SFP56"),
             _profile("arista_eos/DCS-7050SX-64"),
         )
         plan = job.port_mapping_plan
@@ -3091,14 +3105,14 @@ class TestSubInterfaces:
     def test_one_codec_both_sides_asks_nothing(self) -> None:
         """One grammar on both sides: a unit is written as the tree
         holds it.  The same two units have followed, and nothing is
-        asked.  (Not because the AOS-CX one has its tag in the
-        output.  Its parser read none, so the tag is lost on this
-        path as on every other, and here nothing says so.)"""
+        asked.  (The AOS-CX one states no tag here.  One that does is
+        a job its validation holds, since the AOS-CX renderer writes no
+        sub-interface's tag yet: ``test_an_aoscx_sub_interface_states_its_tag.py``.)"""
         ios, aoscx = get_codec("cisco_iosxe_cli"), get_codec("aruba_aoscx")
         for codec, text, source, target, unit in (
             (ios, _IOS_UNIT_WITH_NO_TAG, "cisco_iosxe/C9300-24P", "cisco_iosxe/C9300-48P",
              "GigabitEthernet1/0/1.54"),
-            (aoscx, _AOSCX_UNIT, "aruba_aoscx/6300M-48G-PoE4-SFP56",
+            (aoscx, _AOSCX_UNIT_WITH_NO_TAG, "aruba_aoscx/6300M-48G-PoE4-SFP56",
              "aruba_aoscx/6300M-48G-PoE4-SFP56", "1/1/1.54"),
         ):
             job = run_plan_with_models(codec, codec, text, _profile(source), _profile(target))

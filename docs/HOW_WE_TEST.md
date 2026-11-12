@@ -203,7 +203,7 @@ dropped with a port the target has no name for — the validation
 report has nothing to list, and the job, run as `POST /plan` runs
 it, must be `partial` and name the port and its units (the next
 paragraph is about that status).  One thing is pinned as it is: a
-tag the source parser does not read (AOS-CX, OS10) between two
+tag the source parser does not read (OS10) between two
 configs of that vendor is lost there as on every path, with nothing
 in the job to say so, and the pin keeps the documents which say so
 true.  The same module keeps the list of the codecs whose own

@@ -1120,7 +1120,7 @@ def translate_port_names(  # noqa: C901
            tag the same way, and one with no tag is not sent after
            its port (:func:`goes_by_its_tag`).  The tree has none
            where the platform's parser reads none for a
-           sub-interface (AOS-CX, OS10) and where the config states
+           sub-interface (OS10) and where the config states
            none.
 
            What the target makes of ``<its port>.<unit>`` is the
@@ -1557,7 +1557,7 @@ def translate_port_names(  # noqa: C901
                 # configs of one codec, where a unit is written as
                 # the tree holds it and nothing was to be carried
                 # across.  That is no promise about the tag: one
-                # the parser does not read (AOS-CX, OS10) is lost on
+                # the parser does not read (OS10) is lost on
                 # every path, that one included -- the bare pipeline
                 # loses it too -- and nothing reports it there.
                 warnings.append(

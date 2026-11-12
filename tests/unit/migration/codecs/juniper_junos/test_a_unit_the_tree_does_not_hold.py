@@ -147,8 +147,8 @@ def _problems(job: MigrationJob, target_name: str) -> list[str]:
         _ROUTED_TAG not in _tags(target_name, out, holders[0], job.rendered)
         and job.status == MigrationJobStatus.completed
     ):
-        # A target whose parser reads no tag of a sub-interface
-        # (AOS-CX, OS10) holds the job instead.
+        # A target that writes no sub-interface's tag (AOS-CX,
+        # OS10) holds the job instead.
         problems.append(
             f"{holders[0].name!r} does not carry {_ROUTED_TAG}, and the job is completed"
         )

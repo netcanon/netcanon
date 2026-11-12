@@ -745,6 +745,8 @@ undetected (see [`vendors/aruba_aoscx.md`](vendors/aruba_aoscx.md) §
 | `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
 | `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Unsupported | The `vrf <name>` stanza is a bare name in v1; descriptions / RD / route-targets live under the deferred `evpn` / `router bgp` blocks. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in Phase 1; only default-VRF `ip route` is wired. |
+| `/interfaces/interface/dot1q-vlan` | Unsupported | AOS-CX has routed sub-interfaces (`interface 1/1/1.201` with `encapsulation dot1q 10`, HPE, on the 6300/6400 from 10.08 and the 8100, 83xx and 10000 series), and the parser reads the tag: onto another vendor the sub-interface is written with it.  A tag statement that is not one VLAN id (`0`, `4095`, `10 20`) leaves its sub-interface out, and a row of the job says the statement.  The renderer writes no tag yet, so onto AOS-CX, from AOS-CX itself as from another vendor, the output has the sub-interface with its address and no `encapsulation dot1q`, and the job is `partial`.  A LAG's sub-interface (`interface lag 1.10`) is a form HPE does not document: the parser reads its header as `lag 1`, and its tag is not read. |
+| `/interfaces/interface/{dot1q-native,dot1q-inner-vlan}` | Unsupported | HPE documents one tag for an AOS-CX sub-interface and no native form, so neither has a form here. |
 | `/interfaces/interface/vrrp-groups/group` (and every field of one) | Unsupported | AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is a later phase; the `active-gateway` distributed-gateway anycast surface IS supported.  ⚠️ Up to 0.7.7 a group's virtual IPs, tracked interfaces and virtual MAC were declared supported. |
 | `/interfaces/interface/{dhcp-client,dhcp-client-v6}` | Lossy (warn) | The codec reads and writes no DHCP client, IPv4 or IPv6: the interface is written without one. |
 | Fields of records the codec does not write: `/dhcp-servers/pool/*`, `/interfaces/interface/ipv6/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No DHCP pool, IPv6 virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
@@ -2223,7 +2225,7 @@ What you get back, on the job's `port_mapping_plan`:
   in `off_inventory` and in `unresolved_ports`, so the job is
   `partial` until your `port_rename_map` names it.  A unit gets
   here from a source platform whose parser reads no tag for a
-  sub-interface (AOS-CX, OS10), and from a config that states none
+  sub-interface (OS10), and from a config that states none
   (a config pasted without its indentation is refused, not read).
 * **`unvouched_units`** — sub-interface names that went where their
   port went, tag and all, and that the plan does not count as having
@@ -2585,7 +2587,7 @@ nothing, as before.
   interface is a VLAN), in a job that is `partial` because the
   validation details list the tag.  Map such a unit by hand.  Two
   cases to look for.  A unit with **no tag read from the source** (a
-  platform whose parser reads none — AOS-CX, OS10 — a line the
+  platform whose parser reads none — OS10 — a line the
   parser did not read, or a config
   that states none) leaves the validation nothing to list, on any
   target: the unit is written under `<port>.<unit>` with no VLAN.
@@ -2595,7 +2597,7 @@ nothing, as before.
   status does not move for it (section D1 says what it moves for
   there).  Between two configs of ONE
   vendor none of that is said — and a tag the parser does not read
-  (AOS-CX, OS10) is lost there as well, as it is on every path,
+  (OS10) is lost there as well, as it is on every path,
   with nothing in the job to report it.
   **VyOS, FortiOS and OPNsense write the source's own tag**, where
   the number in the name was once taken for it (or, onto OPNsense,

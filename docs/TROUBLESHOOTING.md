@@ -1007,8 +1007,9 @@ that name with no `encapsulation dot1q` / `vlan-id` — or, on VyOS
 and FortiOS, with the unit's NUMBER as its VLAN id.  The causes:
 
 * the source platform's parser reads no tag for a sub-interface.
-  That is every sub-interface of an AOS-CX or Dell OS10 config,
-  whatever its `encapsulation dot1q` line says;
+  That is every sub-interface of a Dell OS10 config, whatever its
+  `encapsulation dot1q` line says (and of an AOS-CX config up to
+  0.7.7);
 * the stanza states none.
 
 Look the tag up in the source and set it on the target by hand.
@@ -1022,7 +1023,7 @@ not list.
 
 Between two configs of one vendor nothing is said — which is not a
 promise about the tag.  A tag the source platform's parser does not
-read (AOS-CX, OS10) is lost on every path, a job from that vendor to
+read (OS10) is lost on every path, a job from that vendor to
 itself included, and there no warning, no validation line and no
 status reports it.  Compare the sub-interfaces of such an output with
 the source by hand.
