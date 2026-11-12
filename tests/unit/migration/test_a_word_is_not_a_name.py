@@ -652,9 +652,11 @@ _NO_ROUTE_OUT_THE_LOOPBACK = {
 }
 
 #: AOS-CX writes the loopback as its own grammar does, ``loopback 77``,
-#: and its own parser then reads the interface as ``loopback`` and the
-#: distance as 77: the fault mended here for IOS-XE, in another parser.
-#: The line it writes is pinned as text below.
+#: and its own parser then reads the interface as ``loopback``: the
+#: fault mended here for IOS-XE, in another parser.  (Its distance is
+#: read right, from ``distance 123``; up to 0.7.7 the renderer wrote a
+#: bare number, and the parser read the 77 for the distance.)  The line
+#: it writes is pinned as text below.
 _READS_ITS_OWN_SPACE_APART = {"aruba_aoscx"}
 
 
@@ -752,15 +754,15 @@ class TestARouteOutASpacedInterface:
                 no_route.add(target)
                 continue
             (route,) = routes
-            if route.metric != 123:
+            out = route.interface or route.gateway
+            if out != job.port_renames.get("loopback77", "loopback77"):
                 apart.add(target)
                 continue
-            out = route.interface or route.gateway
-            assert out == job.port_renames.get("loopback77", "loopback77"), (target, out)
+            assert route.metric == 123, target
         assert no_route == _NO_ROUTE_OUT_THE_LOOPBACK
         assert apart == _READS_ITS_OWN_SPACE_APART
         cx = _job("cisco_iosxe_cli", _XE_ROUTES, "aruba_aoscx").rendered
-        assert "ip route 198.51.100.0/24 loopback 77 123" in cx.splitlines()
+        assert "ip route 198.51.100.0/24 loopback 77 distance 123" in cx.splitlines()
 
     def test_the_capture_that_writes_them_apart(self) -> None:
         text = _capture(_ROUTES)

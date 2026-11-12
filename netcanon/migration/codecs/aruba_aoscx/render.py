@@ -7,8 +7,8 @@ AOS-CX CLI text out.
 Emits the supported subset declared in the capability matrix: a
 synthesised ``!Version`` banner, hostname, local users (``user <name>
 group <group> password ciphertext <blob>``), top-level ``vrf``
-declarations, per-id ``vlan`` stanzas (+ name / description), default-VRF
-static routes, and interface stanzas with description / admin-state /
+declarations, per-id ``vlan`` stanzas (+ name / description), static
+routes (a route of a VRF with ``vrf <name>``), and interface stanzas with description / admin-state /
 mtu, the L2 switchport surface (``no routing`` + ``vlan access`` / ``vlan
 trunk``) for physical + LAG ports, IPv4 (CIDR) / ``vrf attach`` / IPv6
 for routed ports, LAG membership (``lag N``), and ``lacp mode`` on the
@@ -161,10 +161,8 @@ def render_intent(tree: CanonicalIntent) -> str:
         if vlan.description:
             lines.append(f"    description {vlan.description}")
 
-    # ── Static routes (default VRF only) ──
+    # ── Static routes ──
     for route in tree.static_routes:
-        if route.vrf:
-            continue  # per-VRF static is deferred (declared unsupported)
         lines.append(_render_static_route(route))
 
     # ── Interfaces (AOS-CX show-output order) ──
@@ -415,14 +413,20 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
 
 
 def _render_static_route(route) -> str:
-    """Render one default-VRF static route as ``ip route DEST/N GW [dist]``
-    (or ``ipv6 route`` for an IPv6 destination).
+    """Render one static route as ``ip route DEST/N GW [distance N] [vrf
+    NAME]`` (or ``ipv6 route`` for an IPv6 destination).
 
     ``destination`` is already CIDR (``X/N``).  Next-hop is the gateway
     IP, or the interface name for a directly-attached next-hop.  A
-    non-zero ``metric`` re-emits as the trailing administrative-distance
-    token.  AOS-CX keys the address family off the keyword: an IPv6
-    destination uses ``ipv6 route`` (``ip route <v6>`` is invalid CLI).
+    non-zero ``metric`` is the administrative distance, written
+    ``distance <n>`` as HPE's routing guides give it (``ip route
+    10.0.2.0/24 20.0.0.2 distance 4``); up to 0.7.7 it was written as a
+    bare number, a form no printout or guide of AOS-CX shows.  AOS-CX
+    keys the address family off the keyword: an IPv6 destination uses
+    ``ipv6 route`` (``ip route <v6>`` is invalid CLI).  A route of a VRF
+    ends ``vrf <name>``, as the switch prints it.  Where a route has
+    both, the VRF is written last; no printout of the two together has
+    been seen, so the order is not established.
     """
     nexthop = route.gateway or route.interface
     # Two-token next-hop ``<iface> <gateway>``: emit BOTH, interface first, per
@@ -433,7 +437,9 @@ def _render_static_route(route) -> str:
     keyword = "ipv6 route" if ":" in (route.destination or "") else "ip route"
     out = f"{keyword} {route.destination} {nexthop}".rstrip()
     if route.metric:
-        out += f" {route.metric}"
+        out += f" distance {route.metric}"
+    if route.vrf:
+        out += f" vrf {route.vrf}"
     return out
 
 
