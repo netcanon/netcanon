@@ -17,7 +17,9 @@ v3-protocol preemption-mode interval`` + ``authentication=ah|simple
 password=...`` when set), ``/ip address`` (including the VIP rows
 ``add address=X interface=vrrp<N>`` that bind anycast/virtual IPs
 back to their group's pseudo-interface), ``/ipv6 address`` (GAP-EVPN-3,
-same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
+same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``
+(a route of a VRF is a ``# review:`` line: the output puts nothing in
+a VRF),
 ``/snmp`` (+ ``/snmp community`` for v1/v2c + SNMPv3 USM),
 ``/radius``, ``/ip pool`` + ``/ip dhcp-server`` + ``/ip dhcp-server
 network``, ``/user``,
@@ -812,6 +814,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.static_routes:
         lines.append("/ip route")
         for route in tree.static_routes:
+            if route.vrf:
+                # The output makes no VRF or routing table, so a
+                # route of one is left out and said.  Written as an
+                # ``add``, it was a route of the main table, routing
+                # traffic the source routed in another.
+                lines.append(
+                    f"# review: static route {route.destination} is in "
+                    f"VRF {route.vrf}, and the output puts nothing in a "
+                    f"VRF; not written"
+                )
+                continue
             parts = ["add"]
             if route.description:
                 parts.append(f'comment="{_escape(route.description)}"')

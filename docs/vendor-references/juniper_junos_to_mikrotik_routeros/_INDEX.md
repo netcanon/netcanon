@@ -31,7 +31,7 @@ The asymmetry shapes the cross-pair:
 | `system_services.md` | Hostname / DNS / NTP / timezone / syslog mapping; Junos `set system <X>` -> RouterOS `/system <X>`.  Domain attribute scope mismatch (Junos identity vs RouterOS DNS resolver). |
 | `interfaces.md` | Junos media-prefix names (`ge-0/0/1`) -> RouterOS flat names (`ether1`); per-unit family addressing -> top-level `/ip address` / `/ipv6 address`; loopback / management semantics lossy. |
 | `vlans.md` | Junos named VLANs + per-interface `family ethernet-switching` -> RouterOS two-plane VLAN model (`/interface vlan` Plane 1 + `/interface bridge vlan` Plane 2); SVI absorption round-trips. |
-| `static_routes.md` | Junos `set routing-options static route X/N next-hop Y` -> RouterOS `/ip route add dst-address=X/N gateway=Y`.  Per-VRF routes flatten; preference / metric drift. |
+| `static_routes.md` | Junos `set routing-options static route X/N next-hop Y` -> RouterOS `/ip route add dst-address=X/N gateway=Y`.  Per-VRF routes are left out under a review line (since 2026-11-12; they flattened before); preference / metric drift. |
 | `snmp_aaa.md` | v1/v2c clean; v3 USM algorithm overlap MD5/SHA1/SHA256 + DES/AES; engineID-salted passphrases never cross-portable; multi-target trap-host drops to first on RouterOS render. |
 | `local_users.md` | Junos `class super-user`/`operator`/`read-only` -> RouterOS `full`/`write`/`read`; Junos `$6$`/`$5$`/`$1$` hashes vs RouterOS opaque internal format never cross-compatible. |
 | `lags.md` | Junos `ae<N>` + per-member `ether-options 802.3ad` -> RouterOS `bond<N>` + `slaves=`; LACP `802.3ad` clean; non-LACP modes lossy; chassis device-count drops. |

@@ -15,7 +15,9 @@ from a FortiOS export: ``system global`` → ``system dns`` →
 set adv-interval / set authentication / set status / next / end``
 for **VRRP groups** on the interface) → ``system snmp`` →
 ``system admin`` → ``user radius`` → ``system dhcp server`` →
-``router static``.  Ordering is stable for diff-friendliness.
+``router static``.  Ordering is stable for diff-friendliness.  A
+route of a VRF is a ``# review:`` line in ``router static``: the
+output puts nothing in a VRF.
 Multi-VIP cross-vendor sources and non-``vrrp`` modes (HSRP / CARP)
 surface as ``# review:`` comments inside the interface edit body.
 
@@ -1477,18 +1479,31 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
             out.append(f'        set comment "{_esc(route.description)}"')
 
-    if v4_routes:
-        out.append("config router static")
-        for idx, route in enumerate(v4_routes, start=1):
+    # A route of a VRF is left out under a review line: the output
+    # puts no interface in a VRF, and FortiOS names a VRF by a number
+    # (``set vrf <0-251>``, "Virtual Routing Forwarding ID", FortiOS
+    # 7.4 CLI reference, "config router static"), which a VRF's name
+    # does not give.  Written as an entry, it was a route of the
+    # global table, routing traffic the source routed in another.
+    for head, routes, v6 in (
+        ("router static", v4_routes, False),
+        ("router static6", v6_routes, True),
+    ):
+        if not routes:
+            continue
+        out.append(f"config {head}")
+        idx = 0
+        for route in routes:
+            if route.vrf:
+                out.append(
+                    f"    # review: static route {route.destination} is in "
+                    f"VRF {route.vrf}, and the output puts nothing in a "
+                    f"VRF; not written"
+                )
+                continue
+            idx += 1
             out.append(f"    edit {idx}")
-            _emit_route_body(route, v6=False)
-            out.append("    next")
-        out.append("end")
-    if v6_routes:
-        out.append("config router static6")
-        for idx, route in enumerate(v6_routes, start=1):
-            out.append(f"    edit {idx}")
-            _emit_route_body(route, v6=True)
+            _emit_route_body(route, v6=v6)
             out.append("    next")
         out.append("end")
 

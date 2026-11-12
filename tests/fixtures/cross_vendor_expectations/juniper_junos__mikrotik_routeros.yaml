@@ -556,10 +556,10 @@ per_field_expectation:
       ``qualified-next-hop`` (weighted multi-NH) flattens to
       multiple canonical entries and expands to multiple RouterOS
       records; (3) per-VRF static routes (`routing-instances X
-      routing-options static`) flatten to the global table because
-      the mikrotik_routeros codec emits no per-route
-      ``routing-table=<vrf>`` binding (``CanonicalStaticRoute.vrf``
-      is harvested from Junos but unrendered on RouterOS).
+      routing-options static`) are left out under a ``# review:``
+      line, since the mikrotik_routeros output makes no VRF or
+      routing table: 5 routes on 4 cells.  Up to 0.7.7 they were
+      written into the main table.
     references: [junos-static-routing, mikrotik-ip-routing]
 
   # ── Tier 2 — DHCP server ──

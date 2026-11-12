@@ -699,8 +699,11 @@ class FortiGateCLICodec(CodecBase):
                 reason=(
                     "No VRF is read or written.  A FortiOS route of a "
                     "VRF other than 0 (`set vrf <id>`) is left out, with "
-                    "a row; a route of another vendor's VRF is written "
-                    "into the global table."
+                    "a row; a route of another vendor's VRF is left out "
+                    "under a `# review:` line, since the output puts "
+                    "nothing in a VRF.  It was written into the global "
+                    "table, where it routed traffic the source routed "
+                    "in another."
                 ),
             ),
             # -- Paths this codec writes nothing for (see _NOT_RENDERED). --

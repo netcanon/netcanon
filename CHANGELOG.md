@@ -1401,6 +1401,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A route of another vendor's VRF is left out of a FortiOS or
+  RouterOS output under a review line.**  Neither renderer puts an
+  interface in a VRF, and each wrote such a route as a route of its
+  one table -- an `edit` of `config router static` (`static6`), an
+  `add` of `/ip route` -- where it routed traffic the source routed
+  in another, in a job that was `partial` for the route's VRF and
+  said nothing more.  Each now writes `# review: static route
+  <destination> is in VRF <name>, and the output puts nothing in a
+  VRF; not written`, as AOS-S already did (FortiOS names a VRF by a
+  number, `set vrf <0-251>`, which a VRF's name does not give).  The
+  expectation notes of the pairs onto the two codecs whose committed
+  inputs hold a route of a VRF are re-authored from the regenerated
+  mesh.
 - **A FortiOS default route printed with no `set dst` is read, and a
   FortiOS route the tree cannot hold is left out and said.**  The
   `config router static` and `static6` parser read `dst`, `gateway`,

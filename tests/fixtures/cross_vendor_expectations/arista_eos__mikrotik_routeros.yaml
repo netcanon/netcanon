@@ -299,10 +299,10 @@ per_field_expectation:
       ``CanonicalStaticRoute`` with ``destination`` in CIDR form —
       RouterOS render emits ``/ipv6 route add`` with the same
       shape.  Lossy bits: (1) per-VRF Arista routes (``ip route
-      vrf TENANT_A ...``) drop to the global table on render
-      because the mikrotik_routeros codec emits no per-route
-      ``routing-table=<vrf>`` binding (the ``CanonicalStaticRoute.vrf``
-      field is harvested from Arista but unrendered on RouterOS);
+      vrf TENANT_A ...``) are left out under a ``# review:`` line,
+      since the mikrotik_routeros output makes no VRF or routing
+      table: one route on each of the 3 cells that hold one (up
+      to 0.7.7 such a route was written into the main table);
       (2) Arista route-tag / metric overrides are
       partially modelled (metric carried, tag dropped); (3)
       blackhole / Null0 semantics not modelled canonically (Arista

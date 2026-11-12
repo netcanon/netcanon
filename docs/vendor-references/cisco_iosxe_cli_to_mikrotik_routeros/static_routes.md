@@ -1,5 +1,8 @@
 # Static routes: Cisco IOS-XE versus MikroTik RouterOS
 
+<!-- vrf-route-left-out -->
+> **Update 2026-11-12 — a route of a VRF is left out of a RouterOS output under a review line.**  Up to 0.7.7 the RouterOS render wrote a route of another vendor's VRF as an `add` of `/ip route`, a route of the main table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  The output makes no VRF or routing table, and it now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place.  What follows about a route of a VRF on the RouterOS side describes the output before this change.
+
 ## Cisco IOS-XE
 
 Source: Cisco IOS XE IP Routing: Protocol-Independent Configuration

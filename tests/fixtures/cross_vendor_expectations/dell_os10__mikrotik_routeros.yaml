@@ -364,13 +364,11 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0. Sample drift: {"static_routes[0]
-      {'destination': '0.0.0.0/0'}": {'vrf': {'source': 'management',
-      'target': ''}}, "static_routes[2] {'destination':
-      '10.50.0.0/16'}": {'vrf': {'source': 'TENANT-A', 'target':
-      ''}}}.
+      Every route of the global table survives; a route of a VRF does not.
+      The 4 routes of a VRF on 3 cells (e.g. a default route of
+      `management`, a route of `TENANT-A`) are left out under a `# review:`
+      line, since the output makes no VRF or routing table.  Up to 0.7.7
+      each was written into the main table with its VRF blank.
     references: [os10-routeros-surface]
 
   syslog_servers:

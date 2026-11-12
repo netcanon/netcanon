@@ -583,11 +583,14 @@ per_field_expectation:
       semantics differ from Junos preference, so the integer
       preserves but its meaning differs.  Per-VRF static routes
       (``set routing-instances X routing-options static route
-      ...``) are harvested onto ``CanonicalStaticRoute.vrf`` but
-      drop on render because the fortigate_cli codec has no
-      per-route VRF/VDOM binding.  ``description`` field not rendered
-      (FortiGate has no comment surface on ``edit N`` static
-      routes in v1 codec).
+      ...``) are harvested onto ``CanonicalStaticRoute.vrf`` and
+      left out under a ``# review:`` line in ``config router
+      static``, since the output puts nothing in a VRF: 5 routes
+      on 4 cells.  Up to 0.7.7 they were written into the global
+      table.  No route description arrives: the juniper_junos
+      parser reads none (its matrix declares
+      ``/routing/static-route/description`` lossy), while FortiOS
+      writes one as ``set comment`` and reads it back.
     references: [junos-static-routing, fortios-static-routes]
 
   # ── Tier 2 — DHCP server ──

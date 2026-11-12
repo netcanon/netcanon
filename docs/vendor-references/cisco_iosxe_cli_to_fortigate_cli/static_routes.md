@@ -1,5 +1,8 @@
 # Static routes: Cisco IOS-XE versus FortiGate FortiOS
 
+<!-- vrf-route-left-out -->
+> **Update 2026-11-12 — a route of a VRF is left out of a FortiOS output under a review line.**  Up to 0.7.7 the FortiOS render wrote a route of another vendor's VRF as an entry of `config router static` (`static6`), a route of the global table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  It now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place (FortiOS names a VRF by a number, `set vrf <0-251>`, which a VRF's name does not give).  A route's description (`name <desc>`) is written as `set comment` and read back.  What follows about a route of a VRF on the FortiOS side describes the output before this change.
+
 ## Cisco IOS-XE
 
 Source: Cisco IOS XE IP Routing Configuration Guide — static route
