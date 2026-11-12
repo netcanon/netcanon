@@ -1401,6 +1401,29 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX route of `nullroute` or `reject` is left out and
+  said, never a route out an interface.**  HPE documents two words
+  where an AOS-CX route's next hop goes that are no next hop:
+  `nullroute` (the packets "are silently discarded and no ICMP
+  error notification is sent to the sender") and `reject`
+  (discarded, "and an ICMP error notification is sent to the
+  sender"), as in `ip route 1.2.3.4/32 nullroute vrf myvrf` (AOS-CX
+  IP Routing Guide, `ip route`).  The parser read the word as the
+  route's interface, and the route was written onto IOS-XE and EOS
+  as a route out an interface called `nullroute`, in a job that
+  said `completed`; so was a keyword of the rest of the line where
+  the next hop goes (`ip route 10.8.0.0/16 distance 5`, a route
+  that states no next hop), and a route line neither of the
+  parser's patterns reads (a mask written as an address) was
+  dropped with nothing said.  The tree has no form for a route
+  that discards: each such route is left out, and one `ip route:`
+  row a kind counts them, a route of two lines once, naming no
+  destination, VRF or line.  Each is in force on the switch, so
+  the row is a section, not a statement left out.
+  `tests/unit/migration/codecs/aruba_aoscx/test_a_route_that_discards.py`
+  reads every public codec's output as text for the routes left
+  out.
+
 - **A Junos IPv6 static route is read from `rib inet6.0`, and
   written there.**  Junos holds an IPv6 static route in `inet6.0`:
   `set routing-options rib inet6.0 static route ::/0 next-hop ...`

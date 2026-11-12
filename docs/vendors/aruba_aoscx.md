@@ -46,7 +46,8 @@ distributed gateway), and VXLAN L2VNI bindings.
   route`; see Common gotchas).  ⚠️ Up to 0.7.7 a route of a VRF was
   read as a route of the global table, and written so onto every
   target: the management default route (`vrf mgmt`) was the
-  switch's default route.  Look for one in an old output.
+  switch's default route.  Look for one in an old output.  A
+  route that discards is left out and said (see Common gotchas).
 - VRFs — name (a bare `vrf <name>` stanza in v1)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
@@ -414,6 +415,19 @@ translate it again from `show running-config` as the switch prints it.
   a route that is always installed.  ⚠️ Up to 0.7.7 a distance was
   written as a bare number after the next hop, a form no AOS-CX
   printout or guide shows; it is still read.
+- **A route of `nullroute` or `reject` is left out and said.**
+  HPE documents both words where the next hop goes: `nullroute`
+  discards what the route matches and tells the sender nothing,
+  `reject` discards it and sends an ICMP error.  The tree has no
+  form for a route that discards, so such a route is left out, as
+  is a route whose next hop is a keyword of the rest of the line
+  (`ip route 10.8.0.0/16 distance 5` states none) and a route line
+  the parser does not read (a mask written as an address); one
+  `ip route:` row a kind counts them, and names no destination.
+  Write them on the target by hand.  ⚠️ Up to 0.7.7 the word was
+  read as the route's interface, and the route was written onto
+  IOS-XE and EOS as a route out an interface called `nullroute`,
+  in a job that said `completed`.  Look for one in an old output.
 - **AOS-CX is L3-by-default; `no routing` opts into L2.**  This is the
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2

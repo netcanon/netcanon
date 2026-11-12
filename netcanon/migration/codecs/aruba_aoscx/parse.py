@@ -42,6 +42,10 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
 * top-level ``ip route <dest>/<prefix> <gw> [<dist>] [vrf <name>]``
   → :class:`CanonicalStaticRoute`, its VRF from ``vrf <name>`` and its
   distance from a bare number or ``distance <n>`` (:func:`_route_tail`).
+  A route that discards (``nullroute``, ``reject`` where the next hop
+  goes), a route that states no next hop, and a route line that is not
+  read are left out, and one row a kind counts them
+  (:func:`_routes_not_held_rows`).
 
 Where this codec diverges from ``cisco_nxos`` (its closest template) —
 see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
@@ -322,6 +326,30 @@ _STATIC_ROUTE_V6_RE = re.compile(
 _ROUTE_TAIL_WORDS = {
     "distance": 1, "vrf": 1, "name": 1, "tag": 1, "track": 1, "bfd": 0,
 }
+#: The words HPE documents where a route's next hop goes that are no
+#: next hop: ``nullroute`` ("packets are silently discarded and no ICMP
+#: error notification is sent to the sender") and ``reject`` (discarded,
+#: "and an ICMP error notification is sent to the sender").  The tree
+#: has no form for a route that discards; read as the route's
+#: interface, the word was written onto other vendors as a route out
+#: an interface called ``nullroute`` (up to 0.7.7).
+_ROUTES_THAT_DISCARD = frozenset({"nullroute", "reject"})
+#: A line that begins as a route does, for the routes the two patterns
+#: above do not read (``ip route`` and ``ipv6 route``; ``ip
+#: route-map`` is no route).
+_ROUTE_LINE_RE = re.compile(r"^(?:ip|ipv6)[ \t]+route[ \t]", re.IGNORECASE)
+#: The rows of :func:`_routes_not_held_rows`, a kind each, as each ends.
+_ROUTES_NOT_HELD: dict[str, str] = {
+    "discard": (
+        "route(s) that discard (nullroute, reject): the tree has no "
+        "form for a route that discards; not translated"
+    ),
+    "no_next_hop": (
+        "route(s) that state no next hop (a keyword where the next hop "
+        "goes); not translated"
+    ),
+    "unread": "route line(s) not read; not translated",
+}
 #: A distance, in the digits ``int`` is sure to take: HPE's range is 1
 #: to 255, and a longer run (or a digit of another script) is no
 #: distance of the switch's.
@@ -594,7 +622,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # downstream codecs don't silently drop the SVI's L3 config.
     _synthesize_vlans_from_svis(intent)
 
-    intent.static_routes = _parse_static_routes(raw)
+    routes_not_held: dict[str, set[str]] = {kind: set() for kind in _ROUTES_NOT_HELD}
+    intent.static_routes = _parse_static_routes(raw, routes_not_held)
+    intent.dropped_tier3_sections.extend(_routes_not_held_rows(routes_not_held))
 
     # LAGs (Phase 2) — ``interface lag N`` declares the LAG; per-member
     # ``lag N`` lines + the stanza's ``lacp mode`` contribute.
@@ -1319,7 +1349,9 @@ def _route_tail(rest: str) -> tuple[int, str]:
     return distance, vrf
 
 
-def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+def _parse_static_routes(
+    raw: str, not_held: dict[str, set[str]] | None = None,
+) -> list[CanonicalStaticRoute]:
     """Extract top-level ``ip route`` / ``ipv6 route`` lines from AOS-CX text.
 
     AOS-CX form: ``ip route <dest>/<prefix> <gw> [<dist>] [vrf <name>]``.
@@ -1328,13 +1360,36 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     :attr:`CanonicalStaticRoute.vrf` (:func:`_route_tail`).  A next-hop
     that parses as an IPv4 address becomes ``gateway``; otherwise it's
     an egress ``interface``.
+
+    A word where the next hop goes is not always a next hop.  A route
+    of ``nullroute`` or ``reject`` (:data:`_ROUTES_THAT_DISCARD`) and
+    one whose next hop is a word of :data:`_ROUTE_TAIL_WORDS` (it
+    states none) are left out, as is a route line neither pattern
+    reads: each is counted on *not_held* under its kind, once for its
+    destination and VRF (an unread line, once for its text)
+    (:func:`_routes_not_held_rows`).  Up to 0.7.7 such a word was the
+    route's interface, and an unread line was dropped unsaid.
+
+    Args:
+        raw: The config text.
+        not_held: Filled, where given, with the routes left out, a
+            set of keys for each kind of :data:`_ROUTES_NOT_HELD`.
+
+    Returns:
+        The routes the tree holds.
     """
+    if not_held is None:
+        not_held = {kind: set() for kind in _ROUTES_NOT_HELD}
     routes: list[CanonicalStaticRoute] = []
     for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             dest, gw_or_iface, gw2, rest = m6.groups()
             metric, vrf = _route_tail(rest)
+            kind = _not_a_next_hop(gw_or_iface)
+            if kind:
+                not_held[kind].add(f"{dest} {vrf}")
+                continue
             gateway = ""
             iface = ""
             if gw2:
@@ -1357,9 +1412,15 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             continue
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
+            if _ROUTE_LINE_RE.match(line):
+                not_held["unread"].add(line.strip())
             continue
         dest_ip, prefix, gw_or_iface, gw2, rest = m.groups()
         metric, vrf = _route_tail(rest)
+        kind = _not_a_next_hop(gw_or_iface)
+        if kind:
+            not_held[kind].add(f"{dest_ip}/{prefix} {vrf}")
+            continue
         gateway = ""
         iface = ""
         if gw2:
@@ -1381,6 +1442,28 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             vrf=vrf,
         ))
     return routes
+
+
+def _not_a_next_hop(word: str) -> str:
+    """The kind of :data:`_ROUTES_NOT_HELD` of a route whose next hop
+    is *word*, or ``""`` where *word* is a next hop."""
+    if word.lower() in _ROUTES_THAT_DISCARD:
+        return "discard"
+    if word.lower() in _ROUTE_TAIL_WORDS:
+        return "no_next_hop"
+    return ""
+
+
+def _routes_not_held_rows(not_held: dict[str, set[str]]) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the routes
+    :func:`_parse_static_routes` left out: one a kind, counted, never
+    a destination, a VRF or a line.  Each is in force on the switch, so
+    the row is a section, not a statement left out."""
+    return [
+        f"ip route: {len(not_held[kind])} {text}"
+        for kind, text in _ROUTES_NOT_HELD.items()
+        if not_held.get(kind)
+    ]
 
 
 def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
