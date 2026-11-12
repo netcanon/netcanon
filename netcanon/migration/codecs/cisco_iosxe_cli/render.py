@@ -33,8 +33,9 @@ codec module's ``render()`` method is now a one-line delegator to
 :func:`render_intent`.
 
 Internal helpers (``_prefix_to_mask``, ``_cidr_to_dest_mask``,
-``_extract_lag_number``, ``_split_cisco_hash``) live here because
-they are render-only.  The inverse parse helper
+``_extract_lag_number``, ``_split_cisco_hash``,
+``_vrf_address_families``) live here because they are
+render-only.  The inverse parse helper
 (``_mask_to_prefix``) lives in :mod:`.parse` and the two never
 cross sibling boundaries.
 """
@@ -78,6 +79,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalRoutingInstance,
 )
 from ...limits import ticked
 from .._helpers import (
@@ -114,6 +116,36 @@ _NO_UNTAGGED_REVIEW = (
     "would tag it, and tags the native VLAN of every 802.1Q trunk of "
     "the switch -- check what this port is to carry untagged"
 )
+
+
+def _vrf_address_families(tree: Any) -> dict[str, set[str]]:
+    """Each VRF an interface or a static route of *tree* is in, and
+    the address families (``ipv4``, ``ipv6``) they use there.
+
+    An address on an interface bound to a VRF "requires that the
+    address family corresponding to the address type is active for
+    that VRF" (Cisco, "MPLS VPN VRF CLI for IPv4 and IPv6 VPNs"),
+    and ``vrf forwarding`` names a VRF that has to be defined.  An
+    interface is counted for a family when it is given an address of
+    it (``ip address dhcp``, ``ipv6 address dhcp`` and ``ipv6
+    address autoconfig`` included), a route by its destination.
+    The VRFs are in the order they are first named.
+    """
+    uses: dict[str, set[str]] = {}
+    for iface in tree.interfaces:
+        if not iface.vrf:
+            continue
+        families = uses.setdefault(iface.vrf, set())
+        if iface.ipv4_addresses or iface.dhcp_client:
+            families.add("ipv4")
+        if iface.ipv6_addresses or iface.dhcp_client_v6 in ("dhcp6", "slaac"):
+            families.add("ipv6")
+    for route in tree.static_routes:
+        if route.vrf:
+            uses.setdefault(route.vrf, set()).add(
+                "ipv6" if ":" in (route.destination or "") else "ipv4",
+            )
+    return uses
 
 
 def render_intent(tree: Any) -> str:  # noqa: C901
@@ -289,12 +321,25 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- VRFs (CanonicalRoutingInstance → vrf definition) ---
     # Cisco IOS-XE syntax: ``vrf definition <name>`` with nested
-    # rd / route-target / address-family stanzas.  Empty RD/RT lists
-    # render the bare definition (still valid; lets per-interface
-    # ``vrf forwarding`` references resolve at parse time).
-    for vrf in tree.routing_instances:
-        if not vrf.name:
-            continue
+    # rd / route-target / address-family stanzas.  A VRF an interface
+    # or a route names and no instance declares (OS10 ``management``,
+    # a fragment's ``vrf forwarding``) is defined after the declared
+    # ones: IOS-XE refuses ``vrf forwarding`` to a VRF it does not
+    # have.  Each VRF is given the address families its interfaces
+    # and routes use (:func:`_vrf_address_families`) -- without one,
+    # IOS-XE refuses an address of that family on an interface of the
+    # VRF -- and ``ipv4`` also where route targets are written in it,
+    # or nothing in the VRF says IPv6: a VRF of every other platform
+    # carries IPv4 without a statement.
+    vrf_families = _vrf_address_families(tree)
+    declared = [vrf for vrf in tree.routing_instances if vrf.name]
+    declared_names = {vrf.name for vrf in declared}
+    undeclared = [
+        CanonicalRoutingInstance(name=name)
+        for name in vrf_families if name not in declared_names
+    ]
+    for vrf in [*declared, *undeclared]:
+        families = vrf_families.get(vrf.name, set())
         out.append(f"vrf definition {vrf.name}")
         if vrf.description:
             out.append(f" description {vrf.description}")
@@ -335,12 +380,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     native_form="vnid <n> evpn-instance",
                 )
             )
-        if rt_imports or rt_exports:
+        if rt_imports or rt_exports or "ipv4" in families or "ipv6" not in families:
             out.append(" address-family ipv4")
             for rt in rt_imports:
                 out.append(f"  route-target import {rt}")
             for rt in rt_exports:
                 out.append(f"  route-target export {rt}")
+            out.append(" exit-address-family")
+        if "ipv6" in families:
+            out.append(" address-family ipv6")
             out.append(" exit-address-family")
         out.append("!")
 

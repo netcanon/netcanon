@@ -143,11 +143,18 @@ class TestCiscoIOSXECLI:
         assert " rd 200:1" in out
         assert "route-target import 65000:901002" in out
 
-    def test_an_all_auto_rt_list_emits_no_empty_address_family(self) -> None:
-        """Filtering every RT away must not leave a dangling
-        `address-family ipv4` / `exit-address-family` pair."""
+    def test_an_all_auto_rt_list_writes_no_route_target(self) -> None:
+        """Filtering every RT away leaves no `route-target` line.  The
+        `address-family ipv4` block stays: a VRF is written with the
+        families it uses, and IPv4 where nothing in it is IPv6
+        (test_a_vrf_has_its_address_families.py)."""
         out = get_codec("cisco_iosxe_cli").render(_tree("", ["auto"]))
-        assert "address-family ipv4" not in out
+        commands = [
+            line.strip() for line in out.splitlines()
+            if not line.lstrip().startswith("!")
+        ]
+        assert not [c for c in commands if c.startswith("route-target")]
+        assert "address-family ipv4" in commands
 
 
 class TestDeliberatelyUnchanged:

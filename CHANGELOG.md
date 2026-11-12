@@ -1401,6 +1401,26 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS-XE VRF is written with the address families its
+  addresses need, and every VRF the output names is defined.**  An
+  address on an interface bound to a VRF needs the VRF's address
+  family for it (Cisco, "MPLS VPN VRF CLI for IPv4 and IPv6 VPNs"),
+  and the renderer wrote `address-family ipv4` only where it had a
+  route target to put in it, and `address-family ipv6` nowhere: an
+  output of a VRF with no route target -- a management VRF, a
+  Junos `virtual-router`, most VRFs of a campus -- was a config
+  whose every address in that VRF IOS-XE refuses, from every source,
+  IOS-XE itself included, in jobs that could say `completed`.  A VRF
+  an interface or a route named and no instance declared was named
+  and not defined.  Each VRF is now given the families its
+  interfaces and routes use, and an undeclared one is defined.
+  The cross-mesh harness and the round-trip test of the committed
+  inputs read a target's instance that holds nothing but the name of
+  a VRF the source names and declares no instance of as no drift:
+  it says no more than the naming did.  An instance with anything
+  more in it, or of a VRF the source declares, is compared as
+  before.
+
 - **A Junos static route of a form the tree cannot hold is said.**
   The parser read a route's `next-hop <address>` and passed over
   every other line of it, so a route whose next hop is looked up in

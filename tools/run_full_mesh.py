@@ -94,7 +94,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # Side-effect imports register every codec with the registry.
-from netcanon.migration.canonical.intent import CanonicalIntent  # noqa: E402
+from netcanon.migration.canonical.intent import (  # noqa: E402
+    CanonicalIntent,
+    CanonicalRoutingInstance,
+)
 from netcanon.migration.canonical.transforms import (  # noqa: E402
     ports_with_sub_interfaces,
 )
@@ -443,6 +446,47 @@ def _strip_cosmetic_snmp(field: str, snmp: Any) -> Any:
     return out
 
 
+def _named_vrfs(dump: dict[str, Any]) -> set[str]:
+    """The VRFs a tree's interfaces and static routes name."""
+    names = {i.get("vrf") for i in dump.get("interfaces") or []}
+    names |= {r.get("vrf") for r in dump.get("static_routes") or []}
+    return {name for name in names if name}
+
+
+def _without_defined_for_a_name(
+    source_dump: dict[str, Any],
+    source_instances: list[Any],
+    target_instances: list[Any],
+) -> list[Any]:
+    """The target's routing instances, less each one that holds
+    nothing but the name of a VRF the source NAMES and declares no
+    instance of.
+
+    A source whose interfaces or routes name a VRF that no instance
+    declares (OS10's ``management``, a fragment of a config) still
+    has that VRF, and a target that refuses an interface in a VRF it
+    does not have (IOS-XE ``vrf forwarding``) defines it: the re-parse
+    then holds an instance of nothing but that name, which says no
+    more than the naming did.  An instance with anything more in it,
+    or of a VRF the source declares or does not name, is compared as
+    it is.
+    """
+    declared = {
+        r.get("name") for r in source_instances if isinstance(r, dict)
+    }
+    implied = _named_vrfs(source_dump) - declared
+    if not implied:
+        return target_instances
+    return [
+        r for r in target_instances
+        if not (
+            isinstance(r, dict)
+            and r.get("name") in implied
+            and r == CanonicalRoutingInstance(name=r["name"]).model_dump()
+        )
+    ]
+
+
 def _scalar_summary(value: Any) -> Any:
     """Render a scalar / list / dict value into a JSON-friendly summary.
 
@@ -496,6 +540,11 @@ def compute_field_disposition(
     for field in _AUDITED_FIELDS:
         src_val = src_dump.get(field)
         tgt_val = tgt_dump.get(field)
+        if (
+            field == "routing_instances"
+            and isinstance(src_val, list) and isinstance(tgt_val, list)
+        ):
+            tgt_val = _without_defined_for_a_name(src_dump, src_val, tgt_val)
 
         # Determine whether the target codec has declared this field
         # family as unsupported by design.  Exact-match against direct
