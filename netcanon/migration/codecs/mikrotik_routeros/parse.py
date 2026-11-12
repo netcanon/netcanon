@@ -152,7 +152,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # exports where ``/ip address`` precedes ``/interface vrrp``.
     vrrp_scratch: dict[str, dict[str, Any]] = {}
     ntp_once = Uniques()
-    routes_left_out = _RoutesLeftOut()
+    routes_left_out = {section: _RoutesLeftOut(section) for section in _ROUTE_SECTIONS}
     for section, lines in sections:
         if section == "/interface vrrp":
             _parse_interface_vrrp(lines, vrrp_scratch)
@@ -192,8 +192,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _parse_ip_address(lines, iface_by_name, vrrp_scratch)
         elif section == "/ipv6 address":              # GAP-EVPN-3
             _parse_ipv6_address(lines, iface_by_name, vrrp_scratch)
-        elif section == "/ip route":
-            _parse_ip_route(lines, intent, routes_left_out)
+        elif section in routes_left_out:
+            # ``/ip route`` and ``/ipv6 route``: the same keys.
+            _parse_ip_route(lines, intent, routes_left_out[section])
         elif section == "/snmp":
             _parse_snmp_root(lines, intent)
         elif section == "/snmp community":
@@ -213,7 +214,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dhcp_servers, dhcp_rows, dhcp_left_out = dhcp.read()
     intent.dropped_tier3_sections.extend(dhcp_rows)
     intent.dropped_tier3_sections.extend(left_out_rows(dhcp_left_out, rest="disabled"))
-    intent.dropped_tier3_sections.extend(routes_left_out.rows())
+    for left_out in routes_left_out.values():
+        intent.dropped_tier3_sections.extend(left_out.rows())
 
     # VRRP post-pass — materialise scratch records into
     # CanonicalVRRPGroup entries on the parent interface.  Iterate in
@@ -1881,10 +1883,18 @@ _MAIN_TABLE = "main"
 #: ``blackhole`` flag instead.
 _DISCARDING_TYPES = frozenset({"blackhole", "unreachable", "prohibit"})
 
+#: The sections of static routes: "To add or remove routes /ip(ipv6)
+#: route menus should be used", ``/ip route`` listing the IPv4 routes
+#: and ``/ipv6 route`` the IPv6 ones (MikroTik, IP Routing:
+#: https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing).
+#: Up to 0.7.7 no ``/ipv6 route`` was read, and an IPv6 route of a
+#: RouterOS config was lost with nothing said.
+_ROUTE_SECTIONS = ("/ip route", "/ipv6 route")
+
 
 class _RoutesLeftOut:
-    """The routes of ``/ip route`` the parser reads and does not
-    translate, and the rows that say so.
+    """The routes of one section of :data:`_ROUTE_SECTIONS` the
+    parser reads and does not translate, and the rows that say so.
 
     * ``disabled=yes`` -- the router holds the route and does not
       install it: left out, a row of :func:`left_out_rows` each.
@@ -1901,7 +1911,11 @@ class _RoutesLeftOut:
       a gateway, a route that forwards.  One row counts them.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, section: str) -> None:
+        self.section = section
+        #: The words of the section, as a row of a disabled route
+        #: names them (``ipv6 route``).
+        self.words = section.lstrip("/").split()
         self.disabled: list[tuple[str, list[str]]] = []
         self.elsewhere = 0
         self.discarding = 0
@@ -1912,14 +1926,14 @@ class _RoutesLeftOut:
         rows = left_out_rows(self.disabled, rest="disabled-route")
         if self.elsewhere:
             rows.append(
-                f"/ip route: {self.elsewhere} route(s) in a routing table "
+                f"{self.section}: {self.elsewhere} route(s) in a routing table "
                 "other than main, or with a gateway resolved in one "
                 "(gateway=<address>@<table>): the routes of a VRF, and no "
                 "VRF of a RouterOS config is read; not translated"
             )
         if self.discarding:
             rows.append(
-                f"/ip route: {self.discarding} blackhole, unreachable or "
+                f"{self.section}: {self.discarding} blackhole, unreachable or "
                 "prohibit route(s): the tree has no form for a route that "
                 "discards; not translated"
             )
@@ -1929,7 +1943,8 @@ class _RoutesLeftOut:
 def _parse_ip_route(
     lines: list[str], intent: CanonicalIntent, left_out: _RoutesLeftOut,
 ) -> None:
-    """Parse ``add dst-address=... gateway=...`` static routes.
+    """Parse ``add dst-address=... gateway=...`` static routes, of
+    ``/ip route`` or ``/ipv6 route`` (*left_out* says which).
 
     A route the tree cannot hold as the router holds it is left out
     and said (:class:`_RoutesLeftOut`).  A gateway resolved in the main
@@ -1951,7 +1966,7 @@ def _parse_ip_route(
         if not dest:
             continue
         if kv.get("disabled", "").lower() in ("yes", "true"):
-            left_out.disabled.append(("disabled-route", ["ip", "route", dest]))
+            left_out.disabled.append(("disabled-route", [*left_out.words, dest]))
             continue
         table = kv.get("routing-table") or kv.get("routing-mark") or _MAIN_TABLE
         if table != _MAIN_TABLE:

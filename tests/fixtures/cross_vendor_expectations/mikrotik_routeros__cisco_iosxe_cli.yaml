@@ -211,15 +211,16 @@ per_field_expectation:
       dst-address=X/N gateway=Y`` -> Cisco ``ip route X MASK Y``.
       Codec converts CIDR <-> dotted-mask transparently.
       RouterOS's ``gateway=ether2`` interface form maps to Cisco's
-      interface-as-gateway form.  Lossy bits: (1) per-VRF routes
-      (``routing-table=TENANT-A``) drop to the global table
-      because the mikrotik_routeros codec parses-and-ignores the
-      ``routing-table=`` binding, so ``CanonicalStaticRoute.vrf``
-      is never populated on the RouterOS source; (2)
-      ``blackhole=yes`` has no canonical
-      flag — render encodes it via the ``Null0`` interface name on
-      Cisco side, which is semantic-equivalent but not byte-
-      identical.
+      interface-as-gateway form.  An IPv6 route of ``/ipv6 route``
+      is written ``ipv6 route X/N Y``; up to 0.7.7 the RouterOS
+      parser read no ``/ipv6 route`` section, and such a route was
+      lost with nothing said.  Lossy bits: (1) a route of another
+      routing table (``routing-table=TENANT-A``) is left out of the
+      RouterOS source with a row that counts such routes, since no
+      VRF of a RouterOS config is read (up to 0.7.7 it was read as
+      a route of the main table); (2) a route that discards
+      (``blackhole``, RouterOS 6 ``type=blackhole``) is left out
+      with a row that counts those.
     references: [mikrotik_ip_routing]
 
   # ── Tier 2 — auto-translate with review banner ──
@@ -431,8 +432,9 @@ per_field_expectation:
 #
 # Deferred items (not researched in depth this pass):
 #
-#   * Per-VRF static routes — canonical schema gap; lands alongside
-#     VRF wire-up.
+#   * Per-VRF static routes — a route of another routing table is
+#     left out of the RouterOS source with a row: no VRF of a
+#     RouterOS config is read.
 #
 #   * RouterOS-specific per-interface tuning (``arp=`` modes,
 #     ``ageing-time``, ``loop-protect``) — not modelled canonically.

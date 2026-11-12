@@ -1,5 +1,8 @@
 # Static routes: Juniper Junos versus MikroTik RouterOS
 
+<!-- ipv6-route-section -->
+> **Update 2026-11-12 — an IPv6 route is written into `/ipv6 route`.**  Up to 0.7.7 the RouterOS render wrote every route, the IPv6 ones included, as an `add` of `/ip route`, the menu of the IPv4 routes ([MikroTik, IP Routing](https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing): "To add or remove routes /ip(ipv6) route menus should be used").  Each route is now written into the section of its family, and the RouterOS parser reads both.  What the body below says of an IPv6 route onto RouterOS was written before that.
+
 <!-- vrf-route-left-out -->
 > **Update 2026-11-12 — a route of a VRF is left out of a RouterOS output under a review line.**  Up to 0.7.7 the RouterOS render wrote a route of another vendor's VRF as an `add` of `/ip route`, a route of the main table, where it routed traffic the source routed in another VRF; the job was `partial` for the route's VRF and said nothing more.  The output makes no VRF or routing table, and it now writes `# review: static route <destination> is in VRF <name>, and the output puts nothing in a VRF; not written` in its place.  On the committed inputs the 5 routes of a VRF, on 4 cells, are left out.  What follows about a route of a VRF on the RouterOS side describes the output before this change.
 

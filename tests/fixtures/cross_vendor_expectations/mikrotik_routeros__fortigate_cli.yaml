@@ -238,9 +238,13 @@ per_field_expectation:
       on each ``config router static / edit N`` block (singular
       ``comment``, max 255 chars per FortiOS 7.4 CLI ref).  Distance
       defaults differ (RouterOS 1, FortiOS 10); integer preserves
-      but priority semantics shift.  IPv6 routes on ``/ipv6 route``
-      parse but FortiGate codec does not emit ``config router
-      static6`` so IPv6 statics drop on render.
+      but priority semantics shift.  An IPv6 route of ``/ipv6
+      route`` is written into ``config router static6`` and read
+      back; up to 0.7.7 the RouterOS parser read no ``/ipv6 route``
+      section, and such a route was lost with nothing said.  A
+      route of another routing table, a disabled route and a route
+      that discards are left out of the RouterOS source, each said
+      in a row.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

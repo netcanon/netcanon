@@ -18,8 +18,8 @@ password=...`` when set), ``/ip address`` (including the VIP rows
 ``add address=X interface=vrrp<N>`` that bind anycast/virtual IPs
 back to their group's pseudo-interface), ``/ipv6 address`` (GAP-EVPN-3,
 same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``
-(a route of a VRF is a ``# review:`` line: the output puts nothing in
-a VRF),
+and ``/ipv6 route`` (a route of a VRF is a ``# review:`` line: the
+output puts nothing in a VRF),
 ``/snmp`` (+ ``/snmp community`` for v1/v2c + SNMPv3 USM),
 ``/radius``, ``/ip pool`` + ``/ip dhcp-server`` + ``/ip dhcp-server
 network``, ``/user``,
@@ -794,7 +794,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             )
         lines.append("")
 
-    # ----- /ip route -----
+    # ----- /ip route, /ipv6 route -----
     # RouterOS combines an IP next-hop and an outgoing interface
     # into a single ``gateway=`` argument using the
     # ``<ip>%<iface>`` form (the same shape the device displays
@@ -811,9 +811,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # FortiGate ``set gateway 192.168.1.1`` + ``set device port1``
     # on the same static route).  Phase 4b fortigate_cli
     # cross-vendor finding.
-    if tree.static_routes:
-        lines.append("/ip route")
-        for route in tree.static_routes:
+    #
+    # An IPv6 route is an ``add`` of ``/ipv6 route``: "To add or remove
+    # routes /ip(ipv6) route menus should be used", ``/ip route``
+    # listing the IPv4 routes and ``/ipv6 route`` the IPv6 ones
+    # (MikroTik, IP Routing:
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing).
+    # Every route was an ``add`` of ``/ip route``, IPv6 ones included.
+    for head, routes in (
+        ("/ip route", [r for r in tree.static_routes if ":" not in (r.destination or "")]),
+        ("/ipv6 route", [r for r in tree.static_routes if ":" in (r.destination or "")]),
+    ):
+        if not routes:
+            continue
+        lines.append(head)
+        for route in routes:
             if route.vrf:
                 # The output makes no VRF or routing table, so a
                 # route of one is left out and said.  Written as an

@@ -575,6 +575,13 @@ keeps the largest, and the others are a row of the sections not
 translated; so is a piece of it in a form the parser does not read
 (see [`vendors/mikrotik_routeros.md`](vendors/mikrotik_routeros.md)).
 
+A static route is read from `/ip route` and from `/ipv6 route`,
+which take the same keys, and each route is written into the
+section of its family.  ⚠️ Up to 0.7.7 no `/ipv6 route` was read
+-- an IPv6 route of a RouterOS config was lost on every target,
+with nothing said -- and an IPv6 route of another vendor was
+written as an `add` of `/ip route`.
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |

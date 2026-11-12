@@ -1,5 +1,8 @@
 # Static routes: MikroTik RouterOS versus FortiGate FortiOS
 
+<!-- ipv6-route-section -->
+> **Update 2026-11-12 — an IPv6 route of `/ipv6 route` is read.**  Up to 0.7.7 the RouterOS parser read no `/ipv6 route` section, and every IPv6 route of a RouterOS config was lost on every target, with nothing said, whatever the body below says of it.  `/ipv6 route` is now read with the keys of `/ip route` ([MikroTik, IP Routing](https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing): "To add or remove routes /ip(ipv6) route menus should be used"), and a route of another routing table, a disabled route and a route that discards are left out of it and said as they are there.  The FortiOS render writes such a route into `config router static6`, which the FortiOS parser reads back; the body's "drop on render" was not so.  The *IPv6 Routing* page linked below no longer resolves; the IP Routing page covers both menus.
+
 ## MikroTik RouterOS
 
 Sources:

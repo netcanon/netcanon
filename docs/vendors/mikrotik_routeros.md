@@ -79,8 +79,10 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   ⚠️ Up to 0.7.7 a tunnel's MTU was not written or read.
 - VLANs — `/interface bridge port` with vlan-id mappings + tagged
   / untagged port assignment
-- Static routes (`/ip route`) of the main table, in force (the
-  others: [Lossy paths](#lossy-paths))
+- Static routes (`/ip route`, `/ipv6 route`) of the main table, in
+  force (the others: [Lossy paths](#lossy-paths)).  ⚠️ Up to 0.7.7
+  no `/ipv6 route` was read, and an IPv6 route of another vendor
+  was written into `/ip route`.
 - LAGs (`/interface bonding`)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
@@ -279,7 +281,8 @@ can appear BEFORE `/interface vrrp` in the source.
   `type=blackhole`, `unreachable` and `prohibit`, discards what it
   matches, which the tree has no form for.  One row counts the routes
   of each of the two.  A route held `disabled=yes` installs nothing,
-  and is a `disabled: ip route <destination>` row.  ⚠️ Up to 0.7.7
+  and is a `disabled: ip route <destination>` row (`ipv6 route` for
+  one of `/ipv6 route`, which is read the same way).  ⚠️ Up to 0.7.7
   each was read as a route of the main table, in force: a VRF's route
   carried traffic the source keeps apart, on every target, RouterOS
   included; a disabled route was installed; and a route that discards

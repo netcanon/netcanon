@@ -526,10 +526,10 @@ per_field_expectation:
       arriving with caveats, and the OPNsense capability matrix
       declares ``/routing/static-route`` and every leaf beneath it
       unsupported so validate_against blocks instead of warning.
-      Per-VRF routes (RouterOS ``routing-table=TENANT-A``) are
-      unsupported independently (they have no OPNsense render
-      target and the MikroTik codec does not yet parse VRF
-      context).  Default route (``0.0.0.0/0``) maps to OPNsense's
+      A route of another routing table (RouterOS
+      ``routing-table=TENANT-A``) is left out of the RouterOS
+      source with a row, since no VRF of a RouterOS config is
+      read.  Default route (``0.0.0.0/0``) maps to OPNsense's
       WAN-zone gateway pattern, not a ``<staticroutes>`` entry —
       operator-curated, and still true once rendering lands.
     references: [mikrotik_ip_routing, opnsense-gateways]
