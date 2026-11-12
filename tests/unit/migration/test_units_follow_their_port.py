@@ -1416,7 +1416,7 @@ class TestAUnitOfTooManyDigits:
 # 7. What the job says of a unit that went
 # ---------------------------------------------------------------------------
 
-#: AOS-CX states a sub-interface's tag and its parser reads none.
+#: An AOS-CX sub-interface with tag 300, which its parser reads.
 _AOSCX_UNIT = "\n".join([
     "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
     "interface 1/1/1", "    no shutdown", "    routing", "    description PARENT",
@@ -1425,7 +1425,8 @@ _AOSCX_UNIT = "\n".join([
     "interface 1/1/2", "    no shutdown", "    routing", "    ip address 10.2.0.1/24", "",
 ])
 
-#: The same in OS10's grammar: stated, and not read.
+#: The same in OS10's grammar: stated, and not read -- the OS10 parser
+#: reads no sub-interface's tag.
 _OS10_UNIT = "\n".join([
     "! Version 10.5.4.0", "!", "hostname r1", "!",
     "interface ethernet1/1/1", " description PARENT", " no shutdown", " no switchport", "!",
@@ -1460,18 +1461,18 @@ class TestAUnitWithNoTag:
         "target_name", ["arista_eos", "juniper_junos", "vyos", "fortigate_cli"],
     )
     def test_one_warning_says_it_went_untagged(self, target_name: str) -> None:
-        aoscx, target = get_codec("aruba_aoscx"), get_codec(target_name)
-        tags = {iface.name: iface.dot1q_vlan for iface in aoscx.parse(_AOSCX_UNIT).interfaces}
-        assert "encapsulation dot1q 300" in _AOSCX_UNIT and tags["1/1/1.54"] is None, (
-            "the AOS-CX parser reads a sub-interface's tag now: this is no "
+        os10, target = get_codec("dell_os10"), get_codec(target_name)
+        tags = {iface.name: iface.dot1q_vlan for iface in os10.parse(_OS10_UNIT).interfaces}
+        assert "encapsulation dot1q 300" in _OS10_UNIT and tags["ethernet1/1/1.54"] is None, (
+            "the OS10 parser reads a sub-interface's tag now: this is no "
             "longer a config with a unit that has none"
         )
-        job = run_plan_with_overrides(aoscx, target, _AOSCX_UNIT, port_rename_map={})
-        where = job.port_renames["1/1/1.54"]
-        assert where == job.port_renames["1/1/1"] + ".54"
+        job = run_plan_with_overrides(os10, target, _OS10_UNIT, port_rename_map={})
+        where = job.port_renames["ethernet1/1/1.54"]
+        assert where == job.port_renames["ethernet1/1/1"] + ".54"
         (line,) = [w for w in job.warnings if _NO_TAG in w]
         assert line.startswith(
-            f"port_rename: '1/1/1.54' went with its port to '{where}' {_NO_TAG}: "
+            f"port_rename: 'ethernet1/1/1.54' went with its port to '{where}' {_NO_TAG}: "
             f"none was read for it from the source config"
         )
 
@@ -1516,16 +1517,16 @@ class TestAUnitWithNoTag:
             tags = {i.name: i.dot1q_vlan for i in get_codec(name).parse(text).interfaces}
             if tags[f"{port}.54"] is None:
                 unread.add(name)
-        assert unread == {"aruba_aoscx", "dell_os10"}
+        assert unread == {"dell_os10"}
 
     def test_the_line_quotes_the_unit_first(self) -> None:
         """The migrate page reads the first single-quoted token of a
         warning as the source name the warning is about, and draws it
         on that name's row."""
-        aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
-        job = run_plan_with_overrides(aoscx, eos, _AOSCX_UNIT, port_rename_map={})
+        os10, eos = get_codec("dell_os10"), get_codec("arista_eos")
+        job = run_plan_with_overrides(os10, eos, _OS10_UNIT, port_rename_map={})
         (line,) = [w for w in job.warnings if _NO_TAG in w]
-        assert line.split("'")[1::2] == ["1/1/1.54", "Ethernet1.54"]
+        assert line.split("'")[1::2] == ["ethernet1/1/1.54", "Ethernet1.54"]
 
     def test_it_is_said_where_no_name_changes(self) -> None:
         """IOS-XE CLI onto the NETCONF codec: two codecs, one
@@ -1563,8 +1564,8 @@ class TestAUnitWithNoTag:
 
     @pytest.mark.parametrize(
         ("codec_name", "text", "unit"),
-        [("aruba_aoscx", _AOSCX_UNIT, "1/1/1.54"), ("dell_os10", _OS10_UNIT, "ethernet1/1/1.54")],
-        ids=["aruba_aoscx", "dell_os10"],
+        [("dell_os10", _OS10_UNIT, "ethernet1/1/1.54")],
+        ids=["dell_os10"],
     )
     def test_one_codec_loses_an_unread_tag_too(
         self, codec_name: str, text: str, unit: str,
@@ -1576,7 +1577,10 @@ class TestAUnitWithNoTag:
         reports it: no warning, no validation line, no status.
         Known, and pinned as it is so that the documents which say
         so stay true; a parser that learns to read the tag has to
-        come and take this away."""
+        come and take this away.  (The AOS-CX parser has: its
+        renderer writes no tag yet, and a job from AOS-CX to itself
+        lists the tag as a drop --
+        ``test_an_aoscx_sub_interface_states_its_tag.py``.)"""
         codec = get_codec(codec_name)
         assert "encapsulation dot1q 300" in text
         job = run_plan_with_overrides(codec, codec, text, port_rename_map={})
@@ -1599,11 +1603,11 @@ class TestAUnitWithNoTag:
         assert [w for w in job.warnings if "dropped with it" in w]
 
     def test_one_the_operator_named_is_theirs(self) -> None:
-        aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
+        os10, eos = get_codec("dell_os10"), get_codec("arista_eos")
         job = run_plan_with_overrides(
-            aoscx, eos, _AOSCX_UNIT, port_rename_map={"1/1/1.54": "Ethernet9.54"},
+            os10, eos, _OS10_UNIT, port_rename_map={"ethernet1/1/1.54": "Ethernet9.54"},
         )
-        assert job.port_renames["1/1/1.54"] == "Ethernet9.54"
+        assert job.port_renames["ethernet1/1/1.54"] == "Ethernet9.54"
         assert not [w for w in job.warnings if _NO_TAG in w]
 
 

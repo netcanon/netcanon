@@ -426,18 +426,27 @@ translate it again from `show running-config` as the switch prints it.
   through a target profile.  The shipped 6300M profile lists `mgmt`,
   and is graded `inferred` for the reason its family's JL661A is.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
-- **A routed sub-interface loses its tag.**  A stanza named
-  `interface 1/1/1.54` is read as an interface of that name; its
-  `encapsulation dot1q` line is not read.  Onto another vendor it
-  goes where its port goes (`Ethernet1.54`) with no VLAN — or, on
-  VyOS and FortiOS, with 54 as its VLAN id, whatever the line said.
-  The job warns for each such unit, and with both devices declared
-  lists it in `untagged_units` and stays `partial` until you name
-  it.  Set the tag on the target by hand.  **Onto AOS-CX itself the
-  tag is lost the same way and nothing says so**: the output has
-  `interface 1/1/1.54` with its address and no `encapsulation
-  dot1q`, in a job that is `completed` with no warning.  Compare the
-  sub-interfaces of an AOS-CX to AOS-CX output with the source.
+- **A routed sub-interface's tag is read, and not yet written onto
+  AOS-CX.**  HPE's form is `interface 1/1/1.201` with
+  `encapsulation dot1q 10` (one VLAN id, 1 to 4094, on the 6300/6400
+  from 10.08 and the 8100, 83xx and 10000 series), and the parser
+  reads it as sub-interface `1/1/1.201` with 802.1Q tag 10.  Onto
+  another vendor it goes where its port goes, with tag 10
+  (`encapsulation dot1q vlan 10` on EOS, `unit 201 vlan-id 10` on
+  Junos, `vif 10` on VyOS, `set vlanid 10` on FortiOS).  Up to 0.7.7
+  the line was not read, and the unit went with no VLAN, or on VyOS
+  and FortiOS with its number as its VLAN id, in jobs that said
+  `completed`.  A tag statement that is not one VLAN id (`0`,
+  `4095`, `10 20`) leaves its sub-interface out of the output, and a
+  row of the job says the statement.  **Onto AOS-CX, from AOS-CX
+  itself as from another vendor, the tag is not written**: the
+  output has `interface 1/1/1.201` with its address and no
+  `encapsulation dot1q`, and the job is `partial`, its validation
+  listing `/interfaces/interface/dot1q-vlan`.  Set the tag on the
+  target by hand.  A LAG's sub-interface (`interface lag 1.201`,
+  which HPE documents on an L3 LAG) is not read as one yet: the
+  parser reads its header as `lag 1`, so its lines are read onto the
+  LAG, and its tag is not read.
 - **A port under a name AOS-CX cannot read gets no VLAN line.**  As
   a target, AOS-CX writes a port's `vlan access` / `vlan trunk`
   lines only where the port's name reads as a port or a LAG

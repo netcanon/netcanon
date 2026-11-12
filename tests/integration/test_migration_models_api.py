@@ -1164,12 +1164,11 @@ vlan 1
    exit
 """
 
-#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
-#: parser reads none.
+#: An AOS-CX sub-interface whose stanza states no tag.
 _AOSCX_UNIT = "\n".join([
     "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
     "interface 1/1/1", "    no shutdown", "    routing", "    description PARENT",
-    "interface 1/1/1.54", "    no shutdown", "    encapsulation dot1q 300",
+    "interface 1/1/1.54", "    no shutdown",
     "    ip address 10.54.0.1/24",
     "interface 1/1/2", "    no shutdown", "    routing", "    ip address 10.2.0.1/24", "",
 ])

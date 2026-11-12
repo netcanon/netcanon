@@ -2194,8 +2194,7 @@ interface Loopback0
 end
 """
 
-#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
-#: parser reads none.
+#: An AOS-CX sub-interface whose stanza states no tag.
 _AOSCX_WITH_A_UNIT = """!Version ArubaOS-CX FL.10.10.1010
 hostname r1
 !
@@ -2205,7 +2204,6 @@ interface 1/1/1
     description PARENT
 interface 1/1/1.54
     no shutdown
-    encapsulation dot1q 300
     ip address 10.54.0.1/24
 interface 1/1/2
     no shutdown
@@ -2273,7 +2271,7 @@ class TestEveryRowStateIsDrawn:
         self, page: Page, live_server_url: str,
     ) -> None:
         """AOS-CX onto EOS.  The unit went with its port to
-        ``Ethernet1.54``, and no tag was read for it.  A row that
+        ``Ethernet1.54``, and its stanza states no tag.  A row that
         read "translated by name to Ethernet1.54", as the row of
         any other name the device does not have reads, would not
         say what happened to it.  It says it moved with its port,

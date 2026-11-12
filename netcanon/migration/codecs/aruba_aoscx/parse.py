@@ -97,9 +97,11 @@ from .._helpers import (
     _is_link_local_v6,
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
+    a_tag,
     address_key,
     ip_mtu_read,
     vlan_id_run,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
@@ -535,6 +537,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_vendor="aruba_aoscx",
         source_format="cli-aoscx",
     )
+    # A sub-interface whose tag statement is not one VLAN id
+    # (``encapsulation dot1q 0``, a number above 4094, a second word)
+    # is taken out before any reader sees it, and a row says the
+    # statement: read for its first number it was a tag no VLAN has,
+    # or another tag than the one stated.  The codec's ``parse()``
+    # keeps the row beside the Tier-3 rows.
+    raw, intent.dropped_tier3_sections = without_unread_tags(
+        raw, _is_tag_statement, _tag_read,
+    )
 
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
@@ -656,6 +667,84 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     return instances
 
 
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement,
+    ``encapsulation dot1q ...`` (in any letter case)."""
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() == "dot1q"
+    )
+
+
+def _tag_read(statement: str) -> tuple[int, None] | None:
+    """The tag of ``encapsulation dot1q <VLAN-ID>``, read whole: one
+    VLAN id and nothing after it, else ``None``.
+
+    HPE documents the command in the sub-interface context
+    (``config-subif``) with one VLAN id, 1 to 4094 (AOS-CX
+    Fundamentals Guide, 6300/6400 from 10.08 and the 8100, 83xx and
+    10000 series, "encapsulation dot1q"), and its example gives the
+    sub-interface a tag that is not its number: ``interface
+    1/1/1.201`` with ``encapsulation dot1q 10``.  Anything else -- 0, a
+    number above 4094, a second word -- is not one the tree holds.
+    """
+    words = statement.split()
+    if len(words) != 3:
+        return None
+    vid = a_tag(words[2])
+    return None if vid is None else (vid, None)
+
+
+def _on_shutdown_line(current: dict, line: str) -> bool:
+    """Read *line* of the stanza *current* if it is ``shutdown`` or
+    ``no shutdown``, and say whether it was one."""
+    if _SHUTDOWN_RE.match(line):
+        current["enabled"] = False
+        return True
+    if _NO_SHUTDOWN_RE.match(line):
+        current["enabled"] = True
+        return True
+    return False
+
+
+def _on_tag_line(current: dict, line: str) -> bool:
+    """Read *line* of the stanza *current* if it is a tag statement,
+    and say whether it was one.
+
+    The tag of a sub-interface is its ``dot1q_vlan`` (not its
+    ``access_vlan``: a routed sub-interface is not an access port).  A
+    statement that is not read whole has taken its stanza out already
+    (``without_unread_tags``), and one in a stanza that is no
+    sub-interface of a port is not read onto it.
+    """
+    statement = line.strip()
+    if not _is_tag_statement(statement):
+        return False
+    tags = _tag_read(statement)
+    if tags is not None and _is_a_sub_interface(current["name"]):
+        current["dot1q_vlan"] = tags[0]
+    return True
+
+
+def _is_a_sub_interface(name: str) -> bool:
+    """Whether *name* is a sub-interface of a port: ``<port>.<n>``,
+    the part before the dot a name the classifier reads as a port
+    (``1/1/1.201``).
+
+    A LAG's (``interface lag 1.201``, which HPE documents on an L3
+    LAG) is not read as one yet: the header reader takes that line
+    for ``lag 1``, and a tag statement there is not read onto the
+    LAG.
+    """
+    port, dot, unit = name.rpartition(".")
+    return (
+        bool(dot) and unit.isascii() and unit.isdigit()
+        and _port_names.classify_port_name(port).kind == "physical"
+    )
+
+
 def _new_iface_scratch(name: str) -> dict:
     """Fresh per-interface parse-time scratch dict.
 
@@ -678,6 +767,8 @@ def _new_iface_scratch(name: str) -> dict:
         "access_vlan": None,
         "trunk_native": None,
         "lag_member_of": None,
+        # The 802.1Q tag of a sub-interface (``encapsulation dot1q``).
+        "dot1q_vlan": None,
         # Active-gateway anycast: the per-SVI `active-gateway ip <vip>`
         # mirrors into virtual_gateway_address in
         # _build_canonical_interface.
@@ -732,11 +823,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["description"] = dm.group(1).strip()
             return
 
-        if _SHUTDOWN_RE.match(line):
-            current["enabled"] = False
-            return
-        if _NO_SHUTDOWN_RE.match(line):
-            current["enabled"] = True
+        if _on_shutdown_line(current, line):
             return
 
         mm = _MTU_RE.match(line)
@@ -789,6 +876,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         vm = _VRF_ATTACH_RE.match(line)
         if vm:
             current["vrf"] = vm.group(1)
+            return
+
+        # ``encapsulation dot1q <VLAN-ID>`` on a sub-interface: its
+        # 802.1Q tag.  Before this was read, every AOS-CX
+        # sub-interface went onto another vendor with no tag, or
+        # with its number as its tag.
+        if _on_tag_line(current, line):
             return
 
         # ── Active-gateway anycast (Phase 3) ──
@@ -933,6 +1027,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         access_vlan=raw.get("access_vlan"),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
+        dot1q_vlan=raw.get("dot1q_vlan"),
     )
 
 

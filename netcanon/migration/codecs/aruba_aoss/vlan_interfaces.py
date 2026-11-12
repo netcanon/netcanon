@@ -101,9 +101,9 @@ has no form for a unit of a port, and writes one only as the VLAN of
 its tag.  Where it holds an address, a VRRP group, a description or an
 MTU, a ``; review:`` line and a warning say so; one that holds none of
 them loses nothing, and nothing is said.  Written, it was ``interface
-2.100``, a name AOS-S has no form for, with its address.  The AOS-CX
-and OS10 parsers read no tag for a sub-interface, so each of theirs is
-such a unit.  A unit of a name of no AOS-S form (``ge-0/0/2.100``, left
+2.100``, a name AOS-S has no form for, with its address.  The OS10
+parser reads no tag for a sub-interface, so each of OS10's is such a
+unit.  A unit of a name of no AOS-S form (``ge-0/0/2.100``, left
 as the source has it) is written as every such name is, for a reviewer.
 
 An interface in a VRF is written without it, as the renderer writes

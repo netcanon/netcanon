@@ -123,7 +123,7 @@ def _problems(job: MigrationJob, target: str) -> list[str]:
     interfaces, read back with *target*'s own parser: an address not in
     the text, and -- where the job says ``completed`` -- an address on
     no interface, on two, or on one that does not carry its tag.  A
-    target whose parser reads no tag makes the job ``partial`` (the
+    target that writes no tag makes the job ``partial`` (the
     sub-interface rules), and is held to the text.  Onto a target of
     :data:`_VLAN_1_IS_THE_SWITCHS`, VLAN 1's address is not in the
     text, and its review line is."""

@@ -929,7 +929,8 @@ tests use these exclusively — never CSS classes or element structure.  See
   `tests/unit/migration/test_units_follow_their_port.py`.
   **And a name that moves does not carry what is not in the name.**
   A sub-interface's 802.1Q tag is a field of the tree, and some
-  parsers read none (AOS-CX, OS10): sent after its port, such a
+  parsers read none (OS10; AOS-CX until it read `encapsulation
+  dot1q`): sent after its port, such a
   unit was an interface with no VLAN on a target that would have
   carried the tag, in a job that said `completed` — where the
   stranded name it replaced had at least been said.  There is no
