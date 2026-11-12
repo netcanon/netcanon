@@ -155,13 +155,14 @@ class TestTheParser:
     def test_a_form_the_tree_has_no_form_for_is_counted_as_under_static(self) -> None:
         tree = get_codec("juniper_junos").parse(_text([
             "set routing-options rib inet6.0 static route 2001:db8:60::/48 discard",
-            "set routing-options rib inet6.0 static route ::/0 qualified-next-hop 2001:db8:1::fc",
+            "set routing-options rib inet6.0 static route ::/0 next-hop 2001:db8:1::fc",
+            "set routing-options rib inet6.0 static route ::/0 preference 0",
         ]))
         assert not tree.static_routes
         rows = [row for row in tree.dropped_tier3_sections if row.startswith("routing-options static")]
-        assert [row.split(" route(s)", 1)[0].split(" qualified", 1)[0] for row in rows] == [
+        assert [row.split(" route(s)", 1)[0].split(" at a", 1)[0] for row in rows] == [
             "routing-options static: 1 discard, reject or receive",
-            "routing-options static: 1",
+            "routing-options static: 1 next hop(s)",
         ]
 
 

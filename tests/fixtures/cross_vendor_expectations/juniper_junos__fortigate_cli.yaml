@@ -577,11 +577,10 @@ per_field_expectation:
       ``set routing-options static route 0.0.0.0/0 next-hop X``
       -> FortiGate's ``config router static / edit N / set dst
       0.0.0.0 0.0.0.0 / set gateway X`` (codec converts CIDR to
-      dotted-mask on render).  Junos's ``qualified-next-hop``
-      (multi-NH preference) flattens to multiple canonical entries
-      with different metrics; FortiGate distance / AD-ordering
-      semantics differ from Junos preference, so the integer
-      preserves but its meaning differs.  Per-VRF static routes
+      dotted-mask on render).  A Junos ``preference``, and a
+      ``qualified-next-hop``'s own, are read as the route's
+      distance and written ``set distance <N>`` (no committed
+      Junos input states either).  Per-VRF static routes
       (``set routing-instances X routing-options static route
       ...``) are harvested onto ``CanonicalStaticRoute.vrf`` and
       left out under a ``# review:`` line in ``config router

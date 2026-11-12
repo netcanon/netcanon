@@ -474,6 +474,17 @@ one; a static route of any other table is left out, with a row.
 every target, with nothing said -- and an IPv6 route was written
 under `routing-options static`.
 
+A route's distance is its `preference`: a qualified next hop's own
+(`qualified-next-hop <address> preference <n>`), else the route's
+(`route <dest> preference <n>`), else the table's (`static defaults
+preference <n>`); beside a next hop that states one, a next hop that
+states none is given Junos's default, 5.  The render writes the next
+hops at a destination's lowest distance as `next-hop` with one
+`preference` line, and each other as a `qualified-next-hop`, so that
+a floating route stays the backup.  ⚠️ Up to 0.7.7 no preference
+was read or written, and a floating route came out on Junos as a
+second next hop of the same preference.
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, and nothing in the output stands in its place.  A group is written under an IPv4 address, so a group with no IPv4 virtual IP is not written either.  No virtual MAC is written (`…/group/virtual-mac`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said IPv6 (`vrrp-inet6-group`) was wired: it is not (next row). |
@@ -994,15 +1005,23 @@ and true of the same sentence — they are not in the output:
   source keeps apart.  One that names the route's own VRF is read as
   the route it is.
 * **`routing-options static: <n> route(s) whose next hop is in
-  another VRF (next-table <table>) ...`**, **`routing-options
-  static: <n> discard, reject or receive route(s) ...`** and
-  **`routing-options static: <n> qualified next hop(s) ...`**
-  (Junos, in the global table and in a routing instance) — a route
-  whose next hop is looked up in another table, a route that
-  forwards to no next hop, and a next hop with a preference of its
-  own (commonly a backup), which read as a next hop would carry
-  traffic beside the route's own.  The tree has a form for none of
-  them, and they are left out.  Write them on the target by hand.
+  another VRF (next-table <table>) ...`** and **`routing-options
+  static: <n> discard, reject or receive route(s) ...`** (Junos, in
+  the global table and in a routing instance) — a route whose next
+  hop is looked up in another table, and a route that forwards to
+  no next hop.  The tree has a form for neither, and they are left
+  out.  Write them on the target by hand.
+* **`routing-options static: <n> next hop(s) at a preference the
+  tree does not hold ...`** and **`routing-options static: <n>
+  qualified next hop(s) with a metric of their own ...`** (Junos)
+  — a next hop at a preference of 0, or of 255 and above (the tree
+  holds a distance of 1 to 254, and 255 is a route a Cisco router
+  does not install), and a `qualified-next-hop` that states a
+  `metric` at the preference of another next hop of the route: the
+  tree holds no such metric, and no Juniper page says whether it
+  decides which of them is used.  Each is left out.  Every other
+  preference is read as the next hop's distance, so a floating
+  route stays the backup on every target that holds static routes.
 * **`routing-options rib: <n> static route(s) of a routing table
   other than inet.0 and inet6.0 ...`** (Junos) — a static route of
   a table the tree holds no route of (`inet.3`, `inet.2`, a table

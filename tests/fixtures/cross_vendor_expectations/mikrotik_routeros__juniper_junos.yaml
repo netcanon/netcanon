@@ -537,13 +537,14 @@ per_field_expectation:
       and declares ``/routing/static-route/interface`` unsupported,
       so the job's report lists it.  Up to 0.7.7 the RouterOS parser
       read the name as the gateway, and it was written as a Junos
-      next hop the device does not have.  Lossy bits: (1) RouterOS ``distance=`` and
-      Junos ``preference`` are vendor-specific AD scalars not 1:1
-      with canonical ``metric``; (2) a route of another routing
+      next hop the device does not have.  A RouterOS
+      ``distance=`` arrives as Junos ``preference`` (up to 0.7.7
+      the Junos render wrote destination and next-hop only).
+      Lossy bits: (1) a route of another routing
       table (RouterOS ``routing-table=<name>``) is left out of the
       RouterOS source with a row that counts such routes, since no
       VRF of a RouterOS config is read (up to 0.7.7 it was read as
-      a route of the main table); (3) a route that discards
+      a route of the main table); (2) a route that discards
       (``blackhole``, RouterOS 6 ``type=blackhole``) is left out
       with a row that counts those (up to 0.7.7 it was a
       destination-only record).

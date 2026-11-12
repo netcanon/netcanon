@@ -49,12 +49,13 @@ meta:
     Campus / small-DC aggregation re-home: an ArubaOS-CX switch replaced by a
     Juniper EX/QFX carrying the same VLANs, SVI addressing, LACP uplinks and
     VRFs.  Hostname, VLAN IDs, SVI addressing including the virtual-gateway
-    address, static-route destination and next-hop, SNMP scalars, VRF names
+    address, static-route destination, next-hop and preference, SNMP
+    scalars, VRF names
     and VXLAN VNI bindings all survive.  What
     does not is interface identity for every logical interface (AOS-CX names
     them with a space, and the Junos re-parse keeps only the first token),
     VLAN membership expressed through a LAG, the fabric-wide anycast gateway
-    MAC, static-route preference, and every local account, whose password AOS-CX holds as ciphertext under its own key.
+    MAC, and every local account, whose password AOS-CX holds as ciphertext under its own key.
   certainty: medium
   references:
     - id: aoscx-junos-surface
@@ -333,21 +334,22 @@ per_field_expectation:
   # -- Routing --------------------------------------------------------------
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Destination and next-hop survive; route preference does not.  Measured
-      on the one cell that exercises it: `10.99.0.0/16 via 203.0.113.254`
-      arrives intact with its metric flattened from 200 to 0, while the CANU
-      default route (metric 0 on both sides) round-trips unchanged.
-      juniper_junos declares `/routing/static-route/metric` and
+    disposition: good
+    note: >
+      Destination, next-hop and route preference survive, on both cells that
+      carry a route: the kitchen sink's route with a distance of 200 is
+      written `route <dest> next-hop <gw>` and `route <dest> preference 200`
+      and reads back at 200, and the CANU default route (no distance stated
+      on either side) round-trips unchanged.  Up to 0.7.7 the Junos render
+      wrote destination and next-hop only, and a floating static arrived
+      equal-cost with its primary.  Two declarations are recorded as
+      untested rather than as safe: juniper_junos declares
       `/routing/static-route/description` lossy and
       `/routing/static-route/interface` unsupported (an interface-only,
-      gateway-less route is dropped outright).  A route of a VRF crosses
-      into that routing instance: both sides declare
-      `/routing/static-route/vrf` supported (no committed cell has one).
-      Operationally: a floating/backup static loses
-      the preference that made it floating and arrives equal-cost with the
-      primary — re-apply route preference on the target before activating.
+      gateway-less route is dropped outright), and no committed cell sets
+      either.  A route of a VRF crosses into that routing instance: both
+      sides declare `/routing/static-route/vrf` supported (no committed cell
+      has one).
     references: [aoscx-junos-surface]
 
   "routing_instances[].name":

@@ -465,15 +465,13 @@ per_field_expectation:
   "static_routes[].metric":
     disposition: not_applicable
     note: >
-      Source-side absence: the Junos parser builds
-      `CanonicalStaticRoute(destination, gateway, interface="", vrf)` and
-      never reads `preference`/`metric`, so no administrative distance reaches
-      the target (0 of 11 cells).  NX-OS *can* render it -- its matrix says
-      the render emits destination + next-hop + metric -- so closing the Junos
-      parse side would move this row to `good`, not to a target loss.  Until
-      then, a FLOATING static route authored on Junos with a high preference
-      arrives at default distance and competes with the primary path: re-check
-      preferences by hand.
+      No committed Junos input states a route preference (0 of 11 cells), so
+      no distance reaches the target from this source.  The Junos parser
+      reads one -- a route's `preference`, a `qualified-next-hop`'s own and
+      `static defaults preference` -- as the route's distance, and NX-OS
+      writes it; the Junos parser's own tests pin that path.  Up to 0.7.7
+      the parser never read `preference`, and a floating static route
+      authored on Junos arrived at the default distance.
     references: [junos-nxos-surface]
 
   "static_routes[].interface":

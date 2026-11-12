@@ -363,7 +363,7 @@ per_field_expectation:
 
   static_routes:
     disposition: lossy
-    reason: "Default-VRF static routes round-trip cleanly (Junos CIDR -> Arista CIDR; preference preserved). Junos's 'qualified-next-hop' block (multiple alternate next-hops with per-NH preference under one prefix) flattens to multiple 'ip route' lines on Arista — lossy on the structural grouping but lossless on the next-hop set. Per-VRF routes ('set routing-instances X routing-options static') map to Arista 'ip route vrf X'. IPv6 static routes (Junos 'rib inet6.0 static', and '<instance>.inet6.0' in a routing instance) map to Arista 'ipv6 route' (up to 0.7.7 no 'rib' line was read, and such a route was lost with nothing said); a static route of another table is left out of the Junos source with a row that counts them."
+    reason: "Default-VRF static routes round-trip cleanly (Junos CIDR -> Arista CIDR; a route's 'preference', and a qualified next hop's own, arrive as the route's distance). Junos's 'qualified-next-hop' block (multiple alternate next-hops with per-NH preference under one prefix) flattens to multiple 'ip route' lines on Arista, each at its own distance — lossy on the structural grouping but lossless on the next-hop set. Per-VRF routes ('set routing-instances X routing-options static') map to Arista 'ip route vrf X'. IPv6 static routes (Junos 'rib inet6.0 static', and '<instance>.inet6.0' in a routing instance) map to Arista 'ipv6 route' (up to 0.7.7 no 'rib' line was read, and such a route was lost with nothing said); a static route of another table is left out of the Junos source with a row that counts them."
     references: [junos-static-routing, arista-routing-cg]
 
   # ── Tier 2 — DHCP server ──

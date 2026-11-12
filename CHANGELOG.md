@@ -1401,6 +1401,43 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos static route's preference is read, and written.**  A
+  Junos static route's preference is its administrative distance
+  ("Preference value for a static, aggregate, or generated route",
+  "Default: 5 (for static routes)", Juniper, "preference (Routing
+  Options)"), stated for a route (`route <dest> preference <n>`),
+  for one of its next hops (`qualified-next-hop <address>
+  preference <n>`, the form a floating route takes: "The qualified
+  next-hop preference and metric override the route preference and
+  metric", Juniper, "Static Route Preferences and Qualified Next
+  Hops"), or for every route of a table that states none (`static
+  defaults preference <n>`).  The parser read none of them -- a
+  qualified next hop was left out, and a route's preference was
+  read as nothing -- and the renderer wrote destination and next
+  hop only: a floating route of another platform came out on Junos
+  as a second next hop of the same preference, carrying traffic
+  beside the route it backs up, and a Junos route held at a
+  preference came out at each target's default, in jobs that said
+  `completed`.  The parser reads each next hop's preference as its
+  distance (its own, else the route's, else the table's default);
+  where some next hops of a route state one, the others are given
+  Junos's 5, and a route that states none keeps "not stated".  The
+  renderer writes the next hops at a destination's lowest distance
+  as `next-hop`, with one `route <dest> preference <n>` line, and
+  each other next hop as `qualified-next-hop <address> preference
+  <n>`.  Left out and said, one row a kind: a next hop at a
+  preference the tree does not hold (0, or 255 and above: the tree
+  holds 1 to 254, 255 is a route a Cisco router does not install,
+  and IOS XR takes 254 at most), and a qualified next hop with a
+  `metric` of its own at the preference of another next hop of the
+  route (the tree holds no such metric, and no Juniper page says
+  whether it decides which of them is used).  The `preference` and
+  `qualified-next-hop` lines no longer make a routing instance of
+  their own.  `/routing/static-route/metric` is supported on Junos
+  now, and three expectation cells onto Junos are `good`.
+  `tests/unit/migration/codecs/juniper_junos/test_a_routes_preference.py`
+  reads a floating route back from every public codec's output.
+
 - **A VyOS route out an interface, and a `blackhole` route, are read
   and written.**  VyOS writes a route out an interface as `route
   <prefix> { interface <name> }` ("Next-hop IPv4 router
@@ -6946,6 +6983,16 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A destination whose next hops mix a stated and an unstated
+  distance keeps its order only where the two platforms' defaults
+  agree.**  "Not stated" is one value in the tree, and each target
+  writes it as its own default: 5 on Junos, 10 on FortiOS, 1 on
+  most others.  The Junos parser gives a next hop beside one that
+  states a preference Junos's own 5; no other parser fills its
+  platform's default, so an IOS-XE route that states no distance
+  (1 on the router) beside a floating route of distance 3 comes out
+  on Junos at 5 beside 3, the backup in front.  No committed input
+  has such a destination.
 - **A tunnel's ends are carried between IOS-XE CLI configs only.**
   No other parser reads a tunnel end, and no other renderer writes
   one: onto any other target the three paths are listed unsupported.

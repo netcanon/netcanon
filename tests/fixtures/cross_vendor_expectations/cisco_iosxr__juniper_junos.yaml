@@ -302,8 +302,9 @@ per_field_expectation:
       is forwarded by the target.  Routes carrying a gateway survive with
       destination, gateway and VRF intact, which is why this is `lossy` at the
       list level rather than `unsupported`.  juniper_junos additionally
-      declares `/routing/static-route/metric` and `/description` lossy; no
-      committed cell sets either, so those are declared rather than observed.
+      declares `/routing/static-route/description` lossy; no committed cell
+      sets one, so that is declared rather than observed.  No committed cell
+      sets a distance either, so that path is not observed on this pair.
     references: [iosxr-junos-surface]
 
   # -- Services --------------------------------------------------------------

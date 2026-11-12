@@ -486,11 +486,17 @@ per_field_expectation:
       parsers).  Per-VRF static routes (``ip route vrf X ...``)
       now round-trip via ``CanonicalStaticRoute.vrf`` (Cisco
       ``ip route vrf X`` -> Junos ``set routing-instances X
-      routing-options static``).  Cisco's "administrative distance" and
-      Junos's "preference" are vendor-specific scalars not 1:1;
-      ``CanonicalStaticRoute.metric`` is the operator-visible
-      metric, not preference/AD.  Junos's ``qualified-next-hop``
-      flattens to multiple canonical entries.
+      routing-options static``).  Cisco's administrative distance
+      arrives as Junos ``preference``: a route whose next hops
+      share a distance is written ``next-hop`` and ``route <dest>
+      preference <N>``, and a floating backup to the same
+      destination ``qualified-next-hop <gw> preference <N>``.  Up
+      to 0.7.7 the Junos render wrote destination and next-hop
+      only.  Lossy for what is not written: a route whose next hop
+      is an interface alone (``Null0`` included) is not written,
+      since juniper_junos declares
+      ``/routing/static-route/interface`` unsupported, and a
+      route's ``name`` does not arrive (``/description`` lossy).
     references: [cisco-static-routes, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──
@@ -770,8 +776,7 @@ per_field_expectation:
 #
 # Deferred items:
 #
-#   * NTP per-server options / qualified-next-hop preservation —
-#     canonical model is host-list-only / single-NH-only.
+#   * NTP per-server options — canonical model is host-list-only.
 #
 #   * TACACS+ servers — no canonical model in v1.
 #

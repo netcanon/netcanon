@@ -519,13 +519,12 @@ per_field_expectation:
       vrf X ...`` / ``ipv6 route vrf X ...``).  Verified across the
       full corpus: 8/8 Junos fixtures with static routes are
       byte-model-preserved through iosxe_cli, three of them carrying
-      VRF-bound routes.  Two residuals stay comparator-invisible —
-      they never enter the canonical model, so the harness cannot
-      observe them and both codecs are honest about the on-device
-      loss: Junos ``preference`` is parse-and-ignored (canonical
-      ``metric`` stays 0), and ``qualified-next-hop`` floating
-      routes are parse-and-ignored (Junos parse handles only
-      ``next-hop``).
+      VRF-bound routes.  A Junos ``preference``, and a
+      ``qualified-next-hop``'s own, are read as the route's
+      distance and written ``ip route <dest> <mask> <gw> <N>``;
+      no committed Junos input states either, so the Junos
+      parser's own tests pin them.  Before, a ``preference`` was
+      read as nothing and a qualified next hop was left out.
     references: [junos-static-routing, cisco-static-routes]
 
   # ── Tier 2 — DHCP server ──
@@ -825,8 +824,7 @@ per_field_expectation:
 #
 # Deferred items:
 #
-#   * NTP per-server options / qualified-next-hop preservation —
-#     canonical model is host-list-only / single-NH-only.
+#   * NTP per-server options — canonical model is host-list-only.
 #
 #   * TACACS+ servers — no canonical model in v1.
 #

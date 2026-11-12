@@ -36,6 +36,13 @@ welcome.
   global table and in a routing instance (`rib
   <instance>.inet6.0`).  ⚠️ Up to 0.7.7 no `rib` line was read,
   and an IPv6 route was written under `routing-options static`.
+  A route's `preference`, a `qualified-next-hop <address>
+  preference <n>` and `static defaults preference <n>` are read
+  as each next hop's distance, and written back as `next-hop`
+  with one `route <destination> preference <n>` line and a
+  `qualified-next-hop` for each other next hop.  ⚠️ Up to 0.7.7
+  no preference was read or written, and a floating route came
+  out equal-cost with its primary.
 - LAGs (`ae<N>` aggregated-ethernet, reconciled with cross-vendor
   names like `Port-channel<N>` / `trk<N>`)
 
@@ -203,11 +210,6 @@ Canonical mapping:
   routing instance is written as a `vrf definition` whatever its
   type (`virtual-router`, `mac-vrf`), and the type is not carried.
   Its static routes keep their VRF (`ip route vrf <name> ...`).
-- **`/routing/static-route/metric`** — a route's `preference` is
-  not read, and none is written: a route Junos holds at a
-  preference of its own (a floating route) is written at the
-  target's default, and a route of another vendor with a distance
-  is written here at the Junos default.
 - EVPN Type-5 routes — schema shipped, codec wire-up in progress;
   ship-before-wire path.
 
@@ -477,9 +479,11 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   said.**  A route whose next hop is looked up in another table
   (`next-table <table>`, "the next routing table to the
   destination", Juniper, "static (Routing Options)"), a route
-  that forwards to no next hop (`discard`, `reject`, `receive`)
-  and a `qualified-next-hop <address>` (a next hop with a
-  preference of its own, commonly a backup) are not translated;
+  that forwards to no next hop (`discard`, `reject`, `receive`),
+  a next hop at a preference the tree does not hold (0, or 255
+  and above) and a `qualified-next-hop` with a `metric` of its
+  own at the preference of another next hop of the route are not
+  translated;
   one row of the Tier-3 banner a kind says how many, in the
   global table and in a routing instance.  Write them on the
   target by hand.  A static route of a table that is not `inet.0`
