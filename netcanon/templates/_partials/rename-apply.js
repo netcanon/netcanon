@@ -217,6 +217,12 @@
       var applyPlan = currentPortPlan();
       var undecided = (applyPlan && applyPlan.applied)
         ? (applyPlan.unresolved_ports || []).length : 0;
+      // What the job says of the names no pairing decides: with both
+      // devices declared, a loopback, a tunnel or a VLAN interface it
+      // left unsettled holds it as a port does.
+      var open = (typeof jobNamesNotSettled === 'function') ? jobNamesNotSettled() : null;
+      var namesUnsettled = !!open && (Object.keys(open.fused).length
+        + open.dropped.length + open.left.length) > 0;
       // The strip has just been drawn from this job; the footer says
       // the same thing it does.  "Applied." alone, and a green
       // toast, are for a job the strip has nothing to say against.
@@ -230,9 +236,10 @@
       } else if (outcome === 'blocked') {
         setRenameStatus('Applied. The mapping reports something that has to be '
           + 'put right — see above.');
-      } else if (outcome === 'unsettled') {
-        // No devices declared, and the job still has two names on
-        // one or a port dropped undecided.
+      } else if (outcome === 'unsettled' || namesUnsettled) {
+        // The job still has two names on one, or a name dropped
+        // undecided or left under its source name: with no devices
+        // declared, or among the names the pairing does not decide.
         setRenameStatus('Applied. Port names are still not settled — see above.');
       } else if (undecided) {
         setRenameStatus('Applied. ' + undecided + ' port name'

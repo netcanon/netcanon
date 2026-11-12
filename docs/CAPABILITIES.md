@@ -1462,13 +1462,14 @@ other two.
 
 **Declaring both devices settles the hardware ports among these
 names, and no others.**  Ports are then paired by position, each
-with a port of its own, and the job reports through
-`port_mapping_plan` (section G) — the job's three fields are empty
-on such a job, so that one fact has one account.  A pair of devices
-decides nothing about two loopbacks on one loopback, a tunnel that
-was dropped or a VLAN interface left under its source name: with
-both devices declared the output has them the same, and the job is
-not held for them.  So the job's sentence offers the devices only
+with a port of its own, and the job reports the hardware ports
+through `port_mapping_plan` (section G) and every other name in its
+three fields, as here — a name is in one account, never both.  A
+pair of devices decides nothing about two loopbacks on one loopback,
+a tunnel that was dropped or a VLAN interface left under its source
+name: with both devices declared the output has them the same, and
+the job is held for them as it is with none.  So the job's sentence
+offers the devices only
 where a hardware port is among what it lists, and says so where
 they would decide only some of it -- and only where a device is
 described of the source's vendor and of the target's (a model
@@ -1613,11 +1614,6 @@ What still says `completed`, and is yours to check:
   (`set [ find name=WAN ]`), in a job that can be `completed`.
   Section G: only a declared target device can say which hardware a
   RouterOS port is.
-* **With both devices chosen in the modal**, the strip no longer
-  says which names were not settled, and the job Apply then makes
-  holds only for hardware ports (section G): a VLAN interface left
-  under its source name is in the output the same, in a job that
-  can be `completed`.  Decide such names before you pair.
 * **A name the output has no line for.**  A name left as the source
   has it is listed whether or not the target's renderer wrote
   anything for it (a Junos `irb` that has only a description, onto

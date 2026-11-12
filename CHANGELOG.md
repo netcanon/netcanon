@@ -1365,6 +1365,41 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **With both devices declared, a name the pairing does not decide
+  holds the job as it does with none.**  The pairing by position
+  decides hardware ports.  A loopback, a tunnel, a VLAN interface or
+  an aggregate goes to the translator, and nothing asked what it made
+  of one unless that touched a port: two Junos VLAN interfaces
+  (`irb.100`, `vlan.100`) both written `Vlan100` onto EOS, a FortiGate
+  aggregate called `LAG_CORE` written under that name into a Junos
+  config, an IOS-XE tunnel dropped onto AOS-S -- each was a warning
+  in a job that said `completed` (or was `partial` for its ports
+  alone) with both devices declared, where the same request with no
+  devices was `partial` and listed the name.  The three questions a
+  job with no devices asks are now asked of the names the pairing
+  leaves, and those names are on the job (`fused_ports`,
+  `unresolved_ports`, `untranslated_ports`) with the job's sentence
+  for them; the hardware ports stay on `port_mapping_plan`, and no
+  name is in both.  An entry settles each, as with no devices.  An
+  entry that gives such a name a name of the target is reported as
+  off the device (`off_target`) only where that name reads as a
+  hardware port to the target: `{"LAG_CORE": "ae0"}` onto an EX4300
+  is where the aggregate belongs.  In the rename modal the strip of a
+  plan draws the job's names with their chips and what settles them,
+  counts them among the decisions, holds Apply for two of them on one
+  name, and the footer no longer says "Rendered output refreshed"
+  over such a job.  And under a port plan two rows the job does not
+  list -- a Junos `lo0` and `lo0.0`, one interface, both `Loopback0`
+  -- no longer hold Apply on a job the server called `completed`.  A
+  request that declares no devices is unchanged.  Guarded by
+  `TestNamesThePairingLeaves` and the wrapper every job of
+  `tests/unit/migration/test_run_plan_with_models.py` goes through,
+  which now reads the output for two logical interfaces on one name
+  and for a drop nobody decided (each handed the defect it is for);
+  `test_devices_are_not_offered_for_these` in
+  `tests/integration/test_migration_models_api.py`; and
+  `TestTheNamesNoPairingDecides` in
+  `tests/e2e/test_migrate_device_models_drawn.py`.
 - **A FortiOS redundant interface is read and written as the bond that
   needs nothing of its peer.**  In a redundant interface (`set type
   redundant`) "traffic only goes over one interface at any time"
@@ -5940,9 +5975,8 @@ timestamp if your timezone matters for an audit.
     `oobm`) — collides with nothing and is not dropped; it is
     listed (`landed_off_target`) and asks for a decision, since its
     config is on a port the device does not have.
-    Two logical interfaces the ordinary translation puts on one name
-    (two loopbacks, on a target with one loopback form) are still
-    only warned about, as before.
+    What the ordinary translation makes of the other logical names
+    holds the job as it does with no devices declared (see Fixed).
   - Names are compared as each platform tells interfaces apart.  On
     AOS-S or IOS `1/a1` is the port `1/A1`.  On FortiOS and RouterOS,
     where an operator chooses interface names as free text, `DMZ` and
@@ -6208,8 +6242,8 @@ timestamp if your timezone matters for an audit.
   with a port of its own.  A pair of devices decides nothing about
   two loopbacks on one loopback, a tunnel that was dropped or a VLAN
   interface left under its source name: with both devices declared
-  the output has them the same and the job is not held for them (see
-  Known limitations).  So the job's sentence offers the devices only
+  the output has them the same, and the job is held for them as it
+  is with none.  So the job's sentence offers the devices only
   where a hardware port is among what it lists, and says so where
   they would decide only some of it.
 
@@ -6983,8 +7017,7 @@ timestamp if your timezone matters for an audit.
   reported; either way the job is `partial`.  A loopback's unit
   put on the target's loopback is two names on one: with no devices
   declared the job is `partial` for it (`fused_ports`), and with
-  devices declared it is said only in the warning that two names
-  share the loopback.  A unit
+  devices declared as well.  A unit
   that did follow is written without an 802.1Q tag where none was
   read for it — every AOS-CX and OS10 sub-interface, whose parsers
   read none: a warning says so, and with devices declared it is held
@@ -7001,19 +7034,6 @@ timestamp if your timezone matters for an audit.
   classify are reported as off-inventory, and onto another vendor a
   FortiGate's stock `fortilink` aggregate is reported as displaced or
   as a logical name on a port the target does not list.
-- **With both devices declared, a logical name is still only warned
-  about.**  The port plan reports a shared name that has a hardware
-  port among its sources, and displaces a name nobody decided rather
-  than merge two interfaces; it holds a job for a hardware port.
-  Two loopbacks on one loopback, or two aggregates on one, are in no
-  port's clash; a tunnel or a loopback the target has no form for is
-  dropped; a VLAN interface the translator cannot read is left under
-  its source name.  Each is a warning there, in a job that can be
-  `completed`, where the same job with no devices declared is
-  `partial` and lists the name (`fused_ports`, `unresolved_ports`,
-  `untranslated_ports`).  Junos `lo0 unit 0` and `lo0 unit 2` onto
-  EOS, with an EX4300 and a DCS-7050SX-64 declared: `completed`, two
-  `interface Loopback0` stanzas.
 - **A name the config only refers to is left as it is, in a job that
   can be `completed`.**  A name in a static route, a DHCP pool, a
   tracking entry or a VXLAN source that the translator cannot read
@@ -7067,11 +7087,6 @@ timestamp if your timezone matters for an audit.
   is `partial` until each has an entry, one row at a time.  The
   translator does not give it the target's own name
   (`{"Vlan10": "irb.10"}` is yours to send).
-- **With both devices chosen the strip no longer says which names
-  were not settled**, and the job that Apply then makes is the one
-  the limitation above describes: a logical name is only warned
-  about.  The strip says that the pairing settles none of them
-  while one device is chosen, not after the second is.
 - **A rename or a drop entered on a row of "Other names in the
   config" is recorded by the job and not always shown by the
   output.**  The job lists the entry in `port_renames` or

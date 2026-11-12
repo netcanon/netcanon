@@ -426,11 +426,14 @@ loses the layout too.
   on another vendor and are dropped, with whatever address they
   hold; `naf.root`, `l2t.root` and an interface with a name of your
   own are not read by the port translator and are left under that
-  name.  With no devices declared the job is `partial` for each —
+  name.  The job is `partial` for each — with no devices declared,
   `unresolved_ports` for the dropped, `untranslated_ports` for the
-  ones left — until an entry of `port_rename_map` decides it: a
-  name on the target, or `null`.  A hardware switch that holds the
-  LAN address wants a name (a VLAN interface, usually), not a drop.
+  ones left; with both declared, a name that is not a port of the
+  source device is in `port_mapping_plan.unresolved_ports` and the
+  job's own lists hold the rest — until an entry of
+  `port_rename_map` decides it: a name on the target, or `null`.  A
+  hardware switch that holds the LAN address wants a name (a VLAN
+  interface, usually), not a drop.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never

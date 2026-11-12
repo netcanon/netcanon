@@ -2084,7 +2084,7 @@ BROAD_HANDLERS = {
     ("netcanon/migration/vendors/__init__.py", "*"): "loads the vendor declarations at start",
     ("netcanon/migration/device_models.py", "*"): "loads the model families at start",
     ("netcanon/migration/target_profiles.py", "*"): "loads the target profiles at start",
-    ("netcanon/services/migration_pipeline.py", "reads_as_a_port"): "wraps one classifier call on one name",
+    ("netcanon/services/migration_pipeline.py", "_reads_as_a_port"): "wraps one classifier call on one name",
     ("netcanon/services/migration_pipeline.py", "_management_form"): "wraps one classifier call on one name",
     ("netcanon/services/migration_pipeline.py", "_the_targets_own"):
         "wraps one classifier call and one formatter call on one name",

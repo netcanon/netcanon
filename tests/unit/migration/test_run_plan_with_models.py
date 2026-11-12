@@ -116,27 +116,101 @@ def _shared_final_names(source, target, raw_text: str, job: MigrationJob) -> dic
     plan was made for, and a test that called the same function over
     the same list had the same blind spot.
 
-    Two logical names the ordinary translation puts on one name (two
-    loopbacks, on a target with one loopback form) are left out, as
-    the engine leaves them out: that is the translator's own, older
-    behaviour, and it warns about it itself.
+    Two logical names on one name (two VLAN interfaces, on a target
+    with one form for both) are :func:`_logical_names_shared`'s: the
+    plan does not decide them, and the job lists them apart.
 
     The LIST OF NAMES is still the engine's (``collect_port_names``).
     What does not depend on that list is the pair of checks below,
     which read the rendered output.
     """
-    dropped = set(job.port_drops)
     hardware = {_same(source, name) for name in job.source_ports}
+    return {
+        final: sorted(names) for final, names in _ended(source, target, raw_text, job).items()
+        if len(names) > 1 and hardware.intersection(names)
+    }
+
+
+def _ended(source, target, raw_text: str, job: MigrationJob) -> dict[str, set[str]]:
+    """Each name of the output, as the target compares names, with
+    the source names that ended on it, as the source compares them."""
+    dropped = set(job.port_drops)
     ended: dict[str, set[str]] = {}
     for name in collect_port_names(source.parse(raw_text)):
         if name in dropped:
             continue
         final = job.port_renames.get(name, name)
         ended.setdefault(_same(target, final), set()).add(_same(source, name))
-    return {
-        final: sorted(names) for final, names in ended.items()
-        if len(names) > 1 and hardware.intersection(names)
+    return ended
+
+
+def _logical_names_shared(source, target, raw_text: str, job: MigrationJob) -> dict[str, list[str]]:
+    """Names of the output that more than one source name ended on
+    where none of those names is a hardware port: two loopbacks on
+    one loopback, two VLAN interfaces on one.
+
+    Junos refers to an interface with its unit, so ``lo0.0`` and
+    ``lo0`` end on one name as ONE interface.  Written here, not
+    taken from the engine: a unit 0 beside its own interface is set
+    aside only while the group has more names than the output, read
+    back with the target's parser, has interfaces under the name.
+    """
+    hardware = {_same(source, name) for name in job.source_ports}
+    try:
+        parsed = target.parse(job.rendered)
+        under: dict[str, int] = {}
+        for iface in parsed.interfaces:
+            under[_same(target, iface.name)] = under.get(_same(target, iface.name), 0) + 1
+    except Exception:
+        under = {}
+    shared: dict[str, list[str]] = {}
+    for final, names in _ended(source, target, raw_text, job).items():
+        if len(names) < 2 or hardware.intersection(names):
+            continue
+        counted = sorted(names)
+        for name in sorted(names):
+            port, dot, unit = name.rpartition(".")
+            if (
+                len(counted) > max(under.get(final, 0), 1)
+                and dot and unit and not unit.strip("0") and port in names
+            ):
+                counted.remove(name)
+        if len(counted) > 1:
+            shared[final] = counted
+    return shared
+
+
+def _drops_nobody_decided(source, raw_text: str, job: MigrationJob, entries) -> list[str]:
+    """Names the job dropped that neither the pairing, nor a clash,
+    nor an entry of the operator's decided -- read from the plan's
+    own fields and the entries the test posted, not from the
+    engine's account of the names it holds the job for.  An entry
+    keyed by a name the config does not use may be keyed by the
+    factory name of a port the config calls something else
+    (``labelled_ports``), and a unit goes with its port: dropped by a
+    decision, it is decided too."""
+    plan = job.port_mapping_plan
+    uses = {_same(source, name) for name in collect_port_names(source.parse(raw_text))}
+    by_factory = {
+        _same(source, factory): name for name, factory in plan.labelled_ports.items()
+        if _same(source, factory) not in uses
     }
+    decided = {
+        _same(source, name) for name, where in plan.rename_map.items() if where is None
+    } | {_same(source, name) for name in plan.displaced} | {
+        _same(source, name) for name, where in plan.sub_interfaces.items() if where is None
+    } | {
+        by_factory.get(_same(source, key), _same(source, key))
+        for key, where in (entries or {}).items() if where is None
+    }
+
+    def went_by_a_decision(name: str) -> bool:
+        port, dot, unit = _same(source, name).rpartition(".")
+        return _same(source, name) in decided or bool(
+            dot and unit.isdigit() and port in decided
+        )
+
+    return [name for name in job.port_drops if not went_by_a_decision(name)]
 
 
 def _text_values(node) -> Iterator[str]:
@@ -482,17 +556,25 @@ def run_plan_with_models(
         **_shared_final_names(source, target, raw_text, job),
         **_shared_hardware(target, job),
     }
+    logical = _logical_names_shared(source, target, raw_text, job)
     if expect_fused:
-        assert shared and plan.fused, (
-            f"expected two names on one target; the output has {shared}, the plan {plan.fused}"
-        )
+        assert shared or logical, "expected two names on one target; the output has none"
+        # Each account holds what the output shows of its own names:
+        # the plan, the hardware ports; the job, the rest.
         assert {_same(target, t) for t in plan.fused} == set(shared), (
             f"the plan's fused targets are not the output's: {plan.fused} / {shared}"
+        )
+        assert {_same(target, t) for t in job.fused_ports} == set(logical), (
+            f"the job's fused names are not the output's: {job.fused_ports} / {logical}"
         )
     else:
         assert shared == {}, f"two names on one target name: {shared}"
         assert plan.fused == {}, (
             f"the plan reports a fusion the output does not have: {plan.fused}"
+        )
+        assert logical == {}, f"two logical names on one target name: {logical}"
+        assert job.fused_ports == {}, (
+            f"the job reports a fusion the output does not have: {job.fused_ports}"
         )
         merged = _merged_addresses(source, target, raw_text, job)
         assert merged == {}, f"two source interfaces in one output interface: {merged}"
@@ -514,6 +596,26 @@ def run_plan_with_models(
         assert job.status != MigrationJobStatus.completed, (
             "the plan leaves something open and the job is completed"
         )
+    if job.fused_ports or job.unresolved_ports or job.untranslated_ports:
+        assert job.status != MigrationJobStatus.completed, (
+            "the job leaves names open and is completed"
+        )
+    # The job lists what the plan does not decide; a name is in one
+    # account or the other, never both.
+    the_plans = (
+        {p.source for p in plan.pairings} | {p.source for p in plan.unplaced}
+        | set(plan.unresolved_ports)
+    )
+    both = sorted(
+        the_plans.intersection([*job.unresolved_ports, *job.untranslated_ports])
+        | the_plans.intersection(n for names in job.fused_ports.values() for n in names)
+    )
+    assert both == [], f"names in both accounts, the plan's and the job's: {both}"
+    if job.status == MigrationJobStatus.completed:
+        undecided = _drops_nobody_decided(
+            source, raw_text, job, kwargs.get("port_rename_map"),
+        )
+        assert undecided == [], f"dropped and nobody decided, in a completed job: {undecided}"
     for port in plan.used_unplaced:
         assert port.dropped == (port.source in job.port_drops), (
             f"{port.source}: dropped is not what the job did"
@@ -4306,6 +4408,9 @@ class TestALogicalNameOnAPortTheTargetLacks:
         # switch ``internal`` has no form on a Catalyst, and is.)
         assert plan.displaced == [] and job.port_drops == ["internal"]
         assert plan.unresolved_ports == ["DMZ"]
+        # The switch is no port, and the plan does not decide it: the
+        # job lists it, as the same request with no devices does.
+        assert job.unresolved_ports == ["internal"]
         assert job.status == MigrationJobStatus.partial
         assert any(
             "were given a port name the declared target device does not list "
@@ -4349,10 +4454,11 @@ class TestALogicalNameOnAPortTheTargetLacks:
         job = run_plan_with_models(
             get_codec("fortigate_cli"), get_codec("cisco_iosxe_cli"), _FORTIGATE_CASE,
             _profile("fortigate/100E"), _profile("cisco_iosxe/C9300-24P"),
-            port_rename_map={"DMZ": "Vlan20"}, free_text=("DMZ",),
+            port_rename_map={"DMZ": "Vlan20", "internal": None}, free_text=("DMZ",),
         )
         plan = job.port_mapping_plan
         assert plan.landed_off_target == {} and plan.unresolved_ports == []
+        assert job.unresolved_ports == []
         assert job.status == MigrationJobStatus.completed
 
     def test_on_a_port_it_is_a_unit_that_follows_the_port(self) -> None:
@@ -4545,6 +4651,177 @@ class TestMoreSmallRules:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Names the pairing does not decide
+# ---------------------------------------------------------------------------
+
+#: Two Junos VLAN interfaces, ``irb.100`` and the older ``vlan.100``,
+#: which a target with one VLAN interface for each VLAN writes as one;
+#: and ``fxp0``, a management port an EX4300 lists no place for.
+_JUNOS_TWO_VLAN_INTERFACES = "\n".join([
+    "set system host-name r1",
+    "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
+    "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
+    "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+    "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
+    "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
+    "",
+])
+
+#: A FortiGate aggregate an operator called ``LAG_CORE``.  No
+#: classifier reads the name, so the translator leaves it as it is.
+_FORTIGATE_LAG_NAMED = """\
+config system interface
+    edit "internal1"
+        set type physical
+    next
+    edit "internal2"
+        set type physical
+    next
+    edit "LAG_CORE"
+        set ip 192.168.1.1 255.255.255.0
+        set type aggregate
+        set member "internal1" "internal2"
+    next
+end
+"""
+
+#: A Catalyst's GRE tunnel.  AOS-S has no form for a tunnel.
+_IOS_TUNNEL = """\
+hostname r1
+interface GigabitEthernet1/0/1
+ no switchport
+ ip address 192.0.2.1 255.255.255.252
+interface Tunnel0
+ ip address 172.16.0.1 255.255.255.252
+ tunnel source GigabitEthernet1/0/1
+ tunnel destination 198.51.100.9
+"""
+
+
+class TestNamesThePairingLeaves:
+    """The pairing decides hardware ports; every other name goes to
+    the translator, and with both devices declared nothing asked what
+    it made of them.  Each case below said ``completed`` (or was
+    ``partial`` for its ports alone) where the same request with no
+    devices said ``partial`` for the name.  The same three questions
+    are asked now, the names are on the job apart from the plan's,
+    and an entry settles each."""
+
+    def test_a_name_left_under_the_sources_name(self) -> None:
+        """The members join ``ae0``, and the aggregate's address is
+        on ``LAG_CORE``, an interface no Junos device has."""
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec("juniper_junos"), _FORTIGATE_LAG_NAMED,
+            _profile("fortigate/60F"), _profile("juniper_junos/EX4300-48T"),
+        )
+        assert "set interfaces LAG_CORE unit 0 family inet address 192.168.1.1/24" in (
+            job.rendered.splitlines()
+        )
+        assert job.untranslated_ports == ["LAG_CORE"]
+        assert job.port_mapping_plan.unresolved_ports == []
+        assert job.status == MigrationJobStatus.partial
+        assert job.error == (
+            "Port names are not settled: 1 name(s) could not be read as any kind "
+            "of port: whatever the output has of them is under the name the source "
+            "config has for them, which the target may not accept. An entry in "
+            "port_rename_map settles each: for a name left as it was, the name it "
+            "is to have on the target (its own, if that is right there) or null."
+        )
+
+    def test_the_entry_that_settles_it_is_not_off_the_device(self) -> None:
+        """``ae0`` is no port of an EX4300, and is where the aggregate
+        belongs: the entry the job asked for raises nothing else."""
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec("juniper_junos"), _FORTIGATE_LAG_NAMED,
+            _profile("fortigate/60F"), _profile("juniper_junos/EX4300-48T"),
+            port_rename_map={"LAG_CORE": "ae0"},
+        )
+        assert "set interfaces ae0 unit 0 family inet address 192.168.1.1/24" in (
+            job.rendered.splitlines()
+        )
+        assert job.port_mapping_plan.off_target == []
+        assert (job.status, job.untranslated_ports, job.error) == (
+            MigrationJobStatus.completed, [], None,
+        )
+
+    def test_an_entry_that_puts_it_on_a_port_the_device_lacks_is(self) -> None:
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec("juniper_junos"), _FORTIGATE_LAG_NAMED,
+            _profile("fortigate/60F"), _profile("juniper_junos/EX4300-48T"),
+            port_rename_map={"LAG_CORE": "ge-0/0/99"},
+        )
+        assert job.port_mapping_plan.off_target == ["ge-0/0/99"]
+
+    def test_two_logical_names_on_one(self) -> None:
+        """The pairing's account (``fxp0``) and the job's (the two
+        VLAN interfaces) side by side, each in its own words."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        devices = (_profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"))
+        job = run_plan_with_models(
+            junos, eos, _JUNOS_TWO_VLAN_INTERFACES, *devices, expect_fused=True,
+        )
+        plan = job.port_mapping_plan
+        assert job.fused_ports == {"Vlan100": ["irb.100", "vlan.100"]}
+        assert plan.fused == {} and plan.unresolved_ports == ["fxp0"]
+        assert job.unresolved_ports == [] and job.untranslated_ports == []
+        assert job.status == MigrationJobStatus.partial
+        assert job.error.startswith("Port mapping is incomplete: 1 name(s) in the source config")
+        assert job.error.endswith(
+            "Review the port mapping and map or drop each one. Port names are not "
+            "settled: 1 name(s) in the output received more than one source name, "
+            "so the config of two interfaces is written as one. An entry in "
+            "port_rename_map settles each: a name of its own, or null, for all "
+            "but one of the names that share one."
+        )
+        settled = run_plan_with_models(
+            junos, eos, _JUNOS_TWO_VLAN_INTERFACES, *devices,
+            port_rename_map={"vlan.100": None, "fxp0": None},
+        )
+        assert (settled.status, settled.fused_ports, settled.error) == (
+            MigrationJobStatus.completed, {}, None,
+        )
+
+    def test_a_tunnel_the_target_has_no_form_for(self) -> None:
+        devices = (_profile("cisco_iosxe/C9300-48P"), _profile("aruba_aoss/2930F-24G"))
+        ios = get_codec("cisco_iosxe_cli")
+        job = run_plan_with_models(ios, AOSS, _IOS_TUNNEL, *devices)
+        assert "Tunnel0" in job.port_drops and "172.16.0.1" not in job.rendered
+        assert job.unresolved_ports == ["Tunnel0"]
+        assert job.status == MigrationJobStatus.partial
+        assert job.error == (
+            "Port names are not settled: 1 other name(s) the target has no form for "
+            "(such as a loopback, a tunnel or a hardware switch) were dropped from "
+            "the output. An entry in port_rename_map settles each: a target name "
+            "for a dropped name, or null to say it is to go."
+        )
+        settled = run_plan_with_models(
+            ios, AOSS, _IOS_TUNNEL, *devices, port_rename_map={"Tunnel0": None},
+        )
+        assert (settled.status, settled.unresolved_ports) == (MigrationJobStatus.completed, [])
+
+    def test_between_two_configs_of_one_codec_nothing_is_listed(self) -> None:
+        """No name is put to a classifier there: each stands."""
+        same = _profile("juniper_junos/EX4300-48T")
+        junos = get_codec("juniper_junos")
+        job = run_plan_with_models(junos, junos, _JUNOS_TWO_VLAN_INTERFACES, same, same)
+        assert (job.fused_ports, job.unresolved_ports, job.untranslated_ports) == ({}, [], [])
+        assert "Port names are not settled" not in (job.error or "")
+
+    def test_with_no_pairing_made_ports_are_asked_after_too(self) -> None:
+        """No pairing, so every name went by its shape: the two
+        management ports on ``oobm`` are listed like any two names."""
+        junos = get_codec("juniper_junos")
+        empty = inventory_from_profile(TargetProfile(vendor="juniper_junos", model="Generic"))
+        job = run_plan_with_models(junos, AOSS, _JUNOS_TWO_MGMT, empty, TARGET_2930M_48G)
+        assert not job.port_mapping_plan.applied
+        assert job.fused_ports == {"oobm": ["em0", "em1"]}
+        assert job.error.startswith("Port mapping was not made: ")
+        assert "Port names are not settled: 1 name(s) in the output" in job.error
+        # Devices are declared: the sentence does not offer them.
+        assert "declare both devices" not in job.error.lower()
+
+
 class TestTheChecksOnEveryJobCanFail:
     """Every test above calls the pipeline through a wrapper that
     reads the rendered output back.  A check nobody has seen fail is
@@ -4626,6 +4903,90 @@ class TestTheChecksOnEveryJobCanFail:
             "find default-name=ether1 ]", "find default-name=sfp-sfpplus1 ] name=oob",
         )
         assert _shared_hardware(mikrotik, job) == {"sfp-sfpplus1": ["core-a", "oob"]}
+
+    def test_two_logical_names_made_one(self) -> None:
+        """Two Junos VLAN interfaces both end on ``Vlan100``; the
+        reference ``lo0.0`` beside ``lo0`` is one interface, not a
+        second."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        job = migration_pipeline.run_plan_with_models(
+            junos, eos, _JUNOS_TWO_VLAN_INTERFACES,
+            _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+        )
+        assert _logical_names_shared(junos, eos, _JUNOS_TWO_VLAN_INTERFACES, job) == {
+            "vlan100": ["irb.100", "vlan.100"],
+        }
+        settled = migration_pipeline.run_plan_with_models(
+            junos, eos, _JUNOS_TWO_VLAN_INTERFACES,
+            _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"vlan.100": None},
+        )
+        assert _logical_names_shared(junos, eos, _JUNOS_TWO_VLAN_INTERFACES, settled) == {}
+
+    def _engine_that(self, monkeypatch: pytest.MonkeyPatch, change) -> None:
+        real = migration_pipeline.run_plan_with_models
+
+        def changed(*args, **kwargs) -> MigrationJob:
+            job = real(*args, **kwargs)
+            change(job)
+            return job
+
+        monkeypatch.setattr(migration_pipeline, "run_plan_with_models", changed)
+
+    def test_the_wrapper_refuses_a_fusion_the_job_does_not_list(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._engine_that(monkeypatch, lambda job: job.fused_ports.clear())
+        with pytest.raises(AssertionError, match="the job's fused names are not the output's"):
+            run_plan_with_models(
+                get_codec("juniper_junos"), get_codec("arista_eos"), _JUNOS_TWO_VLAN_INTERFACES,
+                _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+                expect_fused=True,
+            )
+
+    def test_the_wrapper_refuses_a_completed_job_that_lists_names(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def says_completed(job: MigrationJob) -> None:
+            job.status = MigrationJobStatus.completed
+
+        self._engine_that(monkeypatch, says_completed)
+        with pytest.raises(AssertionError, match="the job leaves names open and is completed"):
+            run_plan_with_models(
+                get_codec("fortigate_cli"), get_codec("juniper_junos"), _FORTIGATE_LAG_NAMED,
+                _profile("fortigate/60F"), _profile("juniper_junos/EX4300-48T"),
+            )
+
+    def test_the_wrapper_refuses_a_name_in_both_accounts(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def lists_the_plans(job: MigrationJob) -> None:
+            job.unresolved_ports.extend(job.port_mapping_plan.unresolved_ports)
+
+        self._engine_that(monkeypatch, lists_the_plans)
+        with pytest.raises(AssertionError, match="names in both accounts"):
+            run_plan_with_models(
+                get_codec("juniper_junos"), get_codec("arista_eos"), _JUNOS_TWO_VLAN_INTERFACES,
+                _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+                expect_fused=True,
+            )
+
+    def test_the_wrapper_refuses_a_drop_nobody_decided(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The engine's account emptied, and the job said
+        ``completed``, as it did before: the drop is read from the
+        plan's fields and the posted entries, and is no one's."""
+        def as_before(job: MigrationJob) -> None:
+            job.unresolved_ports.clear()
+            job.status, job.error = MigrationJobStatus.completed, None
+
+        self._engine_that(monkeypatch, as_before)
+        with pytest.raises(AssertionError, match=r"dropped and nobody decided.*Tunnel0"):
+            run_plan_with_models(
+                get_codec("cisco_iosxe_cli"), AOSS, _IOS_TUNNEL,
+                _profile("cisco_iosxe/C9300-48P"), _profile("aruba_aoss/2930F-24G"),
+            )
 
     def test_the_wrapper_itself_refuses_a_fused_job(self) -> None:
         """If the wrapper returned before its checks, every test in

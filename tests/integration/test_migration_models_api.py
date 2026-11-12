@@ -1531,10 +1531,10 @@ class TestPortNamesWithNoDevices:
     def test_devices_are_not_offered_for_these(
         self, client: TestClient,
     ) -> None:
-        """Two VLAN interfaces on one.  With both devices declared
-        the same output is ``completed`` -- the pairing is of
-        hardware ports and asks nothing of these -- so the sentence
-        of the job with none declared does not offer it."""
+        """Two VLAN interfaces on one.  The pairing is of hardware
+        ports and settles neither name: with both devices declared
+        the job is held for the same two, in the same words, so the
+        sentence of the job with none declared does not offer it."""
         body = {
             "source": "juniper_junos", "target": "arista_eos",
             "raw_text": _JUNOS_NOT_SETTLED.replace(
@@ -1555,10 +1555,12 @@ class TestPortNamesWithNoDevices:
             **body, "source_profile": "juniper_junos/EX4300-48T",
             "target_profile": "arista_eos/DCS-7050SX-64",
         }).json()
-        # What the sentence must not send an operator to: the same
-        # two stanzas, and a status that says nothing of them.
+        # The same two stanzas, and the job says so as the one with
+        # no devices does: the names are the job's, not the plan's.
         assert paired["rendered"].count("interface Vlan100\n") == 2
-        assert (paired["status"], paired["port_mapping_plan"]["fused"]) == ("completed", {})
+        assert (paired["status"], paired["port_mapping_plan"]["fused"]) == ("partial", {})
+        assert paired["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
+        assert paired["error"] == job["error"]
 
     def test_with_devices_the_plan_says_it(self, client: TestClient) -> None:
         """One account of one fact.  With both devices declared the
@@ -1608,7 +1610,8 @@ class TestPortNamesWithNoDevices:
             said = " ".join(fields[name]["description"].split())
             assert "the job is partial while it is not empty" in said, name
             assert how in said, name
-            assert "Empty when both devices were declared" in said, name
+            assert "With both devices declared" in said, name
+            assert "instead; the rest are here" in said, name
         # Which of the names a pair of devices would decide.
         assert "only where a hardware port (source_ports) is among" in " ".join(
             fields["fused_ports"]["description"].split()

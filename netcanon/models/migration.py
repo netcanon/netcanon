@@ -547,28 +547,30 @@ class MigrationJob(BaseModel):
             by :func:`run_plan_with_overrides` via the capture
             transform.
         fused_ports: Names of the output that more than one source
-            name ended on, each with those source names, on a job
-            whose request declared no devices.  The job is
-            ``partial`` while it is not empty.  Empty when devices
-            were declared: ``port_mapping_plan.fused`` says it there.
+            name ended on, each with those source names.  The job is
+            ``partial`` while it is not empty.  With both devices
+            declared, a name a paired hardware port ended on is in
+            ``port_mapping_plan.fused`` instead; the rest are here.
         unresolved_ports: Names of the source config that were
             dropped from the output because the target has no name
             for them -- a hardware port, or a logical name such as a
             loopback or a tunnel -- and that no entry of
-            ``port_rename_map`` names, on a job whose request
-            declared no devices.  The job is ``partial`` while it is
-            not empty.  Empty when devices were declared:
-            ``port_mapping_plan.unresolved_ports`` says it there.
+            ``port_rename_map`` names.  The job is ``partial`` while
+            it is not empty.  With both devices declared, a name the
+            pairing accounts for is in
+            ``port_mapping_plan.unresolved_ports`` instead; the rest
+            are here.
         untranslated_ports: Names of the source config that the port
             translator could not read as any kind of port and left
             under the name the source config has for them, that
             are a foreign name on the target, and that no entry of
-            ``port_rename_map`` names, on a job whose request
-            declared no devices.  Not a name the target itself
+            ``port_rename_map`` names.  Not a name the target itself
             writes for the same kind of thing (the ``Vlan20`` of an
             AOS-S VLAN's address, on EOS), and none between two
             codecs of one platform.  The job is ``partial`` while
-            it is not empty.  Empty when devices were declared.
+            it is not empty.  With both devices declared, a name the
+            pairing accounts for is said by the plan instead; the
+            rest are here.
         dropped_tier3_sections: Tier-3 stanza headers detected in
             the source bytes that the codec parser deliberately
             drops (firewall rules, NAT, QoS, route-maps, IPsec,
@@ -805,8 +807,9 @@ class MigrationJob(BaseModel):
     source_other_names: list[str] = Field(default_factory=list)
 
     #: Names of the output that more than one source name ended on,
-    #: each with those names, where the request declared no devices
-    #: (:func:`run_plan_with_checked_names`).  Read from the finished
+    #: each with those names (:func:`run_plan_with_checked_names`, and
+    #: with both devices declared :func:`run_plan_with_models`, for the
+    #: names its pairing leaves to the translator).  Read from the finished
     #: run over every name the port translator rewrites -- a LAG or a
     #: loopback as much as a port -- and compared as the two platforms
     #: compare names.  Whoever decided the names: two entries of
@@ -814,23 +817,24 @@ class MigrationJob(BaseModel):
     #: Unit 0 of an interface beside the interface (a Junos reference
     #: to ``lo0.0`` where the interface is ``lo0``) is one interface
     #: and is not listed.  Named and shaped as
-    #: :attr:`MappingPlan.fused` is, which carries the same fact when
-    #: devices are declared -- by that path's own, narrower rule, so
-    #: this field is left empty there and not filled with a second
-    #: account that could differ from the first.
+    #: :attr:`MappingPlan.fused` is, which carries the same fact, by its
+    #: own rule, for a name a paired hardware port ended on: such a name
+    #: is not here as well, so that no name has two accounts that could
+    #: differ.
     fused_ports: dict[str, list[str]] = Field(
         default_factory=dict,
         description=(
             "Names of the output that more than one source name ended on, "
             "each with those source names: the config of two interfaces is "
-            "written as one.  Filled when the request declared no devices; "
-            "the job is partial while it is not empty.  To settle one, give "
+            "written as one; the job is partial while it is not empty.  "
+            "To settle one, give "
             "all but one of its source names a name of their own in "
             "port_rename_map, or null to drop them.  Declaring both devices "
             "settles a name only where a hardware port (source_ports) is "
             "among its source names: two loopbacks on one loopback are not "
-            "told apart by a device.  Empty when both devices were declared: "
-            "port_mapping_plan.fused says it there.  A name is whatever text "
+            "told apart by a device.  With both devices declared, a name a "
+            "paired hardware port ended on is in port_mapping_plan.fused "
+            "instead; the rest are here.  A name is whatever text "
             "the config has where a port name goes: escape it before showing "
             "it."
         ),
@@ -838,9 +842,10 @@ class MigrationJob(BaseModel):
 
     #: Names of the source config that the port translator dropped
     #: -- the target has no name for them -- and that no entry of
-    #: ``port_rename_map`` names, where the request declared no
-    #: devices (:func:`run_plan_with_checked_names`), in the order
-    #: :attr:`port_drops` lists them.  A hardware port (a management
+    #: ``port_rename_map`` names, in the order :attr:`port_drops`
+    #: lists them (:func:`run_plan_with_checked_names`, and with both
+    #: devices declared :func:`run_plan_with_models`, for the names its
+    #: pairing leaves to the translator).  A hardware port (a management
     #: port on a platform with none, a breakout lane) and a logical
     #: name alike (a loopback, a tunnel, a FortiGate hardware switch
     #: that holds the LAN address): :attr:`source_ports` says which
@@ -848,9 +853,9 @@ class MigrationJob(BaseModel):
     #: with it, unless an entry dropped the port.  Not here: a VLAN
     #: interface a target writes from its VLAN stanza, which is not
     #: dropped at all.  Named as :attr:`MappingPlan.unresolved_ports`
-    #: is, which holds the names that need a decision when devices
-    #: are declared; left empty there for the reason given at
-    #: :attr:`fused_ports`.
+    #: is, which holds the names of the pairing that need a decision
+    #: when devices are declared; a name there is not here as well,
+    #: for the reason given at :attr:`fused_ports`.
     unresolved_ports: list[str] = Field(
         default_factory=list,
         description=(
@@ -858,11 +863,12 @@ class MigrationJob(BaseModel):
             "because the target has no name for them, and that no entry of "
             "port_rename_map names: a hardware port, or a logical name such "
             "as a loopback, a tunnel or a hardware switch (source_ports says "
-            "which are hardware ports).  Filled when the request declared no "
-            "devices; the job is partial while it is not empty.  To settle "
+            "which are hardware ports); the job is partial while it is not "
+            "empty.  To settle "
             "one, give it an entry in port_rename_map: a target name, or "
-            "null to say it is to be dropped.  Empty when both devices were "
-            "declared: port_mapping_plan.unresolved_ports says it there.  "
+            "null to say it is to be dropped.  With both devices declared, a "
+            "name the pairing accounts for is in "
+            "port_mapping_plan.unresolved_ports instead; the rest are here.  "
             "Escape a name before showing it."
         ),
     )
@@ -870,10 +876,12 @@ class MigrationJob(BaseModel):
     #: Names of the source config that the port translator could not
     #: read as any kind of port and so left under the name the source
     #: config has for them (its "could not classify ... left verbatim"
-    #: warning), and that no entry of ``port_rename_map`` names, where
-    #: the request declared no devices
-    #: (:func:`run_plan_with_checked_names`), in the order the
-    #: translator met them.  A source vendor's name in another
+    #: warning), and that no entry of ``port_rename_map`` names, in
+    #: the order the translator met them
+    #: (:func:`run_plan_with_checked_names`, and with both devices
+    #: declared :func:`run_plan_with_models`, for the names its pairing
+    #: leaves to the translator: a port it pairs, and a name in
+    #: :attr:`MappingPlan.unresolved_ports`, are the plan's).  A source vendor's name in another
     #: vendor's config: an IOS ``GigabitEthernet1``, an OPNsense
     #: ``igc0``, a RouterOS interface an operator named -- and a name
     #: that is no interface at all where the config has it in a place
@@ -909,13 +917,15 @@ class MigrationJob(BaseModel):
             "codecs of one platform, and where the target itself writes "
             "that very name for the same kind of logical interface (the "
             "Vlan20 of an AOS-S VLAN's address, on EOS, IOS-XE or NX-OS).  "
-            "A hardware port is always listed.  Filled when the request "
-            "declared no devices and the two codecs differ; the job is "
-            "partial while it is not empty.  To settle one, give it an "
+            "A hardware port is always listed.  Filled when the two codecs "
+            "differ; the job is partial while it is not empty.  To settle "
+            "one, give it an "
             "entry in port_rename_map: the name it is to have on the target "
             "-- its own name, if that is right there -- or null to drop it.  "
-            "Empty when both devices were declared.  Escape a name before "
-            "showing it."
+            "With both devices declared, a name the pairing accounts for "
+            "(a port it pairs, or one in port_mapping_plan.unresolved_ports) "
+            "is said by the plan instead; the rest are here.  Escape a name "
+            "before showing it."
         ),
     )
 
@@ -1052,7 +1062,8 @@ class MigrationPlanRequest(BaseModel):
 
     Every plan endpoint applies this map, the per-pane ones included,
     and an entry is also the operator DECIDING that name.  With no
-    devices declared a job is ``partial`` while two source names end
+    devices declared -- and with both, for every name the pairing
+    does not decide -- a job is ``partial`` while two source names end
     on one name of the output (:attr:`MigrationJob.fused_ports`), a
     name the translator dropped has no entry
     (:attr:`MigrationJob.unresolved_ports`), or a name it could not
