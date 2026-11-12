@@ -84,6 +84,7 @@ from .._helpers import (
     address_key,
     ip_mtu_read,
     keyword_stanza_rows,
+    next_hop_elsewhere_rows,
     second_dot1q_tags,
     spaced_port_name,
     tags_every_native_vlan,
@@ -991,11 +992,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
             ri.l3_vni = _l3vni_by_vrf[ri.name]
 
     # Static routes.  One the router does not install is left out,
-    # and a row says so.
-    intent.static_routes, routes_left_out = _parse_static_routes(raw)
+    # and a row says so; so is one whose next hop is in another VRF.
+    intent.static_routes, routes_left_out, route_rows = _parse_static_routes(raw)
     intent.dropped_tier3_sections.extend(
         left_out_rows(routes_left_out, rest="distance-255"),
     )
+    intent.dropped_tier3_sections.extend(route_rows)
 
     # SNMP (Tier 2)
     intent.snmp = _parse_snmp(raw)
@@ -2202,15 +2204,16 @@ def _route_path(family: str, vrf: str, dest: str) -> list[str]:
 
 
 def _route_after_destination(
-    words: list[str], is_address: Callable[[str], bool],
-) -> tuple[str, str, int, str]:
+    words: list[str], is_address: Callable[[str], bool], own: str,
+) -> tuple[str, str, int, str, bool]:
     """Read what follows the destination of an ``ip route`` or
     ``ipv6 route`` line.
 
-    IOS writes ``{address | interface [address]} [dhcp] [distance]
-    [name <NAME>] [tag <T>] [track <N>] [permanent]``.  The first word
-    is the next hop: an address, an interface, or the keyword
-    ``dhcp``.
+    IOS writes ``{address | interface [address]} [dhcp] [global]
+    [distance] [name <NAME>] [tag <T>] [track <N>] [permanent]``, and
+    for IPv6 ``[nexthop-vrf [<name> | default]]`` after the next hop.
+    The first word is the next hop: an address, an interface, or the
+    keyword ``dhcp``.
 
     * An interface may be a type and its number written apart
       (``loopback 66``).  The two are one name, and the number after
@@ -2231,14 +2234,23 @@ def _route_after_destination(
       IOS-XE as it was, and onto a platform that cannot say it the
       validation report holds the job.  The word is never joined to
       a distance after it (``dhcp 200`` is not ``dhcp200``).
+    * ``global`` says the next hop is in the global table, and
+      ``nexthop-vrf`` names the VRF it is in (``default`` for the
+      global table).  A route whose next hop is in a table other than
+      its own is one the tree has no form for: read past, the word
+      made a route of the VRF to the Internet a route to a next hop
+      of the VRF itself.  Such a route is said to be ELSEWHERE.
+      ``nexthop-vrf`` with no name after it says the next hop is in a
+      VRF and not which, and is taken for elsewhere too.
 
     Args:
         words: The words of the line after the destination; at least
             one.
         is_address: Whether a word is an address of the line's family.
+        own: The route's own VRF, ``""`` for the global table.
 
     Returns:
-        ``(gateway, interface, distance, name)``.
+        ``(gateway, interface, distance, name, elsewhere)``.
     """
     first, tail = words[0], words[1:]
     gateway = ""
@@ -2254,6 +2266,7 @@ def _route_after_destination(
             tail = tail[1:]
     metric = 0
     description = ""
+    elsewhere = False
     t = 0
     while t < len(tail):
         tok = tail[t].lower()
@@ -2262,6 +2275,18 @@ def _route_after_destination(
             t += 2
         elif tok in ("tag", "track") and t + 1 < len(tail):
             t += 2  # keyword + its value — not modelled
+        elif tok == "global":
+            elsewhere = elsewhere or own != ""
+            t += 1
+        elif tok == "nexthop-vrf":
+            stated = tail[t + 1] if t + 1 < len(tail) else ""
+            if stated and not stated.isdigit():
+                table = "" if stated.lower() == "default" else stated
+                elsewhere = elsewhere or table != own
+                t += 2
+            else:
+                elsewhere = True
+                t += 1
         elif gateway == "" and is_address(tail[t]):
             gateway = tail[t]
             t += 1
@@ -2270,12 +2295,12 @@ def _route_after_destination(
             t += 1
         else:
             t += 1
-    return gateway, iface, metric, description
+    return gateway, iface, metric, description, elsewhere
 
 
 def _parse_static_routes(
     raw: str,
-) -> tuple[list[CanonicalStaticRoute], list[tuple[str, list[str]]]]:
+) -> tuple[list[CanonicalStaticRoute], list[tuple[str, list[str]]], list[str]]:
     """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text.
 
     Handles the optional ``vrf <NAME>`` qualifier
@@ -2284,8 +2309,9 @@ def _parse_static_routes(
     (v0.2.0 — graduated the per-VRF static-route surface from
     ``unsupported`` to ``supported`` on this codec).
     What follows the destination is read by
-    :func:`_route_after_destination`; the ``global`` next-hop-leak
-    keyword is not modelled and is read past.
+    :func:`_route_after_destination`.  A route whose next hop is in
+    another VRF (``global``, ``nexthop-vrf``) is left out, and a row
+    says how many (:func:`next_hop_elsewhere_rows`).
 
     A route of administrative distance 255 is one the router does not
     install: Cisco gives 255 as the distance of a source the router
@@ -2296,22 +2322,27 @@ def _parse_static_routes(
     to 254, and wrote 254).
 
     Returns:
-        ``(routes, left_out)``: the routes, and ``(kind, path)`` for
-        each route left out, for
-        :func:`netcanon.migration._tier3_detection.left_out_rows`.
+        ``(routes, left_out, rows)``: the routes; ``(kind, path)`` for
+        each route the router does not install, for
+        :func:`netcanon.migration._tier3_detection.left_out_rows`; and
+        the row for the routes whose next hop is in another VRF.
     """
     routes: list[CanonicalStaticRoute] = []
     left_out: list[tuple[str, list[str]]] = []
+    elsewhere = 0
     for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             vrf = m6.group(1) or ""
             dest = m6.group(2)  # already <prefix>/<len> form
-            gateway, iface, metric, description = _route_after_destination(
-                [m6.group(3), *(m6.group(4) or "").split()], _is_ipv6_literal,
+            gateway, iface, metric, description, away = _route_after_destination(
+                [m6.group(3), *(m6.group(4) or "").split()], _is_ipv6_literal, vrf,
             )
             if metric == _NOT_INSTALLED:
                 left_out.append(("distance-255", _route_path("ipv6", vrf, dest)))
+                continue
+            if away:
+                elsewhere += 1
                 continue
             routes.append(CanonicalStaticRoute(
                 destination=dest,
@@ -2330,11 +2361,14 @@ def _parse_static_routes(
             gw_or_iface = m.group(4)
             prefix_len = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
             dest = f"{dest_ip}/{prefix_len}"
-            gateway, iface, metric, description = _route_after_destination(
-                [gw_or_iface, *(m.group(5) or "").split()], _is_ipv4_literal,
+            gateway, iface, metric, description, away = _route_after_destination(
+                [gw_or_iface, *(m.group(5) or "").split()], _is_ipv4_literal, vrf,
             )
             if metric == _NOT_INSTALLED:
                 left_out.append(("distance-255", _route_path("ip", vrf, dest)))
+                continue
+            if away:
+                elsewhere += 1
                 continue
             routes.append(CanonicalStaticRoute(
                 destination=dest,
@@ -2354,7 +2388,11 @@ def _parse_static_routes(
                 destination="0.0.0.0/0",
                 gateway=m.group(1),
             ))
-    return routes, left_out
+    rows = next_hop_elsewhere_rows(
+        "ip route", elsewhere,
+        "ip route vrf <name> ... <next hop> global, ipv6 route ... nexthop-vrf <name>",
+    )
+    return routes, left_out, rows
 
 
 # -- SNMP parse helpers (shared via re-export for sibling codecs if needed)

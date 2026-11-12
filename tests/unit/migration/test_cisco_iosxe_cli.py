@@ -553,19 +553,16 @@ class TestRender:
             for r in reparsed.static_routes
         )
 
-    def test_per_vrf_ip_route_tolerates_trailing_global_keyword(self):
-        # Real captures carry route-leak nuances, e.g.
-        # ``ip route vrf myvrf 0.0.0.0 0.0.0.0 5.6.7.8 global``.  The
-        # vrf binding + next-hop are modelled; the trailing ``global``
-        # next-hop-leak keyword is not (parse-and-ignore, same as the
-        # administrative distance / ``name`` trailers).
+    def test_per_vrf_ip_route_with_global_is_left_out_and_said(self):
+        # ``ip route vrf myvrf 0.0.0.0 0.0.0.0 5.6.7.8 global``: the next
+        # hop is in the global table, which the tree has no form for.
+        # Read past, the keyword made it a route to a next hop of the
+        # VRF itself (test_a_next_hop_in_another_vrf.py has the rest).
         intent = CiscoIOSXECLICodec().parse(
             "ip route vrf myvrf 0.0.0.0 0.0.0.0 5.6.7.8 global\n"
         )
-        match = [r for r in intent.static_routes if r.vrf == "myvrf"]
-        assert match
-        assert match[0].destination == "0.0.0.0/0"
-        assert match[0].gateway == "5.6.7.8"
+        assert intent.static_routes == []
+        assert [row.split(":")[0] for row in intent.dropped_tier3_sections] == ["ip route"]
 
     def test_global_table_ip_route_has_no_vrf_qualifier(self):
         # Non-vrf routes keep vrf="" and render WITHOUT the qualifier.

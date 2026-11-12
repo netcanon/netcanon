@@ -94,8 +94,9 @@ other than main ...` or `/ip route: <n> blackhole, unreachable or
 prohibit route(s) ...` for RouterOS routes of a VRF or that discard
 (write them on the target by hand, a VRF's routes in that VRF), and
 `router static: <n> route(s) whose next hop is in another VRF ...`
-for IOS XR routes whose next hop is resolved in another VRF's table
-(the same).  See
+(IOS XR) or `ip route: <n> route(s) whose next hop is in another VRF
+...` (IOS-XE, NX-OS, EOS) for routes whose next hop is resolved in
+another VRF's table (the same).  See
 [`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
 
 A job that is `partial` with "No source constructs were recognized"

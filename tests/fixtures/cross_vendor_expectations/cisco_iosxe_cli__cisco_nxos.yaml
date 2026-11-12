@@ -356,7 +356,7 @@ per_field_expectation:
 
   "static_routes[].vrf":
     disposition: good
-    note: "Per-VRF routes stay in their VRF (2 cells)."
+    note: "Per-VRF routes stay in their VRF (1 cell)."
     references: [iosxecli-nxos-surface]
 
   "static_routes[].description":
@@ -553,18 +553,22 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Kept as a whole-record disposition because the drift is a record COUNT
-      change rather than a sub-field: on 1 of the 4 populated cells the target
-      GAINS a VRF the source never declared (0 -> 1).  The source defines no
-      `vrf definition` at all, only VRF-scoped statics
-      (`ip route vrf myvrf ...`); NX-OS cannot host a VRF-scoped route without
-      the VRF existing, so the render materialises `vrf context myvrf` and the
-      re-parse returns it.  That synthesised context carries a name and an
-      instance type and nothing else -- no route distinguisher, no
-      route-targets -- so it will not participate in MP-BGP even though the
-      VRF list now says it exists.  Review the target's VRF inventory after
-      migration and give any synthesised context its RD/RT (or delete it) on
-      purpose.  On the other 3 cells the VRFs round-trip fully, including RD,
-      RT imports/exports, description and the L3 VNI binding.
+      change rather than a sub-field: a source with VRF-scoped statics
+      (`ip route vrf myvrf ...`) and no `vrf definition` for their VRF GAINS
+      a VRF on the target (0 -> 1).  NX-OS cannot host a VRF-scoped route
+      without the VRF existing, so the render materialises `vrf context
+      myvrf` and the re-parse returns it.  That synthesised context carries a
+      name and an instance type and nothing else -- no route distinguisher,
+      no route-targets -- so it will not participate in MP-BGP even though
+      the VRF list now says it exists.  Review the target's VRF inventory
+      after migration and give any synthesised context its RD/RT (or delete
+      it) on purpose.  No committed input shows it now: the one that did
+      holds its VRF-scoped statics with `global` (the next hop is in the
+      global table), which the IOS-XE parser leaves out and counts, so none
+      reaches the render.  `test_a_next_hop_in_another_vrf.py` shows the
+      gain on a config of its own.  On the 3 populated cells the VRFs
+      round-trip fully, including RD, RT imports/exports, description and
+      the L3 VNI binding.
     references: [iosxecli-nxos-surface]
 
   # -- Vendor-specific / structural surfaces --

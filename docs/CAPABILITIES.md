@@ -962,12 +962,16 @@ and true of the same sentence — they are not in the output:
   and they are left out.  Write them on the target by hand, a VRF's
   routes in that VRF.
 * **`router static: <n> route(s) whose next hop is in another VRF
-  ...`** (IOS XR) — `<prefix> vrf <name> <next hop>`, a next hop
-  resolved in the table of another VRF (`vrf default` from a VRF's
-  block is the global table).  The tree has no form for it, and the
-  route is left out: written into the route's own table it would
-  carry traffic the source keeps apart.  A leaf that names its own
-  VRF is read as the route it is.
+  ...`** (IOS XR) and **`ip route: <n> route(s) whose next hop is in
+  another VRF ...`** (IOS-XE, NX-OS, EOS) — a next hop resolved in
+  the table of another VRF: IOS XR `<prefix> vrf <name> <next hop>`
+  (`vrf default` from a VRF's block is the global table), IOS-XE
+  `global` after a VRF route's next hop and IPv6 `nexthop-vrf
+  <name>`, NX-OS `vrf <name>` after the next hop, EOS `egress-vrf
+  <name>`.  The tree has no form for it, and the route is left out:
+  written into the route's own table it would carry traffic the
+  source keeps apart.  One that names the route's own VRF is read as
+  the route it is.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):

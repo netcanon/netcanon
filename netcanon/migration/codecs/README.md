@@ -1223,6 +1223,17 @@ the policy locally:
   section row through `keyword_stanza_rows`.  (`aruba_aoscx` and
   `dell_os10` read their headers themselves.)
 
+* **`netcanon/migration/codecs/_helpers.py::next_hop_elsewhere_rows`**
+  -- the one row a parser adds for the static routes it leaves out
+  because their next hop is in another VRF (IOS XR `<prefix> vrf
+  <name>`, IOS-XE `global` and `nexthop-vrf`, NX-OS `vrf <name>` after
+  the next hop, EOS `egress-vrf`).  A canonical route has one VRF, so
+  such a route is one the tree has no form for.
+  `next_hop_elsewhere_rows(head, count, form)` is a section row (the
+  route is in force on the source) naming how many and the form, or
+  none for a count of 0.  A next hop's VRF that is the route's own is
+  read past, and the route read without it.
+
 * **`netcanon/migration/codecs/_helpers.py::without_unread_tags`**,
   **`second_dot1q_tags`** and **`a_tag`** -- a sub-interface's tag
   statement, read whole or not at all (IOS-XE CLI, IOS XR and EOS;

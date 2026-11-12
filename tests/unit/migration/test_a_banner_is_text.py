@@ -1053,7 +1053,11 @@ BEFORE: dict[str, str] = {
     # translated (codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py):
     # was "ac89fc3d7159".
     "real/cisco_iosxe/batfish_cisco_interface.txt": "8928d38b76db",
-    "real/cisco_iosxe/batfish_cisco_ip_route.txt": "ab1f0cce8811",
+    # Moved on purpose, by its two VRF routes and a row and nothing
+    # else: the next hop of each is in the global table (`global`), so
+    # it is left out and counted (test_a_next_hop_in_another_vrf.py):
+    # was "ab1f0cce8811".
+    "real/cisco_iosxe/batfish_cisco_ip_route.txt": "352bda777c69",
     "real/cisco_iosxe/batfish_cisco_logging.txt": "b1aad8f82e94",
     "real/cisco_iosxe/batfish_cisco_snmp.txt": "ec27664e753c",
     "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "d4cdf42f627c",

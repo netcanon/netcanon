@@ -1401,6 +1401,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS-XE, NX-OS or EOS route whose next hop is in another VRF is
+  no longer translated as a route of its own VRF.**  IOS-XE `global`
+  after a VRF route's next hop (the next hop is in the global table)
+  and an IPv6 route's `nexthop-vrf <name>` were read past, and so was
+  NX-OS's `vrf <name>` after a next hop, with a preference written
+  after it; an EOS `egress-vrf <name>` was read as the route's
+  interface.  Each was a route of its own VRF on every target -- a
+  VRF's default route to the Internet one to a next hop of the VRF
+  itself -- in a job that said nothing of it.  Such a route is now
+  left out, as an IOS XR one is, and one `ip route:` row counts them:
+  the tree has no form for a next hop outside the route's own VRF.
+  One that names the route's own table is read as the route.
+
 - **An IOS XR route out an interface written in two words, an IOS XR
   next hop in another VRF and an IOS-XE route of distance 255 are no
   longer translated as the routes they are not.**  The IOS XR `router

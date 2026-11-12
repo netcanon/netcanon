@@ -411,6 +411,16 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
   it again: the old output may lack its MAC-VRFs, route
   distinguishers and route targets, or its addresses and
   descriptions.
+- **A route whose next hop is in another VRF is left out.**  `ip
+  route [vrf <name>] <prefix> egress-vrf <name> <next hop>` resolves
+  the next hop in the egress VRF (Arista, "Static Inter-VRF Route").
+  The tree has no form for such a route: it is not translated, and
+  one `ip route: <n> route(s) whose next hop is in another VRF ...`
+  row on the migrate banner counts such routes.  An `egress-vrf` that
+  names the route's own VRF (`default` for a route with no `vrf`) is
+  read as the route.  ⚠️ Up to 0.7.7 the keyword was read as the
+  route's interface: a route of its own VRF out an interface called
+  `egress-vrf`.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line is read as a trunk of EVERY
   VLAN — the EOS default, which EOS states by the absence of the
