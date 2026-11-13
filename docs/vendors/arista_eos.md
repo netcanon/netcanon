@@ -142,7 +142,8 @@ Canonical mapping:
   device, cascades to every VARP IP).
 - `ip address virtual source-nat vrf <V> address <Z>` is a DISTINCT
   feature (VARP source-NAT for VRF-leaked traffic, Tier 3) and is
-  parse-and-ignored — does NOT pollute the VARP anycast surface.
+  not translated — does NOT pollute the VARP anycast surface; the
+  line is the Tier-3 row `ip address`.
 
 ### Known limitations
 
@@ -160,7 +161,7 @@ Canonical mapping:
   structural — `virtual_gateway_address != ""` on the address record
   IS the anycast intent.
 - VARP source-NAT (`ip address virtual source-nat ...`) is Tier-3 and
-  not modelled.
+  not modelled (the row `ip address`).
 - **An interface's own address beside a shared gateway is two
   lines.**  From a source that has both on one interface (a Junos
   `virtual-gateway-address`, an AOS-CX `active-gateway`, an NX-OS
@@ -205,11 +206,32 @@ Canonical mapping:
 - **QoS**
 - **Routing protocols** — `router bgp`, `router ospf`, EVPN
   redistribution policies (`address-family evpn`, route-map in/out
-  filters) are parse-tolerant but not auto-rendered to other
-  vendors
-- **`management api http-commands`** / `daemon TerminAttr` —
-  parse-tolerant
+  filters) are not auto-rendered to other vendors.  `router bgp` is
+  read only for what it says of a VRF (its RD and route targets) and
+  of an EVPN VLAN; its sessions are not translated
+- **`management api http-commands`** / `daemon TerminAttr`
 - **PKI / crypto material**
+
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`router bgp`, `ip prefix-list`, `spanning-tree mode`, `logging
+buffered`, `management api`), never a value; one row a kind, however
+many lines it has.  That includes the forms of a command the parser
+reads only in one form: a `vlan` line that is a range or a list
+(`vlan 20-30`; one VLAN a line is read), an `ip name-server` line of
+more than one server, a `logging` line that names no address, an
+`snmp-server community` line whose access right does not follow its
+name, and every `snmp-server community` line after the first (the
+tree holds one community).  A line that begins with a word EOS
+configurations are not
+seen to begin with is counted in one row that shows none of its
+text.  Until 2026-11-13 only the kinds a pattern named (IOS-form
+ACLs, route maps, QoS maps, crypto, MLAG) had a row, and the rest
+were in no output and no row, in jobs that said `completed`.  Not
+reached: an indented line of a stanza the parser reads (an
+interface's `spanning-tree` lines, say) that the stanza's reader
+does not take has no row.
 
 ## Real-world fixtures we've validated against
 

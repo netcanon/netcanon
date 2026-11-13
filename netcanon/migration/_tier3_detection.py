@@ -30,6 +30,11 @@ Public functions:
       firewall / QoS / route-map config — those live in CLI), but
       retained for symmetry so the per-codec hook is structurally
       identical.
+    * :func:`detect_tier3_sections_aoss`, ``_nxos``, ``_iosxr``,
+      ``_aoscx``, ``_dellos10`` and ``_vyos`` — each its platform's
+      CLI; :func:`is_an_iosxe_cli_section_line` and
+      :func:`is_a_dellos10_section_line` ask one line what the
+      IOS-XE and OS10 detectors ask a text.
     * :func:`left_out_row` / :func:`left_out_rows` /
       :func:`is_left_out_row` — the row for a statement a parser
       read and left out on purpose (a Junos statement the source
@@ -37,6 +42,13 @@ Public functions:
       router does not have), the rows for all of them (bounded,
       and one row for statements that read alike), and the test
       that tells such a row from a section header.
+    * :func:`unread_top_level_rows` / :func:`command_label` — the
+      rows for the lines in column 0 that no reader of a parser takes
+      (the Arista EOS and OS10 parsers ask every such line), each a
+      command's words; :func:`no_command_row` /
+      :func:`is_no_command_row` — the row that counts such lines that
+      begin with no command the parser knows, and the test that tells
+      it from the others.
 
 Each returns a list of section labels like::
 
@@ -69,7 +81,7 @@ whole run of blank lines it is in, and a run costs its square.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 from .limits import ticked
 
@@ -492,6 +504,133 @@ def is_a_dellos10_section_line(line: str) -> bool:
     (``dell_os10.parse._rows_for_what_no_reader_takes``), a quarter
     of the time a call of the detector for each line took."""
     return any(pattern.match(line) for pattern in _DELLOS10_TIER3_HEADERS)
+
+
+def is_an_iosxe_cli_section_line(line: str) -> bool:
+    """Whether a pattern of :func:`detect_tier3_sections_iosxe_cli`
+    takes the one line *line*, which then has a row of its own: what
+    the Arista EOS parser asks of every line in column 0 it does not
+    read (``arista_eos.parse._rows_for_what_no_reader_takes``)."""
+    return any(pattern.match(line) for pattern in _IOSXE_TIER3_HEADERS)
+
+
+#: A word that says which command of a family a line is
+#: (:func:`command_label`): no digit, dot or slash, which a value (an
+#: address, a number, a time zone) has, and no longer than a command
+#: word.
+_A_SUB_COMMAND_RE = re.compile(r"[a-z][a-z-]{0,63}\Z")
+
+
+def command_label(
+    words: Sequence[str],
+    command_words: frozenset[str],
+    families: frozenset[str],
+) -> str:
+    """The row for a line in column 0 whose first words are *words*:
+    its command word, and after a word of *families* the word that
+    says which of its commands it is (``ntp server``, ``logging
+    buffered``); after ``no``, the same of the command it takes back.
+    Empty where the command word is not one of *command_words*.  Never
+    a value: after any other command word the second word is often a
+    name the operator chose, a word with a digit, dot or slash is no
+    command's, and the row is cut after a word that names a secret, as
+    every row is (:func:`_shown_label`).
+
+    Args:
+        words: The line's first words, as ``str.split`` gives them.
+        command_words: The words the platform's configurations begin
+            a line in column 0 with, in lower case.
+        families: The words of *command_words* whose second word says
+            which of their commands a line is.
+    """
+    shown: list[str] = []
+    if words and words[0].lower() == "no":
+        shown.append("no")
+        words = words[1:]
+    if not words or words[0].lower() not in command_words:
+        return ""
+    shown.append(words[0].lower())
+    if (
+        shown[-1] in families
+        and len(words) > 1
+        and _A_SUB_COMMAND_RE.match(words[1].lower())
+    ):
+        shown.append(words[1].lower())
+    return _shown_label(" ".join(shown))
+
+
+def unread_top_level_rows(
+    raw: str,
+    *,
+    taken: Callable[[str], object],
+    command_words: frozenset[str],
+    families: frozenset[str],
+    session_words: frozenset[str],
+) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 of *raw* that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that begins with a
+    letter, whose first word is not a word of a session
+    (*session_words*: ``configure``, ``end``, ``write``) and that
+    *taken* does not take -- a reader of the parser, a header that is a
+    record or a row of its own, a line a Tier-3 pattern gives a row --
+    is in no output, and a row says so.  It is a row of its command
+    (:func:`command_label`), one for each kind of line, past
+    :data:`LEFT_OUT_ROWS_SHOWN` of them one that counts the rest; a
+    line that begins with a word the platform's configurations are not
+    seen to begin with is counted in one row, with the number of the
+    first such line and nothing of its text (:func:`no_command_row`),
+    which is no sign that the text was a config.  A line that does not
+    begin with a letter (a comment, a ``!``, an indented line) is not
+    asked.
+
+    Every line is asked, not a list of kinds: a list says nothing of a
+    kind nobody put on it.  Not reached: a line of a stanza (indented)
+    that the stanza's reader does not take.
+
+    Args:
+        raw: The text the readers are given, before any stanza is
+            taken out of it, so that a line has the number it has in
+            the text that was pasted.
+        taken: Whether a reader takes the line, or it is said
+            elsewhere.
+        command_words: As :func:`command_label` takes them.
+        families: As :func:`command_label` takes them.
+        session_words: First words of a session, not of the
+            configuration, in lower case.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    rows: dict[str, None] = {}
+    unknown = 0
+    first_unknown = 0
+    for number, line in enumerate(ticked(raw.splitlines()), start=1):
+        if not line[:1].isalpha():
+            continue
+        words = line.split(None, 3)
+        if words[0].lower() in session_words:
+            continue
+        if taken(line):
+            continue
+        label = command_label(words, command_words, families)
+        if label:
+            rows[label] = None
+            continue
+        unknown += 1
+        first_unknown = first_unknown or number
+    shown = list(rows)
+    if len(shown) > LEFT_OUT_ROWS_SHOWN:
+        unlisted = len(shown) - LEFT_OUT_ROWS_SHOWN
+        shown[LEFT_OUT_ROWS_SHOWN:] = [
+            f"({unlisted} more kinds of top-level command not read; not listed)"
+        ]
+    if unknown:
+        shown.append(no_command_row(unknown, first_unknown))
+    return shown
 
 
 def detect_tier3_sections_vyos(raw: str) -> list[str]:

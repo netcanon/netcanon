@@ -527,9 +527,16 @@ def _check_banner_tree() -> None:
     assert [v.id for v in tree.vlans] == [10]
     assert [i.name for i in tree.interfaces] == ["Ethernet1"]
     assert tree.static_routes == []
-    assert tree.dropped_tier3_sections == []
+    # The banner is not translated, and is said: one row, its command
+    # words, none of its text (the row of a line in column 0 that no
+    # reader takes).
+    assert tree.dropped_tier3_sections == ["banner motd"]
+    assert not any(word in row for row in tree.dropped_tier3_sections for word in BANNER_WORDS)
     assert tree.hostname == "leaf1"
-    assert tree.model_dump() == _parse(NO_BANNER_CONFIG).model_dump()
+    without_banner = _parse(NO_BANNER_CONFIG)
+    assert without_banner.dropped_tier3_sections == []
+    rows = {"dropped_tier3_sections"}
+    assert tree.model_dump(exclude=rows) == without_banner.model_dump(exclude=rows)
 
 
 def test_a_banners_lines_make_no_record() -> None:

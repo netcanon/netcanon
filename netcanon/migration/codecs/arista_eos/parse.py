@@ -24,8 +24,11 @@ line forms; ``ipv4 / priority / preempt / track / timers / description
 **VARP anycast-gateway** (``ip address virtual X/Y [secondary]`` and
 ``ipv6 address virtual``; system-wide ``ip virtual-router
 mac-address`` populates :attr:`CanonicalIntent.anycast_gateway_mac`).
-``ip address virtual source-nat ...`` is parse-and-ignore (Tier-3,
-VRF-leaked traffic).
+A line in column 0 that none of these readers takes is a row of
+``dropped_tier3_sections`` (:func:`_rows_for_what_no_reader_takes`):
+``ip address virtual source-nat ...`` (VRF-leaked traffic) is the row
+``ip address``, ``router bgp`` -- read only for what it says of a VRF
+and of an EVPN VLAN -- the row ``router bgp``.
 
 Extracted verbatim from ``codec.py`` during the parse/render split;
 behaviour is identical to the prior in-class implementation.  The
@@ -48,7 +51,11 @@ from collections.abc import Callable
 from typing import Any
 
 from ..._radius_secrets import EOS_ENVELOPE
-from ..._tier3_detection import left_out_rows
+from ..._tier3_detection import (
+    is_an_iosxe_cli_section_line,
+    left_out_rows,
+    unread_top_level_rows,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -76,6 +83,7 @@ from .._helpers import (
     keyword_stanza_rows,
     merge_trunk_allowed,
     next_hop_elsewhere_rows,
+    one_interface_named,
     spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
@@ -120,6 +128,28 @@ _NTP_SERVER_RE = re.compile(
 # sub-command argument is never a valid IPv4/IPv6 literal, so the guard rejects
 # the noise structurally (mirrors cisco_iosxe_cli ``_SYSLOG_LINE_RE``).
 _SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+
+
+def _first_address(words: str) -> str:
+    """The first word of *words* that is an IP address, or ``""``: the
+    syslog server of a ``logging`` line (:data:`_SYSLOG_LINE_RE`)."""
+    for token in words.split():
+        try:
+            ipaddress.ip_address(token)
+        except ValueError:
+            continue
+        return token
+    return ""
+
+
+def _syslog_server_of(line: str) -> str:
+    """The syslog server of a ``logging`` *line*, or ``""`` where the
+    line names none (``logging buffered 10000``, ``logging host
+    <a host name>``), which nothing reads."""
+    m = _SYSLOG_LINE_RE.match(line)
+    return _first_address(m.group(1)) if m else ""
+
+
 _IP_ROUTE_RE = re.compile(
     # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``,
     # plus the per-VRF form ``ip route vrf MGMT 0.0.0.0/0 192.168.2.1``.
@@ -639,6 +669,169 @@ def _indent(line: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+#: The lines in column 0 a reader of this module takes, by what each
+#: reader asks of a line: a pattern's ``match``, or a function that
+#: gives what the line holds and nothing where it is not read.  A line
+#: none of them takes is translated by nothing
+#: (:func:`_rows_for_what_no_reader_takes`).  A reader that is added to
+#: the parse is added here, and the other way round.  An ``interface``
+#: header is not here: it is a record or a row of its own
+#: (:func:`_an_interface_header_is_said`).  Nor is ``router bgp``, read
+#: only for what it says of a VRF and of an EVPN VLAN: its sessions are
+#: not translated, and its header is a row.  Nor is ``snmp-server
+#: community``: the tree holds one community, and one line of it is
+#: read (:func:`_rows_for_what_no_reader_takes`).
+_TOP_LEVEL_READERS: tuple[Callable[[str], object], ...] = (
+    _HOSTNAME_RE.match,
+    _DNS_SERVER_RE.match,
+    _DNS_DOMAIN_RE.match,
+    _NTP_SERVER_RE.match,
+    _syslog_server_of,
+    _IP_ROUTE_RE.match,
+    _IPV6_ROUTE_RE.match,
+    _GLOBAL_VARP_MAC_RE.match,
+    _SNMP_LOCATION_RE.match,
+    _SNMP_CONTACT_RE.match,
+    _SNMP_HOST_RE.match,
+    _SNMP_V3_USER_RE.match,
+    _USERNAME_RE.match,
+    _RADIUS_SERVER_RE.match,
+    _VRF_INSTANCE_RE.match,
+    _VLAN_HEADER_RE.match,
+    _DHCP_SERVER_HEADER_RE.match,
+    _DHCP_POOL_HEADER_RE.match,
+)
+
+#: Words of a session, not of the configuration: a pasted ``configure
+#: terminal``, ``end`` or ``write memory`` holds nothing to translate.
+_SESSION_WORDS = frozenset({"configure", "end", "exit", "write"})
+
+#: The words EOS configurations begin a line in column 0 with, which a
+#: row may show: from Arista's global configuration commands and the
+#: committed EOS inputs.  A line that begins with another word is said
+#: all the same, in a row that counts such lines and shows none of
+#: their text (:func:`_rows_for_what_no_reader_takes`).  A word missing
+#: here costs a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "alias", "arp", "banner", "bfd", "boot", "class-map", "clock",
+    "cvx", "daemon", "dhcp", "dns", "dot1x", "email", "enable",
+    "errdisable", "event-handler", "event-monitor", "hardware",
+    "hostname", "interface", "ip", "ipv6", "lacp", "link", "lldp",
+    "load-interval", "logging", "mac", "management", "mlag", "monitor",
+    "mpls", "ntp", "peer-filter", "platform", "policy-map", "poe",
+    "port-channel", "prompt", "ptp", "qos", "queue-monitor",
+    "radius-server", "role", "route-map", "router", "schedule",
+    "service", "sflow", "snmp-server", "spanning-tree", "switchport",
+    "system", "tacacs-server", "tap", "track", "traffic-policies",
+    "transceiver", "username", "vlan", "vmtracer", "vrf", "vxlan",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``ntp server``, ``logging buffered``,
+#: ``management api``, ``router bgp``).  After any other the second word
+#: is often a name the operator chose (``daemon``, ``route-map``,
+#: ``username``), which a row does not show
+#: (``_tier3_detection.command_label``).
+_FAMILIES = frozenset({
+    "aaa", "arp", "banner", "bfd", "boot", "clock", "dhcp", "dns",
+    "dot1x", "enable", "errdisable", "event-monitor", "hardware",
+    "interface", "ip", "ipv6", "lacp", "link", "lldp", "load-interval",
+    "logging", "mac", "management", "mlag", "monitor", "mpls", "ntp",
+    "platform", "poe", "port-channel", "ptp", "qos", "queue-monitor",
+    "radius-server", "router", "service", "sflow", "snmp-server",
+    "spanning-tree", "switchport", "system", "tacacs-server", "tap",
+    "transceiver", "vlan", "vmtracer", "vrf", "vxlan",
+})
+
+
+def _an_interface_header_is_said(line: str) -> bool:
+    """Whether the ``interface`` header *line* is a record or a VXLAN
+    container (:func:`_interface_named`) or the header of a stanza that
+    is taken out and has a row of its own (``_helpers.
+    without_stanzas_of_no_one_interface``: one that names no one
+    interface)."""
+    return _interface_named(line) is not None or (
+        len(line.split(None, 2)) > 1 and not one_interface_named(line)
+    )
+
+
+def _taken(line: str) -> bool:
+    """Whether a reader of this module takes the line in column 0
+    *line* (:data:`_TOP_LEVEL_READERS`, an ``interface`` header that
+    :func:`_an_interface_header_is_said`), or a Tier-3 pattern gives it
+    a row of its own (``_tier3_detection.is_an_iosxe_cli_section_line``,
+    the patterns the codec's ``parse()`` gives the text)."""
+    if line.split(None, 1)[0].lower() == "interface" and _an_interface_header_is_said(line):
+        return True
+    if any(reader(line) for reader in _TOP_LEVEL_READERS):
+        return True
+    return is_an_iosxe_cli_section_line(line)
+
+
+def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that no reader takes
+    (:func:`_taken`) and that is not a word of a session
+    (:data:`_SESSION_WORDS`) is in no output, and a row says so
+    (``_tier3_detection.unread_top_level_rows``): a row of its command
+    word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`), one for each kind
+    of line, past ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one
+    that counts the rest; a line that begins with a word EOS
+    configurations are not seen to begin with is counted in one row,
+    with the number of the first such line and nothing of its text
+    (``_tier3_detection.no_command_row``), which is no sign that the
+    text was a config.  A line that does not begin with a letter is no
+    command, and is not counted.  Of the ``snmp-server community``
+    lines, the one the parser reads is taken and no other: the tree
+    holds one community (``CanonicalSNMP.community``), so a second is
+    in no output, and the row ``snmp-server community`` says so.
+
+    Up to 0.7.7 only the kinds a Tier-3 pattern named had a row, and an
+    EOS config's BGP and OSPF, its access and prefix lists, its spanning
+    tree, its AAA, its eAPI and its logging settings were in no output
+    and no row, in jobs that said ``completed`` -- while the codec's own
+    docstring said they were routed to the banner.  So every line is
+    asked, not a list of kinds, as the OS10 parser asks them.  Not
+    reached: a line of a stanza (indented) that the stanza's reader
+    does not take.
+
+    Args:
+        raw: The text the readers are given, its bodies emptied
+            (:func:`without_bodies`) and before any stanza is taken out
+            of it, so that a line has the number it has in the text
+            that was pasted.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    community = _SNMP_COMMUNITY_RE.search(raw)
+    read: str | None = None
+    if community:
+        end = raw.find("\n", community.start())
+        read = raw[community.start() : end if end != -1 else len(raw)].splitlines()[0]
+
+    def taken(line: str) -> bool:
+        # The lines come in order: the community line that was read is
+        # taken once, as the parse reads it once.
+        nonlocal read
+        if read is not None and line == read:
+            read = None
+            return True
+        return _taken(line)
+
+    return unread_top_level_rows(
+        raw,
+        taken=taken,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse Arista EOS ``show running-config`` text into a
     :class:`CanonicalIntent`.
@@ -677,6 +870,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # A text this parser cannot read by its indentation is refused in
     # words, before any reader makes a record of it.
     _refuse_a_flat_text(raw)
+    # Each line in column 0 that no reader below takes is a row, asked
+    # before any stanza is taken out so that a row's line number is the
+    # line's in the text that was pasted; the rows go after every other.
+    top_level = _rows_for_what_no_reader_takes(raw)
 
     intent = CanonicalIntent(
         source_vendor="arista_eos",
@@ -717,15 +914,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # First IP-literal token on the ``logging`` line is the syslog host;
         # non-destination sub-commands carry no IP token.  De-dup, first-seen
         # (``seen_syslog`` set-guard keeps it O(1) per line -- perf review P2).
-        for token in syslog_m.group(1).split():
-            try:
-                ipaddress.ip_address(token)
-            except ValueError:
-                continue
-            if token not in seen_syslog:
-                seen_syslog.add(token)
-                intent.syslog_servers.append(token)
-            break
+        token = _first_address(syslog_m.group(1))
+        if token and token not in seen_syslog:
+            seen_syslog.add(token)
+            intent.syslog_servers.append(token)
     # A route whose next hop is in another VRF (``egress-vrf``: Arista,
     # "Static Inter-VRF Route") is one the tree has no form for: read
     # with the keyword for its interface it was a route of its own VRF
@@ -951,6 +1143,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dropped_tier3_sections.extend(
         left_out_rows(pools_left_out, rest="disabled"),
     )
+    intent.dropped_tier3_sections.extend(top_level)
 
     # SVI fold: ``interface Vlan<N> / ip address ...`` lines carry
     # the Layer-3 surface for VLAN <N>.  VLAN-centric renderers

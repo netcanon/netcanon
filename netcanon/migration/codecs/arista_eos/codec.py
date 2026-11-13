@@ -539,7 +539,8 @@ class AristaEOSCodec(CodecBase):
         # Read from the text the parser read: a banner's (or any other
         # body's) lines up to its ``EOF`` are text, not stanzas.  After
         # them, the rows the parser itself made: a sub-interface whose
-        # tag statement it does not read whole.
+        # tag statement it does not read whole, and each line in column
+        # 0 that no reader takes.
         intent.dropped_tier3_sections = list(dict.fromkeys([
             *detect_tier3_sections_iosxe_cli(without_bodies(raw)),
             *intent.dropped_tier3_sections,

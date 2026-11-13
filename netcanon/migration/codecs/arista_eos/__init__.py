@@ -24,10 +24,13 @@ warrant a distinct codec rather than folding into ``cisco_iosxe_cli``:
       explicit mode setting is always present.
 
 Supported / lossy / unsupported xpaths: see ``_CAPS`` on
-:class:`.codec.AristaEOSCodec`.  Tier-3 parse-tolerant stanzas
-(BGP/OSPF, MLAG/VXLAN/VRF, eAPI, STP, AAA, TerminAttr) are
-detected and routed to ``CanonicalIntent.dropped_tier3_sections``
-for the migrate-page banner.
+:class:`.codec.AristaEOSCodec`.  What the parser does not
+translate -- each line in column 0 no reader takes (BGP and OSPF,
+access and prefix lists, MLAG, eAPI, spanning tree, AAA, TerminAttr
+and the like, by its command's words) and the stanzas the shared
+Tier-3 patterns name -- is a row of
+``CanonicalIntent.dropped_tier3_sections`` for the migrate-page
+banner.
 
 Module layout:
     * codec.py      — ``AristaEOSCodec`` class (metadata, delegation,
