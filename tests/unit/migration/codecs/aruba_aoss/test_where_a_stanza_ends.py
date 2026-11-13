@@ -665,13 +665,16 @@ def test_forbid_is_not_read() -> None:
 
 def _check_forbid() -> None:
     """``forbid`` makes no membership in either context, as under ``vlan
-    N``: GVRP is not modelled."""
+    N``: GVRP is not modelled.  The line of the top that says it is
+    said in the row of its command word, ``interface``."""
     text = (
         _VLANS + "interface 5\n   forbid vlan 10\n   exit\ninterface 6 forbid vlan 20\n"
         "vlan 40\n   forbid 2\n   exit\n"
     )
     without = _VLANS + "interface 5\n   exit\nvlan 40\n   exit\n"
-    assert _parse(_HEAD + text).model_dump(mode="json") == _parse(_HEAD + without).model_dump(mode="json")
+    expected = _parse(_HEAD + without).model_dump(mode="json")
+    expected["dropped_tier3_sections"].append("interface")
+    assert _parse(_HEAD + text).model_dump(mode="json") == expected
 
 
 # ---------------------------------------------------------------------------

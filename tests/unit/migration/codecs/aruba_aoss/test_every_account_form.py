@@ -204,13 +204,16 @@ def test_a_line_that_sets_no_account_is_said(line: str) -> None:
 
 
 def test_other_aaa_lines_are_not_accounts() -> None:
+    """Other ``aaa`` lines are no account, and no row of an account's:
+    each is said in the row of its command words, which shows no value
+    of the line."""
     tree = _parse(
         "aaa authentication login privilege-mode",
         "aaa authentication local-users-only",
         'aaa authorization group "ADMINS" 100 match-command "configure" permit',
     )
     assert _users(tree) == []
-    assert not any(row.startswith("aaa") for row in tree.dropped_tier3_sections)
+    assert tree.dropped_tier3_sections == ["aaa authentication", "aaa authorization"]
 
 
 # ---------------------------------------------------------------------------

@@ -732,8 +732,10 @@ class ArubaAOSSCodec(CodecBase):
         # `policy-map`, etc.), so the IOS-XE CLI detector's patterns, and
         # its own contexts (`stacking`, `vsf`, `oobm`).  Notification-only.
         # The parser's own rows (a port's VLAN line that names a VLAN no
-        # stanza declares) follow.  Read from the text the parser read:
-        # a banner's lines are text, not stanzas.
+        # stanza declares, a statement read and left out, and each kind
+        # of line in column 0 that no reader takes) follow.  Read from
+        # the text the parser read: a banner's lines are text, not
+        # stanzas.
         intent.dropped_tier3_sections = [
             *detect_tier3_sections_aoss(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,

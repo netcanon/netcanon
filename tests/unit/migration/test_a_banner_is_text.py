@@ -1037,7 +1037,10 @@ def _digest(codec: str, path: str) -> str:
 #: (``codecs/aruba_aoscx/test_what_no_reader_takes.py``); and every
 #: IOS XR input with a line in column 0 that no reader takes, when each
 #: kind became a row, the rest of its tree as it was
-#: (``codecs/cisco_iosxr/test_what_no_reader_takes.py``).
+#: (``codecs/cisco_iosxr/test_what_no_reader_takes.py``); and every
+#: AOS-S input with a line in column 0 that no reader takes, when each
+#: kind became a row, the rest of its tree as it was
+#: (``codecs/aruba_aoss/test_what_no_reader_takes.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "bfd67696de2a",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "f37f1937c656",
@@ -1048,29 +1051,29 @@ BEFORE: dict[str, str] = {
     # shape (test_a_typed_password_is_not_a_hash.py): was "48321a06dd41".
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "5376213e3cfe",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "1c1097aeb766",
-    "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "97743fa41ea1",
+    "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "b4aba345d4cb",
     # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
     # as a contact and a location (test_snmp_contact_and_location.py).
     # And again, by its local users and nothing else: its bare
     # `password manager` and `password operator` are each an account
     # that holds no secret (codecs/aruba_aoss/test_every_account_form.py):
     # was "fffcddd76bc4".
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "573a2595bde3",
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "736c923a0c9b",
     # Moved on purpose, by its local users and nothing else: its bare
     # `password manager` is an account that holds no secret
     # (test_every_account_form.py): was "06c7aeab8a24".
-    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "61aacba2b1c0",
+    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "386a7f7716ce",
     # Moved on purpose, by its DHCP pools and nothing else: the switch's
     # server is enabled, and its three `dhcp-server pool` stanzas are
     # read (test_dhcp_server_pools.py): was "dd1030133a7a".
-    "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "6e06c1bf649e",
+    "real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg": "b9a2b80cba09",
     # Moved on purpose, by a row each and nothing else: the `oobm` and
     # `stacking` stanzas are listed among the sections not translated
     # (TestArubaAOSSStack): were "a4e275c2c670" and "fa27e0f87457".
-    "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "f9c207ff3706",
-    "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "9287eeaca4b7",
-    "synthetic/aruba_aoss/kitchen_sink.cfg": "6f113fd102a8",
-    "aruba_aoss/show_run_simple.txt": "8a4bc3fe9e9d",
+    "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "eb6adfb91aef",
+    "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "ab3497fb3bca",
+    "synthetic/aruba_aoss/kitchen_sink.cfg": "c2e9eba32004",
+    "aruba_aoss/show_run_simple.txt": "8ccfd240ba66",
     "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
     # Moved on purpose, by its tunnels' ends and a row and nothing
     # else: `tunnel source` and `tunnel destination` are read, and its

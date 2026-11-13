@@ -757,6 +757,37 @@ several lines with 0.7.7 or earlier, translate it again, and look in
 the old output for accounts, VLANs and routes the switch does not
 have.
 
+## A line nothing reads is a row
+
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`spanning-tree mode`, `ip routing`, `ip authorized-managers`, `ip
+ssh`, `aaa port-access`, `dhcp-snooping vlan`, `router ospf`,
+`device-profile name`), never a value; one row a kind, however many
+lines it has.  That includes the forms of a command the parser reads
+only in one form or only once: an SNMP host or a RADIUS server named
+by an IPv6 address, an `snmpv3 user` line of a form the parser does
+not read, a `vlan` line of a list, a `password` line that sets no account
+(`password minimum-length`), and a second `snmp-server community`
+line (the tree holds one community, the first).  A `no logging`
+line's row is those two words: what follows `logging` is a server.
+A line that begins with a word AOS-S configurations are not seen to
+begin with is counted in one row that shows none of its text; the
+line the switch prints before the configuration (`Running
+configuration:`) is no row.  The lines of a context the parser
+reads nothing of (`stacking`, `vsf`, `device-profile`, `router
+ospf`) are said by the row of its header, and so they are in a text
+whose lines are all in column 0: there a context's lines are its
+own up to its `exit`, an `end`, or a line in column 0 that the top
+reads or that enters another context, as with a `vlan` stanza.
+Until 2026-11-13 only the kinds a pattern named (access lists,
+class and policy maps, route maps and the like, `stacking`, `vsf`,
+`oobm`) had a row, and the rest were in no output and no row, in
+jobs that said `completed`.  Not reached: an indented line of a
+stanza the parser reads that the stanza's reader does not take has
+no row; a banner's lines are text, and have no row.
+
 ## Common gotchas
 
 - **A port of member 0 is written on member 1.**  AOS-S numbers stack

@@ -1465,6 +1465,36 @@ timestamp if your timezone matters for an audit.
   none with the next line's address for a syslog host.  An indented
   line of a stanza that the stanza's reader does not take still has
   no row.  The committed IOS XR inputs gain rows; no output moves.
+- **An AOS-S line that nothing translates is said.**  The Aruba
+  AOS-S parser reads a hostname, SNMP (the first community, the
+  location and contact, a trap host named by an IPv4 address,
+  SNMPv3 users and their groups), the management plane, the default
+  gateway and static routes, RADIUS servers named by an IPv4 address
+  and their key, the two accounts and the local users, trunks, `vlan`
+  and `interface` stanzas and the lines that set a port's VLANs, and
+  the switch's DHCP server; and the AOS-S Tier-3 patterns name access
+  lists, class and policy maps, route maps and the like, `stacking`,
+  `vsf` and `oobm`.  Every other line in column 0 was in no output
+  and no row -- spanning tree, `ip routing`, authorised managers, SSH
+  and port-access settings, DHCP snooping, `module` lines, `router
+  ospf`, a second `snmp-server community` line, an SNMP host or a
+  RADIUS server named by an IPv6 address, an `snmpv3 user` line of a
+  form the parser does not read -- in jobs that said `completed`.
+  Now each kind of such line is a row of `dropped_tier3_sections`,
+  as those of the EOS, NX-OS, AOS-CX, IOS XR and OS10 parsers are:
+  its command word, and the word after it where that says which
+  command it is (`spanning-tree mode`, `aaa port-access`, `ip ssh`),
+  never a value; a `no logging` line's row is those words alone,
+  since what follows `logging` is a server.  A line that begins with
+  a word AOS-S configurations are not seen to begin with is counted
+  in one row that shows none of its text; the line the switch prints
+  before the configuration (`Running configuration:`) is no row.
+  The body of a context nothing reads (`device-profile`, `router
+  ospf`) is said by its header's row, with its indentation or
+  without: in a text whose lines are all in column 0 its lines are
+  the context's up to its `exit`, not lines of the top.  An indented
+  line of a stanza that the stanza's reader does not take still has
+  no row.  The committed AOS-S inputs gain rows; no output moves.
 
 - **An AOS-CX line that nothing translates is said.**  The Aruba
   AOS-CX parser reads a hostname, the release, interfaces, VLANs,

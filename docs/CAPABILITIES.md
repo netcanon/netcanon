@@ -1026,7 +1026,7 @@ and true of the same sentence — they are not in the output:
   ethernet 1/1/14`, as Dell types it) is one name, and is read as
   the name the switch prints (`ethernet1/2`, `ethernet1/1/14`).
 * **A command's words** (OS10, Arista EOS, Cisco NX-OS, Aruba AOS-CX,
-  Cisco IOS XR) — each kind of line in
+  Cisco IOS XR, Aruba AOS-S) — each kind of line in
   column 0 that no reader of the parser takes and no pattern of the
   detector names.  On OS10: `clock timezone`, `spanning-tree mode`,
   `nve`, `virtual-network`, an `ntp server`, `logging server` or `ip
@@ -1062,7 +1062,19 @@ and true of the same sentence — they are not in the output:
   a second line of a local user's name and the like; the lines the
   router prints before the configuration (`Building
   configuration...`, the time) and the line that ends a block
-  (`end-policy`, `end-set`, `end-group`) are not.
+  (`end-policy`, `end-set`, `end-group`) are not.  On AOS-S:
+  `spanning-tree` and `spanning-tree mode`, `ip routing`, `ip
+  authorized-managers`, `ip ssh`, `aaa port-access`,
+  `dhcp-snooping`, `module`, `snmp-server enable`, `router ospf`
+  and `device-profile` (each with the lines of its context, with
+  their indentation or without), an SNMP host or a RADIUS server
+  named by an IPv6 address, an `snmpv3 user` line of a form the
+  parser does not read, a `vlan` line of a list, a `password` line
+  that sets no account (`password minimum-length`), a second
+  `snmp-server community` line, a `no logging` line (its row is
+  those words alone: what follows `logging` is a server) and the
+  like; the line the switch prints before the configuration
+  (`Running configuration:`) is not.
   The row is the line's command
   word, and the word after it where that says which command it
   is, never a value; one row a kind, however many lines it has,

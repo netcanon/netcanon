@@ -35,9 +35,11 @@ Public functions:
       CLI; :func:`is_an_iosxe_cli_section_line`,
       :func:`is_a_nxos_section_line`,
       :func:`is_an_iosxr_section_line`,
+      :func:`is_an_aoss_section_line`,
       :func:`is_an_aoscx_section_line` and
       :func:`is_a_dellos10_section_line` ask one line what the
-      IOS-XE, NX-OS, IOS XR, AOS-CX and OS10 detectors ask a text.
+      IOS-XE, NX-OS, IOS XR, AOS-S, AOS-CX and OS10 detectors ask a
+      text.
     * :func:`left_out_row` / :func:`left_out_rows` /
       :func:`is_left_out_row` — the row for a statement a parser
       read and left out on purpose (a Junos statement the source
@@ -47,8 +49,8 @@ Public functions:
       that tells such a row from a section header.
     * :func:`unread_top_level_rows` / :func:`command_label` — the
       rows for the lines in column 0 that no reader of a parser takes
-      (the Arista EOS, Cisco NX-OS, Cisco IOS XR, Aruba AOS-CX and
-      OS10 parsers ask every such line), each a
+      (the Arista EOS, Cisco NX-OS, Cisco IOS XR, Aruba AOS-S, Aruba
+      AOS-CX and OS10 parsers ask every such line), each a
       command's words; :func:`no_command_row` /
       :func:`is_no_command_row` — the row that counts such lines that
       begin with no command the parser knows, and the test that tells
@@ -532,6 +534,14 @@ def is_an_iosxr_section_line(line: str) -> bool:
     IOS XR parser asks of every line in column 0 it does not read
     (``cisco_iosxr.parse._rows_for_what_no_reader_takes``)."""
     return any(pattern.match(line) for pattern in _IOSXR_TIER3_HEADERS)
+
+
+def is_an_aoss_section_line(line: str) -> bool:
+    """Whether a pattern of :func:`detect_tier3_sections_aoss` takes the
+    one line *line*, which then has a row of its own: what the Aruba
+    AOS-S parser asks of every line in column 0 it reads nothing of
+    (``aruba_aoss.parse._rows_for_what_no_reader_takes``)."""
+    return any(pattern.match(line) for pattern in _IOSXE_TIER3_HEADERS + _AOSS_TIER3_HEADERS)
 
 
 def is_an_aoscx_section_line(line: str) -> bool:

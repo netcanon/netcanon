@@ -344,14 +344,21 @@ class TestRoundTripStable:
         # source_version is parser-stamped metadata (the "Created on
         # release #" banner); render doesn't re-emit it, so exclude it
         # from the same-vendor round-trip — mirrors the generic harness.
+        # The Tier-3 rows say what the SOURCE held and nothing
+        # translates, so they are compared on their own: the fixture's
+        # `module` line is one, and the rendered config holds no line
+        # its own parser leaves unread.
         first_d = first.model_dump()
         second_d = second.model_dump()
-        first_d.pop("source_version", None)
-        second_d.pop("source_version", None)
+        for d in (first_d, second_d):
+            d.pop("source_version", None)
+            d.pop("dropped_tier3_sections", None)
         assert first_d == second_d, (
             "kitchen-sink fixture lost canonical state through "
             "render → parse — a feature is silently asymmetric"
         )
+        assert first.dropped_tier3_sections == ["module"]
+        assert second.dropped_tier3_sections == []
 
     def test_render_is_deterministic(self, raw: str) -> None:
         # Two render calls must produce byte-identical output —
