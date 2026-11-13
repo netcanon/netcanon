@@ -23,9 +23,10 @@ warning (``takes_password``, ``refuses_snmpv3_user``,
 ``refuses_radius_secret`` on ``CodecBase``); the guard below holds the
 two to each other by what they name, on every public codec.
 
-Not held yet: a ``review:`` line of another kind with no warning beside
-it (a VLAN FortiOS can give no parent, a value a target does not read
-as one).
+A value a target does not read as one value is held by its own guard,
+``test_a_value_said_holds_the_job.py``.  Not held yet: a ``review:``
+line of another kind with no warning beside it (a VLAN FortiOS can give
+no parent).
 """
 from __future__ import annotations
 

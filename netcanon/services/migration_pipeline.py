@@ -151,6 +151,7 @@ from ..migration._one_line import (
     secrets_left_out,
     text_only_each,
 )
+from ..migration._one_value import said_while_rendering
 from ..migration._tier3_detection import is_left_out_row, is_no_command_row
 from ..migration._vlan_labels import vlan_labels_as_names
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
@@ -267,7 +268,10 @@ def run_plan(
     secret was left out for the characters it holds, or when the
     target's :meth:`~netcanon.migration.codecs.base.CodecBase.render_warnings`
     says it leaves a record out or writes it otherwise than it
-    stands; ``.error`` then says why.
+    stands, or its renderer writes a review line for a value it does
+    not read as one value
+    (:func:`netcanon.migration._one_value.said_while_rendering`);
+    ``.error`` then says why.
     A config that asks for more than the limits in force allow is a
     ``failed`` job too, with ``.refusal`` set and an ``.error`` that
     begins ``refused:`` (:mod:`netcanon.migration.limits`).
@@ -409,7 +413,13 @@ def run_plan(
         # operator account): the renderer itself returns text only.
         target_said = target.render_warnings(tree)
         job.warnings.extend(target_said)
-        job.rendered = target.render(tree)
+        # And a value the target does not read as one value, which the
+        # renderer decides line by line: each review line it writes for
+        # one is said as it is made.
+        with said_while_rendering() as rewritten:
+            job.rendered = target.render(tree)
+        job.warnings.extend(rewritten)
+        target_said = [*target_said, *rewritten]
 
     except LimitExceeded as exc:
         # Not a fault and not a parse failure: the config was read and

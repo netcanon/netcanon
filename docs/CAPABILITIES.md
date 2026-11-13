@@ -1613,10 +1613,17 @@ these.  Each is a warning of the job, and the job's `error` says
 "The target left out N record(s)".  So is a credential the target
 cannot carry: a local user whose password it does not take, an
 SNMPv3 user whose key belongs to the source device, a RADIUS secret
-it cannot re-use (the server is written, without its secret).  A
-line the target writes under `review:` for another reason, with no
-warning -- a VLAN FortiOS can give no parent -- does not hold the job
-yet: search the output for `review:`.
+it cannot re-use (the server is written, without its secret).  So
+is a value the target does not read as one value -- one that holds
+white space or a quote, in a place the target reads a word at a time
+or quotes with no escape: a record left out for it, or a name or text
+written otherwise (`_` for white space, `'` for a `"`).  Its warning
+restates the review line (`Review: <place> -- <why>.`).  A text the
+target writes as it stands, with a review line that asks for a check
+on the device, does not hold the job: the output has the value the
+source had.  A line the target writes under `review:` for another
+reason, with no warning -- a VLAN FortiOS can give no parent -- does
+not hold the job yet: search the output for `review:`.
 
 ### D1. Port names that are not settled (`fused_ports` / `unresolved_ports` / `untranslated_ports`)
 

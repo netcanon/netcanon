@@ -58,12 +58,60 @@ writes a line):
 
 A review line names the place and never quotes the value: a value
 holds what its source config held, a comment's terminator included.
+
+A job says each review line of this rule as a warning, and is
+``partial`` for it (:func:`said_while_rendering`, which the pipeline
+opens around the render): what the renderer leaves out, or writes
+otherwise than the tree holds it, is in no validation report, which is
+made from the tree before the renderer decides.  The line that writes
+a text as it stands, "check it on the device", is the one that is not
+said: the output holds the value as the source did.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
+
+#: The warnings of the render at work, where a job is rendering
+#: (:func:`said_while_rendering`); ``None`` elsewhere.
+_SAID: ContextVar[list[str] | None] = ContextVar("one_value_said", default=None)
+
+
+@contextmanager
+def said_while_rendering() -> Iterator[list[str]]:
+    """A warning for each review line of this rule that the renderer
+    writes while the block runs: a record left out, or a value written
+    otherwise than the tree holds it.
+
+    Read from the lines the renderer makes, as it makes them, so that
+    a line and its warning are one: the review-line functions of this
+    module (:func:`left_out`, :func:`one_value_tree`) add the warning
+    where a block is open and do nothing more where none is.
+
+    Yields:
+        The list the warnings are added to, in the order the lines are
+        made; each is ``Review: <place> -- <why>.``, the review line
+        without its marker, and never a value.
+    """
+    said: list[str] = []
+    token = _SAID.set(said)
+    try:
+        yield said
+    finally:
+        _SAID.reset(token)
+
+
+def _review(place: str, why: str) -> str:
+    """The text of a review line of this rule, for a record left out or
+    a value written otherwise; and the job's warning for it, where a job
+    is rendering (:func:`said_while_rendering`)."""
+    said = _SAID.get()
+    if said is not None:
+        said.append(f"Review: {place} -- {why}.")
+    return f"{place} -- review: {why}"
 
 
 def splits(value: str | None) -> bool:
@@ -97,12 +145,15 @@ def left_out(what: str, target_label: str) -> str:
 
     *what* names the record (``username alice``, ``an SNMP community``)
     and must not hold a secret: the line is written into the output,
-    and the value is the thing that could not be written.
+    and the value is the thing that could not be written.  A job that
+    is rendering says it as a warning (:func:`said_while_rendering`):
+    call this only for a line the output is given.
     """
-    return (
-        f"{what} -- review: a value of it holds white space or a quote, "
-        f"which {target_label} does not read as one value; it is left "
-        f"out, re-create it on the device"
+    return _review(
+        what,
+        f"a value of it holds white space or a quote, which {target_label} "
+        f"does not read as one value; it is left out, re-create it on the "
+        f"device",
     )
 
 
@@ -217,7 +268,10 @@ def one_value_tree(
     Returns:
         The tree to write (the same object when nothing is changed, a
         copy otherwise) and the text of each review line, without the
-        target's comment marker, in the order the fields are given.
+        target's comment marker, in the order the fields are given.  A
+        line for a value left out or written otherwise is also a warning
+        of the job that is rendering (:func:`said_while_rendering`):
+        write every line this returns.
     """
     names, addresses = tuple(names), tuple(addresses)
     unread_text, no_escape = tuple(unread_text), tuple(no_escape)
@@ -239,10 +293,10 @@ def one_value_tree(
         for record, attr, place in _places(work, field):
             if test(getattr(record, attr)):
                 setattr(record, attr, one_word(getattr(record, attr)))
-                said.append(
-                    f"{place} -- review: it holds white space or a quote, "
-                    f"{one}; each run of white space is written _ and each "
-                    f"double quote '")
+                said.append(_review(
+                    place,
+                    f"it holds white space or a quote, {one}; each run of "
+                    f"white space is written _ and each double quote '"))
     for field in addresses:
         said += _leave_out(work, field, test, target_label)
     for field in unread_text:
@@ -250,11 +304,13 @@ def one_value_tree(
             value = getattr(record, attr) or ""
             if '"' in value:
                 setattr(record, attr, value.replace('"', "'"))
-                said.append(
-                    f"{place} -- review: it holds a double quote, which "
-                    f"{target_label} is not documented to read in this "
-                    f"place; each is written '")
+                said.append(_review(
+                    place,
+                    f"it holds a double quote, which {target_label} is not "
+                    f"documented to read in this place; each is written '"))
             if _white(value):
+                # Written as it stands: a doubt, not a change, and so
+                # not a warning (the module docstring).
                 said.append(
                     f"{place} -- review: it holds white space, and no "
                     f"{target_label} page found says this place reads to "
@@ -265,10 +321,10 @@ def one_value_tree(
             value = getattr(record, attr) or ""
             if '"' in value:
                 setattr(record, attr, value.replace('"', "'"))
-                said.append(
-                    f"{place} -- review: it holds a double quote, which "
-                    f"{target_label} cannot write between its quotes; "
-                    f"each is written '")
+                said.append(_review(
+                    place,
+                    f"it holds a double quote, which {target_label} cannot "
+                    f"write between its quotes; each is written '"))
     return work, said
 
 
@@ -298,11 +354,13 @@ def _rename_vrfs(
     for record in referrers:
         record.vrf = renamed.get(record.vrf, record.vrf)
     return [
-        f"the name of a VRF -- review: it holds white space or a quote, "
-        f"{one}; each run of white space is written _ and each double "
-        f"quote ', at every place the VRF is named"
-        + ("" if new == one_word(old) else
-           ", with a number after it, since another VRF has that name")
+        _review(
+            "the name of a VRF",
+            f"it holds white space or a quote, {one}; each run of white "
+            f"space is written _ and each double quote ', at every place "
+            f"the VRF is named"
+            + ("" if new == one_word(old) else
+               ", with a number after it, since another VRF has that name"))
         for old, new in renamed.items()
     ]
 
@@ -315,25 +373,26 @@ def _leave_out(
         f"an address that holds white space or a quote, which "
         f"{target_label} does not read as one value; it is left out, "
         f"re-create it on the device")
+    # A line for each value left out, made one at a time: each is a
+    # warning of the job as well (:func:`_review`).
     if field in _LISTS:
-        kept = [v for v in getattr(work, field) if not test(v)]
-        gone = len(getattr(work, field)) - len(kept)
-        setattr(work, field, kept)
-        return [f"{_WHAT_A_LIST_HOLDS[field]} -- review: {tail}"] * gone
+        values = getattr(work, field)
+        said = [_review(_WHAT_A_LIST_HOLDS[field], tail) for v in values if test(v)]
+        setattr(work, field, [v for v in values if not test(v)])
+        return said
     if field == "dhcp_servers[].dns_servers":
-        said: list[str] = []
+        said = []
         for pool in work.dhcp_servers:
-            kept = [v for v in pool.dns_servers if not test(v)]
             said += [
-                f"a DNS server of {_who('dhcp_servers', pool)} -- review: "
-                f"{tail}"
-            ] * (len(pool.dns_servers) - len(kept))
-            pool.dns_servers = kept
+                _review(f"a DNS server of {_who('dhcp_servers', pool)}", tail)
+                for v in pool.dns_servers if test(v)
+            ]
+            pool.dns_servers = [v for v in pool.dns_servers if not test(v)]
         return said
     if field == "static_routes[].gateway":
         whole = tail.replace("it is left out", "the route is left out whole")
         said = [
-            f"{_who('static_routes', route)} -- review: its gateway is {whole}"
+            _review(_who("static_routes", route), f"its gateway is {whole}")
             for route in work.static_routes if test(route.gateway)
         ]
         work.static_routes = [
@@ -344,5 +403,5 @@ def _leave_out(
     for record, attr, place in _places(work, field):
         if test(getattr(record, attr)):
             setattr(record, attr, "")
-            said.append(f"{place} -- review: {tail}")
+            said.append(_review(place, tail))
     return said

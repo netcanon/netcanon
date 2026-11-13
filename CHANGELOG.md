@@ -1426,6 +1426,29 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A value the target does not read as one value holds the job
+  `partial`.**  A renderer of a word-at-a-time CLI writes a
+  `review:` line where a value holds white space or a quote: a
+  record it leaves out (an account, an SNMP community or SNMPv3
+  user, an FHRP key, an NTP, syslog or DNS server, a static route
+  whose gateway it is), or a value it writes otherwise (a host,
+  VLAN, VRF or route name with `_` for each run of white space, a
+  `"` written `'`).  The job did not say so, and said `completed`
+  whenever nothing else held it: over the committed inputs, onto
+  every public codec with no port map, 5 jobs did, each for a name
+  written as one word.  Each such line is now a warning of the job
+  that restates it (`Review: <place> -- <why>.`), made by the same
+  call that makes the line (`said_while_rendering`, which `run_plan`
+  opens around the render), and the job is `partial` ("The target
+  left out N record(s)").  A text written as it stands, under a line
+  that asks for a check on the device, does not hold the job.  The
+  rendered output of every job is as it was.  Guarded by
+  `tests/unit/migration/test_a_value_said_holds_the_job.py`, which
+  puts each value the rule knows, with white space and with a quote,
+  into a tree and sends it onto every public codec, and holds each
+  such line of the output to one warning and each warning to its
+  line.
+
 - **A credential the target cannot carry holds the job `partial`.**
   A target that refuses a local user's password (a hash it cannot
   re-use, or a password as typed where it takes only a hash), an
@@ -7328,12 +7351,13 @@ timestamp if your timezone matters for an audit.
 
 - **A `review:` line with no warning does not hold the job.**  A
   target that writes a line under `review:` for a reason other than
-  a credential -- a VLAN FortiOS can give no parent, a value written
-  otherwise because the target does not read it as one -- writes no
-  warning of the job, so a job whose only loss is such a line can say
-  `completed`.  What a target leaves out under a warning holds the
-  job `partial`, a credential it cannot carry included; these do not
-  yet.  Search a `completed` output for `review:`.
+  a credential or a value it does not read as one value -- a VLAN
+  FortiOS can give no parent -- writes no warning of the job, so a
+  job whose only loss is such a line can say `completed`.  What a
+  target leaves out under a warning holds the job `partial`, a
+  credential it cannot carry and a value it does not read as one
+  included; these do not yet.  Search a `completed` output for
+  `review:`.
 - **A destination whose next hops mix a stated and an unstated
   distance keeps its order only where the two platforms' defaults
   agree.**  "Not stated" is one value in the tree, and each target

@@ -646,6 +646,9 @@ that the device reads that place to the end of the line.
 **Action:** after loading the config, check the value on the device
 (`show running-config | include <place>`); if it was cut at the first
 space, set it again there, in quotes or with the space taken out.
+This line alone does not make the job `partial`: the output holds the
+value as the source did.  The lines in the sections above it each do,
+with a warning that restates the line.
 
 ### "A user with a typed password came out as a review comment on Junos or OPNsense"
 
@@ -1796,11 +1799,17 @@ it.  For example:
 * A DHCP pool, a VLAN interface or an account the target has no
   form for.  Where the target writes a line for it under `review:`,
   search the output for `review:`.
+* `Review: <place> -- <why>.`: a value that holds white space or a
+  quote, which the target does not read as one value.  The warning
+  restates the review line of the output; the sections on
+  ["review: a value of it holds white space or a quote"](#review-a-value-of-it-holds-white-space-or-a-quote)
+  and after it say what each means.
 
 Do on the device what each warning says was not done.  A `review:`
-line with no warning beside it -- one that is not about a credential,
-such as a VLAN FortiOS can give no parent -- does not make the job
-`partial` yet, so search a `completed` output for `review:` too.  See
+line with no warning beside it -- one that is not about a credential
+or a value the target does not read as one, such as a VLAN FortiOS
+can give no parent -- does not make the job `partial` yet, so search
+a `completed` output for `review:` too.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § D.
 
 ### The job says `refused:` — "my config was refused"

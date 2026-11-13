@@ -729,6 +729,14 @@ the policy locally:
   that module's `_REST_OF_LINE`, from a vendor page or a committed
   capture that prints such a line, and a target that
   quotes in some places only, in `_QUOTED_PLACES`.
+  Every review line `left_out` and `one_value_tree` make for a value
+  left out or written otherwise is also a warning of the job that is
+  rendering (`said_while_rendering`, which `run_plan` opens around
+  `render`), and holds it `partial`: write each line they return, and
+  make none you do not write.  The line that writes a text as it
+  stands and asks for a check on the device is not a warning.
+  Guarded by `tests/unit/migration/test_a_value_said_holds_the_job.py`,
+  which walks `list_public_codecs()`.
 
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec

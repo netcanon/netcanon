@@ -996,8 +996,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   under a `review:` line is such a record: the renderer and the
   warning ask one question of it (`takes_password`,
   `refuses_snmpv3_user`, `refuses_radius_secret`), never two that
-  happen to agree.  A `review:` line of another kind with no warning
-  does not hold the job yet.  What
+  happen to agree.  So is a value the target does not read as one
+  value (a record left out for it, a name written as one word): the
+  line and its warning are made by one call, as the renderer writes
+  (`said_while_rendering`), so that neither is a copy of the other.
+  A `review:` line of another kind with no warning does not hold the
+  job yet.  What
   it took.  The
   condition is over EVERY name the translator rewrites: with no
   pairing to protect, the model path's reason for looking only at a
