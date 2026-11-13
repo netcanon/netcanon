@@ -1426,6 +1426,31 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An NX-OS line that nothing translates is said.**  The Cisco NX-OS
+  parser reads a hostname, the release, a domain, DNS, NTP and syslog
+  servers, interfaces, VLANs, VRFs, static routes, SNMP, local users,
+  VXLAN and the anycast-gateway MAC, and the NX-OS Tier-3 patterns
+  name routing protocols, ACLs, route maps, QoS maps, crypto, AAA and
+  SPAN sessions; every other line in column 0 was in no output and no
+  row -- the vPC domain, the `evpn` stanza, prefix lists, spanning
+  tree, `logging` settings, `line`, CoPP and `vdc` settings, the
+  services a config enables (`feature bgp`, `feature ssh`), a second
+  `snmp-server community` line and a second line of a local user's
+  name (`username <name> sshkey ...`) -- in jobs that said
+  `completed`.  Now each kind of such line is a row of
+  `dropped_tier3_sections`, as EOS's and OS10's are: its command word,
+  and the word after it where that says which command it is (`vpc
+  domain`, `logging level`, `feature bgp`), never a value; a
+  `feature` line whose configuration the parser reads (`feature
+  interface-vlan`, `feature lacp`) is not a row, as the renderer
+  writes its own.  A line that begins with a word NX-OS
+  configurations are not seen to begin with is counted in one row
+  that shows none of its text.  The renderer writes its own `vdc`,
+  `line` and `boot` lines, so those rows are on an NX-OS job onto
+  NX-OS too.  An indented line of a stanza that the stanza's reader
+  does not take still has no row.  The committed NX-OS inputs gain
+  rows; no output moves.
+
 - **An EOS line that nothing translates is said.**  The Arista EOS
   parser reads a hostname, DNS, NTP and syslog servers, interfaces,
   VLANs, VRFs, static routes, SNMP, local users, RADIUS servers, the

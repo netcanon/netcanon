@@ -1028,7 +1028,10 @@ def _digest(codec: str, path: str) -> str:
 #: tree as it was (``codecs/aruba_aoss/test_management_plane.py``); and
 #: every EOS input with a line in column 0 that no reader takes, when
 #: each kind became a row, the rest of its tree as it was
-#: (``codecs/arista_eos/test_what_no_reader_takes.py``).
+#: (``codecs/arista_eos/test_what_no_reader_takes.py``); and every
+#: NX-OS input, each of which has a line in column 0 that no reader
+#: takes, when each kind became a row, the rest of its tree as it was
+#: (``codecs/cisco_nxos/test_what_no_reader_takes.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1100,26 +1103,26 @@ BEFORE: dict[str, str] = {
     # was "70caca86d542".
     "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "04c2854292eb",
     "iosxe/show_run_simple.txt": "fba5436f7b17",
-    "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "b5ee504e06f3",
-    "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "ed872f066b0f",
-    "real/cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt": "305bb98e00bf",
-    "real/cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt": "7822cd4c7d39",
-    "real/cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt": "62020aba49e9",
-    "real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt": "bb10e8a95a2d",
-    "real/cisco_nxos/batfish_nxos_hsrp_nxos2.txt": "811a7b6f87eb",
-    "real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt": "563911b052c0",
+    "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "c32f6b4c0c4f",
+    "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "b738b9483d97",
+    "real/cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt": "35430cc997e7",
+    "real/cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt": "bbf4a05d250e",
+    "real/cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt": "90127de4fd2b",
+    "real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt": "453349b09d8b",
+    "real/cisco_nxos/batfish_nxos_hsrp_nxos2.txt": "c3dfe660f1db",
+    "real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt": "94e61b7147cf",
     # Moved on purpose, by its HSRP group and nothing else: its
     # `key-string 7` is a type-7 key that is not read (the "7" was read
     # as the key), and the statements of the group that are not
     # translated are rows (test_hsrp_is_read.py): was "d0775abcee6e".
-    "real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt": "42b61064b057",
-    "real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt": "1729a6024e35",
-    "real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg": "34109f2ee06c",
-    "real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg": "a473a68a8205",
+    "real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt": "0c0c6344d17f",
+    "real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt": "ab2db5600a07",
+    "real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg": "24bbf45ec1f2",
+    "real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg": "672429421340",
     # Moved on purpose, by a row and nothing else: its `hsrp version 2`
     # is not kept, and a row says so (test_hsrp_is_read.py): was
     # "f3cb7a5a89f3".
-    "synthetic/cisco_nxos/kitchen_sink.cfg": "1b4b327e3945",
+    "synthetic/cisco_nxos/kitchen_sink.cfg": "9f40d6a86ae0",
     # Moved on purpose, by its `interface range` rows and nothing else: each
     # such stanza is listed among the sections not translated
     # (test_a_header_names_one_interface.py): was "254896e1a85a".

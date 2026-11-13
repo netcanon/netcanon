@@ -69,6 +69,25 @@ def _groups(tree: CanonicalIntent) -> dict[int, dict]:
     }
 
 
+#: The rows of an NX-OS output read back that are none of the source's:
+#: the renderer writes its own ``vdc``, ``line`` and ``boot`` lines, which
+#: no reader takes (``codecs/cisco_nxos/test_what_no_reader_takes.py``).
+NXOS_WRAPPER_ROWS = ["vdc", "line console", "line vty", "boot nxos"]
+
+
+def _rows_read_back(codec, text: str) -> list[str]:
+    """The rows of *text* read back by *codec*, the NX-OS wrapper's taken out.
+
+    The wrapper's rows are asserted, whole and in order, before they are
+    taken out, so that nothing else can hide among them.
+    """
+    rows = codec.parse(text).dropped_tier3_sections
+    if codec.name == NXOS.name:
+        assert rows[-len(NXOS_WRAPPER_ROWS):] == NXOS_WRAPPER_ROWS, rows
+        return rows[:-len(NXOS_WRAPPER_ROWS)]
+    return rows
+
+
 def _kinds(tree: CanonicalIntent, keyword: str) -> set[str]:
     """The kind of each row: the words between *keyword* and the colon."""
     kinds = set()
@@ -323,7 +342,7 @@ def test_a_key_that_is_not_one_the_target_takes_is_said(codec) -> None:
     assert "two words" not in out
     assert len([ln for ln in out.splitlines() if "authentication" in ln and "!" in ln]) == 2
     # The review lines are no statement of the group when read back.
-    assert codec.parse(out).dropped_tier3_sections == []
+    assert _rows_read_back(codec, out) == []
 
 
 def test_iosxe_says_what_an_hsrp_group_has_no_statement_for() -> None:
@@ -391,9 +410,10 @@ def test_a_group_comes_back_from_either_cisco_target(source_text, source, target
               "preempt": False, "authentication": "plain:fakeTextKey"},
     }
     assert _what_both_write(tree) == expected
-    back = target.parse(target.render(tree))
+    out = target.render(tree)
+    back = target.parse(out)
     assert _what_both_write(back) == expected
-    assert back.dropped_tier3_sections == []
+    assert _rows_read_back(target, out) == []
 
 
 @pytest.mark.parametrize(("source_text", "source"), [
