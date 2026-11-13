@@ -113,36 +113,31 @@ per_field_expectation:
       Round-trip is lossless on the string content.
 
   domain:
-    disposition: lossy
-    reason: >
-      Cisco emits ``ip domain name <fqdn>`` as a top-level directive.
-      The aruba_aoss codec does not currently parse or render a
-      separate domain directive (AOS-S folds the FQDN into the
-      hostname via ``hostname "<host>.<domain>"`` when set).  Cisco
-      source -> Aruba target loses the domain field; the value lands
-      only if the operator pre-folds it into hostname.
+    disposition: good
+    note: >
+      The cisco_iosxe_cli parser reads the domain, and the aruba_aoss
+      renderer writes `ip dns domain-name <name>` (since 2026-11-13),
+      read back by its parser.  Measured over 14 cells: drifted on 0,
+      preserved on 3, both sides empty on 11.
     references: [system_services]
 
   dns_servers:
     disposition: good
     note: >
-      Cisco ``ip name-server <addr>`` -> Aruba ``ip dns server-address
-      priority N <addr>``.  Aruba's priority ordinal is synthesised
-      from the canonical list order on render (priority 1 = first
-      in the list).  Round-trip preserves the address list and
-      ordering.
+      The cisco_iosxe_cli parser reads the resolvers, and the aruba_aoss
+      renderer writes `ip dns server-address priority <1-3> <ip>` (since
+      2026-11-13), read back by its parser.  Measured over 14 cells:
+      drifted on 0, preserved on 1, both sides empty on 13.
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Cisco ``ntp server <addr>`` (NTP) -> Aruba ``sntp server priority
-      N <addr>`` (SNTP).  The protocol distinction (full NTP vs SNTP)
-      is lost on the canonical layer (field is ``list[str]`` of
-      addresses).  Per-server modifiers (``prefer``, ``iburst`` on
-      Cisco; per-server priority overrides on Aruba) are not modelled
-      and drop on round-trip.  Typical deployments treat NTP/SNTP
-      interchangeably at the server-list level.
+    disposition: good
+    note: >
+      The cisco_iosxe_cli parser reads the NTP servers, and the
+      aruba_aoss renderer writes `sntp server priority <1-3> <ip>` with
+      `timesync sntp` and `sntp unicast` (since 2026-11-13), read back
+      by its parser.  Measured over 14 cells: drifted on 0, preserved on
+      1, both sides empty on 13.
     references: [system_services]
 
   timezone:
@@ -158,11 +153,15 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      aruba_aoss declares ``/system/syslog-server`` unsupported and its
-      render emits no logging/syslog stanza, so the source host list
-      drops on migration and the cross-vendor unsupported banner fires.
+      The cisco_iosxe_cli parser reads the syslog servers, and the
+      aruba_aoss renderer writes `logging <ip>` (since 2026-11-13), read
+      back by its parser; AOS-S takes a syslog server by its IPv4
+      address only (HPE documents `logging <syslog-ip-addr>` for IPv4),
+      and six at most; any other is left out under a `; review:` line
+      and the job is `partial`.  Measured over 14 cells: drifted on 1,
+      preserved on 2, both sides empty on 11.
     references: [system_services]
 
   interfaces:

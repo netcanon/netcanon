@@ -1,5 +1,8 @@
 # System services: Aruba AOS-S versus MikroTik RouterOS
 
+<!-- aoss-management-plane -->
+> **Update 2026-11-13 — AOS-S reads and writes its management plane.**  This page was measured when the aruba_aoss parser read each `ip dns server-address` and `sntp server` line whatever its priority and whether or not the switch polled the server, and read no `ip dns domain-name`, `ntp server` or `logging` line, and when its renderer wrote every resolver and time server at priority 1 with no `sntp unicast`.  It now reads the domain, the resolvers by priority, the time servers the switch polls and up to six syslog servers, and writes each in the form the switch takes (a resolver or time server given by a name or after the third, and a syslog server that is no IPv4 address or after the sixth, left out under a `; review:` line, the job `partial`); the four keys are measured again: `domain` unsupported (dropped on 1, both sides empty on 6 of 7 cells); `dns_servers` good (preserved on 3, both sides empty on 4 of 7 cells); `ntp_servers` good (preserved on 3, both sides empty on 4 of 7 cells); `syslog_servers` unsupported (dropped on 2, both sides empty on 5 of 7 cells).  The sections below for these keys keep the measurement of their date; `tests/fixtures/cross_vendor_expectations/aruba_aoss__mikrotik_routeros.yaml` holds the current one.
+
 ## Aruba AOS-S
 
 Source: [Aruba ArubaOS-Switch 16.10 Management and Configuration Guide

@@ -71,34 +71,32 @@ per_field_expectation:
     references: [iosxr-aoss-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      A target-side drop, observed rather than inferred: the value goes to `''`
-      on all 8 cells that populate it (`test.com`, `lab.com`, `test.lab`,
-      `lab.example.net`).  The aruba_aoss matrix declares `/system/domain`
-      unsupported — "Render emits no system domain-name; intent.domain is
-      dropped on migration" — and the render contains no domain directive of
-      any kind.  Re-set the domain suffix by hand on the target and check
-      anything that builds short-name lookups from it (DNS search lists,
-      syslog identity).
+    disposition: good
+    note: >
+      The cisco_iosxr parser reads the domain, and the aruba_aoss
+      renderer writes `ip dns domain-name <name>` (since 2026-11-13),
+      read back by its parser.  Measured over 12 cells: drifted on 0,
+      preserved on 8, both sides empty on 4.
     references: [iosxr-aoss-surface]
 
   dns_servers:
     disposition: good
     note: >
-      Both matrices declare `/system/dns-server` supported — cisco_iosxr wired
-      it in promotion #13, aruba_aoss lists it supported.  Stated plainly: no
-      committed cell on this pair populates name-servers (trivially empty on
-      12 of 12), so this disposition rests on the two declarations and NOT on
-      an observed round-trip.  Nothing here has been measured.
+      The aruba_aoss renderer writes `ip dns server-address priority
+      <1-3> <ip>` (since 2026-11-13), read back by its parser, and the
+      cisco_iosxr matrix declares `/system/dns-server` supported; no
+      committed input of the pair states a resolver.  Measured over 12
+      cells: drifted on 0, preserved on 0, both sides empty on 12.
     references: [iosxr-aoss-surface]
 
   ntp_servers:
     disposition: good
     note: >
-      Preserved on the single cell that populates it
-      (`iosxr_design_cst_pa3_xr752.cfg`, two servers, both intact).  Both
-      matrices declare `/system/ntp-server` supported.
+      The cisco_iosxr parser reads the NTP servers, and the aruba_aoss
+      renderer writes `sntp server priority <1-3> <ip>` with `timesync
+      sntp` and `sntp unicast` (since 2026-11-13), read back by its
+      parser.  Measured over 12 cells: drifted on 0, preserved on 1,
+      both sides empty on 11.
     references: [iosxr-aoss-surface]
 
   timezone:
@@ -112,16 +110,13 @@ per_field_expectation:
     references: [iosxr-aoss-surface]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      A target-side drop.  cisco_iosxr declares `/system/syslog-server`
-      supported (promotion #13, `logging <ip>`), but aruba_aoss declares it
-      unsupported — "Render emits no logging/syslog config; intent.syslog_
-      servers are dropped on migration".  No committed IOS-XR cell populates
-      the field, so this disposition rests on the target declaration rather
-      than on a measured drop; a source that does carry collectors will lose
-      every one of them and the migrated switch will log to console only.
-      Re-add `logging <ip>` for each collector before cutover.
+    disposition: good
+    note: >
+      The aruba_aoss renderer writes `logging <ip>` (since 2026-11-13),
+      read back by its parser, and the cisco_iosxr matrix declares
+      `/system/syslog-server` supported; no committed input of the pair
+      states a syslog server.  Measured over 12 cells: drifted on 0,
+      preserved on 0, both sides empty on 12.
     references: [iosxr-aoss-surface]
 
   # -- Interfaces -- a sub-interface becomes a VLAN; three attributes are lost

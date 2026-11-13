@@ -92,6 +92,11 @@ set system ntp server time2.example.net
 #: the target, declared in its matrix), typed by hand.
 _NO_NTP = {"aruba_aoscx", "cisco_iosxe", "opnsense"}
 
+#: Public codecs that take a time server by its address only, and leave
+#: a name out under a review line (AOS-S: ``sntp server priority <1-3>
+#: <ip-addr>``), typed by hand.  The names of this config reach none.
+_ADDRESS_ONLY = {"aruba_aoss"}
+
 
 def _parse(text: str) -> CanonicalIntent:
     return get_codec("vyos").parse(text)
@@ -151,6 +156,13 @@ def _check_names_in_output(target: str, rendered: str, names: list[str]) -> None
     back = list(get_codec(target).parse(rendered).ntp_servers)
     if target in _NO_NTP:
         assert back == [], f"{target}: an NTP server came back: {back}"
+        return
+    if target in _ADDRESS_ONLY:
+        assert back == [], f"{target}: an NTP server came back: {back}"
+        assert not any(name in rendered for name in names), (
+            f"{target}: a name is written"
+        )
+        assert "review:" in rendered, f"{target}: no line says a name is left out"
         return
     assert back == names, f"{target}: NTP servers read back {back}, not {names}"
     for line in rendered.splitlines():
@@ -220,11 +232,22 @@ class TestOntoEveryCodec:
     def test_the_check_fails_on_the_old_tree(self, target):
         if target in _NO_NTP:
             pytest.skip("the target renders no NTP server")
+        if target in _ADDRESS_ONLY:
+            pytest.skip("the target writes no name: see the test after this class")
         tree = _parse(_SET_FORM)
         tree.ntp_servers = [f"{n} {{ }}" for n in _NAMES]
         rendered = get_codec(target).render(tree)
         with pytest.raises(AssertionError):
             _check_names_in_output(target, rendered, _NAMES)
+
+
+def test_the_check_fails_for_a_target_that_writes_a_name(monkeypatch):
+    from netcanon.migration.codecs.aruba_aoss import management_plane
+
+    monkeypatch.setattr(management_plane, "_given", lambda value: True)
+    rendered = run_plan(get_codec("vyos"), get_codec("aruba_aoss"), _PRINTED).rendered
+    with pytest.raises(AssertionError):
+        _check_names_in_output("aruba_aoss", rendered, _NAMES)
 
 
 def test_the_no_ntp_set_is_what_the_targets_do():
@@ -235,4 +258,4 @@ def test_the_no_ntp_set_is_what_the_targets_do():
             run_plan(get_codec("vyos"), get_codec(target), _SET_FORM).rendered,
         ).ntp_servers
     }
-    assert measured == _NO_NTP
+    assert measured == _NO_NTP | _ADDRESS_ONLY

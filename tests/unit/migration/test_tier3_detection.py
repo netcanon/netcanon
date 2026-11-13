@@ -1107,13 +1107,18 @@ class TestRowsForStatementsLeftOut:
     #: name: a subnet an EOS server disables serves nothing, as a
     #: server that is not enabled does, and a RouterOS route held
     #: ``disabled=yes`` and an IOS-XE route of distance 255 install
-    #: nothing; each is said with the same word and a reason of its own.
-    _WORD = {"disabled-subnet": "disabled", "disabled-route": "disabled", "distance-255": "disabled"}
+    #: nothing, and an AOS-S time server whose client is not run is
+    #: polled by nothing; each is said with the same word and a reason
+    #: of its own.
+    _WORD = {
+        "disabled-subnet": "disabled", "disabled-route": "disabled", "distance-255": "disabled",
+        "unpolled": "disabled",
+    }
 
     def test_the_kinds(self) -> None:
         assert self._KINDS == [
             "delete", "disabled", "disabled-route", "disabled-subnet", "distance-255", "inactive",
-            "incomplete", "preconfigure", "shutdown", "untagged",
+            "incomplete", "preconfigure", "shutdown", "unpolled", "untagged",
         ]
 
     def test_each_kind_gives_its_own_reason(self) -> None:

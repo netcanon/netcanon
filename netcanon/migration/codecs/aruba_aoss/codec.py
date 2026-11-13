@@ -48,6 +48,7 @@ from .parse import _parse_port_list, parse_intent, without_banner_bodies
 from .render import (
     _format_port_list,
     loopback_warnings,
+    management_warnings,
     pool_warnings,
     render_intent,
     vlan_interface_warnings,
@@ -236,8 +237,12 @@ class ArubaAOSSCodec(CodecBase):
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
             "/system/hostname",
+            # The domain, the resolvers, the time servers the switch
+            # polls and the syslog servers (:mod:`.management_plane`).
+            "/system/domain",
             "/system/dns-server",
             "/system/ntp-server",
+            "/system/syslog-server",
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
@@ -631,16 +636,8 @@ class ArubaAOSSCodec(CodecBase):
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
             UnsupportedPath(
-                path="/system/domain",
-                reason="Render emits no system domain-name; intent.domain is dropped on migration.",
-            ),
-            UnsupportedPath(
                 path="/system/timezone",
                 reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/syslog-server",
-                reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
             ),
             UnsupportedPath(
                 path="/routing-instances/instance",
@@ -757,7 +754,9 @@ class ArubaAOSSCodec(CodecBase):
         down, and each loopback address written as a host address it
         was not, since an AOS-S loopback takes no mask; and one for
         each active-backup LAG, written as a static ``trunk``
-        (:mod:`netcanon.migration._bonds`)."""
+        (:mod:`netcanon.migration._bonds`); and one for each review line
+        of the management plane: a resolver, a time server or a syslog
+        server AOS-S is not given (:mod:`.management_plane`)."""
         return [
             *account_warnings(getattr(tree, "local_users", None) or []),
             *pool_warnings(tree),
@@ -767,6 +766,7 @@ class ArubaAOSSCodec(CodecBase):
                 lag for lag in getattr(tree, "lags", None) or []
                 if self.aggregate_written_for(getattr(lag, "name", ""))
             ),
+            *management_warnings(tree),
         ]
 
     # -----------------------------------------------------------------

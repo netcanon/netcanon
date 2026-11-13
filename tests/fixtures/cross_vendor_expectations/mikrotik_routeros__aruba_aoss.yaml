@@ -112,31 +112,33 @@ per_field_expectation:
   domain:
     disposition: not_applicable
     note: >
-      RouterOS does not surface a top-level FQDN identity field;
-      the canonical ``domain`` is empty after RouterOS parse.
-      Aruba target render emits no domain directive.  Structural
-      absence on the source, not a translation loss.
+      The mikrotik_routeros matrix declares `/system/domain`
+      unsupported: its parser reads no domain, so nothing reaches the
+      aruba_aoss renderer, which writes `ip dns domain-name <name>`
+      (since 2026-11-13).  Measured over 5 cells: drifted on 0,
+      preserved on 0, both sides empty on 5.
     references: [system_services]
 
   dns_servers:
     disposition: good
     note: >
-      RouterOS ``/ip dns / set servers=1.1.1.1,8.8.8.8`` parses
-      into ``list[str]``; Aruba target render emits per-entry
-      ``ip dns server-address priority N <addr>`` with priority
-      synthesised from canonical list order (priority 1 = first).
+      The mikrotik_routeros parser reads the resolvers, and the
+      aruba_aoss renderer writes `ip dns server-address priority <1-3>
+      <ip>` (since 2026-11-13), read back by its parser.  Measured over
+      5 cells: drifted on 0, preserved on 1, both sides empty on 4.
     references: [system_services]
 
   ntp_servers:
-    disposition: good
-    note: >
-      RouterOS ``/system ntp client / set servers=<list>`` (full
-      NTPv4) -> Aruba ``sntp server priority N <addr>`` (SNTP).
-      The canonical ``list[str]`` round-trips cleanly across this
-      pair; the protocol distinction (full NTP vs SNTP) and any
-      per-server modifiers live outside the canonical surface, so
-      the disposition reflects preservation of the field as
-      canonically modelled (Wave 10β re-flip).
+    disposition: lossy
+    reason: >
+      The mikrotik_routeros parser reads the NTP servers, and the
+      aruba_aoss renderer writes `sntp server priority <1-3> <ip>` with
+      `timesync sntp` and `sntp unicast` (since 2026-11-13), read back
+      by its parser; AOS-S takes a time server by its address only, and
+      three at most; one the source gives by a name, or after the third,
+      is left out under a `; review:` line and the job is `partial`.
+      Measured over 5 cells: drifted on 2, preserved on 1, both sides
+      empty on 2.
     references: [system_services]
 
   timezone:
@@ -153,17 +155,14 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      RouterOS ``/system logging action add target=remote
-      remote=<addr>`` (destination) plus ``/system logging add
-      action=remote topics=...`` (filter) -> Aruba ``logging
-      <addr>``.  RouterOS's per-topic / per-severity filter rules
-      are richer than the canonical surface (host-only); per-
-      topic filters drop on the cross-vendor migration.  The
-      aruba_aoss codec does not currently parse syslog hosts on
-      its own side either, so cross-vendor render may end up as
-      no-op on Aruba target.
+      The mikrotik_routeros matrix declares `/system/syslog-server`
+      unsupported: its parser reads no syslog server, so nothing reaches
+      the aruba_aoss renderer, which writes `logging <ip>` (since
+      2026-11-13), and no committed input of the pair states a syslog
+      server.  Measured over 5 cells: drifted on 0, preserved on 0, both
+      sides empty on 5.
     references: [system_services]
 
   interfaces:

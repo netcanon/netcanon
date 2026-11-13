@@ -174,34 +174,34 @@ per_field_expectation:
     references: [opnsense-system, aruba-system-services]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S has no first-class domain directive in the
-      codec's parse surface; the field is always empty on Aruba
-      parse so nothing renders on the OPNsense target.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13), and the opnsense renderer writes the domain it is
+      given.  Measured over 7 cells: drifted on 0, preserved on 1, both
+      sides empty on 6.
     references: [aruba-system-services]
 
   dns_servers:
-    disposition: lossy
-    reason: >
-      Aruba ``ip dns server-address priority N <addr>`` collapses
-      to a bare list on canonical: the parser captures only the
-      resolver address and drops the per-server ``priority N``
-      value.  OPNsense render does emit one ``<system>/<dnsserver>``
-      element per resolver, so the addresses themselves round-trip;
-      the loss is the per-server priority ordering metadata.
+    disposition: good
+    note: >
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the opnsense renderer
+      writes the resolvers it is given.  Measured over 7 cells: drifted
+      on 0, preserved on 3, both sides empty on 4.
     references: [opnsense-system, aruba-system-services]
 
   ntp_servers:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Aruba's SNTP ``sntp server priority N <addr>`` lines map to
-      OPNsense's space-separated ``<system>/<timeservers>``
-      element.  Protocol distinction (full NTP vs SNTP) is lost
-      on the canonical layer.  Per-server modifiers (priority
-      overrides; prefer / iburst) drop on round-trip.  OPNsense
-      codec does not currently wire ``<timeservers>`` into
-      ``CanonicalIntent.ntp_servers`` on render.
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13); the opnsense matrix declares
+      `/system/ntp-server` unsupported, its renderer writes no time
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 7 cells: drifted on 3, preserved on 0, both sides
+      empty on 4.
     references: [opnsense-system, aruba-system-services]
 
   timezone:
@@ -217,13 +217,13 @@ per_field_expectation:
     references: [opnsense-system, aruba-system-services]
 
   syslog_servers:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Aruba ``logging <addr>`` lines map to OPNsense
-      ``<system>/<syslog>/<remoteserver>``.  OPNsense codec does
-      not currently wire syslog config into canonical
-      ``syslog_servers`` on render.  Severity / facility tokens
-      are not modelled.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13); the opnsense matrix declares `/system/syslog-server`
+      unsupported, its renderer writes no syslog server, and the value
+      is dropped under the cross-vendor banner.  Measured over 7 cells:
+      drifted on 2, preserved on 0, both sides empty on 5.
     references: [opnsense-system, aruba-system-services]
 
   interfaces:

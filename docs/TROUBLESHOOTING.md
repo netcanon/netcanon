@@ -75,7 +75,10 @@ hand.  A `disabled: ip route <destination>` row is a RouterOS route
 held `disabled=yes`, or an IOS-XE route of administrative distance
 255, which IOS does not install, and a `disabled: config router
 static edit <id>` row (`static6` for IPv6) a FortiGate route of
-`status disable`; none installs anything.
+`status disable`; none installs anything.  A `disabled: sntp
+server` or `disabled: ntp server` row is an AOS-S time server the
+switch does not poll: SNTP with no `sntp unicast`, or NTP with no
+`ntp enable`, or a `timesync` line that selects the other protocol.
 **Action:** none, unless
 the route is to be in force on the target — then write it there by
 hand.

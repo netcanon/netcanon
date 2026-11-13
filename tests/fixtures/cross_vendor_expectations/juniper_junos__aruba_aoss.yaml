@@ -216,33 +216,34 @@ per_field_expectation:
     references: [junos-initial-config, aruba-system-services]
 
   domain:
-    disposition: unsupported
-    reason: >
-      Junos's ``set system domain-name`` is parsed and lands on
-      ``CanonicalIntent.domain``, but the aruba_aoss codec's render
-      path does not emit a domain directive (no parse path for
-      ``ip domain-name`` or equivalent on AOS-S today).  The field
-      drops on Aruba render.  Codec-side wire-up gap.
+    disposition: good
+    note: >
+      The juniper_junos parser reads the domain, and the aruba_aoss
+      renderer writes `ip dns domain-name <name>` (since 2026-11-13),
+      read back by its parser.  Measured over 11 cells: drifted on 0,
+      preserved on 2, both sides empty on 9.
     references: [junos-initial-config, aruba-system-services]
 
   dns_servers:
     disposition: good
     note: >
-      Junos's ``set system name-server <addr>`` lines collect into
-      the canonical list; Aruba render emits
-      ``ip dns server-address priority N <addr>`` lines with
-      synthetic priority numbers (1, 2, ...).
+      The juniper_junos parser reads the resolvers, and the aruba_aoss
+      renderer writes `ip dns server-address priority <1-3> <ip>` (since
+      2026-11-13), read back by its parser.  Measured over 11 cells:
+      drifted on 0, preserved on 6, both sides empty on 5.
     references: [junos-initial-config, aruba-system-services]
 
   ntp_servers:
     disposition: lossy
     reason: >
-      Junos uses NTP (``set system ntp server``) while Aruba uses
-      SNTP (``sntp server priority N <addr>``).  The protocol
-      distinction is not modelled canonically.  Per-server
-      modifiers (Junos ``prefer`` / ``key`` / ``source-address``)
-      drop on round-trip.  Functional equivalence at the
-      server-list level for typical deployments.
+      The juniper_junos parser reads the NTP servers, and the aruba_aoss
+      renderer writes `sntp server priority <1-3> <ip>` with `timesync
+      sntp` and `sntp unicast` (since 2026-11-13), read back by its
+      parser; AOS-S takes a time server by its address only, and three
+      at most; one the source gives by a name, or after the third, is
+      left out under a `; review:` line and the job is `partial`.
+      Measured over 11 cells: drifted on 1, preserved on 5, both sides
+      empty on 5.
     references: [junos-initial-config, aruba-system-services]
 
   timezone:
@@ -256,13 +257,12 @@ per_field_expectation:
     references: [junos-initial-config, aruba-system-services]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      Junos's ``set system syslog host X any info`` populates the
-      canonical host list; the aruba_aoss codec render path does
-      not emit syslog directives.  Per-host severity / facility
-      filters drop on canonical layer first; the host list itself
-      then drops on Aruba render.  Codec-side wire-up gap.
+    disposition: good
+    note: >
+      The juniper_junos parser reads the syslog servers, and the
+      aruba_aoss renderer writes `logging <ip>` (since 2026-11-13), read
+      back by its parser.  Measured over 11 cells: drifted on 0,
+      preserved on 6, both sides empty on 5.
     references: [junos-syslog-overview, aruba-system-services]
 
   # ── Tier 1 — interfaces ──

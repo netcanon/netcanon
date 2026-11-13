@@ -58,35 +58,32 @@ per_field_expectation:
     references: [nxos-aoss-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      The aruba_aoss matrix declares `/system/domain` unsupported — "Render
-      emits no system domain-name; intent.domain is dropped on migration" —
-      and the corpus agrees: on both cells that populate it the value goes to
-      `''`.  AOS-S folds the FQDN into the hostname rather than carrying a
-      separate directive, so re-set the domain suffix by hand (or fold it into
-      `hostname`) on the target, and check anything that builds short-name
-      lookups from it (DNS search, syslog identity).
+    disposition: good
+    note: >
+      The cisco_nxos parser reads the domain, and the aruba_aoss
+      renderer writes `ip dns domain-name <name>` (since 2026-11-13),
+      read back by its parser.  Measured over 13 cells: drifted on 0,
+      preserved on 2, both sides empty on 11.
     references: [nxos-aoss-surface]
 
   dns_servers:
     disposition: good
     note: >
-      Both matrices declare `/system/dns-server` supported; the NX-OS `ip
-      name-server <ip>` list maps onto the AOS-S `ip dns server-address
-      priority N <ip>` form.  Stated rather than left implicit: NO committed
-      fixture on this pair populates the field (0 preserved / 0 drifted / 13
-      untested), so this rests on the two declarations, not on an observed
-      round-trip.
+      The aruba_aoss renderer writes `ip dns server-address priority
+      <1-3> <ip>` (since 2026-11-13), read back by its parser, and the
+      cisco_nxos matrix declares `/system/dns-server` supported; no
+      committed input of the pair states a resolver.  Measured over 13
+      cells: drifted on 0, preserved on 0, both sides empty on 13.
     references: [nxos-aoss-surface]
 
   ntp_servers:
     disposition: good
     note: >
-      Preserved on the one cell that exercises it.  The canonical model
-      carries the server address list only, which is exactly the surface AOS-S
-      re-emits (as SNTP); per-server modifiers such as `prefer` are not
-      modelled on either side, so nothing measurable is lost.
+      The cisco_nxos parser reads the NTP servers, and the aruba_aoss
+      renderer writes `sntp server priority <1-3> <ip>` with `timesync
+      sntp` and `sntp unicast` (since 2026-11-13), read back by its
+      parser.  Measured over 13 cells: drifted on 0, preserved on 1,
+      both sides empty on 12.
     references: [nxos-aoss-surface]
 
   timezone:
@@ -102,14 +99,12 @@ per_field_expectation:
     references: [nxos-aoss-surface]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      The aruba_aoss matrix declares `/system/syslog-server` unsupported
-      ("Render emits no logging/syslog config"), and the one cell that
-      populates the field loses the whole record — "all 1 syslog_servers
-      dropped".  The migrated switch will log to console only: re-add
-      `logging <ip>` for every collector before cutover or the device goes
-      dark to the SIEM.
+    disposition: good
+    note: >
+      The cisco_nxos parser reads the syslog servers, and the aruba_aoss
+      renderer writes `logging <ip>` (since 2026-11-13), read back by
+      its parser.  Measured over 13 cells: drifted on 0, preserved on 1,
+      both sides empty on 12.
     references: [nxos-aoss-surface]
 
   # -- Interfaces.  The top-level key is kept because the LIST itself loses
