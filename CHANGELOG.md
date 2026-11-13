@@ -1426,6 +1426,38 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Every review line a target writes for a loss holds the job
+  `partial`.**  A renderer writes a `review:` line where it leaves a
+  record out, or writes it otherwise than the source states it, for a
+  reason of the target's own: a VRRP group of a protocol the target
+  does not run, or an authentication it cannot write; a VLAN interface
+  FortiOS can give no parent, or a VLAN name the target has no place
+  for; a trunk of every VLAN on OS10, one that allows no VLAN on
+  AOS-CX, one that carries no VLAN untagged on IOS-XE or NX-OS; an
+  SNMP trap host given a community the source did not state; a static
+  route in a VRF the target does not write, or of a distance it does
+  not take; a tunnel or a DHCPv6 client of a kind it does not run; and
+  more of each target's own.  What `render_warnings` says (a
+  credential, an account, a DHCP pool) and a value the target does
+  not read as one value were said in the job; every other such line
+  was a comment of the output and nothing else, and a job whose only
+  loss it was said `completed`: over the committed inputs, onto every
+  public codec with no port map, 11 jobs did.  Each such line is
+  now made by one call (`review`, `netcanon/migration/_said.py`) that
+  returns its words and adds a warning of the job that restates them
+  (`Review: <place> -- <why>.`), and the job is `partial` ("The target
+  left out N record(s)").  A line that writes what the source holds
+  -- asking for a check on the device, or saying what its own form
+  refuses when the record is edited there -- does not hold the job.  The
+  rendered output of every job is as it was.  Guarded by
+  `tests/unit/migration/test_a_review_line_holds_the_job.py`, which
+  reads every `review` line of every committed input onto every public
+  codec, and of trees made to reach the lines no input reaches, and
+  holds each to one warning that restates it, to the words of a doubt,
+  or to a line the target says another way in a `partial` job; and
+  which records the call that made each warning, so that every call of
+  `review` in the product is reached.
+
 - **A value the target does not read as one value holds the job
   `partial`.**  A renderer of a word-at-a-time CLI writes a
   `review:` line where a value holds white space or a quote: a
@@ -1474,8 +1506,7 @@ timestamp if your timezone matters for an audit.
   with its own `fortios:` envelope back as FortiOS ciphertext,
   whatever config it came from; it does so now only where the shared
   policy says the secret is FortiOS's own, and refuses it otherwise.
-  Still open: a `review:` line of another kind with no warning (Known
-  limitations).  Guarded by
+  Guarded by
   `tests/unit/migration/test_a_render_warning_holds_the_job.py`,
   which gives every public codec trees whose credential records each
   carry a token of their own, and holds each `review:` line that
@@ -7349,15 +7380,6 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **A `review:` line with no warning does not hold the job.**  A
-  target that writes a line under `review:` for a reason other than
-  a credential or a value it does not read as one value -- a VLAN
-  FortiOS can give no parent -- writes no warning of the job, so a
-  job whose only loss is such a line can say `completed`.  What a
-  target leaves out under a warning holds the job `partial`, a
-  credential it cannot carry and a value it does not read as one
-  included; these do not yet.  Search a `completed` output for
-  `review:`.
 - **A destination whose next hops mix a stated and an unstated
   distance keeps its order only where the two platforms' defaults
   agree.**  "Not stated" is one value in the tree, and each target

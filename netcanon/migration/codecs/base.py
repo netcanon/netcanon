@@ -585,11 +585,11 @@ class CodecBase(ABC):
         channel of its own for a warning, and what it writes in place
         of a record (a ``review:`` comment) is in the output only.
         The pipeline calls it just before :meth:`render`.  One
-        channel there is: a review line of the rule on values a
-        target does not read as one value is said by the pipeline as
-        the renderer makes it
-        (:func:`netcanon.migration._one_value.said_while_rendering`),
-        and is not repeated here.
+        channel there is: a review line the renderer makes through
+        :func:`netcanon.migration._said.review` is said by the
+        pipeline as the renderer makes it
+        (:func:`netcanon.migration._said.said_while_rendering`), and
+        is not repeated here.
 
         Returns:
             One sentence a record, naming it and never a secret of it.

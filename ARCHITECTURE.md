@@ -927,6 +927,33 @@ line is written and said, and one between quotes with no escape
 (AOS-S, VyOS, OS10) has each `"` written `'`.  Guarded by
 `tests/unit/migration/test_a_name_is_one_word.py`.
 
+**A review line of a loss is a warning of the job**
+(`netcanon/migration/_said.py`).  A renderer writes a `review:` comment
+where it leaves a record out, or writes it otherwise than the tree holds
+it, for a reason of the target's own: a VRRP group of a protocol the
+target does not run, a VLAN FortiOS can give no parent, a trunk of every
+VLAN on OS10.  The validation report is made from the tree before the
+renderer decides, so a job whose only loss was such a line said
+`completed`.  The line's words go through `review(why, where)` (or
+`review_line(place, why)`), which returns them for the renderer to write
+after its own marker and, where a job is rendering
+(`said_while_rendering`, which `run_plan` opens around `render`), adds a
+warning that restates them, `Review: <where> -- <why>.`; the job is
+`partial`.  The line and its warning come from one call, so neither is a
+copy of the other, and the output is the same text with or without a
+job.  Not made there: a DOUBT, which writes what the source holds and
+asks for a check on the device (or says what the device's own form
+refuses when the record is edited there), and a line the target says
+another way
+(`render_warnings` for a credential, an account, a DHCP pool; the check
+of names for two source names on one).  Guarded by
+`tests/unit/migration/test_a_review_line_holds_the_job.py`, which reads
+every review line of every committed input onto every public codec, and
+of trees made to reach the lines no input reaches, as said, a doubt, or
+said another way (the words of the last two typed there); and which
+records the call that made each warning, so that every call of `review`
+in the product -- found by reading the source -- is reached.
+
 **A value stays in its comment** (`netcanon/migration/_comments.py`).
 A review comment names what was left out as the tree holds it, and a
 comment that ends at a terminator -- VyOS `/* */`, OPNsense

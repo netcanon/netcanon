@@ -44,6 +44,7 @@ from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
 from ..._roles import same_platform
+from ..._said import review, review_line
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -300,12 +301,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             community = tree.snmp.community or "public"
             out.append(f"snmp-server host {host} version 2c {community}")
             if not tree.snmp.community:
-                out.append(
-                    f"! snmp-server host {host} -- review: the source "
-                    f"carried no SNMP community, so `public` was "
-                    f"synthesised to keep the trap target valid; set the "
-                    f"real community or convert this host to v3"
-                )
+                out.append("! " + review_line(
+                    f"snmp-server host {host}",
+                    "the source carried no SNMP community, so `public` was "
+                    "synthesised to keep the trap target valid; set the "
+                    "real community or convert this host to v3",
+                ))
         # SNMPv3 users.  ``aes128`` canonical → ``aes`` on EOS wire
         # (Arista accepts both but the bare form is the
         # platform-natural default); ``aes192`` / ``aes256`` emit
@@ -425,12 +426,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 continue
             algorithm, payload = classify_hash(user.hashed_password)
             if not is_migratable(user.hashed_password, "arista_eos"):
-                review = format_review_comment(
+                out.append(format_review_comment(
                     user.name, algorithm,
                     comment_syntax="exclamation",
                     target_label="Arista EOS",
-                )
-                out.append(review)
+                ))
                 continue
             secret_tag = _ARISTA_SECRET_TYPE[algorithm]
             # The role is written as it stands (or not at all) only
@@ -814,11 +814,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # touchpoints.md`` § "2. arista_eos" for emit-side reference.
         for group in iface.vrrp_groups:
             if group.mode != "vrrp":
-                out.append(
-                    f"   ! review: vrrp_groups[{group.group_id}].mode="
-                    f"{group.mode!r} has no Arista EOS equivalent "
-                    f"(EOS supports IETF VRRP only)"
-                )
+                out.append("   ! review: " + review(
+                    f"vrrp_groups[{group.group_id}].mode={group.mode!r} has "
+                    f"no Arista EOS equivalent (EOS supports IETF VRRP only)",
+                    f"interface {iface.name}",
+                ))
                 continue
             for vip in group.virtual_ips:
                 out.append(
@@ -881,8 +881,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # The blob is a secret: the line says where, never what.
                 out.append(
                     f"   ! vrrp {group.group_id} authentication -- review: "
-                    f"the source's authentication value names no scheme, "
-                    f"so it could not be cleanly emitted"
+                    + review(
+                        "the source's authentication value names no scheme, "
+                        "so it could not be cleanly emitted",
+                        f"interface {iface.name}, vrrp {group.group_id} "
+                        f"authentication",
+                    )
                 )
         # IPv6 dynamic-address mode.  Arista EOS mirrors IOS-XE:
         # ``ipv6 address dhcp`` (stateful client) and ``ipv6
@@ -894,10 +898,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         elif iface.dhcp_client_v6 == "slaac":
             out.append("   ipv6 address autoconfig")
         elif iface.dhcp_client_v6:
-            out.append(
-                f"   ! review: dhcp_client_v6={iface.dhcp_client_v6} "
-                f"has no Arista EOS equivalent"
-            )
+            out.append("   ! review: " + review(
+                f"dhcp_client_v6={iface.dhcp_client_v6} has no Arista EOS "
+                f"equivalent",
+                f"interface {iface.name}",
+            ))
         # Tunnel-mode discriminator on ``Tunnel<N>`` stanzas.  Empty
         # tunnel_type falls through to the EOS platform default
         # (GRE), so we suppress the redundant ``tunnel mode gre ip``.
@@ -912,10 +917,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             elif tt == "vxlan":
                 out.append("   tunnel mode vxlan")
             elif tt == "eoip":
-                out.append(
-                    "   ! review: tunnel_type=eoip has no Arista EOS "
-                    "equivalent (MikroTik-only)"
-                )
+                out.append("   ! review: " + review(
+                    "tunnel_type=eoip has no Arista EOS equivalent "
+                    "(MikroTik-only)",
+                    f"interface {iface.name}",
+                ))
         # LAG membership: ``channel-group N mode <mode>`` on member
         # Ethernet interfaces.  Arista (like Cisco IOS) puts this
         # on the child side, not the Port-Channel stanza.

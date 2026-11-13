@@ -47,6 +47,7 @@ from ..._radius_secrets import (
     radius_secret_is_migratable,
     unwrap_native_secret,
 )
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -188,12 +189,12 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             # An account the source gives no password is a review
             # comment, never a <user> with no <password>.
             if holds_no_secret(user.hashed_password):
-                review = format_empty_hash_comment(
+                note = format_empty_hash_comment(
                     user.name, comment_syntax="xml",
                     target_label="OPNsense",
                 )
                 sys_el.append(ET.Comment(
-                    review.removeprefix("<!-- ").removesuffix(" -->")
+                    note.removeprefix("<!-- ").removesuffix(" -->")
                 ))
                 continue
             if user.hashed_password and not is_migratable(
@@ -203,11 +204,11 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                 # XML-comment-safe body (single-dash separator for
                 # ``comment_syntax="xml"``).
                 algorithm, _payload = classify_hash(user.hashed_password)
-                review = format_review_comment(
+                note = format_review_comment(
                     user.name, algorithm, comment_syntax="xml",
                     target_label="OPNsense",
                 )
-                body = review.removeprefix("<!-- ").removesuffix(" -->")
+                body = note.removeprefix("<!-- ").removesuffix(" -->")
                 sys_el.append(ET.Comment(body))
                 continue
             user_el = ET.SubElement(sys_el, "user")
@@ -345,10 +346,10 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         def write_device(device: _VlanDevice) -> None:
             record = device.record
             if device.tag is None:
-                vlans_el.append(ET.Comment(_comment_text(
-                    f"review: {record.name} is a VLAN interface whose "
-                    f"tag the tree does not state, so no <vlan> defines it"
-                )))
+                vlans_el.append(ET.Comment(_comment_text("review: " + review(
+                    f"{record.name} is a VLAN interface whose tag the tree "
+                    f"does not state, so no <vlan> defines it"
+                ))))
                 return
             parent, said = placed[id(device)]
             vlan_el = ET.SubElement(vlans_el, "vlan")
@@ -368,6 +369,8 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                 ET.SubElement(vlan_el, "descr").text = descr
             ET.SubElement(vlan_el, "vlanif").text = record.name
             if not _opnsense_takes_device_name(record.name, parent, device.tag):
+                # Not a loss: the device runs the name as written, and
+                # the line is for the operator who edits it later.
                 vlan_el.append(ET.Comment(_comment_text(
                     f"review: OPNsense's VLAN form refuses the device "
                     f"name {record.name} when this VLAN is saved; it takes "
@@ -375,14 +378,16 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                     f"or {parent}_vlan{device.tag}"
                 )))
             if said:
-                vlan_el.append(ET.Comment(_comment_text(said)))
+                vlan_el.append(ET.Comment(_comment_text(
+                    "review: " + review(said, f"interface {record.name}"),
+                )))
             first = first_on.setdefault((parent, device.tag), record.name)
             if first != record.name:
-                vlan_el.append(ET.Comment(_comment_text(
-                    f"review: VLAN {device.tag} is on {parent} already "
-                    f"({first}); OPNsense keeps one VLAN device for a "
-                    f"tag on a parent"
-                )))
+                vlan_el.append(ET.Comment(_comment_text("review: " + review(
+                    f"VLAN {device.tag} is on {parent} already ({first}); "
+                    f"OPNsense keeps one VLAN device for a tag on a parent",
+                    f"interface {record.name}",
+                ))))
             written.add((parent, device.tag))
 
         by_vlan = {id(device.vlan): device for device in devices if device.vlan}
@@ -442,11 +447,11 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                 record = lagg_members[member][1]
                 held = _held_by(record) if record is not None else []
                 if held:
-                    lagg_el.append(ET.Comment(
-                        f" review: {_dashes_apart(member)} is a member of this"
-                        " LAGG, and OPNsense assigns no member of a LAGG:"
-                        f" not written: {', '.join(held)} "
-                    ))
+                    lagg_el.append(ET.Comment(" review: " + review(
+                        f"{_dashes_apart(member)} is a member of this LAGG, "
+                        f"and OPNsense assigns no member of a LAGG: not "
+                        f"written: {', '.join(held)}"
+                    ) + " "))
 
     # SNMP (Tier 2) — OPNsense snmpd plugin element.
     if intent.snmp is not None and (
@@ -858,8 +863,8 @@ def _port_of_unit(name: str) -> str | None:
 def _device_parent(
     device: _VlanDevice, carriers: dict[int, str], parent_default: str,
 ) -> tuple[str, str]:
-    """The <if> *device* is written on, and a review line where the
-    output does not know it.
+    """The <if> *device* is written on, and what a review line says
+    where the output does not know it.
 
     A routed sub-interface rides on the device its config says it
     rides on, then on the port its name is a unit of, whether or not
@@ -872,7 +877,9 @@ def _device_parent(
     what carries its VLAN, else on the parent chosen for every VLAN.
 
     Returns:
-        The parent's name, and the review line (``""`` for none).
+        The parent's name, and the words of the review line (``""`` for
+        none), which the device's ``<vlan>`` is written with and the job
+        says (:func:`netcanon.migration._said.review`).
     """
     record = device.record
     assert device.tag is not None
@@ -882,7 +889,7 @@ def _device_parent(
             return port, ""
         parent = carriers.get(device.tag, parent_default)
         return parent, (
-            f"review: a routed sub-interface (tag {device.tag}) whose "
+            f"a routed sub-interface (tag {device.tag}) whose "
             f"name gives no port; it is written on {parent}, move it "
             f"to its port"
         )

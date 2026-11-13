@@ -384,7 +384,7 @@ def test_the_check_sees_a_vlan_on_the_management_port(monkeypatch: pytest.Monkey
 
 def test_the_check_sees_a_vlan_with_no_parent_said_nowhere(monkeypatch: pytest.MonkeyPatch) -> None:
     """The renderer with no line for a VLAN it has no parent for."""
-    monkeypatch.setattr(fgt_render, "_NO_PARENT_REVIEW", "")
+    monkeypatch.setattr(fgt_render, "_no_parent_line", lambda vid, name: "")
     text = _output("cisco_nxos", _NXOS.format(trunk="", mgmt=""))
     # An empty line is not a review line; the reader strips it.
     assert any("no parent and no review line" in w for w in wrong_parents("cisco_nxos", text))

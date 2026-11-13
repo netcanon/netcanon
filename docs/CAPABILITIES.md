@@ -1618,12 +1618,14 @@ is a value the target does not read as one value -- one that holds
 white space or a quote, in a place the target reads a word at a time
 or quotes with no escape: a record left out for it, or a name or text
 written otherwise (`_` for white space, `'` for a `"`).  Its warning
-restates the review line (`Review: <place> -- <why>.`).  A text the
-target writes as it stands, with a review line that asks for a check
-on the device, does not hold the job: the output has the value the
-source had.  A line the target writes under `review:` for another
-reason, with no warning -- a VLAN FortiOS can give no parent -- does
-not hold the job yet: search the output for `review:`.
+restates the review line (`Review: <place> -- <why>.`).  So is every
+other line the target writes under `review:` for what it leaves out
+or writes otherwise -- a VLAN FortiOS can give no parent, a VRRP group
+of a protocol the target does not run, a trunk of every VLAN on OS10:
+its warning restates it the same way.  A line under `review:` that
+writes what the source holds -- asking for a check on the device, or
+saying what its own form refuses when the record is edited there --
+does not hold the job: the output has the value the source had.
 
 ### D1. Port names that are not settled (`fused_ports` / `unresolved_ports` / `untranslated_ports`)
 

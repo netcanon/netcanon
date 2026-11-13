@@ -65,6 +65,7 @@ from ..._radius_secrets import (
     unwrap_native_secret,
 )
 from ..._roles import below_admin, format_below_admin_comment, own_role
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -117,9 +118,10 @@ _RFC1918_NETWORKS = (
 )
 
 #: Beside the alias of a VLAN interface whose own description holds the
-#: one label FortiOS has, the label the source gives the VLAN.
+#: one label FortiOS has, the label the source gives the VLAN (the words
+#: after ``# review:``).
 _LABEL_NOT_WRITTEN_REVIEW = (
-    "        # review: VLAN {vid} is called {label} in the source; FortiOS "
+    "VLAN {vid} is called {label} in the source; FortiOS "
     "has one label for a VLAN interface, its alias, which holds the "
     "description the source gives the interface -- choose which to keep"
 )
@@ -209,10 +211,19 @@ def _port_of_unit(name: str) -> str | None:
 #: What a VLAN interface with no parent is written with: a FortiOS VLAN
 #: interface takes one, and no interface of the output can be it.
 _NO_PARENT_REVIEW = (
-    "        # review: VLAN {vid} has no parent -- no interface of "
+    "VLAN {vid} has no parent -- no interface of "
     "this output can carry it (a loopback or a tunnel cannot); set "
     "the port it rides on"
 )
+
+
+def _no_parent_line(vid: int, name: str) -> str:
+    """The review line of VLAN interface *name*, of VLAN *vid*, that no
+    interface of the output can carry; a warning of the job as well
+    (:func:`netcanon.migration._said.review`)."""
+    return "        # review: " + review(
+        _NO_PARENT_REVIEW.format(vid=vid), f"interface {name}",
+    )
 
 #: The interface types that carry no frames, so no VLAN rides on them.
 _CARRIES_NO_FRAMES = frozenset({"ianaift:softwareLoopback", "ianaift:tunnel"})
@@ -231,7 +242,7 @@ _TYPE_LINE = {
 #: phase1-interface`` or ``config system gre-tunnel``, and this output
 #: writes neither.
 _TUNNEL_REVIEW = (
-    '        # review: a tunnel interface; FortiOS makes it from the '
+    'a tunnel interface; FortiOS makes it from the '
     '"config vpn ipsec phase1-interface" or "config system gre-tunnel" '
     'entry of the same name, which this output does not have'
 )
@@ -694,17 +705,18 @@ def _is_fortigate_native_name(name: str) -> bool:
     return bool(_IS_FORTIGATE_PHYSICAL_PORT_RE.match(name))
 
 
-#: The review line for a resolver no slot of ``config system dns``
-#: takes.  It names the kind and never the value.
+#: What the review line for a resolver no slot of ``config system
+#: dns`` takes says.  It names the kind and never the value.
 _RESOLVER_NOT_TAKEN = (
-    "    # review: the source gives a resolver that is no IPv4 or IPv6 "
+    "the source gives a resolver that is no IPv4 or IPv6 "
     "address, or is the address FortiOS reads as none (0.0.0.0, ::); "
     "it is left out, re-create it on the device"
 )
 
-#: The review line for the resolvers of a family after its two slots.
+#: What the review line for the resolvers of a family after its two
+#: slots says.
 _RESOLVERS_PAST_TWO = (
-    "    # review: the source gives more IPv{family} resolvers than the "
+    "the source gives more IPv{family} resolvers than the "
     "two FortiOS takes ({first}, {second}); those after the second are "
     "left out"
 )
@@ -724,7 +736,10 @@ def _resolver_lines(servers: list[str]) -> tuple[list[str], list[str]]:
     left out.  An IPv4 resolver goes in ``primary`` then ``secondary``,
     an IPv6 one in ``ip6-primary`` then ``ip6-secondary``; a third of a
     family, a value that is no address and the unspecified address
-    (which the slot reads as none) are left out and said."""
+    (which the slot reads as none) are left out and said, each a warning
+    of the job as well (:func:`netcanon.migration._said.review`).  The
+    order of the families is a doubt, said in a line and not a
+    warning: what FortiOS asks first is not established."""
     by_family: dict[int, list[str]] = {4: [], 6: []}
     order: list[int] = []
     not_taken = False
@@ -738,13 +753,19 @@ def _resolver_lines(servers: list[str]) -> tuple[list[str], list[str]]:
             continue
         by_family[address.version].append(server)
         order.append(address.version)
-    said = [_RESOLVER_NOT_TAKEN] if not_taken else []
+    said = (
+        ["    # review: " + review(_RESOLVER_NOT_TAKEN, "config system dns")]
+        if not_taken else []
+    )
     lines: list[str] = []
     for family, slots in RESOLVER_SLOTS.items():
         taken = by_family[family]
         if len(taken) > len(slots):
-            said.append(_RESOLVERS_PAST_TWO.format(
-                family=family, first=slots[0], second=slots[1],
+            said.append("    # review: " + review(
+                _RESOLVERS_PAST_TWO.format(
+                    family=family, first=slots[0], second=slots[1],
+                ),
+                "config system dns",
             ))
         lines += [
             f"    set {slot} {server}"
@@ -952,7 +973,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # FortiOS alias caps at 25 chars per spec.
                 out.append(f'        set alias "{_esc(alias[:25])}"')
             if iface.description and label and label != iface.description:
-                out.append(_LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label))
+                out.append("        # review: " + review(
+                    _LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label),
+                    f"interface {iface.name}",
+                ))
             if lag is not None:
                 # A bond whose peer needs no aggregate is a redundant
                 # interface, one member at a time; any other LAG an
@@ -1012,44 +1036,48 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")
+                    where = f"interface {iface.name}"
                     if no_port and not stated:
-                        out.append(
-                            f"        # review: a routed sub-interface "
-                            f"(tag {vid}) whose name gives no port; it "
-                            f"is written on \"{_esc(parent)}\" -- move it to "
-                            f"its port"
+                        out.append("        # review: " + review(
+                            f"a routed sub-interface (tag {vid}) whose name "
+                            f"gives no port; it is written on "
+                            f"\"{_esc(parent)}\" -- move it to its port"
                             if parent else
-                            f"        # review: a routed sub-interface "
-                            f"(tag {vid}) whose name gives no port, and "
-                            f"this output has none to write it on"
-                        )
+                            f"a routed sub-interface (tag {vid}) whose name "
+                            f"gives no port, and this output has none to "
+                            f"write it on",
+                            where,
+                        ))
                     if stated and parent != stated:
-                        out.append(
-                            f"        # review: rides on \"{_esc(stated)}\" in "
-                            f"the source, which is not in this output; "
-                            f"the parent below was chosen"
+                        out.append("        # review: " + review(
+                            f"rides on \"{_esc(stated)}\" in the source, "
+                            f"which is not in this output; the parent "
+                            f"below was chosen"
                             if parent else
-                            f"        # review: rides on \"{_esc(stated)}\" in "
-                            f"the source, which is not in this output"
-                        )
+                            f"rides on \"{_esc(stated)}\" in the source, "
+                            f"which is not in this output",
+                            where,
+                        ))
                     if parent:
                         first = first_on.setdefault((parent, vid), iface.name)
                         if first != iface.name:
-                            out.append(
-                                f"        # review: VLAN {vid} is on "
-                                f"\"{_esc(parent)}\" already (\"{_esc(first)}\"); a "
-                                f"FortiGate takes a VLAN id once on an "
-                                f"interface"
-                            )
+                            out.append("        # review: " + review(
+                                f"VLAN {vid} is on \"{_esc(parent)}\" "
+                                f"already (\"{_esc(first)}\"); a FortiGate "
+                                f"takes a VLAN id once on an interface",
+                                where,
+                            ))
                         out.append(
                             f'        set interface "{_esc(parent)}"'
                         )
                     elif not no_port and not stated:
-                        out.append(_NO_PARENT_REVIEW.format(vid=vid))
+                        out.append(_no_parent_line(vid, iface.name))
             elif type_line is not None:
                 out.append(f"        set type {type_line}")
                 if type_line == "tunnel" and not _fortios_adds_it(iface.name):
-                    out.append(_TUNNEL_REVIEW)
+                    out.append("        # review: " + review(
+                        _TUNNEL_REVIEW, f"interface {iface.name}",
+                    ))
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
             # virtual_gateway_address, and emitting ``set ip  <mask>`` is
@@ -1120,10 +1148,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.dhcp_client_v6 == "dhcp6":
                 out.append("        set ip6-mode dhcp")
             elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
-                out.append(
-                    f"        ! review: dhcp_client_v6="
-                    f"{iface.dhcp_client_v6} has no FortiOS equivalent"
-                )
+                out.append("        ! review: " + review(
+                    f"dhcp_client_v6={iface.dhcp_client_v6} has no FortiOS "
+                    f"equivalent",
+                    f"interface {iface.name}",
+                ))
             # One MTU here: the IP MTU where the tree states no
             # payload.
             mtu = one_mtu_written(iface)
@@ -1167,12 +1196,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append("        config vrrp")
                 for group in iface.vrrp_groups:
                     if group.mode != "vrrp":
-                        out.append(
-                            f"        # review: vrrp_groups[{group.group_id}]"
-                            f" mode={group.mode!r} has no FortiOS "
-                            f"equivalent — VRRP is the only L3 redundancy "
-                            f"protocol on FortiOS"
-                        )
+                        out.append("        # review: " + review(
+                            f"vrrp_groups[{group.group_id}] mode="
+                            f"{group.mode!r} has no FortiOS equivalent — "
+                            f"VRRP is the only L3 redundancy protocol on "
+                            f"FortiOS",
+                            f"interface {iface.name}",
+                        ))
                         continue
                     out.append(f"            edit {group.group_id}")
                     if group.virtual_ips:
@@ -1181,11 +1211,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         )
                         if len(group.virtual_ips) > 1:
                             extra = ", ".join(group.virtual_ips[1:])
-                            out.append(
-                                f"                # review: FortiOS "
-                                f"accepts one vrip per group; additional "
-                                f"virtual_ips dropped: {extra}"
-                            )
+                            out.append("                # review: " + review(
+                                f"FortiOS accepts one vrip per group; "
+                                f"additional virtual_ips dropped: {extra}",
+                                f"interface {iface.name}, vrrp "
+                                f"{group.group_id}",
+                            ))
                     if group.virtual_ipv6s:
                         out.append(
                             f"                set vrip6 "
@@ -1223,11 +1254,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         )
                         if len(group.track_interfaces) > 1:
                             extra = ", ".join(group.track_interfaces[1:])
-                            out.append(
-                                f"                # review: FortiOS "
-                                f"accepts one vrdst per group; additional "
-                                f"track_interfaces dropped: {extra}"
-                            )
+                            out.append("                # review: " + review(
+                                f"FortiOS accepts one vrdst per group; "
+                                f"additional track_interfaces dropped: "
+                                f"{extra}",
+                                f"interface {iface.name}, vrrp "
+                                f"{group.group_id}",
+                            ))
                     out.append("                set status enable")
                     out.append("            next")
                 out.append("        end")
@@ -1246,7 +1279,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f'        set interface "{_esc(child["parent"])}"'
                 )
             else:
-                out.append(_NO_PARENT_REVIEW.format(vid=child["vlanid"]))
+                out.append(_no_parent_line(child["vlanid"], child["name"]))
             if child.get("ip") and child.get("mask"):
                 out.append(f'        set ip {child["ip"]} {child["mask"]}')
                 out.append("        set mode static")
@@ -1560,11 +1593,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         idx = 0
         for route in routes:
             if route.vrf:
-                out.append(
-                    f"    # review: static route {route.destination} is in "
-                    f"VRF {route.vrf}, and the output puts nothing in a "
-                    f"VRF; not written"
-                )
+                out.append("    # review: " + review(
+                    f"static route {route.destination} is in VRF "
+                    f"{route.vrf}, and the output puts nothing in a VRF; "
+                    f"not written"
+                ))
                 continue
             idx += 1
             out.append(f"    edit {idx}")

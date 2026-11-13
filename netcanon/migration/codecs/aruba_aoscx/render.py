@@ -58,6 +58,7 @@ import re
 from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -506,13 +507,14 @@ def _render_interface(
                     "" if iface.trunk_native_vlan is None
                     else f" (native VLAN {iface.trunk_native_vlan})"
                 )
-                block.append(
-                    "    ! review: the source trunk allows no VLAN"
-                    f"{native}; AOS-CX has no form for that (a trunk "
-                    "with no allowed VLAN carries every VLAN), so no "
-                    "vlan trunk line is written -- list the VLANs "
-                    "this port is to carry, or shut it down"
-                )
+                block.append("    ! review: " + review(
+                    f"the source trunk allows no VLAN{native}; AOS-CX "
+                    "has no form for that (a trunk with no allowed VLAN "
+                    "carries every VLAN), so no vlan trunk line is "
+                    "written -- list the VLANs this port is to carry, "
+                    "or shut it down",
+                    f"interface {iface.name}",
+                ))
             else:
                 if iface.trunk_native_vlan is not None:
                     block.append(

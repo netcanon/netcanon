@@ -54,6 +54,8 @@ what AGENTS.md's "declare it, don't invent it" forbids.
 
 from __future__ import annotations
 
+from ._said import review
+
 #: The one derivation keyword netcanon's parsers place in an RD / RT slot.
 #: Compared case-insensitively; both NX-OS and AOS-CX write it lowercase.
 AUTO = "auto"
@@ -72,18 +74,31 @@ def is_derivation_keyword(value: str) -> bool:
     return value.strip().lower() == AUTO
 
 
-def review_comment(field: str, target_label: str, native_form: str = "") -> str:
+def review_comment(
+    field: str, target_label: str, native_form: str = "", where: str = "",
+) -> str:
     """One-line note explaining a dropped derivation keyword.
 
-    *field* names the thing that was dropped (e.g. ``"route-distinguisher"``),
-    *native_form* optionally names the target's own equivalent so the operator
-    knows what to write instead.
+    The value is not written, so the note is a warning of the job that
+    is rendering as well (:func:`netcanon.migration._said.review`).
+
+    Args:
+        field: The thing that was dropped (e.g. ``"route-distinguisher"``).
+        target_label: The target's name, as the note says it.
+        native_form: The target's own equivalent, if it has one, so the
+            operator knows what to write instead.
+        where: What the note is in (the routing instance), for the
+            warning; the note itself does not repeat it.
+
+    Returns:
+        ``review: <why>``, for the renderer to put after its comment
+        marker.
     """
     body = (
-        f"review: the source device derived its {field} itself (`auto`); "
+        f"the source device derived its {field} itself (`auto`); "
         f"that keyword is not valid on {target_label}, so no value was "
         f"emitted -- set one explicitly"
     )
     if native_form:
         body += f" -- the equivalent on this platform is `{native_form}`"
-    return body
+    return "review: " + review(body, where)

@@ -1799,17 +1799,19 @@ it.  For example:
 * A DHCP pool, a VLAN interface or an account the target has no
   form for.  Where the target writes a line for it under `review:`,
   search the output for `review:`.
-* `Review: <place> -- <why>.`: a value that holds white space or a
-  quote, which the target does not read as one value.  The warning
-  restates the review line of the output; the sections on
+* `Review: <place> -- <why>.`: a line of the output under `review:`,
+  for something the target left out or wrote otherwise -- a value
+  that holds white space or a quote, which the target does not read
+  as one value; a VRRP group of a protocol the target does not run; a
+  VLAN FortiOS can give no parent.  The warning restates the review
+  line of the output; for a value, the sections on
   ["review: a value of it holds white space or a quote"](#review-a-value-of-it-holds-white-space-or-a-quote)
   and after it say what each means.
 
 Do on the device what each warning says was not done.  A `review:`
-line with no warning beside it -- one that is not about a credential
-or a value the target does not read as one, such as a VLAN FortiOS
-can give no parent -- does not make the job `partial` yet, so search
-a `completed` output for `review:` too.  See
+line that writes what the source had -- asking for a check on the
+device, or saying what its own form refuses when the record is edited
+there -- has no warning and does not make the job `partial`.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § D.
 
 ### The job says `refused:` — "my config was refused"

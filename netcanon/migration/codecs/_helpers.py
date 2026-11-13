@@ -24,6 +24,7 @@ from bisect import bisect_left
 from collections.abc import Callable, Hashable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar
 
+from .._said import review_line
 from .._tier3_detection import left_out_rows
 from ..canonical.transforms import is_every_vlan
 from ..canonical.transforms import trunk_untagged_vlan as trunk_untagged_vlan
@@ -2337,7 +2338,8 @@ def no_vtep_source(indent: str, line: str) -> str:
     Returns:
         ``<indent>! <line> -- review: ...``, a comment on the target.
     """
-    return (
-        f"{indent}! {line} -- review: no source interface of this VTEP "
-        "is known, so none is written; give it one"
+    return f"{indent}! " + review_line(
+        line,
+        "no source interface of this VTEP is known, so none is written; "
+        "give it one",
     )

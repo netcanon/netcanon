@@ -59,6 +59,7 @@ from ..._radius_secrets import (
     radius_secret_is_migratable,
     unwrap_native_secret,
 )
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -86,9 +87,10 @@ from .port_names import is_factory_port_name
 # ---------------------------------------------------------------------------
 
 #: Above a VLAN interface whose own description holds the one label
-#: RouterOS has, the label the source gives the VLAN.
+#: RouterOS has, the label the source gives the VLAN (the words after
+#: ``# review:``).
 _LABEL_NOT_WRITTEN_REVIEW = (
-    "# review: VLAN {vid} is called {label} in the source; RouterOS "
+    "VLAN {vid} is called {label} in the source; RouterOS "
     "has one label for a VLAN interface, its comment, which holds the "
     "description the source gives the interface -- choose which to keep"
 )
@@ -712,11 +714,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 port = iface.vlan_parent or _port_of_unit(iface.name)
                 parent = port or vlan_parent_name
                 if port is None:
-                    lines.append(
-                        f"# review: {iface.name} is a routed sub-interface "
-                        f"(tag {vid}) whose name gives no port; it is "
-                        f"written on {parent} -- move it to its port"
-                    )
+                    lines.append("# review: " + review(
+                        f"{iface.name} is a routed sub-interface (tag {vid}) "
+                        f"whose name gives no port; it is written on "
+                        f"{parent} -- move it to its port"
+                    ))
                 if iface.dot1q_inner_vlan is not None:
                     outer = outer_of.get((parent, vid))
                     if outer is None:
@@ -747,7 +749,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 label if label != iface.name else ""
             )
             if iface.description and label and label != iface.description:
-                lines.append(_LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label))
+                lines.append("# review: " + review(
+                    _LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label),
+                    f"interface {iface.name}",
+                ))
             parts = ["add"]
             if comment:
                 parts.append(f'comment="{_escape(comment)}"')
@@ -886,11 +891,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # route of one is left out and said.  Written as an
                 # ``add``, it was a route of the main table, routing
                 # traffic the source routed in another.
-                lines.append(
-                    f"# review: static route {route.destination} is in "
-                    f"VRF {route.vrf}, and the output puts nothing in a "
-                    f"VRF; not written"
-                )
+                lines.append("# review: " + review(
+                    f"static route {route.destination} is in VRF "
+                    f"{route.vrf}, and the output puts nothing in a VRF; "
+                    f"not written"
+                ))
                 continue
             parts = ["add"]
             if route.description:
@@ -1428,11 +1433,11 @@ def _render_vrrp(
                 # HSRP / CARP / anycast — surface review comment and
                 # skip; RouterOS has no native equivalent for any of
                 # those wire protocols.
-                vrrp_lines.append(
-                    f"# review: vrrp_groups[{group.group_id}] on "
-                    f"{iface.name!r} has mode={group.mode!r} "
-                    f"which RouterOS does not natively support"
-                )
+                vrrp_lines.append("# review: " + review(
+                    f"vrrp_groups[{group.group_id}] on {iface.name!r} has "
+                    f"mode={group.mode!r} which RouterOS does not natively "
+                    f"support"
+                ))
                 continue
             pseudo_name = f"vrrp{group.group_id}"
             parts = [

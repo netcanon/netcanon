@@ -80,6 +80,7 @@ from ..._derived_values import (
 )
 from ..._one_value import ADDRESSES, one_value_tree
 from ..._roles import own_role
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -594,10 +595,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"family inet6 dhcpv6-client"
                 )
             elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
-                out.append(
-                    f"# review: dhcp_client_v6={iface.dhcp_client_v6} "
-                    f"has no Junos equivalent on {parent}.{unit_num}"
-                )
+                out.append("# review: " + review(
+                    f"dhcp_client_v6={iface.dhcp_client_v6} has no Junos "
+                    f"equivalent on {parent}.{unit_num}"
+                ))
             if not sub_has_renderable:
                 if iface_is_vrf_bound.get(name, False):
                     out.append(
@@ -705,10 +706,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"set interfaces {name} unit 0 family inet6 dhcpv6-client"
             )
         elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
-            out.append(
-                f"# review: dhcp_client_v6={iface.dhcp_client_v6} "
-                f"has no Junos equivalent on {name}"
-            )
+            out.append("# review: " + review(
+                f"dhcp_client_v6={iface.dhcp_client_v6} has no Junos "
+                f"equivalent on {name}"
+            ))
 
         # --- L2 switchport emission (Phase 4 rank-4) ---
         #
@@ -954,12 +955,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     for vlan in tree.vlans:
         vlan_key = _vlan_key(vlan)
         if vlan.name and vlan_key != vlan.name:
-            out.append(
-                f"# review: VLAN {vlan.id} is named {vlan.name!r} in the "
-                f"source; a Junos member list reads that as "
+            out.append("# review: " + review(
+                f"VLAN {vlan.id} is named {vlan.name!r} in the source; a "
+                f"Junos member list reads that as "
                 f"{'every VLAN' if vlan.name == 'all' else 'VLAN ids'}, "
                 f"so it is {vlan_key} here"
-            )
+            ))
         out.append(
             f"set vlans {_quote_if_needed(vlan_key)} vlan-id {vlan.id}"
         )
@@ -1083,6 +1084,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     "# " + derived_review_comment(
                         "route-distinguisher", "Junos",
+                        where=f"routing-instances {ri.name}",
                     )
                 )
             else:
@@ -1126,6 +1128,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(
                         "# " + derived_review_comment(
                             "route-target import", "Junos",
+                            where=f"routing-instances {ri.name}",
                         )
                     )
                     continue
@@ -1138,6 +1141,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(
                         "# " + derived_review_comment(
                             "route-target export", "Junos",
+                            where=f"routing-instances {ri.name}",
                         )
                     )
                     continue

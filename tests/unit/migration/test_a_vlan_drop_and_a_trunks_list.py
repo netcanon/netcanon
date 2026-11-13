@@ -107,6 +107,24 @@ assert SOURCE not in AOSS_WRITES_NO_PORT_OF       # AOS-S has names for this sou
 
 _NOW_NONE = "the trunk now allows no VLAN"
 
+#: The target that cannot be told "none": AOS-CX writes no allowed line
+#: under a review line, which holds the job `partial` (`_said.review`).
+_CANNOT_BE_TOLD_NONE = frozenset({"aruba_aoscx"})
+_NO_FORM_FOR_NONE = "the source trunk allows no VLAN"
+_NO_WORD_FOR_ALL = "the source trunk allows every VLAN"
+
+
+def _held_for(job, words: str | None) -> MigrationJobStatus:
+    """The status of a job whose one loss, if *words* is given, is the
+    review line that holds those words: ``partial``, with its warning;
+    ``completed`` otherwise."""
+    said = [str(text) for text in job.warnings if str(text).startswith("Review:")]
+    if words is None:
+        assert said == [], said
+        return MigrationJobStatus.completed
+    assert len(said) == 1 and words in said[0], said
+    return MigrationJobStatus.partial
+
 #: The access port's VLAN, which no case drops or renumbers.
 _ACCESS = 20
 
@@ -219,8 +237,10 @@ def test_the_job_says_a_trunk_was_emptied(title: str, target: str) -> None:
     assert len(said) == 1, (title, target, job.warnings)
     assert said[0].startswith("vlan_rename: interface '"), said
     assert f"is a trunk that {warning} — {_NOW_NONE}" in said[0], said
-    # As for a port detached by a drop, the job is not failed by it.
-    assert job.status == MigrationJobStatus.completed, (title, target, job.status)
+    # As for a port detached by a drop, the job is not failed by it; on a
+    # target that cannot be told "none" it is `partial` for that line.
+    words = _NO_FORM_FOR_NONE if target in _CANNOT_BE_TOLD_NONE else None
+    assert job.status == _held_for(job, words), (title, target, job.status)
 
 
 # ---------------------------------------------------------------------------
@@ -1150,7 +1170,10 @@ def test_the_job_says_what_a_dropped_native_vlan_leaves(
     job, final = _job_of(SOURCE, _source(*trunk), _TRUNK, target, {vid: None})
     want = _DROPPED.format(port=final, vid=vid) + (_STILL_HELD.format(vid=vid) if every else "")
     assert [str(text) for text in job.warnings if _CLEARED in str(text)] == [want], job.warnings
-    assert job.status == MigrationJobStatus.completed, (target, job.status)
+    # A trunk of every VLAN, onto a target that cannot be told so, is
+    # `partial` for the review line beside it.
+    words = _NO_WORD_FOR_ALL if every and target in CANNOT_BE_TOLD_ALL else None
+    assert job.status == _held_for(job, words), (target, job.status)
     if every and vid == 1 and target in HAVE_A_DEFAULT:
         # What the warning is for.  The output's trunk is a trunk of
         # every VLAN (no allowed line; on AOS-CX `vlan trunk allowed

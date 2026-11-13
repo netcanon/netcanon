@@ -41,6 +41,7 @@ import re
 
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -328,10 +329,12 @@ def _distance_review_lines(routes: list) -> list[str]:
     the mode it is in.
     """
     return [
-        f"! review: static route {route.destination}"
-        f"{' vrf ' + route.vrf if route.vrf else ''} has administrative "
-        f"distance {route.metric} in the source; IOS XR takes 1 to "
-        f"{_MOST_DISTANCE}, and it is written with {_MOST_DISTANCE}"
+        "! review: " + review(
+            f"static route {route.destination}"
+            f"{' vrf ' + route.vrf if route.vrf else ''} has administrative "
+            f"distance {route.metric} in the source; IOS XR takes 1 to "
+            f"{_MOST_DISTANCE}, and it is written with {_MOST_DISTANCE}"
+        )
         for route in routes
         if route.metric > _MOST_DISTANCE
     ]
