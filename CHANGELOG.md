@@ -1401,6 +1401,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A VyOS set-form paste is detected as VyOS from its interface
+  names.**  VyOS names an interface by its type and a number (vyos-1x:
+  `bond[0-9]+`, `tun[0-9]+`, `wg[0-9]+`; an ethernet port also
+  `lan0` or `eno`/`ens`/`enp`/`enx` and more).  The VyOS probe's
+  marker for such a name put a word boundary straight after the
+  type's prefix (`eth`), which stands before no `eth0`, so of all
+  VyOS's names it held for `lo` alone; and the Junos probe counted
+  any name that begins `et`, `ge` or `lo` as a Junos port, so
+  `ethernet eth0`, `geneve gnv0` and `loopback lo` were Junos ports
+  to it.  A paste of VyOS interfaces, `protocols bgp` and a host name
+  was offered as Junos, which reads it as one interface called
+  `ethernet`.  The VyOS marker now takes the name with its number,
+  and the Junos one a port with its dash or its number (`ge-0/0/0`,
+  `ae0`, `lo0`).  No committed input is detected otherwise.
+
 - **A Junos VRRP group is written under one address of its unit.**
   Junos configures `vrrp-group` under a `family inet address`
   (Juniper, "Configuring Basic VRRP Support"), and the tree keeps a

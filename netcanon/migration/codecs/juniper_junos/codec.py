@@ -581,7 +581,8 @@ class JunosCodec(CodecBase):
         Signals:
           * ``set version <X>`` banner on the first non-comment line.
           * ``set system host-name`` — universal Junos line shape.
-          * ``set interfaces <media>-<fpc>/<pic>/<port>`` —
+          * ``set interfaces <media>-<fpc>/<pic>/<port>`` (or a type
+            and its number: ``em0``, ``ae1``, ``lo0``; or ``irb``) —
             Junos-specific port naming.
           * The hierarchical form of ``show configuration``: its
             ``## Last commit:`` line with a second sign of Junos
@@ -623,8 +624,12 @@ class JunosCodec(CodecBase):
             raw_prefix, re.MULTILINE,
         ):
             hits += 1
+        # A Junos port is named by its media and a dash (``ge-0/0/0``),
+        # or by its type and a number (``em0``, ``ae1``, ``lo0``).  The
+        # bare prefix counted VyOS's ``ethernet eth0``, ``loopback lo``
+        # and ``geneve gnv0`` as Junos ports.
         if re.search(
-            r"^set interfaces (?:ge|xe|et|fe|em|me|fxp|ae|lo|irb)",
+            r"^set interfaces (?:ge-|xe-|et-|fe-|em\d|me\d|fxp\d|ae\d|lo\d|irb\b)",
             raw_prefix, re.MULTILINE,
         ):
             hits += 1

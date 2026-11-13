@@ -814,9 +814,10 @@ class VyOSCodec(CodecBase):
         curly capture; VyOS uses bare newlines).
 
         **Set-form** (``set `` lines).  Claimed only when a Junos-disjoint
-        VyOS marker is present (Linux ``ethernet ethN`` / ``bonding bondN``
-        / ``vxlan`` netdev names, top-level ``set service``, ``set
-        protocols static route``, or ``set vrf name``).  Junos-defining
+        VyOS marker is present (an interface of VyOS's own name, as
+        ``ethernet eth0``, ``bonding bond0`` or ``loopback lo``; a
+        top-level ``set service``, ``set protocols static route``, or
+        ``set vrf name``).  Junos-defining
         markers (``set version``, ``ge-/xe-/…`` interface names,
         ``routing-options`` / ``routing-instances`` / ``set snmp`` / ``set
         vlans``) veto the match so the ``juniper_junos`` codec keeps its
@@ -891,10 +892,18 @@ class VyOSCodec(CodecBase):
                 return None
 
         markers = strong = 0
+        # A VyOS interface is named by its type and a number (vyos-1x
+        # ``interface-definitions``: ``bond[0-9]+``, ``tun[0-9]+``,
+        # ``wg[0-9]+``), an ethernet port also ``lan[0-9]+`` or
+        # ``eno``/``ens``/``enp``/``enx`` and more, and the loopback is
+        # ``lo``.  The number is part of the name: a word boundary
+        # straight after ``eth`` stands before no ``eth0``, and with one
+        # there this marker held for ``lo`` alone, so a paste of VyOS
+        # interfaces went to Junos.
         if re.search(
-            r"^set interfaces (?:ethernet eth|bonding bond|dummy dum|"
-            r"loopback lo|vxlan vxlan|bridge br|wireguard wg|tunnel tun|"
-            r"pppoe pppoe|geneve gnv)\b",
+            r"^set interfaces (?:ethernet (?:(?:eth|lan)\d+\b|en[ospx]\S)|"
+            r"(?:bonding bond|dummy dum|vxlan vxlan|bridge br|wireguard wg|"
+            r"tunnel tun|pppoe pppoe|geneve gnv)\d+\b|loopback lo\b)",
             raw_prefix, re.MULTILINE,
         ):
             markers += 1
