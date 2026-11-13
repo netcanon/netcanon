@@ -151,7 +151,7 @@ from ..migration._one_line import (
     secrets_left_out,
     text_only_each,
 )
-from ..migration._tier3_detection import is_left_out_row
+from ..migration._tier3_detection import is_left_out_row, is_no_command_row
 from ..migration._vlan_labels import vlan_labels_as_names
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..migration.limits import LimitExceeded
@@ -213,7 +213,9 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         Junos parser names a deactivated path whether or not any handler
         would have read a line under it, so ``hello world`` / ``set foo
         bar`` / ``deactivate foo`` had a row and was ``completed`` with
-        nothing in it.
+        nothing in it.  Nor is the row that counts lines that begin with
+        no command the parser knows (``_tier3_detection.is_no_command_row``,
+        the OS10 parser's): any text that is not a config gives it.
 
     Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
     exemption so the backend signal is at least as precise as the banner.
@@ -232,7 +234,10 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         return False
     if not (raw_text or "").strip():
         return False
-    if not all(is_left_out_row(label) for label in job.dropped_tier3_sections):
+    if not all(
+        is_left_out_row(label) or is_no_command_row(label)
+        for label in job.dropped_tier3_sections
+    ):
         return False
     report = job.validation
     if report is None:

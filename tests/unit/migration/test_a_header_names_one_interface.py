@@ -557,13 +557,15 @@ def _check_an_indented_range_is_a_row() -> None:
 
 def _check_a_track_line_stays() -> None:
     """Only a range header is moved to the left: the ``track`` line is
-    no stanza and no row, and the port it names keeps its record."""
+    no stanza taken out, and the port it names keeps its record.  The
+    ``track`` object is translated by nothing, and is a row of its
+    own (``codecs/dell_os10/test_what_no_reader_takes.py``)."""
     tree = get_codec("dell_os10").parse(_OS10_TRACK)
     assert [
         (iface.name, [address.ip for address in iface.ipv4_addresses])
         for iface in tree.interfaces
     ] == [("ethernet1/1/1", ["10.1.0.1"])]
-    assert tree.dropped_tier3_sections == []
+    assert tree.dropped_tier3_sections == ["track"]
 
 
 #: An ``interface range`` line of a text, read by the test.

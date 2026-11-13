@@ -15,8 +15,11 @@ Phase 1 surface (see ``docs/vendor-research/dell_os10/30-codec-plan.md``
 § 8): hostname, ``! Version`` banner, interfaces (description / admin
 state / mtu / IPv4 + IPv6 CIDR / ``ip vrf forwarding`` / L2 switchport /
 ``channel-group``), VLANs (SVI-derived + switchport projection), LAGs,
-top-level VRF declarations, and static routes.  SNMP, local users and
-VRRP are Phase 3 and are deliberately NOT parsed here.
+top-level VRF declarations, and static routes; SNMP (communities,
+location, contact, trap hosts, v3 users), local users and VRRP groups
+were added after it.  A line in column 0 that none of these readers
+takes is a row of ``dropped_tier3_sections``
+(:func:`_rows_for_what_no_reader_takes`).
 
 Grammar notes — every one of these was MEASURED across the 14 OS10
 captures held OUT-OF-TREE at ``local/dell-os10/configs/`` (gitignored —
@@ -116,6 +119,12 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._tier3_detection import (
+    LEFT_OUT_ROWS_SHOWN,
+    _shown_label,
+    is_a_dellos10_section_line,
+    no_command_row,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -139,6 +148,7 @@ from .._helpers import (
     address_key,
     keyword_stanza_rows,
     mtu_read,
+    one_interface_named,
     spaced_port_name,
     trunk_list_read,
     without_stanzas_of_no_one_interface,
@@ -693,6 +703,178 @@ def _refuse_a_flat_text(raw: str) -> None:
         )
 
 
+#: ``ip vrf default`` names the global table, which every target has: it
+#: states nothing to translate (no committed input has anything under
+#: it), and :data:`_VRF_DECL_RE` makes no VRF of it.
+_GLOBAL_TABLE_RE = re.compile(r"^ip[ \t]+vrf[ \t]+default[ \t]*$", re.IGNORECASE)
+
+#: The lines in column 0 a reader of this module takes, by the pattern
+#: each reader matches.  A line none of them matches is translated by
+#: nothing (:func:`_rows_for_what_no_reader_takes`).  A reader that is
+#: added to the parse is added here, and the other way round.  An
+#: ``interface`` header is not here: it is a record or a row of its own
+#: (:func:`_an_interface_header_is_said`).
+_TOP_LEVEL_READERS: tuple[re.Pattern[str], ...] = (
+    _HOSTNAME_RE,
+    _VRF_DECL_RE,
+    _GLOBAL_TABLE_RE,
+    _IP_ROUTE_RE,
+    _IPV6_ROUTE_RE,
+    _MGMT_ROUTE_RE,
+    _USERNAME_RE,
+    _SNMP_COMMUNITY_RE,
+    _SNMP_LOCATION_RE,
+    _SNMP_CONTACT_RE,
+    _SNMP_HOST_RE,
+    _SNMP_V3_USER_RE,
+)
+
+#: Words of a session, not of the configuration: a pasted ``configure
+#: terminal``, ``end`` or ``write memory`` holds nothing to translate.
+_SESSION_WORDS = frozenset({"configure", "end", "exit", "write"})
+
+#: The words OS10 configurations begin a line in column 0 with, which a
+#: row may show: a line that begins with another word is said all the
+#: same, in a row that counts such lines and shows none of their text
+#: (:func:`_rows_for_what_no_reader_takes`).  A word missing here costs
+#: a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "alias", "banner", "bfd", "boot", "class-map", "clock",
+    "control-plane", "crypto", "dcbx", "default", "dot1x", "enable",
+    "errdisable", "evpn", "exec-timeout", "hardware", "hash-algorithm",
+    "hostname",
+    "interface", "ip", "ipv6", "iscsi", "line", "lldp", "load-balancing",
+    "logging", "login", "mac", "management", "monitor", "nve", "ntp",
+    "object-group", "password-attributes", "policy-map", "port-group",
+    "qos-map", "radius-server", "rest", "route-map", "router",
+    "scale-profile", "service", "sflow", "snmp-server", "spanning-tree",
+    "support-assist", "system", "system-user", "tacacs-server",
+    "telemetry", "track", "trust", "uplink-state-group", "username",
+    "userrole", "virtual-network", "vlt-domain", "vrrp", "wred", "ztd",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``ntp server``, ``logging server``, ``clock
+#: timezone``, ``snmp-server enable``).  After any other the second word
+#: is often a name the operator chose, which a row does not show.
+_FAMILIES = frozenset({
+    "aaa", "banner", "bfd", "boot", "clock", "crypto", "dcbx", "default",
+    "enable", "evpn", "hardware", "interface", "ip", "ipv6", "iscsi",
+    "line", "lldp", "logging", "login", "mac", "management", "monitor",
+    "ntp", "password-attributes", "radius-server", "rest", "router",
+    "service", "snmp-server", "spanning-tree", "system", "tacacs-server",
+})
+
+#: A word that says which command of a family a line is: no digit, dot
+#: or slash, which a value (an address, a number, a time zone) has, and
+#: no longer than a command word.
+_A_SUB_COMMAND_RE = re.compile(r"[a-z][a-z-]{0,63}\Z")
+
+
+def _an_interface_header_is_said(line: str) -> bool:
+    """Whether the ``interface`` header *line* is a record
+    (:data:`_IFACE_RE`) or the header of a stanza that is taken out and
+    has a row of its own (:func:`_without_headers_of_no_one_interface`:
+    one that names no one interface)."""
+    return bool(_IFACE_RE.match(line)) or (
+        len(line.split(None, 2)) > 1 and not one_interface_named(line)
+    )
+
+
+def _command_label(words: list[str]) -> str:
+    """The row for a line in column 0 whose first words are *words*: its
+    command word, and after a word of :data:`_FAMILIES` the word that
+    says which of its commands it is; after ``no``, the same of the
+    command it takes back.  Empty where the command word is not one of
+    :data:`_COMMAND_WORDS`.  Never a value: cut after a word that names
+    a secret, as every row is (``_tier3_detection._shown_label``)."""
+    shown: list[str] = []
+    if words and words[0].lower() == "no":
+        shown.append("no")
+        words = words[1:]
+    if not words or words[0].lower() not in _COMMAND_WORDS:
+        return ""
+    shown.append(words[0].lower())
+    if (
+        shown[-1] in _FAMILIES
+        and len(words) > 1
+        and _A_SUB_COMMAND_RE.match(words[1].lower())
+    ):
+        shown.append(words[1].lower())
+    return _shown_label(" ".join(shown))
+
+
+def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that no reader takes
+    (:data:`_TOP_LEVEL_READERS`, :func:`_an_interface_header_is_said`),
+    that no Tier-3 pattern gives a row of its own
+    (``_tier3_detection.is_a_dellos10_section_line``) and that is
+    not a word of a session (:data:`_SESSION_WORDS`) is in no output,
+    and a row says so.  It is a row of its command word
+    (:func:`_command_label`), one for each kind of line, past
+    ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one that counts
+    the rest; a line that begins with a word OS10 configurations are
+    not seen to begin with is counted in one row, with the number of
+    the first such line and nothing of its text
+    (``_tier3_detection.no_command_row``), which is no sign that the
+    text was a config.  A line that does not begin with a letter is
+    no command, and is not counted.
+
+    Up to 0.7.7 only the kinds a pattern named had a row, and an OS10
+    config's NTP and syslog servers, its DNS, its time zone, its
+    spanning tree, its DCBX and LLDP settings and its VXLAN overlay
+    (``nve``, ``virtual-network``) were in no output and no row, in
+    jobs that said ``completed``.  So every line is asked, not a list
+    of kinds: a list says nothing of a kind nobody put on it.  Not
+    reached: a line of a stanza (indented) that the stanza's reader
+    does not take.
+
+    Args:
+        raw: The text the readers are given, before any stanza is
+            taken out of it, so that a line has the number it has in
+            the text that was pasted.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    rows: dict[str, None] = {}
+    unknown = 0
+    first_unknown = 0
+    for number, line in enumerate(ticked(raw.splitlines()), start=1):
+        if not line[:1].isalpha():
+            continue
+        words = line.split(None, 3)
+        head = words[0].lower()
+        if head in _SESSION_WORDS:
+            continue
+        if head == "interface" and _an_interface_header_is_said(line):
+            continue
+        if any(reader.match(line) for reader in _TOP_LEVEL_READERS):
+            continue
+        if is_a_dellos10_section_line(line):
+            continue
+        label = _command_label(words)
+        if label:
+            rows[label] = None
+            continue
+        unknown += 1
+        first_unknown = first_unknown or number
+    shown = list(rows)
+    if len(shown) > LEFT_OUT_ROWS_SHOWN:
+        unlisted = len(shown) - LEFT_OUT_ROWS_SHOWN
+        shown[LEFT_OUT_ROWS_SHOWN:] = [
+            f"({unlisted} more kinds of top-level command not read; not listed)"
+        ]
+    if unknown:
+        shown.append(no_command_row(unknown, first_unknown))
+    return shown
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse Dell OS10 ``show running-configuration`` output into a
     :class:`CanonicalIntent`.
@@ -729,6 +911,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_format="cli-dellos10",
     )
 
+    # A line in column 0 that no reader below takes is a row, after
+    # the others; counted here, where every line has its number.
+    unread = _rows_for_what_no_reader_takes(raw)
+
     # A header that names no one interface (``interface range ...``,
     # ``interface breakout ...``, a range where a name goes) has its
     # stanza taken out of the text every reader below is given, and
@@ -743,6 +929,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.lags = _parse_lags(raw)
     intent.local_users = _parse_local_users(raw)
     intent.snmp = _parse_snmp(raw)
+    intent.dropped_tier3_sections += unread
 
     # OS10 has no top-level ``vlan <id>`` stanza, so every VLAN record is
     # derived — from an SVI, or from per-port switchport membership.

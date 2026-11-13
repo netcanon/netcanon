@@ -1401,6 +1401,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An OS10 line that nothing translates is said.**  The OS10
+  parser reads a hostname, VRFs, interfaces, static routes, LAGs,
+  local users and SNMP, and the Tier-3 detector names routing
+  protocols, ACLs, QoS and VLT; every other line in column 0 was
+  in no output and no row -- an OS10 config's NTP and syslog
+  servers, its DNS servers, its time zone, its spanning tree, its
+  DCBX and LLDP settings and its VXLAN overlay (`nve`,
+  `virtual-network`), in jobs that said `completed`, while the
+  vendor page said the loss was reported.  Now each kind of such
+  line is a row of `dropped_tier3_sections`: its command word, and
+  the word after it where that says which command it is (`ntp
+  server`, `logging console`), never a value.  A line that begins
+  with a word OS10 configurations are not seen to begin with is
+  counted in one row that shows none of its text.  An indented
+  line of a stanza that the stanza's reader does not take still
+  has no row.  The committed OS10 inputs gain rows; no output
+  moves.
+
 - **A RouterOS route with a list of gateways is a route for each
   gateway.**  `gateway=ether1,ether2` -- ECMP on RouterOS -- was one
   route whose next hop was the list as written: onto another vendor

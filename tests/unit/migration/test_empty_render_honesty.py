@@ -108,6 +108,21 @@ class TestInputNotRecognizedHelper:
             "real", CanonicalIntent(), self._job(tier3=["firewall"])
         )
 
+    def test_a_row_of_lines_of_no_command_is_no_sign(self):
+        # The OS10 parser counts the lines that begin with no command it
+        # knows in one row, which any text that is not a config gives.
+        assert _input_not_recognized(
+            "lorem ipsum", CanonicalIntent(),
+            self._job(tier3=[
+                "a line in column 0 that begins with no command this "
+                "parser knows (line 1)",
+            ]),
+        )
+        assert not _input_not_recognized(
+            "lorem ipsum", CanonicalIntent(),
+            self._job(tier3=["ntp server"]),
+        )
+
     def test_non_canonical_tree_is_not_flagged(self):
         # mock / stub dict tree -> not a real parse, exempt.
         assert not _input_not_recognized("real", {"a": "b"}, self._job())

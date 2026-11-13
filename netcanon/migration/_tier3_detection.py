@@ -330,12 +330,14 @@ _OPNSENSE_TIER3_HEADERS: tuple[str, ...] = (
 
 
 # Dell SmartFabric OS10 shape — `show running-configuration` headers for
-# the sections the OS10 codec does NOT consume.  Excludes `interface`,
-# `hostname`, `ip vrf`, `ip route` / `management route` (parsed), and the
-# deferred VXLAN blocks (`nve` / `virtual-network`), which have a planned
-# canonical surface — flagging those as Tier-3 would mislead, and their
-# drop is already declared in the capability matrix (the same line the
-# AOS-CX header set draws).
+# the sections the OS10 codec does NOT consume, each with a row of its
+# own.  Excludes `interface`, `hostname`, `ip vrf`, `ip route` /
+# `management route` (parsed).  These are not all there is: the OS10
+# parser gives a row to each kind of line in column 0 that no reader
+# takes and no pattern here names (`nve`, `virtual-network`, `ntp
+# server` and the like; `dell_os10.parse._rows_for_what_no_reader_takes`).
+# The capability matrix does not say those: it is asked of a field of
+# the tree, and the parser puts nothing there.
 #
 # `interface breakout` is matched WITHOUT its port/profile tail on
 # purpose: a 32-port switch carries 32 distinct breakout lines, and
@@ -447,6 +449,49 @@ def detect_tier3_sections_aoscx(raw: str) -> list[str]:
 def detect_tier3_sections_dellos10(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Dell SmartFabric OS10 CLI text."""
     return _detect_regex(raw, _DELLOS10_TIER3_HEADERS)
+
+
+def no_command_row(count: int, first: int) -> str:
+    """The row that counts the *count* lines in column 0 of a text
+    that begin with no command its parser knows, the first of them
+    line *first*.  It shows none of their text: such a line can be
+    anything that was pasted.  And any text that is not a config gives
+    it, so it is no sign that the text was one
+    (:func:`is_no_command_row`)."""
+    if count == 1:
+        return (
+            "a line in column 0 that begins with no command this parser "
+            f"knows (line {first})"
+        )
+    return (
+        f"{count} lines in column 0 that begin with no command this "
+        f"parser knows (the first is line {first})"
+    )
+
+
+_NO_COMMAND_ROW = re.compile(
+    r"(?:a line|[1-9][0-9]* lines) in column 0 that begins? with no command "
+    r"this parser knows \((?:the first is )?line [1-9][0-9]*\)\Z"
+)
+
+
+def is_no_command_row(label: str) -> bool:
+    """Whether *label* is a row made by :func:`no_command_row`.
+
+    A reader of ``dropped_tier3_sections`` that takes a row for a sign
+    that the parser recognised something has to ask this, as it asks
+    :func:`is_left_out_row`: ``lorem ipsum`` given to the OS10 parser
+    is such a row and nothing else."""
+    return bool(_NO_COMMAND_ROW.match(label))
+
+
+def is_a_dellos10_section_line(line: str) -> bool:
+    """Whether a pattern of :func:`detect_tier3_sections_dellos10`
+    takes the one line *line*, which then has a row of its own: what
+    the OS10 parser asks of every line in column 0 it does not read
+    (``dell_os10.parse._rows_for_what_no_reader_takes``), a quarter
+    of the time a call of the detector for each line took."""
+    return any(pattern.match(line) for pattern in _DELLOS10_TIER3_HEADERS)
 
 
 def detect_tier3_sections_vyos(raw: str) -> list[str]:

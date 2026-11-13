@@ -1090,8 +1090,12 @@ class CanonicalIntent(BaseModel):
             section of its own (an ``interface range`` or
             ``interface breakout`` header in a text read as IOS-XE
             or IOS XR, an OPNsense ``<dhcpd>`` zone that has no
-            device); the codec's ``parse()`` puts a parser's rows
-            after the detector's.
+            device, each kind of OS10 line in column 0 that no
+            reader takes); the codec's ``parse()`` puts a parser's
+            rows after the detector's.  The OS10 row that counts
+            lines of no command the parser knows is no sign that
+            the text was a config, and is told apart with
+            ``is_no_command_row``.
         source_vendor: ``vendor_id`` of the codec that produced this
             tree (metadata, populated by parse).
         source_format: ``input_format`` of the source codec

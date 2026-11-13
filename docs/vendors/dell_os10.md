@@ -158,10 +158,24 @@ have -- in jobs that said `completed`.
 
 ## What we don't do
 
-Declared `unsupported` — the loss is reported, never silent:
+Declared `unsupported`, or translated by nothing — the loss is
+reported, never silent.  Every line in column 0 that no reader of
+the parser takes and no Tier-3 pattern names is a row of the job's
+Tier-3 list: its command word, and the word after it where that
+says which command it is (`ntp server`, `logging console`), never a
+value; one row a kind, however many lines it has.  A line that
+begins with a word OS10 configurations are not seen to begin with
+is counted in one row that shows none of its text.  Until
+2026-11-12 only the kinds below that a pattern names had a row, and
+the rest -- the VXLAN overlay and the management-plane scalars
+among them -- were in no output and no row, in jobs that said
+`completed`.  Not reached: an indented line of a stanza the parser
+reads (an interface's `spanning-tree` or `lldp` lines, say) that
+the stanza's reader does not take has no row.
 
 - **VXLAN / EVPN.**  OS10 reaches an overlay through a
   `virtual-network <vnid>` indirection that is deferred past v1.
+  The `nve` and `virtual-network` blocks are a row each.
 - **BGP / OSPF / IS-IS**, ACLs, QoS/DCB, NAT and firewall surfaces —
   [Tier 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered),
   captured for the dropped-Tier-3 banner and never auto-rendered.
@@ -182,7 +196,8 @@ Declared `unsupported` — the loss is reported, never silent:
   either.  Arista's MLAG is the same story — see
   [`arista_eos.md`](arista_eos.md).
 - Management-plane scalars: `ip domain-name`, `ip name-server`,
-  `ntp server`, `logging server`, DHCP pools and `radius-server`.
+  `ntp server`, `logging server`, `clock timezone`, DHCP pools and
+  `radius-server`, a row for each kind.
 
 ## Lossy paths
 
