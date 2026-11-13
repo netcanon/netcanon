@@ -1012,8 +1012,9 @@ class CanonicalIntent(BaseModel):
             ``juniper_junos`` (``set system syslog host <ip>``),
             ``cisco_iosxe_cli`` and ``arista_eos`` (``logging host <ip>``,
             promotions #1/#11), ``cisco_nxos`` (``logging server <ip>``,
-            #4) and ``cisco_iosxr`` (bare ``logging <ip>``, #13).  The other
-            seven codecs all declare it ``unsupported`` and surface the
+            #4), ``cisco_iosxr`` (bare ``logging <ip>``, #13) and
+            ``dell_os10`` (bare ``logging server <host>``).  The other
+            codecs all declare it ``unsupported`` and surface the
             cross-vendor banner on a source-side value (there is no
             implicit-drop "rest" — every codec declares this path).  Not yet a
             universal round-trip guarantee — see docs/CAPABILITIES.md.

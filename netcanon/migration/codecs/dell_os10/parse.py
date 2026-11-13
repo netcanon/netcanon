@@ -16,8 +16,11 @@ Phase 1 surface (see ``docs/vendor-research/dell_os10/30-codec-plan.md``
 state / mtu / IPv4 + IPv6 CIDR / ``ip vrf forwarding`` / L2 switchport /
 ``channel-group``), VLANs (SVI-derived + switchport projection), LAGs,
 top-level VRF declarations, and static routes; SNMP (communities,
-location, contact, trap hosts, v3 users), local users and VRRP groups
-were added after it.  A line in column 0 that none of these readers
+location, contact, trap hosts, v3 users), local users, VRRP groups
+and the management plane (``ip domain-name``, ``ip name-server``,
+``ntp server`` and ``logging server``, each in its bare form: see
+:func:`_parse_management_plane`) were added after it.  A line in
+column 0 that none of these readers
 takes is a row of ``dropped_tier3_sections``
 (:func:`_rows_for_what_no_reader_takes`).
 
@@ -708,25 +711,120 @@ def _refuse_a_flat_text(raw: str) -> None:
 #: it), and :data:`_VRF_DECL_RE` makes no VRF of it.
 _GLOBAL_TABLE_RE = re.compile(r"^ip[ \t]+vrf[ \t]+default[ \t]*$", re.IGNORECASE)
 
-#: The lines in column 0 a reader of this module takes, by the pattern
-#: each reader matches.  A line none of them matches is translated by
-#: nothing (:func:`_rows_for_what_no_reader_takes`).  A reader that is
-#: added to the parse is added here, and the other way round.  An
-#: ``interface`` header is not here: it is a record or a row of its own
+#: The management plane, in the forms Dell's User Guide gives (10.4.1.0,
+#: the command reference of each: ``ip domain-name``, ``ip
+#: name-server``, ``ntp server``, ``logging server``) and the committed
+#: inputs print: ``ip domain-name <name>``, ``ip name-server <ip> [<ip>
+#: ...]``, ``ntp server <host>`` and ``logging server <host>``, where a
+#: host is ``{hostname | ipv4-address | ipv6-address}`` (:func:`a_host`)
+#: and a name server an address.  Each is read in that bare form only.
+#: A tail says something the tree cannot hold -- a VRF (``ip
+#: name-server vrf <name> <ip>``, ``logging server ... vrf <name>``), an
+#: NTP key or ``prefer``, a syslog transport, port or severity -- and
+#: written without it the server would be another statement, so a line
+#: with one is not read and keeps its row
+#: (:func:`_rows_for_what_no_reader_takes`).  So does a value the form
+#: does not take.
+_DOMAIN_NAME_RE = re.compile(
+    r"^ip[ \t]+domain-name[ \t]+(\S+)[ \t]*$", re.IGNORECASE,
+)
+_NAME_SERVER_RE = re.compile(
+    r"^ip[ \t]+name-server[ \t]+(\S(?:.*\S)?)[ \t]*$", re.IGNORECASE,
+)
+_NTP_SERVER_RE = re.compile(r"^ntp[ \t]+server[ \t]+(\S+)[ \t]*$", re.IGNORECASE)
+_LOGGING_SERVER_RE = re.compile(
+    r"^logging[ \t]+server[ \t]+(\S+)[ \t]*$", re.IGNORECASE,
+)
+
+
+def an_address(value: str) -> bool:
+    """Whether *value* is an IPv4 or IPv6 address, which is what the
+    management-plane forms this codec reads and writes take."""
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def a_domain_name(value: str) -> bool:
+    """Whether *value* is shaped as a domain name: ASCII letters,
+    digits, ``-`` and ``.``, beginning with a letter or a digit, and
+    no longer than the 253 characters a name's text may have (RFC
+    1035).  ``vrf`` alone is the first word of the VRF form."""
+    return (
+        0 < len(value) <= 253
+        and value[0].isascii()
+        and value[0].isalnum()
+        and all(c.isascii() and (c.isalnum() or c in "-.") for c in value)
+        and value.lower() != "vrf"
+    )
+
+
+def a_host(value: str) -> bool:
+    """Whether *value* is what ``ntp server`` and ``logging server``
+    take: Dell's User Guide (10.4.1.0) gives ``{hostname |
+    ipv4-address | ipv6-address}`` for each, and a host name in its
+    examples.  A host name is shaped as a domain name and holds a
+    letter: ``1.2.3`` is neither an address nor a name."""
+    return an_address(value) or (
+        a_domain_name(value) and any(c.isalpha() for c in value)
+    )
+
+
+def _domain_name_of(line: str) -> str:
+    """The domain of an ``ip domain-name <name>`` line, or ``""``."""
+    m = _DOMAIN_NAME_RE.match(line)
+    return m.group(1) if m and a_domain_name(m.group(1)) else ""
+
+
+def _name_servers_of(line: str) -> list[str]:
+    """The resolvers of an ``ip name-server <ip> [<ip> ...]`` line, or
+    ``[]`` where a word of it is not an address (``vrf <name>``)."""
+    m = _NAME_SERVER_RE.match(line)
+    if not m:
+        return []
+    servers = m.group(1).split()
+    return servers if all(an_address(s) for s in ticked(servers)) else []
+
+
+def _ntp_server_of(line: str) -> str:
+    """The server of an ``ntp server <host>`` line, or ``""``."""
+    m = _NTP_SERVER_RE.match(line)
+    return m.group(1) if m and a_host(m.group(1)) else ""
+
+
+def _logging_server_of(line: str) -> str:
+    """The server of a ``logging server <host>`` line, or ``""``."""
+    m = _LOGGING_SERVER_RE.match(line)
+    return m.group(1) if m and a_host(m.group(1)) else ""
+
+
+#: The lines in column 0 a reader of this module takes, by what each
+#: reader asks of a line: a pattern's ``match``, or a function that
+#: gives what the line holds and nothing where it is not read.  A line
+#: none of them takes is translated by nothing
+#: (:func:`_rows_for_what_no_reader_takes`).  A reader that is added to
+#: the parse is added here, and the other way round.  An ``interface``
+#: header is not here: it is a record or a row of its own
 #: (:func:`_an_interface_header_is_said`).
-_TOP_LEVEL_READERS: tuple[re.Pattern[str], ...] = (
-    _HOSTNAME_RE,
-    _VRF_DECL_RE,
-    _GLOBAL_TABLE_RE,
-    _IP_ROUTE_RE,
-    _IPV6_ROUTE_RE,
-    _MGMT_ROUTE_RE,
-    _USERNAME_RE,
-    _SNMP_COMMUNITY_RE,
-    _SNMP_LOCATION_RE,
-    _SNMP_CONTACT_RE,
-    _SNMP_HOST_RE,
-    _SNMP_V3_USER_RE,
+_TOP_LEVEL_READERS: tuple[Callable[[str], object], ...] = (
+    _HOSTNAME_RE.match,
+    _VRF_DECL_RE.match,
+    _GLOBAL_TABLE_RE.match,
+    _IP_ROUTE_RE.match,
+    _IPV6_ROUTE_RE.match,
+    _MGMT_ROUTE_RE.match,
+    _USERNAME_RE.match,
+    _SNMP_COMMUNITY_RE.match,
+    _SNMP_LOCATION_RE.match,
+    _SNMP_CONTACT_RE.match,
+    _SNMP_HOST_RE.match,
+    _SNMP_V3_USER_RE.match,
+    _domain_name_of,
+    _name_servers_of,
+    _ntp_server_of,
+    _logging_server_of,
 )
 
 #: Words of a session, not of the configuration: a pasted ``configure
@@ -854,7 +952,7 @@ def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
             continue
         if head == "interface" and _an_interface_header_is_said(line):
             continue
-        if any(reader.match(line) for reader in _TOP_LEVEL_READERS):
+        if any(reader(line) for reader in _TOP_LEVEL_READERS):
             continue
         if is_a_dellos10_section_line(line):
             continue
@@ -929,6 +1027,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.lags = _parse_lags(raw)
     intent.local_users = _parse_local_users(raw)
     intent.snmp = _parse_snmp(raw)
+    _parse_management_plane(raw, intent)
     intent.dropped_tier3_sections += unread
 
     # OS10 has no top-level ``vlan <id>`` stanza, so every VLAN record is
@@ -1527,6 +1626,26 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
             priv_kind=kind,
         ))
     return snmp
+
+
+def _parse_management_plane(raw: str, intent: CanonicalIntent) -> None:
+    """Read the domain, the resolvers, the NTP servers and the syslog
+    servers from their bare forms (:func:`_domain_name_of` and the
+    readers beside it), each server once and in the order its lines
+    come.  A printout holds one ``ip domain-name``; of two, the last is
+    kept, and which one a switch keeps is not established.  Mutates
+    *intent* in place."""
+    once = Uniques()
+    for line in ticked(raw.splitlines()):
+        if domain := _domain_name_of(line):
+            intent.domain = domain
+        elif servers := _name_servers_of(line):
+            for server in servers:
+                once.add(intent.dns_servers, server)
+        elif server := _ntp_server_of(line):
+            once.add(intent.ntp_servers, server)
+        elif server := _logging_server_of(line):
+            once.add(intent.syslog_servers, server)
 
 
 def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:

@@ -8,12 +8,14 @@ OS10 CLI text out.
 Phase 2 emits the surface Phase 1 parses: the ``! Version`` banner, the
 explicit ``ip vrf default`` stanza, named VRF declarations, hostname,
 interface stanzas (description / admin state / LAG membership / L2
-switchport / mtu / VRF bind / IPv4 + IPv6 CIDR), and static routes.  It
-stays deliberately tolerant of the canonical surfaces it does NOT emit
-(SNMP, local users, VRRP, the management plane): a cross-vendor source
-tree carrying those renders cleanly, simply omitting them, and the
-capability matrix declares each omission so the migrate-page banner
-surfaces the gap.
+switchport / mtu / VRF bind / IPv4 + IPv6 CIDR), and static routes;
+SNMP, local users, VRRP groups and the management plane (the bare
+``ip name-server``, ``ip domain-name``, ``ntp server`` and ``logging
+server`` lines: :func:`_render_management_plane`) were added after it.
+It stays deliberately tolerant of the canonical surfaces it does NOT
+emit: a cross-vendor source tree carrying those renders cleanly,
+simply omitting them, and the capability matrix declares each omission
+so the migrate-page banner surfaces the gap.
 
 Three inversions of the parse-side traps live here — each one is the
 reason the round-trip holds:
@@ -195,7 +197,8 @@ def _version_token(tree: CanonicalIntent) -> str:
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Dell OS10 config text."""
     # A name that is not one word where OS10 reads one is written as
-    # one, at every place it goes; a gateway is left out with its route.
+    # one, at every place it goes; a gateway is left out with its route,
+    # and a domain or a server of the management plane on its own.
     # A description (a VLAN's name is written as its interface's) and
     # the SNMP location and contact are written between quotes, which
     # Dell documents no escape for, so a ``"`` in one is written ``'``.
@@ -203,7 +206,10 @@ def render_intent(tree: CanonicalIntent) -> str:
     tree, one_value_said = one_value_tree(
         tree, "OS10",
         names=("hostname", "routing_instances[].name"),
-        addresses=("static_routes[].gateway",),
+        addresses=(
+            "domain", "dns_servers", "ntp_servers", "syslog_servers",
+            "static_routes[].gateway",
+        ),
         no_escape=(
             "interfaces[].description", "vlans[].name", "snmp.location",
             "snmp.contact",
@@ -263,6 +269,12 @@ def render_intent(tree: CanonicalIntent) -> str:
     if tree.static_routes:
         lines.append("!")
 
+    # ── Management plane ── (device order: after the static routes)
+    plane = _render_management_plane(tree)
+    if plane:
+        lines.extend(plane)
+        lines.append("!")
+
     # ── SNMP ── (device order: the snmp-server block sits near the end)
     if tree.snmp is not None:
         snmp_lines = _render_snmp(tree.snmp, tree.source_vendor)
@@ -271,6 +283,67 @@ def render_intent(tree: CanonicalIntent) -> str:
             lines.append("!")
 
     return "\n".join(lines) + "\n"
+
+
+#: The review line for a value of the management plane that is not
+#: written: the forms written here, which the parser reads back, take
+#: an address for a name server, an address or a host name for an NTP
+#: or syslog server, and a domain name for ``ip domain-name``.  It
+#: names the kind and never the value.
+_PLANE_LEFT_OUT_REVIEW = (
+    "! {what} -- review: the source gives one that is not {shape}, "
+    "which the form written here takes; it is left out, re-create it "
+    "on the device"
+)
+
+#: How many name servers OS10 takes: "up to three", in the User
+#: Guide's ``ip name-server`` (10.4.1.0).
+_NAME_SERVERS_AT_MOST = 3
+
+#: The review line for the resolvers after the third.
+_NAME_SERVERS_REVIEW = (
+    "! ip name-server -- review: the source gives more resolvers than "
+    "the three OS10 takes; those after the third are left out"
+)
+
+
+def _render_management_plane(tree: CanonicalIntent) -> list[str]:
+    """The resolvers, the domain, the NTP servers and the syslog
+    servers, one a line, in the bare forms the parser reads back
+    (``parse._parse_management_plane``) and in the order the committed
+    inputs print them: after the static routes, before SNMP.  A value
+    the form does not take -- a name server that is not an address, an
+    NTP or syslog server that is neither an address nor a host name, a
+    domain not shaped as a domain name -- is left out with a review
+    line for its kind, and so are the resolvers after the third."""
+    out: list[str] = []
+    review: list[str] = []
+
+    def servers(what: str, values: list[str], takes, shape: str) -> list[str]:
+        written = [value for value in values if takes(value)]
+        if len(written) < len(values):
+            review.append(_PLANE_LEFT_OUT_REVIEW.format(what=what, shape=shape))
+        return written
+
+    resolvers = servers(
+        "ip name-server", tree.dns_servers, _parse.an_address, "an address",
+    )
+    if len(resolvers) > _NAME_SERVERS_AT_MOST:
+        review.append(_NAME_SERVERS_REVIEW)
+    out.extend(f"ip name-server {value}" for value in resolvers[:_NAME_SERVERS_AT_MOST])
+    if tree.domain and _parse.a_domain_name(tree.domain):
+        out.append(f"ip domain-name {tree.domain}")
+    elif tree.domain:
+        review.append(_PLANE_LEFT_OUT_REVIEW.format(
+            what="ip domain-name", shape="a domain name",
+        ))
+    for what, values in (
+        ("ntp server", tree.ntp_servers),
+        ("logging server", tree.syslog_servers),
+    ):
+        written = servers(what, values, _parse.a_host, "an address or a host name")
+        out.extend(f"{what} {value}" for value in written)
+    return review + out
 
 
 def _render_local_user(user, source_vendor: str = "") -> str:

@@ -1017,7 +1017,11 @@ def _digest(codec: str, path: str) -> str:
 #: became a row (``test_a_header_names_one_interface.py``); and every
 #: OS10 input with a line in column 0 that no reader takes, when each
 #: kind became a row, the rest of its tree as it was
-#: (``codecs/dell_os10/test_what_no_reader_takes.py``).
+#: (``codecs/dell_os10/test_what_no_reader_takes.py``); and every
+#: OS10 input with a bare ``ip name-server``, ``ntp server`` or
+#: ``logging server`` line, when the management plane was read, its
+#: rows for those lines gone and the rest of its tree as it was
+#: (``codecs/dell_os10/test_management_plane.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1112,14 +1116,14 @@ BEFORE: dict[str, str] = {
     # Moved on purpose, by its `interface range` rows and nothing else: each
     # such stanza is listed among the sections not translated
     # (test_a_header_names_one_interface.py): was "254896e1a85a".
-    "real/dell_os10/azlocal_tor1.txt": "5f3fe8187a1d",
+    "real/dell_os10/azlocal_tor1.txt": "88df2936bdcc",
     # Moved on purpose, by its `interface range` rows and nothing else: each
     # such stanza is listed among the sections not translated
     # (test_a_header_names_one_interface.py): was "88bb0da08716".
-    "real/dell_os10/azlocal_tor2.txt": "f1ace73cc5ab",
+    "real/dell_os10/azlocal_tor2.txt": "9c9dca2a8455",
     "real/dell_os10/azsupport_TOR1_Sample.cfg": "4751d5837437",
     "real/dell_os10/azsupport_TOR2_Sample.cfg": "c67c68101040",
-    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "c3c080f53eb5",
+    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "f56a5b1e7f3a",
     # Moved on purpose, by its `interface range` rows and nothing else: each
     # such stanza is listed among the sections not translated
     # (test_a_header_names_one_interface.py): was "34857fa6db7b".

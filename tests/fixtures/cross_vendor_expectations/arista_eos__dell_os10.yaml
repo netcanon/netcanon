@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 6 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 16, 'lossy': 17}
+# Dispositions: {'unsupported': 9, 'good': 21, 'lossy': 16}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/arista_eos_to_dell_os10/
@@ -74,23 +74,21 @@ per_field_expectation:
     references: [eos-os10-surface]
 
   dns_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ip
-      name-server`. Measured over 6 cells: drifted on 4, preserved on
-      0, both sides empty on 2. Sample drift: all 2 dns_servers
-      dropped.
+    disposition: good
+    note: >
+      The arista_eos parser reads the name servers, and the dell_os10
+      renderer writes `ip name-server <ip>` (since 2026-11-12), read
+      back by its parser.  Measured over 8 cells: drifted on 0,
+      preserved on 5, both sides empty on 3.
     references: [eos-os10-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ip
-      domain-name`. Measured over 6 cells: drifted on 2, preserved on
-      0, both sides empty on 4. Sample drift: domain: 'lab.local' →
-      ''.
+    disposition: good
+    note: >
+      The arista_eos parser reads the domain, and the dell_os10 renderer
+      writes `ip domain-name <name>` (since 2026-11-12), read back by
+      its parser.  Measured over 8 cells: drifted on 0, preserved on 3,
+      both sides empty on 5.
     references: [eos-os10-surface]
 
   evpn_type5_routes:
@@ -256,12 +254,12 @@ per_field_expectation:
     references: [eos-os10-surface]
 
   ntp_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ntp
-      server`. Measured over 6 cells: drifted on 4, preserved on 0,
-      both sides empty on 2. Sample drift: all 2 ntp_servers dropped.
+    disposition: good
+    note: >
+      The arista_eos parser reads the NTP servers, and the dell_os10
+      renderer writes `ntp server <host>` (since 2026-11-12), read back
+      by its parser.  Measured over 8 cells: drifted on 0, preserved on
+      5, both sides empty on 3.
     references: [eos-os10-surface]
 
   radius_servers:
@@ -354,13 +352,12 @@ per_field_expectation:
     references: [eos-os10-surface]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no
-      `logging server`. Measured over 6 cells: drifted on 1, preserved
-      on 0, both sides empty on 5. Sample drift: all 1 syslog_servers
-      dropped.
+    disposition: good
+    note: >
+      The arista_eos parser reads the syslog servers, and the dell_os10
+      renderer writes `logging server <host>` (since 2026-11-12), read
+      back by its parser.  Measured over 8 cells: drifted on 0,
+      preserved on 1, both sides empty on 7.
     references: [eos-os10-surface]
 
   timezone:

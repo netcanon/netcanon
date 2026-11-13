@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 13 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 25, 'lossy': 6, 'not_applicable': 2}
+# Dispositions: {'unsupported': 10, 'good': 27, 'lossy': 7, 'not_applicable': 2}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/vyos_to_dell_os10/
@@ -78,23 +78,21 @@ per_field_expectation:
     references: [vyos-os10-surface]
 
   dns_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ip
-      name-server`. Measured over 13 cells: drifted on 1, preserved on
-      0, both sides empty on 12. Sample drift: all 3 dns_servers
-      dropped.
+    disposition: good
+    note: >
+      The vyos parser reads the name servers, and the dell_os10 renderer
+      writes `ip name-server <ip>` (since 2026-11-12), read back by its
+      parser.  Measured over 13 cells: drifted on 0, preserved on 1,
+      both sides empty on 12.
     references: [vyos-os10-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ip
-      domain-name`. Measured over 13 cells: drifted on 1, preserved on
-      0, both sides empty on 12. Sample drift: domain:
-      'internal.sigkill.org' → ''.
+    disposition: good
+    note: >
+      The vyos parser reads the domain, and the dell_os10 renderer
+      writes `ip domain-name <name>` (since 2026-11-12), read back by
+      its parser.  Measured over 13 cells: drifted on 0, preserved on 1,
+      both sides empty on 12.
     references: [vyos-os10-surface]
 
   evpn_type5_routes:
@@ -247,12 +245,12 @@ per_field_expectation:
     references: [vyos-os10-surface]
 
   ntp_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ntp
-      server`. Measured over 13 cells: drifted on 12, preserved on 0,
-      both sides empty on 1. Sample drift: all 3 ntp_servers dropped.
+    disposition: good
+    note: >
+      The vyos parser reads the NTP servers, and the dell_os10 renderer
+      writes `ntp server <host>` (since 2026-11-12), read back by its
+      parser.  Measured over 13 cells: drifted on 0, preserved on 12,
+      both sides empty on 1.
     references: [vyos-os10-surface]
 
   radius_servers:
@@ -343,12 +341,10 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. NOT EXERCISED BY THIS
-      CORPUS — all 13 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 1
-      parses no `logging server`. Measured over 13 cells: drifted on
+      The dell_os10 renderer writes `logging server <host>` (since
+      2026-11-12), read back by its parser; the vyos matrix declares
+      `/system/syslog-server` unsupported, and no committed input of the
+      pair states a syslog server.  Measured over 13 cells: drifted on
       0, preserved on 0, both sides empty on 13.
     references: [vyos-os10-surface]
 

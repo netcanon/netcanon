@@ -48,6 +48,19 @@ mis-parse it into a plausible-looking wrong answer.
 - VLANs — ID, name, tagged / untagged port lists
 - Static routes — including per-VRF (`ip route vrf <name> …`)
 - VRFs — name (`ip vrf <name>`)
+- The management plane, in its bare forms: `ip domain-name <name>`,
+  `ip name-server <ip> [<ip> …]`, `ntp server <host>` and `logging
+  server <host>`, a host being a host name or an address (Dell's
+  User Guide gives these forms -- `{hostname | ipv4-address |
+  ipv6-address}` for the last two -- and the committed captures
+  print no other).  Written after the static routes, one server a
+  line.  A value the form does not take is not written -- a name
+  server that is not an address, an NTP or syslog server that is
+  neither an address nor a host name, a domain not shaped as a
+  domain name -- nor are the resolvers after the third (the guide's
+  `ip name-server` takes "up to three"): the output says so in a
+  `! review:` line that names the kind and not the value.  Until
+  2026-11-12 none of the four was read or written.
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
 translatable with caveats:
@@ -162,7 +175,7 @@ Declared `unsupported`, or translated by nothing — the loss is
 reported, never silent.  Every line in column 0 that no reader of
 the parser takes and no Tier-3 pattern names is a row of the job's
 Tier-3 list: its command word, and the word after it where that
-says which command it is (`ntp server`, `logging console`), never a
+says which command it is (`clock timezone`, `logging console`), never a
 value; one row a kind, however many lines it has.  A line that
 begins with a word OS10 configurations are not seen to begin with
 is counted in one row that shows none of its text.  Until
@@ -195,9 +208,17 @@ the stanza's reader does not take has no row.
   isomorphic target is NX-OS `vpc`, which netcanon does not model
   either.  Arista's MLAG is the same story — see
   [`arista_eos.md`](arista_eos.md).
-- Management-plane scalars: `ip domain-name`, `ip name-server`,
-  `ntp server`, `logging server`, `clock timezone`, DHCP pools and
-  `radius-server`, a row for each kind.
+- The time zone (`clock timezone`), DHCP pools and `radius-server`,
+  a row for each kind.
+- An `ip name-server`, `ntp server` or `logging server` line with a
+  tail -- a VRF (`ip name-server vrf <name> <ip>`, `logging server
+  <ip> vrf <name>`), an NTP `key` or `prefer`, a syslog transport,
+  port or `severity` -- or with a value the form does not take, and
+  an `ip domain-name` line that is not one domain name.  The tree
+  holds no VRF, key or severity for a server, and the server written
+  without its tail would be another statement, so the line is not
+  read: it is a row, `ntp server` and the like.  `ntp enable vrf
+  <name>` and `ip domain-list` are rows as well.
 
 ## Lossy paths
 

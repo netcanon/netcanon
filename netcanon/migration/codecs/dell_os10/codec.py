@@ -146,6 +146,17 @@ class DellOS10Codec(CodecBase):
         supported=[
             # System
             "/system/hostname",
+            # The management plane, read and written in its bare forms
+            # (`ip domain-name <name>`, `ip name-server <ip>`, `ntp server
+            # <host>`, `logging server <host>`).  A source line with a tail
+            # (a VRF, an NTP key, a syslog severity) is not read and keeps
+            # its row; a value the form does not take, or a resolver after
+            # the third, is not written, and the output says so in a
+            # review line.
+            "/system/domain",
+            "/system/dns-server",
+            "/system/ntp-server",
+            "/system/syslog-server",
             # Interfaces — name + basic L3
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
@@ -660,22 +671,6 @@ class DellOS10Codec(CodecBase):
                     "Phase 1 parses no `clock timezone` stanza; "
                     "intent.timezone is dropped."
                 ),
-            ),
-            UnsupportedPath(
-                path="/system/domain",
-                reason="Phase 1 parses no `ip domain-name`.",
-            ),
-            UnsupportedPath(
-                path="/system/dns-server",
-                reason="Phase 1 parses no `ip name-server`.",
-            ),
-            UnsupportedPath(
-                path="/system/ntp-server",
-                reason="Phase 1 parses no `ntp server`.",
-            ),
-            UnsupportedPath(
-                path="/system/syslog-server",
-                reason="Phase 1 parses no `logging server`.",
             ),
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-vlan",

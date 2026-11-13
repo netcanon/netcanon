@@ -1,5 +1,8 @@
 # OPNsense → Dell OS10: measured canonical surface
 
+<!-- os10-management-plane -->
+> **Update 2026-11-12 — OS10 reads and writes its management plane.**  This page was measured when the dell_os10 parser read no `ip domain-name`, `ip name-server`, `ntp server` or `logging server` line and its renderer wrote none.  It now reads each in its bare form and writes it (an NTP or syslog server as a host name or an address, at most three name servers, a value the form does not take left out under a `! review:` line), and the four keys are measured again: `domain` good (preserved on 7, both sides empty on 1 of 8 cells); `dns_servers` good (preserved on 4, both sides empty on 4 of 8 cells); `ntp_servers` unsupported (none of the 8 cells states one); `syslog_servers` unsupported (none of the 8 cells states one).  The sections below for these keys keep the measurement of their date; `tests/fixtures/cross_vendor_expectations/opnsense__dell_os10.yaml` holds the current one.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/opnsense__dell_os10.yaml`.
 

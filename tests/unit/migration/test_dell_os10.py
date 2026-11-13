@@ -807,12 +807,18 @@ class TestPhase3bSurfacesNotParsedYet:
         declared = {p.path for p in codec.capabilities.unsupported}
         assert "/system/timezone" in declared
 
-    def test_syslog_is_not_claimed_supported(self, codec):
-        """`test_tier1_wiring_honesty` pins an EXACT roster of codecs
-        declaring `/system/syslog-server` supported.  Phase 1 parses no
-        `logging server`, so claiming it would both be false and break
-        that roster on registration."""
-        assert "/system/syslog-server" not in set(codec.capabilities.supported)
+    def test_the_management_plane_is_claimed_supported(self, codec):
+        """The bare `ip domain-name`, `ip name-server`, `ntp server` and
+        `logging server` lines are read and written
+        (`codecs/dell_os10/test_management_plane.py`), so the four
+        paths are declared supported -- and OS10 is in the EXACT syslog
+        roster `test_tier1_wiring_honesty` pins."""
+        supported = set(codec.capabilities.supported)
+        for path in (
+            "/system/domain", "/system/dns-server",
+            "/system/ntp-server", "/system/syslog-server",
+        ):
+            assert path in supported, path
 
 
 # ---------------------------------------------------------------------------
