@@ -87,6 +87,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import gc
 import importlib
 import pkgutil
 import re
@@ -174,12 +175,32 @@ _now = _cpu_clock()
 
 def _best(read: Callable[[str], object], text: str, tries: int = 3) -> float:
     """The quickest of *tries* readings.  A loaded machine only ever
-    adds time, so the least of several is the one to believe."""
+    adds time, so the least of several is the one to believe.
+
+    The garbage collector is off while a reading is taken, as
+    :mod:`timeit` has it, and as it was after.  The thread's clock
+    leaves out the time other processes had, but not a collection
+    the thread makes, and a collection walks every object the
+    process holds, not what the reading made: in a worker that has
+    run thousands of tests it can take longer than a short reading.
+    Where a stall lands in the SMALLER of two readings, a reader
+    that costs the square of its input looks linear.  On CI the
+    VRRP control below found nothing, on Python 3.11 and 3.12, for
+    a defect nineteen times as slow at four times the input on a
+    quiet machine.  A collection is the stall a test can switch
+    off; what a reading leaves to collect is collected after it.
+    """
     best = float("inf")
     for _ in range(tries):
-        started = _now()
-        read(text)
-        best = min(best, _now() - started)
+        collecting = gc.isenabled()
+        gc.disable()
+        try:
+            started = _now()
+            read(text)
+            best = min(best, _now() - started)
+        finally:
+            if collecting:
+                gc.enable()
         if best > 1.0:
             break
     return best
@@ -874,6 +895,34 @@ def _grows_faster_than_its_input(
     if higher > _TOO_STEEP * high:
         return f"{measured}; {16 * small} units: {higher:.3f}s"
     return ""
+
+
+class TestAReadingIsNotACollection:
+    """The collector is off while :func:`_best` takes a reading,
+    and as it was before once the reading is over."""
+
+    def test_off_for_each_reading(self) -> None:
+        assert gc.isenabled()
+        seen: list[bool] = []
+        _best(lambda _text: seen.append(gc.isenabled()), "", 3)
+        assert seen == [False, False, False]
+        assert gc.isenabled()
+
+    def test_on_again_after_a_reading_that_raises(self) -> None:
+        def refuses(_text: str) -> None:
+            raise ValueError("a reader that fails")
+
+        with pytest.raises(ValueError):
+            _best(refuses, "", 1)
+        assert gc.isenabled()
+
+    def test_left_off_where_it_was_off(self) -> None:
+        gc.disable()
+        try:
+            _best(lambda _text: None, "", 1)
+            assert not gc.isenabled()
+        finally:
+            gc.enable()
 
 
 class TestEveryPublicCodec:
@@ -2432,9 +2481,14 @@ class TestAUnitOfManyVRRPGroups:
         render = get_codec("juniper_junos").render
         # Read at two sizes only, and timed above a lower floor: at the
         # second size the defect writes 400 groups under each of 400
-        # addresses.
-        assert _grows_faster_than_its_input(
-            render, _junos_unit_of_many_vrrp_groups, 100, largest=400, floor=0.05,
+        # addresses.  Asked up to three times, as the controls above
+        # are: one stalled reading of the smaller tree passes a slow
+        # renderer.
+        assert any(
+            _grows_faster_than_its_input(
+                render, _junos_unit_of_many_vrrp_groups, 100, largest=400, floor=0.05,
+            )
+            for _attempt in range(3)
         )
 
 

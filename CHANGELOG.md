@@ -1426,6 +1426,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A timed reading of the cost tests is not a garbage
+  collection.**  `tests/unit/test_untrusted_text_cost.py` compares
+  the thread's CPU time for a text and for four times the text.  The
+  control that plants the Junos VRRP renderer's old defect found
+  nothing on CI, on Python 3.11 and 3.12, for a defect nineteen
+  times as slow at four times the input on a quiet machine: one
+  stalled reading of the smaller tree is enough.  That time counts a
+  collection the thread makes, which walks every object a test
+  worker holds, so the collector is now off while a reading is taken,
+  as `timeit` has it, and that control asks up to three times, as
+  the others do.
+
 - **An OS10 line that nothing translates is said.**  The OS10
   parser reads a hostname, VRFs, interfaces, static routes, LAGs,
   local users and SNMP, and the Tier-3 detector names routing
