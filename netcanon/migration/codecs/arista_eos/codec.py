@@ -58,7 +58,7 @@ from ..registry import register
 from . import port_names as _port_names
 from .dhcp_pools import render_pools
 from .parse import parse_intent, without_bodies
-from .render import render_intent
+from .render import lag_channel, render_intent
 
 #: Every walkable path this codec writes only in some cases, or a record
 #: it writes without the field, by the reason.  Spread into
@@ -545,6 +545,12 @@ class AristaEOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def aggregate_written_for(self, lag_name: str) -> bool:
+        """A member is written into ``channel-group <N>`` only where
+        the LAG's name is a ``Port-Channel<N>`` or a name EOS reads
+        as one (:func:`.render.lag_channel`)."""
+        return lag_channel(lag_name) is not None
 
     def render_warnings(self, tree: Any) -> list[str]:
         """The warnings every target gives, and one for each review

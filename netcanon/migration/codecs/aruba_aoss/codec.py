@@ -763,7 +763,10 @@ class ArubaAOSSCodec(CodecBase):
             *pool_warnings(tree),
             *vlan_interface_warnings(tree),
             *loopback_warnings(tree),
-            *active_backup_warnings(getattr(tree, "lags", None) or []),
+            *active_backup_warnings(
+                lag for lag in getattr(tree, "lags", None) or []
+                if self.aggregate_written_for(getattr(lag, "name", ""))
+            ),
         ]
 
     # -----------------------------------------------------------------
