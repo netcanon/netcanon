@@ -849,14 +849,15 @@ class TestVxlanSourceInterfaceUdpPort:
         assert "vxlan udp-port 8472" in out
         assert "vxlan vlan 100 vni 10100" in out
 
-    def test_render_falls_back_to_defaults_when_unset(self):
+    def test_render_invents_no_source_and_falls_back_to_the_port(self):
         from netcanon.migration.canonical.intent import CanonicalVxlan
         intent = CanonicalIntent(
             vlans=[CanonicalVlan(id=100, name="V100")],
             vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
         )
         out = AristaEOSCodec().render(intent)
-        assert "vxlan source-interface Loopback0" in out
+        assert "vxlan source-interface Loopback0" not in out
+        assert "   ! vxlan source-interface -- review: " in out
         assert "vxlan udp-port 4789" in out
 
     def test_round_trip_preserves_vxlan_globals(self):

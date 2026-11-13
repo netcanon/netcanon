@@ -2313,3 +2313,31 @@ def without_unread_tags(
     if not rows and not held:
         return raw, []
     return "".join(kept), [*left_out_rows(held, rest=_UNTAGGED), *rows]
+
+
+def no_vtep_source(indent: str, line: str) -> str:
+    """The line a renderer writes where its VTEP's source interface
+    would go, when no record of the tree states one.
+
+    The tree holds no source when the source config states none (a
+    VyOS ``vxlan`` interface with neither ``source-interface`` nor
+    ``source-address``), when the operator's map dropped the
+    interface it named, and when the overlay is L3 VNIs only, which
+    have no record to hold one.  Up to 0.7.7 the EOS, IOS-XE CLI and
+    NX-OS renderers wrote ``Loopback0`` / ``loopback0`` in its place:
+    an interface nothing names, which the target may not have.  None
+    is written now, and this line says so where the source line
+    would be.
+
+    Args:
+        indent: The white space of the stanza's own lines.
+        line: The target's words for the source line, without a
+            value (``vxlan source-interface``, ``source-interface``).
+
+    Returns:
+        ``<indent>! <line> -- review: ...``, a comment on the target.
+    """
+    return (
+        f"{indent}! {line} -- review: no source interface of this VTEP "
+        "is known, so none is written; give it one"
+    )

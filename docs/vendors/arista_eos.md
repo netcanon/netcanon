@@ -43,7 +43,12 @@ corpus yet — operator captures from EOS 4.27+ are welcome (see
 - MLAG — peer link + per-Port-Channel `mlag <id>` mapping
 - VRF definitions (`vrf instance ...`)
 - VXLAN — `interface Vxlan1` + `vxlan vlan <id> vni <vni>` mappings
-  (ship-before-wire path stabilised)
+  (ship-before-wire path stabilised).  As a target, a VTEP whose
+  source no record states (a VyOS one that states none, one whose
+  loopback the map dropped, an overlay of L3 VNIs only) is written
+  with a review line where `vxlan source-interface` would go.  ⚠️
+  Up to 0.7.7 it was written `Loopback0`, an interface nothing
+  named
 - Routing instances (`/routing-instances/instance` declared
   supported on Arista — VRF + EVPN paths translate cleanly)
 - DHCP server pools — `dhcp server [vrf <name>]`, a `subnet
@@ -549,9 +554,12 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
   interface under *Other names in the config*.  EOS output writes
   `interface Vlan<id>` from the VLAN itself: renamed, the interface
   is written under the new name and the old one again; dropped, it
-  comes back.  And a loopback that is the VXLAN source can be
-  renamed there, but dropped it is still named by `vxlan
-  source-interface`.  The job records each entry and says nothing.
+  comes back.  The job records each entry and says nothing.  A
+  loopback that is the VXLAN source can be renamed or dropped there:
+  dropped, the VTEP is written with a review line where its `vxlan
+  source-interface` line was, and the job says the VTEP lost its
+  source.  ⚠️ Up to 0.7.7 that line named `Loopback0`, whatever the
+  source had named.
   Renumber or drop the VLAN on the VLANs pane, which takes its
   interface with it.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.

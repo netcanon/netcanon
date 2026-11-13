@@ -48,7 +48,12 @@ translatable with caveats:
   import/export
 - VXLAN-EVPN — VLAN↔VNI binding (`vlan N / vn-segment`), the `nve1`
   VTEP (source-interface, UDP port, multicast group, flood list), and
-  the symmetric-IRB **L3VNI** (`vrf context X / vni N`)
+  the symmetric-IRB **L3VNI** (`vrf context X / vni N`).  As a
+  target, a VTEP whose source no record states (a VyOS one that
+  states none, one whose loopback the map dropped, an overlay of L3
+  VNIs only) is written with a review line where `source-interface`
+  would go.  ⚠️ Up to 0.7.7 it was written `loopback0`, an interface
+  nothing named
 
 > **Management-plane caveat.**  When NX-OS is the **target**, the codec
 > now renders `ip domain-name` / `ip name-server` / `ntp server` /
@@ -498,12 +503,13 @@ translate it again from `show running-config` as the switch prints it.
   interface-vlan` / `feature lacp` / `feature hsrp` etc. from the
   canonical shape; it does not preserve arbitrary source `feature`
   declarations.
-- **Dropping the loopback a VTEP sources from leaves the VTEP naming
-  it.**  A translation from NX-OS to NX-OS lists the loopback under
-  *Other names in the config* in the rename modal.  Renamed there,
-  the output follows.  Dropped, its stanza goes and the VXLAN
-  source line still names it; the job records the drop and says
-  nothing.  See
+- **Dropping the loopback a VTEP sources from leaves the VTEP with
+  no source.**  A translation from NX-OS to NX-OS lists the loopback
+  under *Other names in the config* in the rename modal.  Renamed
+  there, the output follows.  Dropped, its stanza goes, the VTEP is
+  written with a review line where its `source-interface` line was,
+  and the job says the VTEP lost its source.  ⚠️ Up to 0.7.7 that
+  line named `loopback0`, whatever the source had named.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Declaring a Nexus switch as the source or target device** -- the
   Nexus 9300 switches are model families with one mode, `standalone`:

@@ -500,6 +500,15 @@ for the reference pattern).
    that is in one of the two trunk tables and not the other, and
    wants a reader of its own for the new grammar and a row in its
    hand-written table.
+   **And write no VTEP source that no record states.**  The tree
+   holds none when the source config states none, when the
+   operator's map dropped it, and when the overlay is L3 VNIs only.
+   Where the target's VTEP stanza has a source line, write
+   `no_vtep_source` (`_helpers.py`) in its place, never a default
+   loopback; `tests/unit/migration/test_a_vtep_source_is_not_invented.py`
+   reads every public codec's output for a source line nothing
+   states, and holds each renderer that writes the review line to
+   it, typed by hand.
 4. **Write `probe()`** using 2-3 discriminating structural markers
    unique to your vendor's wire format.  A probe — and everything
    `parse` does — reads whatever was pasted, so its cost has to fit the

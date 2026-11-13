@@ -866,10 +866,11 @@ class CanonicalVxlan(BaseModel):
             (``translate_port_names``) rewrites this field alongside the
             other port-name references when a rename/drop is applied, so
             a cross-platform rename keeps the VTEP binding valid.  Empty
-            string
-            means undeclared and codecs should fall back to a sensible
-            default (typically ``Loopback0`` on Arista, ``lo0.0`` on
-            Junos).  This is a switch-level / global attribute on the
+            string means no source is known (the source states none,
+            or the operator's map dropped it): a renderer writes no
+            source line and invents none -- the EOS, IOS-XE CLI and
+            NX-OS renderers write a review line in its place.  This
+            is a switch-level / global attribute on the
             VTEP — codecs populate it on EVERY CanonicalVxlan record
             for that switch so the value survives even when only a
             subset of VNIs is consumed downstream.

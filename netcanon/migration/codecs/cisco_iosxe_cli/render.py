@@ -89,6 +89,7 @@ from .._helpers import (
     every_native_vlan_tagged,
     ip_mtu_written,
     native_vlan_stated,
+    no_vtep_source,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
     trunk_list_says,
@@ -835,12 +836,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f" member evpn-instance 1 vni {vx.vni}")
         if ordered_vx:
             out.append("!")
+        # A source no record states is not invented: a review line
+        # stands where it would go.
         source_iface = next(
             (x.source_interface for x in ordered_vx if x.source_interface), "",
-        ) or "Loopback0"
+        )
         out.append("interface nve1")
         out.append(" no ip address")
-        out.append(f" source-interface {source_iface}")
+        if source_iface:
+            out.append(f" source-interface {source_iface}")
+        else:
+            out.append(no_vtep_source(" ", "source-interface"))
         out.append(" host-reachability protocol bgp")
         for vx in ordered_vx:
             if vx.mcast_group:

@@ -110,7 +110,11 @@ translatable with caveats:
 - **`/vxlan-vnis/source-interface`** — the VTEP source is
   `source-address <ip>` (or `source-interface <if>`); a cross-vendor
   source (e.g. `Loopback0`) is re-emitted verbatim and may need an
-  operator port-rename.
+  operator port-rename.  A VyOS VTEP that states neither is written
+  with no source onto every target, and onto EOS, IOS-XE (CLI) and
+  NX-OS with a review line where the source line would go.  ⚠️ Up
+  to 0.7.7 those three wrote `Loopback0` / `loopback0` there, an
+  interface the VyOS config does not name.
 - **`/vxlan-vnis/vlan-id`** — VyOS models one VNI per `vxlan vxlanN`
   netdev with no on-device VLAN (the L2 binding lives on a separate
   `bridge`); the canonical `vlan_id` is synthesised from the VNI and
