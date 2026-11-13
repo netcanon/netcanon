@@ -248,7 +248,9 @@ def _carrier_review(iface) -> str:
 def _render_vxlan(tree: CanonicalIntent) -> list[str]:
     """Render the ``interface vxlan 1`` VTEP stanza from VXLAN data.
 
-    AOS-CX uses a single VTEP (``vxlan 1``).  Each L2 VNI emits a ``vni
+    AOS-CX uses a single VTEP (``vxlan 1``), written ``no shutdown``:
+    a VTEP in the tree is one the source runs (an AOS-CX VTEP that is
+    down is left out where it is read).  Each L2 VNI emits a ``vni
     <VNI>`` sub-block carrying a nested ``vlan <VLAN>`` (the L2 binding);
     the switch-level ``source ip <X>`` is taken from the first record
     whose ``source_interface`` parses as an IPv4 address.  AOS-CX states

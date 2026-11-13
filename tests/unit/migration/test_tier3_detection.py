@@ -1113,7 +1113,7 @@ class TestRowsForStatementsLeftOut:
     def test_the_kinds(self) -> None:
         assert self._KINDS == [
             "delete", "disabled", "disabled-route", "disabled-subnet", "distance-255", "inactive",
-            "incomplete", "preconfigure", "untagged",
+            "incomplete", "preconfigure", "shutdown", "untagged",
         ]
 
     def test_each_kind_gives_its_own_reason(self) -> None:

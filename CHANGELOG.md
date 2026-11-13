@@ -1401,6 +1401,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX VTEP that is down is left out and said, with every
+  VNI under it.**  AOS-CX brings `interface vxlan` up only on `no
+  shutdown`, as it does a port, a LAG and `interface mgmt`.  The
+  parser read no state of the VTEP, so the VNIs of one that says
+  `shutdown`, or no `no shutdown`, were written onto every target
+  that writes an overlay -- onto AOS-CX under `no shutdown` -- in
+  jobs that said `completed`.  Such a VTEP is now left out with
+  its VNIs, and said in a row of a new left-out kind, `shutdown:
+  interface vxlan <N>`, which the migrate page gives a sentence of
+  its own.  No committed input moves: each of their VTEPs says `no
+  shutdown`.
+
 - **A job onto EOS or OS10 says a bond is written as a static
   aggregate only where it is.**  A bond that needs no aggregate of
   its peer (a RouterOS `active-backup` bond, an OPNsense `failover`

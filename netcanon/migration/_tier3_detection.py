@@ -529,6 +529,11 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "over another, an address reserved twice, or a subnet over another), "
         "so it serves nothing; not translated",
     ),
+    "shutdown": (
+        "shutdown: ",
+        "a VXLAN interface the source holds shut, so it carries none of "
+        "its VNIs; not translated",
+    ),
 }
 
 #: A word of a path that names a secret.  What follows it is the
@@ -581,7 +586,9 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             (an IOS-XE ``ip route`` of administrative distance 255,
             which IOS does not install) or ``"incomplete"`` (an AOS-S
             DHCP pool the server discards) or ``"disabled-subnet"``
-            (an EOS DHCP server's subnet that EOS disables).
+            (an EOS DHCP server's subnet that EOS disables) or
+            ``"shutdown"`` (an AOS-CX ``interface vxlan`` that is
+            down, with every VNI under it).
         path: The words of the statement's path, outermost first.
 
     Returns:

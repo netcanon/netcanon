@@ -68,7 +68,9 @@ see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
 * ``interface vxlan <N>`` VTEP (Phase 4) → :class:`CanonicalVxlan`
   L2 VLAN↔VNI bindings (``vni <VNI>`` / nested ``vlan <VLAN>``) + the
   switch-level ``source ip`` (an IPv4 address, stashed verbatim in the
-  opaque ``source_interface`` field).
+  opaque ``source_interface`` field).  A VTEP that is down (it says
+  ``shutdown``, or no ``no shutdown``) carries none of its VNIs: it
+  is left out, with them, and said in a ``shutdown:`` row.
 
 Deferred to later phases (parse-and-ignore in v1): the per-VLAN L2VNI
 RD / route-target (``evpn / vlan N / rd auto / route-target ...`` —
@@ -83,7 +85,9 @@ import ipaddress
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
+from ..._tier3_detection import left_out_rows
 from ..._user_secrets import classify_hash
 from ...canonical.intent import (
     CanonicalIntent,
@@ -286,6 +290,11 @@ _VXLAN_VNI_RE = re.compile(r"^\s+vni\s+(\d+)\s*$", re.IGNORECASE)
 #: (Indented; the top-level VLAN declaration is matched by
 #: :data:`_VLAN_TOP_RE`, which anchors ``vlan`` at column 0.)
 _VXLAN_VLAN_MAP_RE = re.compile(r"^\s+vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: ``shutdown`` / ``no shutdown``: the VTEP's state where the line is
+#: at the depth of the stanza's own lines, not under a ``vni``.
+_VXLAN_STATE_RE = re.compile(
+    r"^([^\S\n]+)(no[^\S\n]+)?shutdown[^\S\n]*$", re.IGNORECASE,
+)
 
 
 #: ``vrf <name>`` opens a top-level VRF declaration (single token, whole
@@ -640,7 +649,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # VXLAN (Phase 4) — L2 VLAN↔VNI bindings from the ``interface vxlan``
     # VTEP (``vni N / vlan N``) + the switch-level ``source ip``.
-    intent.vxlan_vnis = _parse_vxlan(raw)
+    intent.vxlan_vnis, vteps_left_out = _parse_vxlan(raw)
+    intent.dropped_tier3_sections.extend(
+        left_out_rows(vteps_left_out, rest="shutdown"),
+    )
 
     # Shared switchport→VLAN projection: mirror per-port switchport state
     # into the VLAN-centric tagged/untagged lists so VLAN-centric
@@ -1466,7 +1478,21 @@ def _routes_not_held_rows(not_held: dict[str, set[str]]) -> list[str]:
     ]
 
 
-def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
+@dataclass
+class _Vtep:
+    """One ``interface vxlan <N>`` stanza, as read."""
+
+    name: str
+    #: The white space before the stanza's own lines.
+    depth: str | None = None
+    up: bool = False
+    source: str = ""
+    vlan_by_vni: dict[int, int] = field(default_factory=dict)
+
+
+def _parse_vxlan(
+    raw: str,
+) -> tuple[list[CanonicalVxlan], list[tuple[str, list[str]]]]:
     """Build :class:`CanonicalVxlan` records from the AOS-CX VTEP stanza.
 
     Scans every ``interface vxlan <N>`` block (a VXLAN config container —
@@ -1484,28 +1510,49 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     phase.  Records are returned sorted by ``vlan_id`` so the order is
     canonical (the real-capture round-trip compares ``vxlan_vnis`` by
     list equality, without re-sorting).
+
+    A VTEP is down unless the stanza says ``no shutdown`` at its own
+    depth (the last state line wins), as every port, LAG and
+    ``interface mgmt`` is (:func:`_default_enabled`).  A VTEP that is
+    down carries none of its VNIs: its records are left out, and
+    the stanza is returned for a ``shutdown:`` row.  Up to 0.7.7 the
+    state was not read, and the VNIs of a shut VTEP were written
+    onto every target, onto AOS-CX under ``no shutdown``.
+
+    Returns:
+        The records, and ``("shutdown", path)`` for each VTEP
+        left out (:func:`netcanon.migration._tier3_detection.left_out_row`).
     """
-    source_ip = ""
-    vlan_by_vni: dict[int, int] = {}
-    in_vxlan = False
+    vteps: list[_Vtep] = []
+    vtep: _Vtep | None = None
     current_vni: int | None = None
 
     for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
-            in_vxlan = _iface_name(im).lower().startswith("vxlan ")
+            name = _iface_name(im)
+            vtep = _Vtep(name) if name.lower().startswith("vxlan ") else None
+            if vtep is not None:
+                vteps.append(vtep)
             current_vni = None
             continue
         if line and not line[0].isspace():
-            in_vxlan = False
+            vtep = None
             current_vni = None
             continue
-        if not in_vxlan:
+        if vtep is None or not line.strip():
             continue
+        if vtep.depth is None:
+            vtep.depth = line[: len(line) - len(line.lstrip())]
 
+        state = _VXLAN_STATE_RE.match(line)
+        if state:
+            if state.group(1) == vtep.depth:
+                vtep.up = state.group(2) is not None
+            continue
         sm = _VXLAN_SOURCE_IP_RE.match(line)
         if sm:
-            source_ip = sm.group(1)
+            vtep.source = sm.group(1)
             continue
         vnim = _VXLAN_VNI_RE.match(line)
         if vnim:
@@ -1514,14 +1561,24 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
         if current_vni is not None:
             vmap = _VXLAN_VLAN_MAP_RE.match(line)
             if vmap:
-                vlan_by_vni[current_vni] = int(vmap.group(1))
+                vtep.vlan_by_vni[current_vni] = int(vmap.group(1))
                 continue
-        # Any other indented line (``no shutdown`` / ``address-family``
-        # / per-VNI flags) is parse-and-ignore.
+        # Any other indented line (``address-family`` / per-VNI flags)
+        # is parse-and-ignore.
+
+    source_ip = ""
+    vlan_by_vni: dict[int, int] = {}
+    left_out: list[tuple[str, list[str]]] = []
+    for vtep in ticked(vteps):
+        if not vtep.up:
+            left_out.append(("shutdown", ["interface", *vtep.name.split()]))
+            continue
+        source_ip = vtep.source or source_ip
+        vlan_by_vni.update(vtep.vlan_by_vni)
 
     records = [
         CanonicalVxlan(vlan_id=vlan, vni=vni, source_interface=source_ip)
         for vni, vlan in vlan_by_vni.items()
     ]
     records.sort(key=lambda r: r.vlan_id)
-    return records
+    return records, left_out

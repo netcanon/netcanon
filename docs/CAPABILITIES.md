@@ -931,7 +931,10 @@ an IOS-XE route of administrative distance 255, which IOS does not
 install, as `disabled: ip route <destination>` (`ipv6 route` for an
 IPv6 one).  A FortiGate route of `status disable` is listed as
 `disabled: config router static edit <id>` (`router static6` for an
-IPv6 one).  The banner counts only the sections,
+IPv6 one).  An AOS-CX `interface vxlan` that is down (it says
+`shutdown`, or no `no shutdown`) carries none of its VNIs, and is
+listed as `shutdown: interface vxlan <N>`; none of its VNIs is in
+the output.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
