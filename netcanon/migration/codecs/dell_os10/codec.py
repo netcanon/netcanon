@@ -784,7 +784,9 @@ class DellOS10Codec(CodecBase):
         # most real configs; that is correct behaviour, not a defect.
         # Read from the text the parser read: a banner's lines are text,
         # not stanzas.  After them, the rows the parser itself made: the
-        # header of a stanza that names no one interface.
+        # header of a stanza that names no one interface, and each kind
+        # of line in column 0 that no reader takes and no pattern of
+        # the detector names.
         intent.dropped_tier3_sections = list(dict.fromkeys([
             *detect_tier3_sections_dellos10(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,
