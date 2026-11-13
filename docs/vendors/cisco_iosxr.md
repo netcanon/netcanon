@@ -159,6 +159,40 @@ Deliberately deferred to [Tier
 - **ACLs / firewall / NAT** — `ipv4 access-list` / stateful firewall
   / `nat64` / `cgnat`
 
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`snmp-server community`, `ssh server`, `line default`,
+`telemetry model-driven`, `group`, `apply-group`,
+`segment-routing`, `lldp`, `router hsrp`), never a value; one row a
+kind, however many lines it has.  That includes the forms of a
+command the parser reads only in one form or only once: a `vrf` line
+with more than a name, a `logging` line that names no host address
+(its row is the word alone, since IOS XR takes a host's name right
+after it), a `domain` line other than `domain name` and `domain name-server`, a
+second `hostname` or `domain name` line, and a second line of a local
+user's name, in either form (the tree holds one of each).  A line
+that begins with a word IOS XR configurations are not seen to begin
+with is counted in one row that shows none of its text.  The lines
+the router prints before the configuration (`Building
+configuration...`, and the time the output was made) and a line
+that ends a block (`end-policy`, `end-set`, `end-group`) are no row.
+Until 2026-11-13 only the kinds a pattern named (routing protocols,
+MPLS, route policies and their sets, access lists, classes,
+policies, L2VPN, EVPN, multicast) had a row, and the rest were in no
+output and no row, in jobs that said `completed`.  Not reached: an
+indented line of a stanza the parser reads that the stanza's reader
+does not take has no row; a banner's lines are text, with a row of
+their own.
+
+The readers of a hostname, a domain, a name server, a syslog host,
+an NTP server and the release take their value from their own line.
+Up to 2026-11-13 the white space between their words could be a line
+break, so a `hostname` or `domain name` line with no value was read
+with the next line's first word for the hostname or the domain, and
+a `logging` line with none with the next line's address for a syslog
+host.
+
 If your migration involves these surfaces, plan to hand-translate
 them or pair Netcanon with a complementary tool — see
 [`../COMPARISON.md`](../COMPARISON.md).

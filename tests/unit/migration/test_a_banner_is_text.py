@@ -1034,7 +1034,10 @@ def _digest(codec: str, path: str) -> str:
 #: (``codecs/cisco_nxos/test_what_no_reader_takes.py``); and every
 #: AOS-CX input with a line in column 0 that no reader takes, when
 #: each kind became a row, the rest of its tree as it was
-#: (``codecs/aruba_aoscx/test_what_no_reader_takes.py``).
+#: (``codecs/aruba_aoscx/test_what_no_reader_takes.py``); and every
+#: IOS XR input with a line in column 0 that no reader takes, when each
+#: kind became a row, the rest of its tree as it was
+#: (``codecs/cisco_iosxr/test_what_no_reader_takes.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "bfd67696de2a",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "f37f1937c656",
@@ -1163,17 +1166,17 @@ BEFORE: dict[str, str] = {
     # grammar, and one is served on `Vlan100` (dhcp_pools.py): was
     # "5f8ca989330b".
     "synthetic/arista_eos/kitchen_sink.txt": "22799702d769",
-    "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
-    "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
-    "real/cisco_iosxr/batfish_ibgp_border01.txt": "639b6fd2954a",
-    "real/cisco_iosxr/batfish_ibgp_rr.txt": "0432b72eff4e",
-    "real/cisco_iosxr/batfish_vpnv4_pe1.txt": "d3c44fa0bb3b",
-    "real/cisco_iosxr/batfish_vpnv4_pe2.txt": "fa0c9f8fddb3",
-    "real/cisco_iosxr/batfish_vpnv4_pe3.txt": "63fcc6d7a988",
-    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "700193459777",
+    "real/cisco_iosxr/batfish_ebgp_border01.txt": "cc14bfa1bb77",
+    "real/cisco_iosxr/batfish_ebgp_border02.txt": "18026db9c1da",
+    "real/cisco_iosxr/batfish_ibgp_border01.txt": "9cdd850814e4",
+    "real/cisco_iosxr/batfish_ibgp_rr.txt": "7147762e76a5",
+    "real/cisco_iosxr/batfish_vpnv4_pe1.txt": "3a656fe28a8e",
+    "real/cisco_iosxr/batfish_vpnv4_pe2.txt": "b85cb1a63142",
+    "real/cisco_iosxr/batfish_vpnv4_pe3.txt": "77b16ca3da7e",
+    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "2a8f8b9f6724",
     "real/cisco_iosxr/xrdtools_isis_r1.cfg": "178d0314da43",
-    "real/cisco_iosxr/xrdtools_sr_xrd1.cfg": "74c70c975078",
-    "real/cisco_iosxr/xrdtools_srv6_pe1.cfg": "0e4e6ddc0250",
+    "real/cisco_iosxr/xrdtools_sr_xrd1.cfg": "5dd362d97abb",
+    "real/cisco_iosxr/xrdtools_srv6_pe1.cfg": "58d0148f4a0f",
     "synthetic/cisco_iosxr/kitchen_sink.cfg": "75b5a4a7443e",
 }
 

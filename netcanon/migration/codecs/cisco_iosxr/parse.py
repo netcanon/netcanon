@@ -122,7 +122,11 @@ Deliberately NOT parsed (declared ``unsupported`` in the capability
 matrix — Tier-3): the SP-routing protocol blocks (``router bgp`` beyond
 the per-VRF RD harvest, ``router ospf`` / ``isis``), MPLS, the
 ``route-policy`` / ``prefix-set`` DSL, ACLs, and ``l2vpn`` / ``evpn``
-(the latter surfaced via ``dropped_tier3_sections``).
+(the latter surfaced via ``dropped_tier3_sections``).  A line in
+column 0 that none of the readers above takes is a row of
+``dropped_tier3_sections`` too (:func:`_rows_for_what_no_reader_takes`):
+``snmp-server``, ``ssh server``, ``line``, ``group`` and
+``apply-group``, ``telemetry``, a second ``hostname``.
 """
 
 from __future__ import annotations
@@ -132,6 +136,10 @@ import logging
 import re
 from collections.abc import Callable
 
+from ..._tier3_detection import (
+    is_an_iosxr_section_line,
+    unread_top_level_rows,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -171,10 +179,16 @@ logger = logging.getLogger(__name__)
 # Regex constants — module-level so they compile once per import.
 # ---------------------------------------------------------------------------
 
-_HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: The patterns applied to the whole text under ``re.MULTILINE`` read
+#: one line each: the white space between their words is ``[^\S\n]``,
+#: never ``\s``, which crosses a line break -- a ``hostname`` line with
+#: no value was read with the NEXT line's first word for the hostname,
+#: and that line was in no row (:func:`_rows_for_what_no_reader_takes`
+#: asks a line at a time).
+_HOSTNAME_RE = re.compile(r"^hostname[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE)
 #: ``domain name example.com`` — XR form (IOS-XE prefixes it with ``ip``).
 _DOMAIN_RE = re.compile(
-    r"^domain\s+name\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^domain[^\S\n]+name[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 
 # ── Management-plane globals (promotion #13) — XR render-dropped DNS / NTP /
@@ -183,7 +197,7 @@ _DOMAIN_RE = re.compile(
 #: (``name-server`` has no whitespace after ``name``, so ``_DOMAIN_RE`` can't
 #: match it, and vice-versa).
 _NAMESERVER_RE = re.compile(
-    r"^domain\s+name-server\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^domain[^\S\n]+name-server[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 #: NTP is a block: ``ntp`` on its own line, then indented ``server <ip>
 #: [maxpoll N] [prefer]`` / ``source <iface>`` / ``update-calendar`` leaves.
@@ -202,14 +216,31 @@ _NTP_BLOCK_RE = re.compile(
 #: captured as the server and the real IP lost (HEAD-review L1-3; the
 #: arista_eos ``_NTP_SERVER_RE`` twin already carries this infix).
 _NTP_SERVER_LINE_RE = re.compile(
-    r"^[ \t]+server\s+(?:vrf\s+\S+\s+)?(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^[ \t]+server[^\S\n]+(?:vrf[^\S\n]+\S+[^\S\n]+)?(\S+)",
+    re.IGNORECASE | re.MULTILINE,
 )
 #: Syslog destinations — XR spells them bare ``logging <ip>``, but ``logging``
 #: also fronts non-destination sub-commands (``logging console debugging``,
 #: ``logging monitor``, ``logging trap``).  Harvest the first IP-literal token
 #: per ``logging`` line, validated with :mod:`ipaddress` (mirrors the sibling
 #: Cisco codecs' ``_SYSLOG_LINE_RE``).
-_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(
+    r"^[^\S\n]*logging[^\S\n]+(\S.*)$", re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _syslog_host(rest: str) -> str | None:
+    """The syslog host a ``logging`` line names: the first word of
+    *rest* (what follows ``logging``) that is an IP address, or
+    ``None`` where the line names none (``logging console
+    debugging``)."""
+    for token in rest.split():
+        try:
+            ipaddress.ip_address(token)
+        except ValueError:
+            continue
+        return token
+    return None
 
 #: ``interface <name>``.  The second group is the word after the
 #: name: its number, when the type and the number are written apart
@@ -672,6 +703,207 @@ def banner_rows(raw: str) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Lines in column 0 that nothing translates
+# ---------------------------------------------------------------------------
+
+
+def _a_syslog_line(line: str) -> bool:
+    """Whether *line* is a ``logging`` line :func:`_parse_globals`
+    reads: one that names a host."""
+    m = _SYSLOG_LINE_RE.match(line)
+    return m is not None and _syslog_host(m.group(1)) is not None
+
+
+#: The lines in column 0 a reader of this module takes, every one of
+#: them, by what each reader asks of a line: a pattern's ``match``, or
+#: a function that says whether the line is read.  An ``interface``
+#: header is a record, a LAG or a row of its own (``interface
+#: preconfigure``, ``range``, a sub-interface whose tag is not read);
+#: ``ntp`` alone is the header of the block whose servers are read;
+#: a ``logging`` line is a syslog host where it names one.  The
+#: readers that read one line of a kind are :data:`_READ_ONCE`, and
+#: the local users are read one line a name
+#: (:func:`_rows_for_what_no_reader_takes`).  A reader that is added
+#: to the parse is added to one of them, and the other way round.
+_TOP_LEVEL_READERS: tuple[Callable[[str], object], ...] = (
+    _IFACE_RE.match,
+    _VRF_TOP_RE.match,
+    _ROUTER_STATIC_RE.match,
+    _NTP_HDR_RE.match,
+    _NAMESERVER_RE.match,
+    _a_syslog_line,
+)
+
+#: The readers that read the first line of their kind and no other,
+#: each giving the match it reads or ``None``: the tree holds one
+#: hostname and one domain.  A later line of the kind is in no
+#: output, and a row says so.
+_READ_ONCE: tuple[Callable[[str], re.Match[str] | None], ...] = (
+    _HOSTNAME_RE.search,
+    _DOMAIN_RE.search,
+)
+
+#: Words of a session, not of the configuration: a pasted
+#: ``configure``, ``commit`` or ``end`` holds nothing to translate.
+_SESSION_WORDS = frozenset({"configure", "commit", "end", "exit"})
+
+#: The words that end a block in column 0 (``route-policy`` ...
+#: ``end-policy``, ``prefix-set`` ... ``end-set``, ``group`` ...
+#: ``end-group``): the line belongs to the block, which a row of its
+#: own says.
+_BLOCK_ENDS = frozenset({
+    "end-class-map", "end-group", "end-policy", "end-policy-map", "end-set",
+})
+
+#: A line the router prints around the configuration, not a line of
+#: it: ``Building configuration...``, and the time the output was
+#: made (``Thu Apr 23 18:31:17.384 UTC``), as Batfish's IOS XR
+#: grammar skips a line that begins with either.  Matched whole,
+#: after the line's trailing white space.
+_PRINTOUT_RE = re.compile(
+    r"Building configuration\.\.\."
+    r"|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[ \t]+"
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ \t]+\d{1,2}[ \t]+"
+    r"\d{1,2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:[ \t]+[A-Za-z]{1,6})?",
+)
+
+#: The words IOS XR configurations begin a line in column 0 with,
+#: which a row may show: the words the committed IOS XR inputs begin
+#: such a line with, the words Batfish's IOS XR grammar reads a
+#: top-level line by, and the words this module's readers and the
+#: IOS XR Tier-3 patterns read.  A line that begins with another
+#: word is said all the same, in a row that counts such lines and
+#: shows none of their text (:func:`_rows_for_what_no_reader_takes`).
+#: A word missing here costs a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "apply-group", "as-path-set", "banner", "bfd", "bridge",
+    "call-home", "cdp", "cef", "class-map", "clock", "community-set",
+    "configuration", "control-plane", "crypto", "dhcp", "domain",
+    "ethernet", "event", "evpn", "extcommunity-set", "flow", "fpd",
+    "frequency", "group", "grpc", "hostname", "interface", "ipsla",
+    "ipv4", "ipv6", "isolation", "key", "l2tp-class", "l2vpn", "line",
+    "lldp", "logging", "lpts", "mpls", "multicast-routing", "netconf",
+    "netconf-yang", "nsr", "ntp", "object-group", "performance-measurement",
+    "policy-map", "prefix-set", "ptp", "radius-server", "rd-set",
+    "route-policy", "router", "rsvp", "sampler-map", "segment-routing",
+    "service", "service-policy", "snmp-server", "spanning-tree", "srlg",
+    "ssh", "statistics", "tacacs", "tacacs-server", "taskgroup", "tcp",
+    "telemetry", "telnet", "template", "tftp", "track", "usergroup",
+    "username", "vrf", "vty-pool",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``snmp-server community``, ``ssh
+#: server``, ``router hsrp``, ``line console``).  After any other the
+#: second word is often a name the operator chose (``hostname``,
+#: ``username``, ``vrf``, ``group``, ``route-policy``), which a row
+#: does not show (``_tier3_detection.command_label``).  ``logging``
+#: is not one: IOS XR takes a syslog host's address or its NAME
+#: straight after the word (``logging <host>``), and a name is a
+#: value.
+_FAMILIES = frozenset({
+    "aaa", "bfd", "cdp", "cef", "clock", "configuration", "crypto",
+    "dhcp", "domain", "ethernet", "event", "flow", "fpd", "frequency",
+    "grpc", "ipsla", "ipv4", "ipv6", "key", "line", "lldp",
+    "lpts", "mpls", "netconf", "netconf-yang", "nsr", "ntp",
+    "object-group", "radius-server", "router", "service", "snmp-server",
+    "spanning-tree", "ssh", "statistics", "tacacs-server", "tcp",
+    "telemetry", "telnet", "tftp",
+})
+
+
+def _line_at(raw: str, start: int) -> str:
+    """The line of *raw* that begins at *start*, as
+    ``str.splitlines`` gives it."""
+    end = raw.find("\n", start)
+    return raw[start : end if end != -1 else len(raw)].splitlines()[0]
+
+
+def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that no reader takes --
+    :data:`_TOP_LEVEL_READERS`, the line each of :data:`_READ_ONCE`
+    reads, the first ``username`` line of each name, a line a Tier-3
+    pattern gives a row of its own
+    (``_tier3_detection.is_an_iosxr_section_line``) -- and that is not
+    a word of a session (:data:`_SESSION_WORDS`), the end of a block
+    (:data:`_BLOCK_ENDS`) or a line the router prints around the
+    configuration (:data:`_PRINTOUT_RE`) is in no output, and a row
+    says so (``_tier3_detection.unread_top_level_rows``): a row of its
+    command word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`), one for
+    each kind of line, past ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of
+    them one that counts the rest; a line that begins with a word IOS
+    XR configurations are not seen to begin with is counted in one
+    row, with the number of the first such line and nothing of its
+    text (``_tier3_detection.no_command_row``), which is no sign that
+    the text was a config.  A line that does not begin with a letter
+    (``!!``, a ``!``) is no command, and is not counted.
+
+    Up to 0.7.7 only the kinds a Tier-3 pattern named had a row, and an
+    IOS XR config's SNMP, SSH, ``line`` and telemetry settings, its
+    configuration groups and the interfaces they apply to were in no
+    output and no row, in jobs that said ``completed``.  So every line
+    is asked, not a list of kinds, as the Arista EOS, Cisco NX-OS,
+    Aruba AOS-CX and OS10 parsers ask them.  Not reached: a line of a
+    stanza (indented) that the stanza's reader does not take; and a
+    banner, whose lines -- the one that opens it among them -- are
+    text, emptied before any reader (:func:`without_banner_bodies`),
+    with a row of their own (:func:`banner_rows`).
+
+    Args:
+        raw: The text the readers are given, its banners emptied
+            (:func:`without_banner_bodies`) and before any stanza is
+            taken out of it, so that a line has the number it has in
+            the text that was pasted.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    once: dict[str, int] = {}
+    for read in _READ_ONCE:
+        m = read(raw)
+        if m is not None:
+            line = _line_at(raw, m.start())
+            once[line] = once.get(line, 0) + 1
+    users: set[str] = set()
+
+    def taken(line: str) -> bool:
+        # The lines come in order: a line a reader of one line read is
+        # taken once, as the parse reads it once (no line before it
+        # can be the same, or the reader would have read that one).
+        if once.get(line):
+            once[line] -= 1
+            return True
+        user = _USERNAME_INLINE_RE.match(line) or _USERNAME_HDR_RE.match(line)
+        if user is not None:
+            # The first line of a name is read, a later one is not
+            # (``_parse_local_users``).
+            if user.group(1) in users:
+                return False
+            users.add(user.group(1))
+            return True
+        if any(reader(line) for reader in _TOP_LEVEL_READERS):
+            return True
+        if line.split(None, 1)[0].lower() in _BLOCK_ENDS:
+            return True
+        if _PRINTOUT_RE.fullmatch(line.rstrip()):
+            return True
+        return is_an_iosxr_section_line(line)
+
+    return unread_top_level_rows(
+        raw,
+        taken=taken,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XR ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -714,6 +946,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # A text the router would place otherwise than this parser reads it:
     # refused in words, before any reader makes a record of it.
     _refuse_a_form_the_router_misplaces(raw)
+    # Each line in column 0 that no reader below takes is a row, asked
+    # before any stanza is taken out so that a row's line number is the
+    # line's in the text that was pasted; the rows go after every other.
+    top_level = _rows_for_what_no_reader_takes(raw)
 
     intent = CanonicalIntent(
         source_vendor="cisco_iosxr",
@@ -777,6 +1013,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.lags = _parse_lags(raw)
     intent.local_users = _parse_local_users(raw)
 
+    intent.dropped_tier3_sections.extend(top_level)
+
     logger.debug(
         "cisco_iosxr parsed: hostname=%r ifaces=%d vrfs=%d vlans=%d "
         "routes=%d lags=%d users=%d (input=%d chars)",
@@ -818,15 +1056,10 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
         # First IP-literal token on a ``logging`` line is the syslog host;
         # non-destination sub-commands carry no IP token.  De-dup, first-seen
         # (``seen_syslog`` set-guard keeps it O(1) per line -- perf review P2).
-        for token in m.group(1).split():
-            try:
-                ipaddress.ip_address(token)
-            except ValueError:
-                continue
-            if token not in seen_syslog:
-                seen_syslog.add(token)
-                intent.syslog_servers.append(token)
-            break
+        token = _syslog_host(m.group(1))
+        if token is not None and token not in seen_syslog:
+            seen_syslog.add(token)
+            intent.syslog_servers.append(token)
 
 
 def _extract_version(raw: str) -> str:
@@ -845,7 +1078,8 @@ def _extract_version(raw: str) -> str:
     # run of spaces after ``version`` was shared out between the two every
     # way there is before the release was found not to follow.
     m = re.search(
-        r"^!!\s+IOS XR Configuration\s+(?:version(?:\s*=)?\s*)?(\S+)",
+        r"^!![^\S\n]+IOS XR Configuration[^\S\n]+"
+        r"(?:version(?:[^\S\n]*=)?[^\S\n]*)?(\S+)",
         raw, re.MULTILINE,
     )
     return m.group(1) if m else ""
