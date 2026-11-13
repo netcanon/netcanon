@@ -48,6 +48,7 @@ import re
 from ..._comments import comment
 from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._roles import below_admin, format_below_admin_comment
+from ..._said import review
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -310,11 +311,12 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
             # of another vendor's name, which only the port
             # translator makes a VyOS name of, or an entry that
             # named it so.)
-            lines.append("        " + _review(
-                f"review: the source config tags this "
-                f"interface {iface.dot1q_vlan}; on VyOS a tag is a vif "
-                f"of its port, and this block carries none"
-            ))
+            lines.append("        " + _review("review: " + review(
+                f"the source config tags this interface "
+                f"{iface.dot1q_vlan}; on VyOS a tag is a vif of its port, "
+                f"and this block carries none",
+                f"interfaces {btype} {bname}",
+            )))
         if iface is not None:
             lines.extend(_iface_body(iface, "        "))
         if btype == "bonding":
@@ -326,11 +328,11 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
                 # another: an operator's entry named the
                 # sub-interface so (the translator names one by its
                 # tag).  Written as it was named, and said.
-                lines.append("        " + _review(
-                    f"review: the source config tags this "
-                    f"sub-interface {tag}, and a vif's number is its "
-                    f"VLAN: it carries {vid}"
-                ))
+                lines.append("        " + _review("review: " + review(
+                    f"the source config tags this sub-interface {tag}, and "
+                    f"a vif's number is its VLAN: it carries {vid}",
+                    f"interfaces {btype} {bname} vif {vid}",
+                )))
             lines.append(f"        vif {vid} {{")
             lines.extend(_iface_body(viface, "            "))
             lines.append("        }")

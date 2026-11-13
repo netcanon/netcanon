@@ -1000,9 +1000,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   value (a record left out for it, a name written as one word): the
   line and its warning are made by one call, as the renderer writes
   (`said_while_rendering`), so that neither is a copy of the other.
-  A `review:` line of another kind with no warning does not hold the
-  job yet.  What
-  it took.  The
+  And so is every other `review:` line a renderer writes for a loss
+  (`review`, `netcanon/migration/_said.py`); a line that writes what
+  the source holds (a check to make on the device, a note for an edit
+  there) does not hold the job, and
+  every call of `review` in the product is reached by an input that
+  `tests/unit/migration/test_a_review_line_holds_the_job.py` reads.
+  What it took.  The
   condition is over EVERY name the translator rewrites: with no
   pairing to protect, the model path's reason for looking only at a
   clash that has a hardware port in it does not apply, and the two

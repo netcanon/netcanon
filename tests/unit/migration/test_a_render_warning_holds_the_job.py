@@ -24,9 +24,10 @@ warning (``takes_password``, ``refuses_snmpv3_user``,
 two to each other by what they name, on every public codec.
 
 A value a target does not read as one value is held by its own guard,
-``test_a_value_said_holds_the_job.py``.  Not held yet: a ``review:``
-line of another kind with no warning beside it (a VLAN FortiOS can give
-no parent).
+``test_a_value_said_holds_the_job.py``, and every other ``review:`` line
+a renderer writes for a loss (a VLAN FortiOS can give no parent, a VRRP
+group of a protocol the target does not run) by
+``test_a_review_line_holds_the_job.py``.
 """
 from __future__ import annotations
 
@@ -155,18 +156,19 @@ def test_a_radius_secret_the_target_cannot_carry_holds_it() -> None:
     assert job.status is MigrationJobStatus.partial
 
 
-def test_a_review_line_with_no_warning_does_not_hold_it_yet() -> None:
-    """A known limitation, pinned so that closing it fails here until
-    this is taken out (CHANGELOG, Known limitations): a VLAN FortiOS can
-    give no parent is a ``review:`` line and no warning, and the job
-    says ``completed``."""
+def test_a_review_line_of_another_kind_holds_it() -> None:
+    """Once a known limitation: a VLAN FortiOS can give no parent was a
+    ``review:`` line and no warning, and the job said ``completed``.
+    The line is a warning of the job now, and the job is ``partial``."""
     job = _plan("arista_eos", get_codec("fortigate_cli"), "hostname s1\nvlan 10\n   name ten\n")
     assert any(
         "review:" in line and "VLAN 10 has no parent" in line
         for line in (job.rendered or "").splitlines()
     )
-    assert job.warnings == []
-    assert job.status is MigrationJobStatus.completed
+    said = [w for w in job.warnings if "VLAN 10 has no parent" in w]
+    assert len(said) == 1, job.warnings
+    assert said[0].startswith("Review: interface vlan10 -- "), said
+    assert job.status is MigrationJobStatus.partial
 
 
 def test_a_failed_job_is_not_made_partial() -> None:

@@ -4044,6 +4044,22 @@ end
 """
 
 
+def _partial_for_its_parent_alone(job, name: str) -> bool:
+    """A VLAN interface of these FortiGate inputs rides on ``internal``,
+    which they do not define: FortiOS writes it on a parent of its own
+    choosing under a review line, and the job is ``partial`` for that
+    line and nothing else (``netcanon.migration._said.review``)."""
+    said = [str(text) for text in job.warnings if str(text).startswith("Review:")]
+    return (
+        job.status == MigrationJobStatus.partial
+        and "The target left out 1 record(s)" in job.error
+        and said == [
+            f'Review: interface {name} -- rides on "internal" in the source, '
+            f"which is not in this output; the parent below was chosen."
+        ]
+    )
+
+
 class TestCaseIsAFactAboutThePlatform:
     """On AOS-S ``1/a1`` is the port ``1/A1``.  On FortiOS ``DMZ`` and
     ``dmz`` are two interfaces.  Each codec says which its platform is."""
@@ -4108,7 +4124,7 @@ class TestCaseIsAFactAboutThePlatform:
         assert "10.10.10.1" in job.rendered and "10.20.20.1" in job.rendered
         assert job.port_renames == {}
         assert job.port_mapping_plan.fused == {}
-        assert job.status == MigrationJobStatus.completed
+        assert _partial_for_its_parent_alone(job, "DMZ"), (job.status, job.warnings)
 
     def test_sending_one_onto_the_other_is_two_interfaces_on_one_name(self) -> None:
         """The same two interfaces, and this time the operator does
@@ -4660,7 +4676,7 @@ class TestALogicalNameOnAPortTheTargetLacks:
         assert job.port_renames == {} and job.port_drops == []
         assert plan.landed_off_target == {} and plan.unresolved_ports == []
         assert 'edit "DMZ"' in job.rendered and "dmz1" not in job.rendered
-        assert job.status == MigrationJobStatus.completed
+        assert _partial_for_its_parent_alone(job, "DMZ"), (job.status, job.warnings)
 
     def test_the_operator_deciding_it_clears_it(self) -> None:
         job = run_plan_with_models(
@@ -5767,7 +5783,7 @@ class TestAManagementShapedLanding:
         plan = job.port_mapping_plan
         assert plan.displaced == [] and plan.landed_off_target == {}
         assert job.port_drops == [] and 'edit "MGMT"' in job.rendered
-        assert job.status == MigrationJobStatus.completed
+        assert _partial_for_its_parent_alone(job, "MGMT"), (job.status, job.warnings)
 
     def test_each_kind_of_port_counts_and_case_is_the_targets(self) -> None:
         junos, fortigate = get_codec("juniper_junos"), get_codec("fortigate_cli")

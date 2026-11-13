@@ -73,6 +73,7 @@ from ..._radius_secrets import (
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
+from ..._said import review, review_line
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
 from ...canonical.transforms import (
@@ -1158,10 +1159,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     # no HSRP, no CARP grammar exists on the platform.
                     # Surface a review comment so the operator knows
                     # to translate manually.
-                    lines.append(
-                        f"   ; review: vrrp_groups[{group.group_id}]"
-                        f".mode={group.mode!r} has no AOS-S equivalent"
-                    )
+                    lines.append("   ; review: " + review(
+                        f"vrrp_groups[{group.group_id}].mode={group.mode!r} "
+                        f"has no AOS-S equivalent",
+                        f"vlan {vlan.id}",
+                    ))
                     continue
                 lines.append(
                     f"   vrrp vrid {group.group_id}"
@@ -1176,11 +1178,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"      virtual-ip-address {group.virtual_ips[0]}"
                     )
                     for extra in group.virtual_ips[1:]:
-                        lines.append(
-                            f"      ; review: AOS-S supports only one "
-                            f"virtual-ip-address per vrid; secondary "
-                            f"{extra} dropped"
-                        )
+                        lines.append("      ; review: " + review(
+                            f"AOS-S supports only one virtual-ip-address "
+                            f"per vrid; secondary {extra} dropped",
+                            f"vlan {vlan.id}, vrrp vrid {group.group_id}",
+                        ))
                 if group.priority == 255:
                     # AOS-S has no ``priority 255`` line — priority 255 IS
                     # the RFC 5798 address-owner role, expressed via the
@@ -1209,11 +1211,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     # consume this format.  Surface as review, naming the
                     # scheme and never the key.
                     scheme = group.authentication.partition(":")[0]
-                    lines.append(
-                        f"      ; review: vrrp authentication "
-                        f"({scheme or 'no scheme'}) cannot be cleanly "
-                        f"emitted on AOS-S"
-                    )
+                    lines.append("      ; review: " + review(
+                        f"vrrp authentication ({scheme or 'no scheme'}) "
+                        f"cannot be cleanly emitted on AOS-S",
+                        f"vlan {vlan.id}, vrrp vrid {group.group_id}",
+                    ))
                 # ``enable`` is the platform-mandatory activation
                 # token — emit it for every group so AOS-S actually
                 # starts the election.
@@ -1252,10 +1254,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # this writing; we emit a comment flagging it for operator
         # review rather than guessing the syntax.
         for v6 in oobm_iface.ipv6_addresses:
-            lines.append(
-                f"   ; ipv6 address {v6.ip}/{v6.prefix_length} "
-                f"-- review: AOS-S oobm IPv6 syntax not auto-emitted"
-            )
+            lines.append("   ; " + review_line(
+                f"ipv6 address {v6.ip}/{v6.prefix_length}",
+                "AOS-S oobm IPv6 syntax not auto-emitted",
+            ))
         lines.append("   exit")
 
     # Physical / named interfaces.  Skip Vlan<N> stubs that were
@@ -1507,7 +1509,9 @@ def _route_line(route: Any, not_a_vlan: frozenset[str] = frozenset()) -> str:
 
 
 def _route_review(route: Any, why: str) -> str:
-    return f"; review: static route {route.destination} {why}; not written"
+    return "; review: " + review(
+        f"static route {route.destination} {why}; not written"
+    )
 
 
 def refuses_snmpv3_user(user, source_vendor: str) -> bool:

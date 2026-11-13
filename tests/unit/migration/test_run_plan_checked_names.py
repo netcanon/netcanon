@@ -2069,7 +2069,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (0, 0, 6, 2, 0, 0): a job whose target refuses a credential
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-7).
-    "aruba_aoscx": (0, 0, 1, 0, 0, 0),
+    # And from (0, 0, 1, 0, 0, 0): a job whose target writes a review line for a
+    # record it leaves out, or writes otherwise, is `partial` for that
+    # before a name is checked (-1).
+    "aruba_aoscx": (0, 0, 0, 0, 0, 0),
     # From (8, 0, 0, 0, 6, 0): an AOS-S stanza ends at its `exit`, not
     # at a line in column 0.  The KB.15.15 capture, every line at
     # column 0, had been read as three empty VLANs; its 48 letter-slot
@@ -2124,7 +2127,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (14, 0, 0, 1, 4, 16): a job whose target refuses a credential
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-17).
-    "cisco_iosxe_cli": (8, 0, 0, 0, 3, 7),
+    # And from (8, 0, 0, 0, 3, 7): a job whose target writes a review line for a
+    # record it leaves out, or writes otherwise, is `partial` for that
+    # before a name is checked (-2).
+    "cisco_iosxe_cli": (7, 0, 0, 0, 3, 6),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     # And onto RouterOS a sub-interface is a VLAN interface on its
@@ -2170,7 +2176,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (0, 0, 11, 0, 0, 0): a job whose target refuses a credential
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-9).
-    "cisco_nxos": (0, 0, 2, 0, 0, 0),
+    # And from (0, 0, 2, 0, 0, 0): a job whose target writes a review line for a
+    # record it leaves out, or writes otherwise, is `partial` for that
+    # before a name is checked (-2).
+    "cisco_nxos": (0, 0, 0, 0, 0, 0),
     # From (0, 0, 14, 0, 0, 0): a job whose target writes a name as one
     # word, since it does not read it as one, is `partial` for that
     # before a name is checked (-2).
@@ -2236,7 +2245,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (6, 0, 10, 0, 2, 9): a job whose target refuses a credential
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-8).
-    "juniper_junos": (5, 0, 8, 0, 0, 6),
+    # And from (5, 0, 8, 0, 0, 6): a job whose target writes a review line for a
+    # record it leaves out, or writes otherwise, is `partial` for that
+    # before a name is checked (-1).
+    "juniper_junos": (5, 0, 8, 0, 0, 5),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -2290,7 +2302,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (10, 0, 0, 0, 25, 0): a job whose target refuses a credential
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-27).
-    "opnsense": (8, 0, 0, 0, 0, 0),
+    # And from (8, 0, 0, 0, 0, 0): a job whose target writes a review line for a
+    # record it leaves out, or writes otherwise, is `partial` for that
+    # before a name is checked (-2).
+    "opnsense": (6, 0, 0, 0, 0, 0),
     # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
     # is written `Ethernet1` there, as `eth1` is: two ports on one name
     # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
@@ -2372,16 +2387,31 @@ def _a_port_is_among(job: MigrationJob) -> bool:
     return bool(hardware.intersection(listed))
 
 
+#: Source codecs no committed input of which makes a `completed` job
+#: onto any public codec, so that the read-back below has nothing of
+#: theirs to read, with the reason.  Compared for equality: a job of
+#: such a source that is `completed` again fails until it is taken out.
+_NONE_COMPLETED = {
+    "fortigate_cli": (
+        "onto FortiOS itself an input with a tunnel interface is `partial` "
+        "for the review line beside it (FortiOS makes the interface from a "
+        "VPN entry the output does not have), and every other job is "
+        "`partial` for another reason"
+    ),
+}
+
+
 class TestEveryCommittedCapture:
     def test_every_source_codec_is_pinned(self) -> None:
         """So that a codec's captures cannot go unread."""
         assert set(_MOVES) == set(CAPTURES)
+        assert set(_NONE_COMPLETED) <= set(_MOVES)
 
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [51, 0, 38, 1, 26, 15]
-        assert sum(by_reason) == 131
+        assert by_reason == [48, 0, 35, 1, 26, 13]
+        assert sum(by_reason) == 123
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
@@ -2446,5 +2476,6 @@ class TestEveryCommittedCapture:
         assert dict(stands) == _STANDS.get(codec_name, {})
         # Every job still called completed was read back, and there
         # are some: a loop that reads none back passes every line above.
-        assert still_completed > 0
+        # A source none of whose jobs is completed is named, with why.
+        assert (still_completed > 0) is (codec_name not in _NONE_COMPLETED)
         assert _READ_BACKS["asked"] - asked == still_completed

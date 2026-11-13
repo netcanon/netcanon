@@ -300,14 +300,19 @@ def test_two_units_with_one_tag_are_one_name_and_said() -> None:
 def test_an_entry_that_gives_a_unit_another_number_is_said() -> None:
     """An entry decides the name, and on VyOS the name is the VLAN: the
     job says the entry's number is not the source's tag, and so does a
-    line of the output."""
+    line of the output -- whose warning holds the job ``partial``, since
+    the output carries another VLAN than the source."""
     ios, vyos = get_codec("cisco_iosxe_cli"), get_codec(_VYOS)
     port = run_plan_with_checked_names(
         ios, vyos, _ONE_TAG, port_rename_map={},
     ).port_renames["GigabitEthernet0/0/2"]
     entry = {"GigabitEthernet0/0/2.300": f"{port}.300"}
     job = run_plan_with_checked_names(ios, vyos, _ONE_TAG, port_rename_map=entry)
-    assert job.status == MigrationJobStatus.completed, job.error
+    assert job.status == MigrationJobStatus.partial, job.error
+    assert [str(text) for text in job.warnings if str(text).startswith("Review:")] == [
+        f"Review: interfaces ethernet {port} vif 300 -- the source config tags "
+        f"this sub-interface 200, and a vif's number is its VLAN: it carries 300."
+    ]
     assert (
         f"port_rename: the entry for 'GigabitEthernet0/0/2.300' names it "
         f"'{port}.300'; on vyos the number after the dot is the VLAN a "

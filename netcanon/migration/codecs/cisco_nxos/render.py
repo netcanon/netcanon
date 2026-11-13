@@ -34,6 +34,7 @@ import re
 from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
+from ..._said import review, review_line
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -66,7 +67,7 @@ from . import port_names as _port_names
 #: native VLAN ID uses the default VLAN, which is VLAN1, and the global
 #: line changes the native VLAN of all trunks on the device.
 _NO_UNTAGGED_REVIEW = (
-    "  ! review: this trunk carries no VLAN untagged in the translated "
+    "this trunk carries no VLAN untagged in the translated "
     "config; on NX-OS a trunk with no native line uses the default VLAN, "
     "VLAN 1, and this one's allowed list holds VLAN 1; vlan dot1q tag "
     "native would tag it, and changes the native VLAN of every trunk of "
@@ -451,12 +452,12 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
         community = snmp.community or "public"
         lines.append(f"snmp-server host {host} traps version 2c {community}")
         if not snmp.community:
-            lines.append(
-                f"! snmp-server host {host} -- review: the source carried "
-                f"no SNMP community, so `public` was synthesised to keep "
-                f"the trap target valid; set the real community or convert "
-                f"this host to v3"
-            )
+            lines.append("! " + review_line(
+                f"snmp-server host {host}",
+                "the source carried no SNMP community, so `public` was "
+                "synthesised to keep the trap target valid; set the real "
+                "community or convert this host to v3",
+            ))
     for user in snmp.v3_users:
         # ⚠️ An SNMPv3 USM key is localised against the agent's OWN engine ID.
         # This render emitted whatever key it was handed and then appended
@@ -652,7 +653,9 @@ def _render_switchport_lines(iface, may_review: bool = False) -> list[str]:
         elif may_review and wants_no_untagged_vlan(
             "cisco_nxos", iface.trunk_allowed_vlans, iface.trunk_native_vlan,
         ):
-            out.append(_NO_UNTAGGED_REVIEW)
+            out.append("  ! review: " + review(
+                _NO_UNTAGGED_REVIEW, f"interface {iface.name}",
+            ))
         # The list means what it says.  No VLAN is ``none``.  Every
         # VLAN is no line at all: it is the default and what the
         # device prints, and ``1-4094`` names the ids NX-OS keeps for
@@ -766,8 +769,12 @@ def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -
                 # The value is a secret: the line says where, never what.
                 block.append(
                     f"    ! hsrp {group.group_id} authentication -- review: "
-                    f"the source's authentication is not a key NX-OS takes "
-                    f"as typed, so the group is written with none"
+                    + review(
+                        "the source's authentication is not a key NX-OS "
+                        "takes as typed, so the group is written with none",
+                        f"interface {iface.name}, hsrp {group.group_id} "
+                        f"authentication",
+                    )
                 )
 
     if iface.lag_member_of:

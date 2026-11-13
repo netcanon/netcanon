@@ -62,6 +62,7 @@ from ..._radius_secrets import (
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
+from ..._said import review, review_line
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -111,7 +112,7 @@ _ALLOWED_VLAN_LEAD = " switchport trunk allowed vlan "
 #: VLAN is VLAN 1 by default, and the global line tags the native VLAN
 #: on all 802.1Q trunk ports.
 _NO_UNTAGGED_REVIEW = (
-    " ! review: this trunk carries no VLAN untagged in the translated "
+    "this trunk carries no VLAN untagged in the translated "
     "config; on IOS-XE a trunk with no native line has native VLAN 1, "
     "and this one's allowed list holds VLAN 1; vlan dot1q tag native "
     "would tag it, and tags the native VLAN of every 802.1Q trunk of "
@@ -361,6 +362,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         "route-distinguisher",
                         "Cisco IOS-XE",
                         native_form="rd-auto (IOS-XE 17.12.1+)",
+                        where=f"vrf definition {vrf.name}",
                     )
                 )
             else:
@@ -379,6 +381,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     "route-target",
                     "Cisco IOS-XE",
                     native_form="vnid <n> evpn-instance",
+                    where=f"vrf definition {vrf.name}",
                 )
             )
         if rt_imports or rt_exports or "ipv4" in families or "ipv6" not in families:
@@ -526,12 +529,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # decide whether to flip to VRRP or to mirror the
                 # virtual IP onto the primary.  Emitted once per such
                 # address.
-                body.append(
-                    f" ! review: virtual_gateway_address="
+                body.append(" ! review: " + review(
+                    f"virtual_gateway_address="
                     f"{addr.virtual_gateway_address!r} differs from "
                     f"primary IP {addr.ip!r}; IOS-XE SD-Access only "
-                    f"supports primary-IP-as-anycast (NX-OS shape)"
-                )
+                    f"supports primary-IP-as-anycast (NX-OS shape)",
+                    f"interface {iface.name}",
+                ))
         # GAP-EVPN-3: IPv6 addresses — IOS-XE uses CIDR natively
         # (no dotted-mask form for v6).  Link-local re-emits the
         # explicit keyword.
@@ -554,10 +558,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         elif iface.dhcp_client_v6 == "slaac":
             body.append(" ipv6 address autoconfig")
         elif iface.dhcp_client_v6:
-            body.append(
-                f" ! review: dhcp_client_v6={iface.dhcp_client_v6} "
-                f"has no IOS-XE equivalent"
-            )
+            body.append(" ! review: " + review(
+                f"dhcp_client_v6={iface.dhcp_client_v6} has no IOS-XE "
+                f"equivalent",
+                f"interface {iface.name}",
+            ))
         # A tunnel's two ends, ahead of its mode, where IOS prints
         # them.  A source is an interface or an address; the tree
         # holds at most one of the two.
@@ -584,10 +589,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             elif tt == "eoip":
                 # MikroTik-specific Ethernet-over-IP — no IOS-XE
                 # equivalent; surface as a review comment.
-                body.append(
-                    " ! review: tunnel_type=eoip has no IOS-XE "
-                    "equivalent (MikroTik-only)"
-                )
+                body.append(" ! review: " + review(
+                    "tunnel_type=eoip has no IOS-XE equivalent "
+                    "(MikroTik-only)",
+                    f"interface {iface.name}",
+                ))
         # Switchport — emit the mode FIRST (operator-natural
         # ordering), then EVERY captured switchport sub-attribute
         # regardless of mode.  Cisco IOS-XE tolerates declaring
@@ -631,7 +637,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 iface.trunk_native_vlan,
             )
         ):
-            body.append(_NO_UNTAGGED_REVIEW)
+            body.append(" ! review: " + review(
+                _NO_UNTAGGED_REVIEW, f"interface {iface.name}",
+            ))
         if iface.switchport_mode == "trunk":
             # On a trunk the list means what it says.  No VLAN is
             # ``none``.  Every VLAN is no line at all: it is the
@@ -705,13 +713,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for group in iface.vrrp_groups:
             gid = group.group_id
             if group.mode == "hsrp":
-                body.extend(_standby_lines(group))
+                body.extend(_standby_lines(group, f"interface {iface.name}"))
                 continue
             if group.mode and group.mode != "vrrp":
-                body.append(
-                    f" ! review: vrrp_groups[{gid}].mode="
-                    f"{group.mode!r} has no IOS-XE equivalent"
-                )
+                body.append(" ! review: " + review(
+                    f"vrrp_groups[{gid}].mode={group.mode!r} has no IOS-XE "
+                    f"equivalent",
+                    f"interface {iface.name}",
+                ))
                 continue
             # Primary virtual IP — first element is the canonical
             # primary; secondaries get the ``secondary`` trailer.
@@ -766,9 +775,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # guessing the scheme.
                 # The blob is a secret: the line says where, never what.
                 body.append(
-                    f" ! vrrp {gid} authentication -- review: the source's "
-                    f"authentication value names no scheme, so it could "
-                    f"not be cleanly emitted"
+                    f" ! vrrp {gid} authentication -- review: " + review(
+                        "the source's authentication value names no "
+                        "scheme, so it could not be cleanly emitted",
+                        f"interface {iface.name}, vrrp {gid} authentication",
+                    )
                 )
             for tracked in group.track_interfaces:
                 body.append(f" vrrp {gid} track {tracked}")
@@ -793,11 +804,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # bare ``interface NAME`` line so the membership has a
             # binding target, but flag for operator review.
             out.append(f"interface {iface.name}")
-            out.append(
-                f"! interface {iface.name} -- review: foreign port "
-                f"name preserved from source vendor; rename to a "
-                f"native IOS-XE port before deploy"
-            )
+            out.append("! " + review_line(
+                f"interface {iface.name}",
+                "foreign port name preserved from source vendor; rename "
+                "to a native IOS-XE port before deploy",
+            ))
             out.append("!")
             continue
         out.append(f"interface {iface.name}")
@@ -961,12 +972,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             community = s.community or "public"
             out.append(f"snmp-server host {host} version 2c {community}")
             if not s.community:
-                out.append(
-                    f"! snmp-server host {host} -- review: the source "
-                    f"carried no SNMP community, so `public` was "
-                    f"synthesised to keep the trap target valid; set the "
-                    f"real community or convert this host to v3"
-                )
+                out.append("! " + review_line(
+                    f"snmp-server host {host}",
+                    "the source carried no SNMP community, so `public` was "
+                    "synthesised to keep the trap target valid; set the "
+                    "real community or convert this host to v3",
+                ))
         # SNMPv3 USM users.  Cisco syntax pairs auth/priv with
         # the v3 keyword; ``aes128`` canonical → ``aes 128`` two
         # tokens; ``aes192``/``aes256`` similarly split.
@@ -1117,16 +1128,25 @@ def _needs_hsrp_version_2(group: Any) -> bool:
     )
 
 
-def _standby_lines(group: Any) -> list[str]:
+def _standby_lines(group: Any, where: str = "") -> list[str]:
     """An HSRP group as IOS-XE writes it: a ``standby <group>`` line for
     each statement (Cisco's HSRP guide: ``standby [group-number] ip
     [ip-address [secondary]]``, ``priority``, ``preempt``,
     ``authentication text`` / ``md5 key-string``, ``mac-address``).
 
-    What is not written is said in a review line: a key that is not one
-    word, a key of another scheme, and the fields an HSRP group of
-    IOS-XE has no statement for (a description; tracked interfaces,
+    What is not written is said in a review line, and as a warning of
+    the job (:func:`netcanon.migration._said.review`): a key that is
+    not one word, a key of another scheme, and the fields an HSRP group
+    of IOS-XE has no statement for (a description; tracked interfaces,
     which IOS-XE tracks as objects).
+
+    Args:
+        group: The canonical VRRP group, of mode ``hsrp``.
+        where: The stanza the lines are in (``interface <name>``), for
+            the warnings.
+
+    Returns:
+        The group's lines, each with its leading space.
     """
     gid = group.group_id
     lines = [
@@ -1151,9 +1171,12 @@ def _standby_lines(group: Any) -> list[str]:
     elif group.authentication:
         # The value is a secret: the line says where, never what.
         lines.append(
-            f" ! standby {gid} authentication -- review: the source's "
-            f"authentication is not a key IOS-XE takes as typed, so the "
-            f"group is written with none"
+            f" ! standby {gid} authentication -- review: " + review(
+                "the source's authentication is not a key IOS-XE takes as "
+                "typed, so the group is written with none",
+                f"{where}, standby {gid} authentication" if where
+                else f"standby {gid} authentication",
+            )
         )
     mac = _mac_to_dotted_triplet(group.virtual_mac)
     if mac:
@@ -1169,17 +1192,18 @@ def _standby_lines(group: Any) -> list[str]:
         ) if value
     ]
     if unwritten:
-        lines.append(
-            f" ! review: vrrp_groups[{gid}] (HSRP): {', '.join(unwritten)} "
-            f"not written"
-        )
+        lines.append(" ! review: " + review(
+            f"vrrp_groups[{gid}] (HSRP): {', '.join(unwritten)} not written",
+            where,
+        ))
     if not lines:
         # A group at every default with no address has no line: IOS-XE
         # writes a group only by its statements.
-        lines.append(
-            f" ! review: HSRP group {gid} has no virtual address and no "
-            f"other statement to write, so it is not written"
-        )
+        lines.append(" ! review: " + review(
+            f"HSRP group {gid} has no virtual address and no other "
+            f"statement to write, so it is not written",
+            where,
+        ))
     return lines
 
 

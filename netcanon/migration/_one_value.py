@@ -60,58 +60,20 @@ A review line names the place and never quotes the value: a value
 holds what its source config held, a comment's terminator included.
 
 A job says each review line of this rule as a warning, and is
-``partial`` for it (:func:`said_while_rendering`, which the pipeline
-opens around the render): what the renderer leaves out, or writes
-otherwise than the tree holds it, is in no validation report, which is
-made from the tree before the renderer decides.  The line that writes
-a text as it stands, "check it on the device", is the one that is not
-said: the output holds the value as the source did.
+``partial`` for it (:func:`netcanon.migration._said.review_line`):
+what the renderer leaves out, or writes otherwise than the tree holds
+it, is in no validation report, which is made from the tree before the
+renderer decides.  The line that writes a text as it stands, "check it
+on the device", is the one that is not said: the output holds the
+value as the source did.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable, Iterable
 from typing import Any
 
-#: The warnings of the render at work, where a job is rendering
-#: (:func:`said_while_rendering`); ``None`` elsewhere.
-_SAID: ContextVar[list[str] | None] = ContextVar("one_value_said", default=None)
-
-
-@contextmanager
-def said_while_rendering() -> Iterator[list[str]]:
-    """A warning for each review line of this rule that the renderer
-    writes while the block runs: a record left out, or a value written
-    otherwise than the tree holds it.
-
-    Read from the lines the renderer makes, as it makes them, so that
-    a line and its warning are one: the review-line functions of this
-    module (:func:`left_out`, :func:`one_value_tree`) add the warning
-    where a block is open and do nothing more where none is.
-
-    Yields:
-        The list the warnings are added to, in the order the lines are
-        made; each is ``Review: <place> -- <why>.``, the review line
-        without its marker, and never a value.
-    """
-    said: list[str] = []
-    token = _SAID.set(said)
-    try:
-        yield said
-    finally:
-        _SAID.reset(token)
-
-
-def _review(place: str, why: str) -> str:
-    """The text of a review line of this rule, for a record left out or
-    a value written otherwise; and the job's warning for it, where a job
-    is rendering (:func:`said_while_rendering`)."""
-    said = _SAID.get()
-    if said is not None:
-        said.append(f"Review: {place} -- {why}.")
-    return f"{place} -- review: {why}"
+from ._said import review_line as _review
 
 
 def splits(value: str | None) -> bool:
@@ -146,8 +108,9 @@ def left_out(what: str, target_label: str) -> str:
     *what* names the record (``username alice``, ``an SNMP community``)
     and must not hold a secret: the line is written into the output,
     and the value is the thing that could not be written.  A job that
-    is rendering says it as a warning (:func:`said_while_rendering`):
-    call this only for a line the output is given.
+    is rendering says it as a warning
+    (:func:`netcanon.migration._said.said_while_rendering`): call this
+    only for a line the output is given.
     """
     return _review(
         what,
@@ -270,8 +233,9 @@ def one_value_tree(
         copy otherwise) and the text of each review line, without the
         target's comment marker, in the order the fields are given.  A
         line for a value left out or written otherwise is also a warning
-        of the job that is rendering (:func:`said_while_rendering`):
-        write every line this returns.
+        of the job that is rendering
+        (:func:`netcanon.migration._said.said_while_rendering`): write
+        every line this returns.
     """
     names, addresses = tuple(names), tuple(addresses)
     unread_text, no_escape = tuple(unread_text), tuple(no_escape)
@@ -374,7 +338,7 @@ def _leave_out(
         f"{target_label} does not read as one value; it is left out, "
         f"re-create it on the device")
     # A line for each value left out, made one at a time: each is a
-    # warning of the job as well (:func:`_review`).
+    # warning of the job as well (:func:`.._said.review_line`).
     if field in _LISTS:
         values = getattr(work, field)
         said = [_review(_WHAT_A_LIST_HOLDS[field], tail) for v in values if test(v)]

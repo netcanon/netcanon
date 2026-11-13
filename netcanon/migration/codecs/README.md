@@ -731,12 +731,31 @@ the policy locally:
   quotes in some places only, in `_QUOTED_PLACES`.
   Every review line `left_out` and `one_value_tree` make for a value
   left out or written otherwise is also a warning of the job that is
-  rendering (`said_while_rendering`, which `run_plan` opens around
-  `render`), and holds it `partial`: write each line they return, and
+  rendering (`said_while_rendering` in `_said.py`, which `run_plan`
+  opens around `render`), and holds it `partial`: write each line they return, and
   make none you do not write.  The line that writes a text as it
   stands and asks for a check on the device is not a warning.
   Guarded by `tests/unit/migration/test_a_value_said_holds_the_job.py`,
   which walks `list_public_codecs()`.
+
+* **`netcanon/migration/_said.py`** — a `review:` line a renderer
+  writes for a loss is a warning of the job.  Public API:
+  `review(why, where="")` returns the words to write after the
+  renderer's own `review:` marker and adds `Review: <where> -- <why>.`
+  to the job that is rendering; `review_line(place, why)` is
+  `<place> -- review: <why>`, said the same way;
+  `said_while_rendering()` is what the pipeline opens around `render`.
+  A renderer that leaves a record out, or writes it otherwise, for a
+  reason of its own makes the line's words through `review` and keeps
+  its comment marker, so that the output is the same text; a doubt
+  that writes what the source holds (a check to make on the device, a
+  note for an edit there), and a line its `render_warnings` already
+  says, do not.  A new codec is judged by
+  `tests/unit/migration/test_a_review_line_holds_the_job.py` with no
+  entry of its own (it walks `list_public_codecs()` and reads every
+  call of `review` from the source): a new call needs an input that
+  reaches it -- a committed capture, or a tree in that module -- and a
+  new doubt, or a line said another way, its words typed there.
 
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec

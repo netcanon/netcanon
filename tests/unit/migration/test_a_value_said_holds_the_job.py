@@ -34,7 +34,8 @@ from typing import Any
 
 import pytest
 
-from netcanon.migration._one_value import left_out, said_while_rendering
+from netcanon.migration._one_value import left_out
+from netcanon.migration._said import said_while_rendering
 from netcanon.migration.canonical.intent import CanonicalIntent, CanonicalSNMP
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
@@ -120,10 +121,26 @@ def _restated(warning: str) -> str:
         " -- ", " -- review: ", 1)
 
 
+def _of_another_kind(warning: str, rendered: list[str]) -> bool:
+    """Whether *warning* is said for a review line of another kind: its
+    words are in a line of the output that is no line of this rule.
+    Those are held by ``test_a_review_line_holds_the_job.py``."""
+    body = warning.removeprefix("Review: ").removesuffix(".")
+    why = body.split(" -- ", 1)[1] if " -- " in body else body
+    return any(
+        why in line and not any(words in line for words in (*_CHANGED, _DOUBT))
+        for line in rendered
+    )
+
+
 def _disagreements(job: Any, secret: str | None = None) -> list[str]:
     """What is wrong between the output and the job's warnings."""
     lines = _changed_lines(job)
-    warnings = [w for w in job.warnings if w.startswith("Review: ")]
+    rendered = (job.rendered or "").splitlines()
+    warnings = [
+        w for w in job.warnings
+        if w.startswith("Review: ") and not _of_another_kind(w, rendered)
+    ]
     unmatched = list(warnings)
     wrong = []
     for line in lines:

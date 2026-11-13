@@ -101,6 +101,7 @@ from __future__ import annotations
 from ..._bonds import ACTIVE_BACKUP, active_backup_review
 from ..._one_value import left_out, one_value_tree, splits
 from ..._roles import own_role
+from ..._said import review, review_line
 from ..._user_secrets import (
     classify_hash,
     format_empty_hash_comment,
@@ -285,13 +286,14 @@ def render_intent(tree: CanonicalIntent) -> str:
     return "\n".join(lines) + "\n"
 
 
-#: The review line for a value of the management plane that is not
-#: written: the forms written here, which the parser reads back, take
-#: an address for a name server, an address or a host name for an NTP
-#: or syslog server, and a domain name for ``ip domain-name``.  It
-#: names the kind and never the value.
+#: What the review line for a value of the management plane that is
+#: not written says (after ``! <kind> -- review:``): the forms written
+#: here, which the parser reads back, take an address for a name
+#: server, an address or a host name for an NTP or syslog server, and
+#: a domain name for ``ip domain-name``.  It names the kind and never
+#: the value.
 _PLANE_LEFT_OUT_REVIEW = (
-    "! {what} -- review: the source gives one that is not {shape}, "
+    "the source gives one that is not {shape}, "
     "which the form written here takes; it is left out, re-create it "
     "on the device"
 )
@@ -300,9 +302,9 @@ _PLANE_LEFT_OUT_REVIEW = (
 #: Guide's ``ip name-server`` (10.4.1.0).
 _NAME_SERVERS_AT_MOST = 3
 
-#: The review line for the resolvers after the third.
+#: What the review line for the resolvers after the third says.
 _NAME_SERVERS_REVIEW = (
-    "! ip name-server -- review: the source gives more resolvers than "
+    "the source gives more resolvers than "
     "the three OS10 takes; those after the third are left out"
 )
 
@@ -315,27 +317,32 @@ def _render_management_plane(tree: CanonicalIntent) -> list[str]:
     the form does not take -- a name server that is not an address, an
     NTP or syslog server that is neither an address nor a host name, a
     domain not shaped as a domain name -- is left out with a review
-    line for its kind, and so are the resolvers after the third."""
+    line for its kind, and so are the resolvers after the third.  Each
+    such line is a warning of the job as well
+    (:func:`netcanon.migration._said.review_line`)."""
     out: list[str] = []
-    review: list[str] = []
+    said: list[str] = []
 
     def servers(what: str, values: list[str], takes, shape: str) -> list[str]:
         written = [value for value in values if takes(value)]
         if len(written) < len(values):
-            review.append(_PLANE_LEFT_OUT_REVIEW.format(what=what, shape=shape))
+            said.append("! " + review_line(
+                what, _PLANE_LEFT_OUT_REVIEW.format(shape=shape),
+            ))
         return written
 
     resolvers = servers(
         "ip name-server", tree.dns_servers, _parse.an_address, "an address",
     )
     if len(resolvers) > _NAME_SERVERS_AT_MOST:
-        review.append(_NAME_SERVERS_REVIEW)
+        said.append("! " + review_line("ip name-server", _NAME_SERVERS_REVIEW))
     out.extend(f"ip name-server {value}" for value in resolvers[:_NAME_SERVERS_AT_MOST])
     if tree.domain and _parse.a_domain_name(tree.domain):
         out.append(f"ip domain-name {tree.domain}")
     elif tree.domain:
-        review.append(_PLANE_LEFT_OUT_REVIEW.format(
-            what="ip domain-name", shape="a domain name",
+        said.append("! " + review_line(
+            "ip domain-name",
+            _PLANE_LEFT_OUT_REVIEW.format(shape="a domain name"),
         ))
     for what, values in (
         ("ntp server", tree.ntp_servers),
@@ -343,7 +350,7 @@ def _render_management_plane(tree: CanonicalIntent) -> list[str]:
     ):
         written = servers(what, values, _parse.a_host, "an address or a host name")
         out.extend(f"{what} {value}" for value in written)
-    return review + out
+    return said + out
 
 
 def _render_local_user(user, source_vendor: str = "") -> str:
@@ -440,12 +447,12 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
         community = snmp.community or "public"
         lines.append(f"snmp-server host {host} traps version 2c {community}")
         if not snmp.community:
-            lines.append(
-                f"! snmp-server host {host} -- review: the source carried "
-                f"no SNMP community, so `public` was synthesised to keep "
-                f"the trap target valid; set the real community or convert "
-                f"this host to v3"
-            )
+            lines.append("! " + review_line(
+                f"snmp-server host {host}",
+                "the source carried no SNMP community, so `public` was "
+                "synthesised to keep the trap target valid; set the real "
+                "community or convert this host to v3",
+            ))
 
     for user in snmp.v3_users:
         if refuses_snmpv3_user(user, source_vendor):
@@ -550,7 +557,7 @@ def _svis_by_vlan(interfaces: list[CanonicalInterface]) -> dict[int, list[int]]:
 #: Written in an SVI's stanza, below a description that is not its
 #: VLAN's name.  ``{vid}`` and ``{name}`` are the output's.
 _NAME_NOT_WRITTEN_REVIEW = (
-    " ! review: VLAN {vid} is named {name} in the source; OS10 has one "
+    "VLAN {vid} is named {name} in the source; OS10 has one "
     "label for a VLAN, this interface's description, which holds the "
     "description the source gives the interface -- choose which to keep"
 )
@@ -641,7 +648,7 @@ def _sort_interfaces(interfaces: list[CanonicalInterface]):
 
 #: Written above the allowed line of a trunk of every VLAN.
 _EVERY_VLAN_REVIEW = (
-    " ! review: the source trunk allows every VLAN; OS10 has no word "
+    "the source trunk allows every VLAN; OS10 has no word "
     "for that, its VLAN ids end at 4093 and a VLAN must exist before "
     "it is listed -- list the VLANs this trunk is to carry"
 )
@@ -751,7 +758,9 @@ def _render_switchport_lines(
                 # word for it, its ids end at 4093, and a VLAN has to
                 # exist before a port is put in it.  The range is
                 # written as it always was, and the operator is told.
-                out.append(_EVERY_VLAN_REVIEW)
+                out.append(" ! review: " + review(
+                    _EVERY_VLAN_REVIEW, f"interface {iface.name}",
+                ))
             out.append(f" switchport trunk allowed vlan {vlist}")
     elif iface.switchport_mode == "access":
         if iface.access_vlan is not None:
@@ -792,9 +801,10 @@ def _render_interface(
             described = f'"{described}"'
         block.append(f" description {described}")
         if vlan_name and iface.description != vlan_name:
-            block.append(
+            block.append(" ! review: " + review(
                 _NAME_NOT_WRITTEN_REVIEW.format(vid=_svi_of(iface.name), name=vlan_name),
-            )
+                f"interface {iface.name}",
+            ))
     block.append(" no shutdown" if iface.enabled else " shutdown")
 
     if iface.lag_member_of:
