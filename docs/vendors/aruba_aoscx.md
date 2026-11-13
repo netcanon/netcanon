@@ -184,7 +184,9 @@ word, and the word after it where that says which command it is
 (`vsx`, `evpn`, `ntp server`, `ip dns`, `ip prefix-list`, `ssh
 server`, `spanning-tree priority`, `tacacs-server host`, `apply
 access-list`, `router vrrp`), never a value; one row a kind, however
-many lines it has.  That includes the forms of a command the parser
+many lines it has.  A `logging` line's row is the word alone, since
+AOS-CX takes a syslog server's host name right after it.  That
+includes the forms of a command the parser
 reads only in one form or only once: a `vlan` line of a list, a range
 or an id no switch has (`vlan 10,20`, `vlan 5000`), a `vrf` line with
 more than a name, an `snmpv3 user` line with no `auth`, a `user` line

@@ -14,8 +14,9 @@ Now each kind of such line is a row of ``dropped_tier3_sections``
 (``aruba_aoscx.parse._rows_for_what_no_reader_takes``): its command
 word, and the word after it where that says which command it is
 (``ntp server``, ``spanning-tree mode``, ``router vrrp``), never a
-value.  A line that begins with a word AOS-CX configurations are not
-seen to begin with is counted in one row that shows none of its text.
+value (a ``logging`` line's row is the word alone).  A line that
+begins with a word AOS-CX configurations are not seen to begin with
+is counted in one row that shows none of its text.
 
 The check reads the text with a list of what the parser reads, typed
 here from the AOS-CX grammar the parser takes, and holds the rows to
@@ -23,7 +24,9 @@ it: each line the list does not read is said by a row, and each row
 says a line the list does not read.  It is handed the parser with the
 rows taken out, with a reader that takes every line, with one that
 takes none, with one that takes every community line, every hostname
-line and every ``vlan`` line, and has to fail.
+line and every ``vlan`` line, and has to fail; and a ``logging``
+line's row, whose next word can be a host's name, is the word alone,
+which a check handed the parser that shows that word sees.
 """
 
 from __future__ import annotations
@@ -374,6 +377,7 @@ def test_a_row_shows_no_value() -> None:
         "snmp-server community fakeCommunityB\n"
         "ntp authentication-key 1 sha1 ciphertext AQBfakeNtpKey==\n"
         "fakeword fakeSecret\n"
+        "logging loghost vrf mgmt\n"
     )
     rows = get_codec("aruba_aoscx").parse(text).dropped_tier3_sections
     assert "tacacs-server key" in rows
@@ -383,11 +387,51 @@ def test_a_row_shows_no_value() -> None:
     # ``radius-server`` is no word the committed inputs begin a line
     # with: its line is counted with the other, and shows nothing.
     assert MANY_UNKNOWN.format(count=2, first=3) in rows
+    assert "logging" in rows
     assert not [
         row for row in rows
         if "fake" in row.lower() or "aqb" in row.lower() or "admin" in row or "leaf1" in row
+        or "loghost" in row
     ], rows
     _check_every_unread_line_is_said(text)
+
+
+#: ``logging`` lines that name a syslog server by a host name, and one
+#: by its address: AOS-CX takes a server straight after the word.
+LOGGING_BY_NAME = (
+    "logging loghost severity info vrf mgmt\n"
+    "logging collector-a\n"
+    "logging 192.0.2.10 severity err vrf mgmt\n"
+)
+
+
+def _check_no_host_name_in_a_row(text: str) -> None:
+    """No row of ``text`` shows the name of a syslog server."""
+    rows = get_codec("aruba_aoscx").parse(text).dropped_tier3_sections
+    assert not [
+        row for row in rows if "loghost" in row or "collector" in row
+    ], rows
+
+
+def test_a_logging_row_is_the_word_alone() -> None:
+    """A ``logging`` line is in no output, and its row is the word
+    alone: the word after ``logging`` can be a syslog server's host
+    name, which a row does not show.  One row for every such line."""
+    tree = get_codec("aruba_aoscx").parse(LOGGING_BY_NAME)
+    assert tree.syslog_servers == []
+    assert tree.dropped_tier3_sections == ["logging"]
+    _check_no_host_name_in_a_row(LOGGING_BY_NAME)
+    _check_every_unread_line_is_said(LOGGING_BY_NAME)
+
+
+def test_the_check_fails_with_logging_a_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Were the word after ``logging`` shown, a host's name would be in
+    a row, and the check sees it."""
+    monkeypatch.setattr(cx_parse, "_FAMILIES", cx_parse._FAMILIES | {"logging"})
+    with pytest.raises(AssertionError):
+        _check_no_host_name_in_a_row(LOGGING_BY_NAME)
 
 
 #: Two communities: the tree holds one, and the parser reads the first.
