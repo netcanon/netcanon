@@ -70,6 +70,12 @@ not run -- the server is not enabled, or the pool is neither a network
 with a range nor a static binding -- is left out and said, and what a
 pool states that the tree has no place for is said.
 
+Each line in column 0 that the walk reads nothing of -- no branch of
+it takes the line, or it is an ``snmp-server community`` line after
+the first -- and that no Tier-3 pattern gives a row of its own is a
+row of ``dropped_tier3_sections``: its command word, never a value
+(:func:`_rows_for_what_no_reader_takes`).
+
 Internal helpers re-exported from ``codec.py`` for tests that pin the
 parser's structural contract (``_parse_port_list``,
 ``_format_port_list`` is in :mod:`.render`):
@@ -90,7 +96,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 from ..._radius_secrets import AOSS_ENVELOPE
-from ..._tier3_detection import left_out_rows
+from ..._tier3_detection import is_an_aoss_section_line, left_out_rows, unread_top_level_rows
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -1520,6 +1526,65 @@ def _past_the_oobm_stanza(lines: list[str], start: int) -> int:
     return i
 
 
+def _past_a_line_nothing_reads(lines: list[str], at: int) -> int:
+    """The index of the first line after the line at *at*, which the
+    walk of :func:`parse_intent` reads nothing of -- and, where that
+    line enters a context the top of the config reads nothing of
+    (``stacking``, ``vsf``, ``device-profile``, ``router``, an
+    ``interface`` no header pattern takes: :data:`_OPENS_A_CONTEXT_RE`),
+    after the context's body.
+
+    The header's row says the context is not translated, and so says
+    its lines.  A body that keeps its indentation is passed by the top
+    of the config a line at a time, and nothing is done here: the index
+    returned is the next line's.  A body in column 0 -- a text without its
+    indentation -- ends where the device ends it: at its own ``exit``
+    (a ``member N`` context nested in it has an ``exit`` of its own
+    first) or at an ``end``, or at a line in column 0 that enters
+    another context or that the top of the config reads
+    (:func:`_ends_the_stanza`), which is read again there.  So such a
+    text has the rows of the text it was.  A context with no ``exit``
+    takes, in such a text, the lines in column 0 after it up to one of
+    those, as a ``vlan`` stanza does; and the body of a context this
+    parser does not know as one (``openflow``'s, say) is read at the
+    top of such a text, and has rows of its own.
+    """
+    start = at + 1
+    if not _OPENS_A_CONTEXT_RE.match(lines[at].strip()):
+        return start
+    first = start
+    while first < len(lines):
+        tick()
+        stripped = lines[first].strip()
+        if stripped and not stripped.startswith(";"):
+            break
+        first += 1
+    if first >= len(lines) or lines[first][0].isspace():
+        return start
+    depth = 0
+    i = first
+    while i < len(lines):
+        tick()
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            i += 1
+            continue
+        left = _leaves(stripped)
+        if left:
+            i += 1
+            if left == "end" or not depth:
+                break
+            depth -= 1
+            continue
+        if _ends_the_stanza(line, stripped):
+            break
+        if _MEMBER_BLOCK_RE.match(stripped):
+            depth += 1
+        i += 1
+    return i
+
+
 # ---------------------------------------------------------------------------
 # The switch's own DHCP server
 # ---------------------------------------------------------------------------
@@ -2212,6 +2277,125 @@ def without_banner_bodies(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Lines in column 0 that nothing translates
+# ---------------------------------------------------------------------------
+
+#: The line ``show running-config`` prints above an AOS-S config
+#: (``Running configuration:``), which is no line of it.
+_PRINTOUT_HEADER_RE = re.compile(r"running[ \t]+configuration:[ \t]*\Z", re.IGNORECASE)
+
+#: Words of a session, not of the configuration: a pasted ``configure
+#: terminal``, ``end``, ``exit`` or ``write memory`` holds nothing to
+#: translate.
+_SESSION_WORDS = frozenset({"configure", "end", "exit", "write"})
+
+#: The words AOS-S configurations begin a line in column 0 with, which
+#: a row may show: the words the committed AOS-S inputs begin such a
+#: line with (and take back with ``no``), the words of the public
+#: AOS-S configurations on GitHub that more than one of them begins
+#: such a line with, and the words this module's readers and the
+#: AOS-S Tier-3 patterns read (``ipv6``, ``access-list``, ``vsf``).
+#: A line that begins with another word is said all the same, in a
+#: row that counts such lines and shows none of their text
+#: (:func:`_rows_for_what_no_reader_takes`).  A word missing here
+#: costs a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "access-list", "activate", "allow-unsupported-transceiver",
+    "autorun", "cwmp", "device-profile", "dhcp", "dhcp-server",
+    "dhcp-snooping", "hostname", "include-credentials", "interface",
+    "ip", "ipv6", "lldp", "logging", "mac-delimiter", "management-vlan",
+    "module", "ntp", "oobm", "openflow", "password",
+    "power-over-ethernet", "primary-vlan", "qos", "radius-server",
+    "router", "snmp-server", "snmpv3", "sntp", "spanning-tree",
+    "stacking", "telnet-server", "tftp", "time", "timesync", "trunk",
+    "vlan", "vsf", "web-management",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``aaa port-access``, ``ip ssh``,
+#: ``snmp-server enable``, ``spanning-tree mode``).  After any other
+#: the second word is often a value (``vlan 10``, ``trunk 1-2``,
+#: ``module 1``, ``primary-vlan 10``), which a row does not show
+#: (``_tier3_detection.command_label``).  ``logging`` is not one:
+#: the word after it is the syslog server, and HPE's AOS-S pages do
+#: not say that it cannot be a host name; and ``password`` is not
+#: one either, since a row is cut after it.
+_FAMILIES = frozenset({
+    "aaa", "activate", "cwmp", "device-profile", "dhcp", "dhcp-snooping",
+    "ip", "ipv6", "lldp", "qos", "radius-server", "router",
+    "snmp-server", "snmpv3", "spanning-tree", "tftp", "web-management",
+})
+
+
+def _said_elsewhere(line: str) -> bool:
+    """Whether *line*, which the walk reads nothing of, is said by
+    another row or is no line of the config: a Tier-3 pattern gives it
+    a row of its own (``_tier3_detection.is_an_aoss_section_line``),
+    or it is the line ``show running-config`` prints above the config
+    (:data:`_PRINTOUT_HEADER_RE`)."""
+    return is_an_aoss_section_line(line) or _PRINTOUT_HEADER_RE.match(line) is not None
+
+
+def _rows_for_what_no_reader_takes(lines: list[str], unread: Iterable[int]) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One the walk of
+    :func:`parse_intent` reads nothing of (*unread*) -- no branch of it
+    takes the line, or it is an ``snmp-server community`` line after
+    the first, the tree holding one community -- is in no output, and
+    unless a Tier-3 pattern gives it a row of its own, it is the
+    printout's own first line, or it is a word of a session
+    (:data:`_SESSION_WORDS`), a row says so
+    (``_tier3_detection.unread_top_level_rows``): a row of its command
+    word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`), one for each kind
+    of line, past ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one
+    that counts the rest; a line that begins with a word AOS-S
+    configurations are not seen to begin with is counted in one row,
+    with the number of the first such line and nothing of its text
+    (``_tier3_detection.no_command_row``), which is no sign that the
+    text was a config.  A line that does not begin with a letter is no
+    command, and is not counted.
+
+    Up to 0.7.7 only the kinds a Tier-3 pattern named had a row, and an
+    AOS-S config's spanning tree, its authorised managers, its SSH and
+    port-access settings, a second SNMP community, an SNMP host or a
+    RADIUS server named by an IPv6 address, and every other line no
+    branch reads were in no output and no row, in jobs that said
+    ``completed``.  So every line the walk passes is said, as the
+    Arista EOS, Cisco NX-OS, Aruba AOS-CX, Cisco IOS XR and OS10
+    parsers say theirs.
+    Not reached: a line of a stanza that the stanza's reader does not
+    take -- indented, or in column 0 above the stanza's ``exit``
+    (:func:`_ends_the_stanza`) -- and a banner, whose lines are text,
+    emptied before any reader (:func:`without_banner_bodies`).  The
+    lines of a context the top reads nothing of (``stacking``,
+    ``device-profile``) are said by the row of its header, with
+    their indentation or without (:func:`_past_a_line_nothing_reads`).
+
+    Args:
+        lines: The lines the walk is given, its banners emptied.
+        unread: The index in *lines* of each line the walk reads
+            nothing of.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    numbers = set(unread)
+    # The other lines are emptied, each keeping its number.
+    text = "\n".join(line if n in numbers else "" for n, line in enumerate(ticked(lines)))
+    return unread_top_level_rows(
+        text,
+        taken=_said_elsewhere,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -2301,6 +2485,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # first, after the last line.
     by_role: dict[str, CanonicalLocalUser] = {}
     by_name: dict[str, CanonicalLocalUser] = {}
+    # The lines in column 0 the walk reads nothing of, which are rows
+    # once the config has been read (`_rows_for_what_no_reader_takes`).
+    unread: list[int] = []
     i = 0
     while i < len(lines):
         tick()
@@ -2329,6 +2516,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 intent.snmp = CanonicalSNMP()
             if not intent.snmp.community:
                 intent.snmp.community = comm.group(1)
+            else:
+                # The tree holds one community: a later line is read
+                # for nothing.
+                unread.append(i)
             i += 1
             continue
 
@@ -2774,8 +2965,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i = next_i
             continue
 
-        # Unrecognised top-level line — skip.
-        i += 1
+        # A line no branch above reads: a row says it, after the loop.
+        # The header of a context nothing reads says its body too.
+        unread.append(i)
+        i = _past_a_line_nothing_reads(lines, i)
 
     # The two accounts first, as the switch prints them, then the local
     # users: the AOS-S renderer gives the manager slot to the first user
@@ -2802,6 +2995,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dropped_tier3_sections = [
         *memberships.rows(),
         *left_out_rows([*dhcp_left_out, *plane_read.left_out], rest="disabled"),
+        *_rows_for_what_no_reader_takes(lines, unread),
     ]
 
     # LAG-member linkage post-pass.  The inline linking at the
