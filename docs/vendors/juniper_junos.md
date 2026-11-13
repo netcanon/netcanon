@@ -97,11 +97,21 @@ welcome.
 
 Junos's grammar is distinctive: every redundancy sub-command nests
 under a parent `family inet address <X>/<prefix>` line, so the
-address acts as the binding anchor.  The canonical model uses
-interface-scope (`vrrp_groups` on `CanonicalInterface`), so the
-parser records the binding-address anchor for round-trip; render-
-side re-attaches the group to the primary address.  Exercised by the
-QFX10K2 fixture (`ksator_labmgmt_qfx10k2_junos173.set`).
+address acts as the binding anchor.  The canonical model keeps a
+unit's groups beside its addresses (`vrrp_groups` on
+`CanonicalInterface`), and the parser keeps no record of which
+address each was under.  The renderer writes each group once:
+under the first address of its unit whose subnet holds one of its
+virtual addresses, else under the unit's first address.  Where the
+unit has another address, a virtual address outside the chosen
+address's subnet is said in a `# review:` line and a warning of the
+job.  ⚠️ Up to 0.7.7 every group was written under every address of
+its unit, a group of one subnet under an address of another
+included.  No committed input has a `vrrp-group`: the grammar is
+held by synthetic tests
+(`tests/unit/migration/codecs/juniper_junos/test_a_vrrp_group_under_its_address.py`).
+The QFX10K2 fixture (`ksator_labmgmt_qfx10k2_junos173.set`)
+exercises the anycast half below.
 
 ### Classic vrrp-group grammar
 
@@ -161,13 +171,13 @@ Canonical mapping:
   unit's per-address MAC on the receiving Junos side.  The
   capability matrix declares `/anycast-gateway-mac` `unsupported`
   on the Junos codec.
-- **Per-address binding round-trip.**  Junos binds the group to the
-  address; the canonical model is interface-scope.  Parser picks
-  the source address as the anchor; render re-attaches to the
-  primary address.  If multiple addresses on the same unit each
-  carry a vrrp-group in the source, the cross-vendor round-trip
-  through interface-scope may consolidate them onto the primary
-  (lossy when both addresses are present).
+- **Which address a group was under is not kept.**  Junos binds the
+  group to an address; the canonical model is interface-scope.
+  The renderer places a group by the subnet of its virtual
+  address (above), so a group whose virtual address is in no
+  subnet of its unit goes under the unit's first address, with a
+  review line where the unit has another.  Whether Junos commits
+  such a group is not established.
 - **Track priority-cost decrement is lossy** (mirror of IOS-XE
   decrement / Arista decrement — only the interface name survives).
 - **Sub-second `fast-interval`** drops to canonical

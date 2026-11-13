@@ -1401,6 +1401,26 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos VRRP group is written under one address of its unit.**
+  Junos configures `vrrp-group` under a `family inet address`
+  (Juniper, "Configuring Basic VRRP Support"), and the tree keeps a
+  unit's groups beside its addresses, with nothing that says which
+  address each was under.  The renderer wrote every group under
+  every address of its unit, so a unit of two subnets and a group
+  for each came out with each group configured twice, once under
+  the address of the other subnet, Junos to Junos included, in jobs
+  that said `completed`.  Each group is now written once: under the
+  first address whose subnet holds one of its virtual addresses,
+  taken in the order the group states them, else under the unit's
+  first address.  Where the unit has another address, a virtual
+  address the chosen address's subnet does not hold is said in a
+  `# review:` line and in a warning of the job; that Junos refuses
+  such a group is not established (Juniper's page asks a virtual
+  address to share the interface's subnet for an IPv6 link-local
+  one only).  A unit of one address is written as before.  No
+  committed input has a VRRP group on an interface of more than one
+  address, so no output of them moves.
+
 - **An OS10 `interface range` stanza is listed, and a header Dell
   types with a space is one interface.**  Dell types `interface
   ethernet 1/1/14` (KB 000201923) and `interface range ethernet
