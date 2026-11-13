@@ -20,11 +20,11 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | Source fixture | arista_eos | aruba_aoscx | aruba_aoss | cisco_iosxe | cisco_iosxe_cli | cisco_iosxr | cisco_nxos | dell_os10 | fortigate_cli | juniper_junos | mikrotik_routeros | opnsense | vyos |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | arista_eos/batfish_duplicateprivate_eos4211.txt | OK 21/21 | WARN 19/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
-| arista_eos/batfish_eos_evpn_vlan_based_leaf.txt | OK 21/21 | WARN 13/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
-| arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt | OK 21/21 | WARN 13/21 | WARN 15/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | WARN 17/21 | WARN 13/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
-| arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt | OK 21/21 | WARN 13/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
+| arista_eos/batfish_eos_evpn_vlan_based_leaf.txt | OK 21/21 | WARN 13/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
+| arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt | OK 21/21 | WARN 13/21 | WARN 15/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
+| arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt | OK 21/21 | WARN 13/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
 | arista_eos/karneliuk_a_eos1_eos4260.txt | OK 21/21 | WARN 17/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
-| arista_eos/ksator_dcs_7150s64_eos4224.txt | WARN 20/21 | WARN 15/21 | WARN 17/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 15/21 | WARN 19/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 |
+| arista_eos/ksator_dcs_7150s64_eos4224.txt | WARN 20/21 | WARN 15/21 | WARN 17/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 |
 | arista_eos/lwa_dcs_7060cx_32s_eos42014.txt | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 |
 | aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 |
@@ -32,37 +32,37 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg | WARN 17/21 | OK 21/21 | WARN 16/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg | WARN 18/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
 | aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 |
-| aruba_aoss/aruba_central_5memberstack_rendered.cfg | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
+| aruba_aoss/aruba_central_5memberstack_rendered.cfg | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
 | aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg | WARN 19/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
-| aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
+| aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
 | aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | aruba_aoss/hpe_community_5406rzl2_kb1515.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
 | aruba_aoss/user_contrib_2930m_wc1611.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | cisco_iosxe/batfish_cisco_aaa.txt | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 |
 | cisco_iosxe/batfish_cisco_interface.txt | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | cisco_iosxe/batfish_cisco_ip_route.txt | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 |
-| cisco_iosxe/batfish_cisco_logging.txt | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
+| cisco_iosxe/batfish_cisco_logging.txt | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
 | cisco_iosxe/batfish_cisco_snmp.txt | OK 21/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 |
-| cisco_iosxe/batfish_iosxe_basic_vrrp.txt | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 |
+| cisco_iosxe/batfish_iosxe_basic_vrrp.txt | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 |
 | cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt | WARN 18/21 | WARN 16/21 | WARN 19/21 | WARN 20/21 | OK 21/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 16/21 |
 | cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt | OK 21/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
 | cisco_iosxe/ntc_carrier_interfaces.txt | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 |
-| cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 |
-| cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
+| cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 |
+| cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 |
 | cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | cisco_iosxe/user_contrib_cat9300_iosxe1712.txt | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 |
-| cisco_iosxr/batfish_ebgp_border01.txt | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 16/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 |
-| cisco_iosxr/batfish_ebgp_border02.txt | WARN 19/21 | WARN 17/21 | WARN 16/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 |
-| cisco_iosxr/batfish_ibgp_border01.txt | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
-| cisco_iosxr/batfish_ibgp_rr.txt | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxr/batfish_vpnv4_pe1.txt | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 |
-| cisco_iosxr/batfish_vpnv4_pe2.txt | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxr/batfish_vpnv4_pe3.txt | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg | WARN 18/21 | WARN 17/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 |
+| cisco_iosxr/batfish_ebgp_border01.txt | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 |
+| cisco_iosxr/batfish_ebgp_border02.txt | WARN 19/21 | WARN 17/21 | WARN 16/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 |
+| cisco_iosxr/batfish_ibgp_border01.txt | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
+| cisco_iosxr/batfish_ibgp_rr.txt | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
+| cisco_iosxr/batfish_vpnv4_pe1.txt | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 |
+| cisco_iosxr/batfish_vpnv4_pe2.txt | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
+| cisco_iosxr/batfish_vpnv4_pe3.txt | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 |
+| cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg | WARN 18/21 | WARN 17/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 |
 | cisco_iosxr/xrdtools_isis_r1.cfg | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
 | cisco_iosxr/xrdtools_sr_xrd1.cfg | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 |
 | cisco_iosxr/xrdtools_srv6_pe1.cfg | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 |
-| cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt | WARN 17/21 | WARN 15/21 | WARN 15/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 |
+| cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt | WARN 17/21 | WARN 15/21 | WARN 15/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 |
 | cisco_nxos/batfish_nxos_bgp_redist_d1.txt | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 |
 | cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 |
 | cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
@@ -71,54 +71,54 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | cisco_nxos/batfish_nxos_hsrp_nxos2.txt | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
 | cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt | WARN 18/21 | WARN 15/21 | WARN 16/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
-| cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 17/21 |
+| cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 17/21 |
 | cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 19/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
 | cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| dell_os10/azlocal_tor1.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
-| dell_os10/azlocal_tor2.txt | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
+| dell_os10/azlocal_tor1.txt | WARN 17/21 | WARN 14/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 15/21 | WARN 17/21 | WARN 15/21 | WARN 14/21 | WARN 16/21 |
+| dell_os10/azlocal_tor2.txt | WARN 17/21 | WARN 14/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 15/21 | WARN 17/21 | WARN 15/21 | WARN 14/21 | WARN 16/21 |
 | dell_os10/azsupport_TOR1_Sample.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | dell_os10/azsupport_TOR2_Sample.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
-| dell_os10/canu_sw-leaf-bmc-001.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
+| dell_os10/canu_sw-leaf-bmc-001.cfg | WARN 19/21 | WARN 16/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR1-Universal.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | dell_os10/dellgeos_S5212F-TOR2-Universal.cfg | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| fortigate/kevinguenay_fgt_70g_branch.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 17/21 |
-| fortigate/kevinguenay_fgt_vm_hub.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 |
-| fortigate/user_contrib_fg100e_fos7213.conf | WARN 17/21 | WARN 13/21 | WARN 15/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 15/21 |
+| fortigate/kevinguenay_fgt_70g_branch.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 17/21 |
+| fortigate/kevinguenay_fgt_vm_hub.conf | WARN 18/21 | WARN 16/21 | WARN 16/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 |
+| fortigate/user_contrib_fg100e_fos7213.conf | WARN 17/21 | WARN 13/21 | WARN 15/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 15/21 |
 | junos/batfish_evpntype5_router1_junos2541.set | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | junos/batfish_l3vpn_pe1_junos2541.set | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | junos/buraglio_netlab_junos184.set | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
 | junos/jnprautomate_mnha_vsrx_a_junos.set | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
-| junos/ksator_labmgmt_ex4550_junos151.set | WARN 17/21 | WARN 13/21 | WARN 16/21 | WARN 18/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 14/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 15/21 |
-| junos/ksator_labmgmt_qfx10k2_junos173.set | WARN 16/21 | WARN 10/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 14/21 | WARN 16/21 | WARN 12/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 12/21 |
-| junos/ksator_labmgmt_qfx5100_junos173.set | WARN 16/21 | WARN 12/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 14/21 |
-| junos/ksator_labmgmt_qfx5110_junos173.set | WARN 16/21 | WARN 12/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 14/21 |
-| junos/saidvandeklundert_snmpv3_junos172.set | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 13/21 | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 14/21 | WARN 15/21 |
+| junos/ksator_labmgmt_ex4550_junos151.set | WARN 17/21 | WARN 13/21 | WARN 16/21 | WARN 18/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 15/21 |
+| junos/ksator_labmgmt_qfx10k2_junos173.set | WARN 16/21 | WARN 10/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 14/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 12/21 |
+| junos/ksator_labmgmt_qfx5100_junos173.set | WARN 16/21 | WARN 12/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 14/21 |
+| junos/ksator_labmgmt_qfx5110_junos173.set | WARN 16/21 | WARN 12/21 | WARN 14/21 | WARN 18/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 13/21 | WARN 14/21 |
+| junos/saidvandeklundert_snmpv3_junos172.set | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 14/21 | WARN 15/21 |
 | junos/tsg8139_evpn_leaf_dhcpv6_junos232.set | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 |
 | mikrotik/ntc_ip_address_export.rsc | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 19/21 |
-| mikrotik/routeros_diff_verbose_export.rsc | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 17/21 |
-| mikrotik/taqavi_initial_provisioning.rsc | WARN 20/21 | WARN 17/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 |
+| mikrotik/routeros_diff_verbose_export.rsc | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 17/21 |
+| mikrotik/taqavi_initial_provisioning.rsc | WARN 20/21 | WARN 17/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | WARN 18/21 |
 | mikrotik/user_contrib_crs310_ros7.rsc | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 18/21 |
-| opnsense/opnsense_acl_test_config.xml | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
-| opnsense/opnsense_core_default.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
-| opnsense/opnsense_docs_carp_ha_backup.xml | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 16/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
-| opnsense/opnsense_docs_carp_ha_master.xml | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 16/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
-| opnsense/opnsense_paramiko_shell_capture.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
+| opnsense/opnsense_acl_test_config.xml | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
+| opnsense/opnsense_core_default.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
+| opnsense/opnsense_docs_carp_ha_backup.xml | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
+| opnsense/opnsense_docs_carp_ha_master.xml | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 |
+| opnsense/opnsense_paramiko_shell_capture.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
 | opnsense/opnsense_service_test_config.xml | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 |
-| opnsense/user_contrib_supergate_opn25.xml | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
-| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 |
-| vyos/metasploit-vyos-config.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round1-border.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round1-core.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round3b-routera.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round3b-routerb.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round3b-routerd.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/pc5-round3b-routere.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
-| vyos/scottlaird-vyos-parser.conf | WARN 19/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 16/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | OK 21/21 |
+| opnsense/user_contrib_supergate_opn25.xml | WARN 19/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
+| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 20/21 |
+| vyos/metasploit-vyos-config.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round1-border.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round1-core.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round3b-routera.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round3b-routerb.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round3b-routerd.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/pc5-round3b-routere.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
+| vyos/scottlaird-vyos-parser.conf | WARN 19/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | OK 21/21 |
 | vyos/vyos_forum_snmpv3_user_eq13.conf | WARN 18/21 | WARN 18/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | OK 21/21 |
-| vyos/wcni-kind-gw0.conf | WARN 18/21 | WARN 17/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 |
-| vyos/wcni-kind-gw1.conf | WARN 18/21 | WARN 17/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 |
+| vyos/wcni-kind-gw0.conf | WARN 18/21 | WARN 17/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 |
+| vyos/wcni-kind-gw1.conf | WARN 18/21 | WARN 17/21 | WARN 19/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | OK 21/21 |
 
 ## Synthetic kitchen-sink coverage matrix
 
@@ -126,19 +126,19 @@ One hand-authored fixture per codec exercising every field the codec's :class:`C
 
 | Source fixture | arista_eos | aruba_aoscx | aruba_aoss | cisco_iosxe | cisco_iosxe_cli | cisco_iosxr | cisco_nxos | dell_os10 | fortigate_cli | juniper_junos | mikrotik_routeros | opnsense | vyos |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| arista_eos/kitchen_sink.txt | WARN 20/21 | WARN 10/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 11/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 14/21 | WARN 13/21 |
+| arista_eos/kitchen_sink.txt | WARN 20/21 | WARN 10/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 14/21 | WARN 13/21 |
 | aruba_aoscx/kitchen_sink.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
-| aruba_aoss/kitchen_sink.cfg | WARN 18/21 | WARN 13/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 14/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 15/21 |
+| aruba_aoss/kitchen_sink.cfg | WARN 18/21 | WARN 13/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 15/21 |
 | cisco_iosxe/kitchen_sink.xml | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 9/21 | WARN 13/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 12/21 |
-| cisco_iosxr/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 |
+| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 13/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 12/21 |
+| cisco_iosxr/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 |
 | cisco_nxos/kitchen_sink.cfg | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 |
 | dell_os10/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
-| fortigate_cli/kitchen_sink.conf | WARN 15/21 | WARN 13/21 | WARN 13/21 | WARN 20/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 15/21 |
-| juniper_junos/kitchen_sink.set | WARN 13/21 | WARN 7/21 | WARN 11/21 | WARN 18/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | WARN 12/21 | WARN 11/21 | WARN 10/21 |
-| mikrotik_routeros/kitchen_sink.rsc | WARN 14/21 | WARN 12/21 | WARN 15/21 | WARN 20/21 | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 11/21 | WARN 18/21 | WARN 15/21 | WARN 20/21 | WARN 16/21 | WARN 14/21 |
-| opnsense/kitchen_sink.xml | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 13/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 14/21 |
-| vyos/kitchen_sink.conf | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | OK 21/21 |
+| fortigate_cli/kitchen_sink.conf | WARN 15/21 | WARN 13/21 | WARN 13/21 | WARN 20/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 14/21 | WARN 15/21 |
+| juniper_junos/kitchen_sink.set | WARN 13/21 | WARN 7/21 | WARN 11/21 | WARN 18/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 13/21 | WARN 20/21 | WARN 12/21 | WARN 11/21 | WARN 10/21 |
+| mikrotik_routeros/kitchen_sink.rsc | WARN 14/21 | WARN 12/21 | WARN 15/21 | WARN 20/21 | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 13/21 | WARN 18/21 | WARN 15/21 | WARN 20/21 | WARN 16/21 | WARN 14/21 |
+| opnsense/kitchen_sink.xml | WARN 17/21 | WARN 12/21 | WARN 14/21 | WARN 20/21 | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 15/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 20/21 | WARN 14/21 |
+| vyos/kitchen_sink.conf | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 18/21 | WARN 16/21 | OK 21/21 |
 
 ## Top drifted (source codec → target codec) pairs
 
@@ -149,13 +149,13 @@ Combined across both matrices.  Sums every WARN cell's ``fields_drifted`` count 
 | 1 | juniper_junos | aruba_aoscx | 76 |
 | 2 | cisco_nxos | vyos | 73 |
 | 3 | cisco_nxos | aruba_aoscx | 67 |
-| 4 | juniper_junos | dell_os10 | 66 |
-| 5 | cisco_nxos | juniper_junos | 64 |
-| 6 | cisco_nxos | opnsense | 63 |
-| 7 | juniper_junos | opnsense | 63 |
-| 8 | juniper_junos | vyos | 63 |
-| 9 | cisco_nxos | mikrotik_routeros | 60 |
-| 10 | cisco_nxos | fortigate_cli | 58 |
+| 4 | cisco_nxos | juniper_junos | 64 |
+| 5 | cisco_nxos | opnsense | 63 |
+| 6 | juniper_junos | opnsense | 63 |
+| 7 | juniper_junos | vyos | 63 |
+| 8 | cisco_nxos | mikrotik_routeros | 60 |
+| 9 | cisco_nxos | fortigate_cli | 58 |
+| 10 | juniper_junos | aruba_aoss | 56 |
 
 ### Top drifted pairs — synthetic submatrix only
 
@@ -165,18 +165,18 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 |---:|---|---|---:|
 | 1 | juniper_junos | aruba_aoscx | 14 |
 | 2 | cisco_iosxe_cli | aruba_aoscx | 12 |
-| 3 | cisco_iosxe_cli | dell_os10 | 12 |
-| 4 | juniper_junos | dell_os10 | 12 |
-| 5 | arista_eos | aruba_aoscx | 11 |
-| 6 | juniper_junos | vyos | 11 |
-| 7 | arista_eos | dell_os10 | 10 |
-| 8 | juniper_junos | aruba_aoss | 10 |
-| 9 | juniper_junos | opnsense | 10 |
-| 10 | mikrotik_routeros | dell_os10 | 10 |
+| 3 | arista_eos | aruba_aoscx | 11 |
+| 4 | juniper_junos | vyos | 11 |
+| 5 | juniper_junos | aruba_aoss | 10 |
+| 6 | juniper_junos | opnsense | 10 |
+| 7 | cisco_iosxe_cli | mikrotik_routeros | 9 |
+| 8 | cisco_iosxe_cli | opnsense | 9 |
+| 9 | cisco_iosxe_cli | vyos | 9 |
+| 10 | juniper_junos | mikrotik_routeros | 9 |
 
 ## Per-cell drill-downs — real captures
 
-One section per non-OK real-capture cell (1147 total).  Sections are ordered by source fixture then target codec.
+One section per non-OK real-capture cell (1146 total).  Sections are ordered by source fixture then target codec.
 
 ### arista_eos/batfish_duplicateprivate_eos4211.txt → aruba_aoscx  (WARN 19/21)
 
@@ -328,12 +328,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 1, "hashed_password": "arista:sha512:$6$fWzDTNTpVx3TJ6HQ$33r4F7c1zX4bCBDqphtNXc4sxCuRvrVOmbwJt.Hfehd4mZyYET1qsSHSpdv5X4FLBG.Gsdt2MlIa8Rd4p1IEu1", "role": "netw... | [] | all 1 local_users dropped |
 | routing_instances | DRIFT | [{"name": "MGMT", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "Tenant_A_OPZone", "instance_type": "vrf", "rou... | [{"name": "MGMT", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "Tenant_A_OPZone", "instance_type": "vrf", "rou... | {"routing_instances[2] {'name': 'Tenant_A_OPZone_1'}": {"instance_type": {"source": "mac-vrf", "target": "vrf"}}, "routing_instances[3] {'name': 'Tenant_A_OPZone_2'}": {"instance_type": {"source": ... |
 
-### arista_eos/batfish_eos_evpn_vlan_based_leaf.txt → dell_os10  (WARN 13/21)
+### arista_eos/batfish_eos_evpn_vlan_based_leaf.txt → dell_os10  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["192.168.2.1", "8.8.8.8"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["0.north-america.pool.ntp.org", "1.north-america.pool.ntp.org"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "P2P_UPLINK_TO_H-SPINE1_Ethernet2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_address... | [{"name": "Ethernet1", "default_name": "", "description": "P2P_UPLINK_TO_H-SPINE1_Ethernet2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_address... | {"interfaces[5] {'name': 'Ethernet3'}": {"lag_member_of": {"source": "Port-Channel3", "target": "port-channel3"}}, "interfaces[6] {'name': 'Ethernet4'}": {"lag_member_of": {"source": "Port-Channel3... |
 | vlans | DRIFT | [{"id": 110, "name": "Tenant_A_OPZone_1", "description": "", "tagged_ports": ["Port-Channel3"], "untagged_ports": [], "ipv4_addresses": [{"ip": "", "prefix_length": 24, "is_secondary": false, "virt... | [{"id": 110, "name": "Tenant_A_OPZone_1", "description": "", "tagged_ports": ["Port-Channel3"], "untagged_ports": [], "ipv4_addresses": []}, {"id": 111, "name": "Tenant_A_OPZone_2", "description": ... | {"vlans[0] {'id': 110, 'name': 'Tenant_A_OPZone_1'}": {"ipv4_addresses": {"source": [{"ip": "", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac": ""}... |
 | lags | DRIFT | [{"name": "Port-Channel3", "members": ["Ethernet3", "Ethernet4"], "mode": "active"}, {"name": "Port-Channel5", "members": ["Ethernet5"], "mode": "active"}, {"name": "Port-Channel6", "members": ["Et... | [{"name": "port-channel3", "members": ["Ethernet3", "Ethernet4"], "mode": "active"}, {"name": "port-channel5", "members": ["Ethernet5"], "mode": "active"}, {"name": "port-channel6", "members": ["Et... | {"lags[0] {'name': 'Port-Channel3'}": {"name": {"source": "Port-Channel3", "target": "port-channel3"}}, "lags[1] {'name': 'Port-Channel5'}": {"name": {"source": "Port-Channel5", "target": "port-cha... |
@@ -472,12 +470,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "Port-Channel10", "members": ["Ethernet10"], "mode": "active"}, {"name": "Port-Channel11", "members": ["Ethernet11"], "mode": "active"}, {"name": "Port-Channel3", "members": ["Ethernet3",... | [{"name": "port-channel10", "members": ["Ethernet10"], "mode": "active"}, {"name": "port-channel11", "members": ["Ethernet11"], "mode": "active"}, {"name": "port-channel3", "members": ["Ethernet3",... | {"lags[0] {'name': 'Port-Channel10'}": {"name": {"source": "Port-Channel10", "target": "port-channel10"}}, "lags[1] {'name': 'Port-Channel11'}": {"name": {"source": "Port-Channel11", "target": "por... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 1, "hashed_password": "arista:sha512:$6$E6BvvRqMzRBBMQ2T$dZxlhTTkJdV6qW70W.CNEhF4zF6GzJfAbKulJ.tmP7tQ.Z2SkI.gmVbjOarUdsDn4EszUrgUo.K1/dlZuofOe.", "role": "netw... | [] | all 1 local_users dropped |
 
-### arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt → dell_os10  (WARN 13/21)
+### arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt → dell_os10  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["192.168.2.1", "8.8.8.8"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["0.north-america.pool.ntp.org", "1.north-america.pool.ntp.org"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "P2P_UPLINK_TO_DC1-SPINE1_Ethernet2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addre... | [{"name": "Ethernet1", "default_name": "", "description": "P2P_UPLINK_TO_DC1-SPINE1_Ethernet2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addre... | count drift: 39 → 40 (interfaces) |
 | vlans | DRIFT | [{"id": 110, "name": "Tenant_A_OP_Zone_1", "description": "", "tagged_ports": ["Port-Channel3", "Port-Channel6", "Port-Channel7"], "untagged_ports": ["Port-Channel10"], "ipv4_addresses": [{"ip": ""... | [{"id": 110, "name": "Tenant_A_OP_Zone_1", "description": "", "tagged_ports": ["Port-Channel3", "Port-Channel6", "Port-Channel7"], "untagged_ports": ["Port-Channel10"], "ipv4_addresses": []}, {"id"... | {"vlans[0] {'id': 110, 'name': 'Tenant_A_OP_Zone_1'}": {"ipv4_addresses": {"source": [{"ip": "", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac": ""... |
 | lags | DRIFT | [{"name": "Port-Channel10", "members": ["Ethernet10"], "mode": "active"}, {"name": "Port-Channel11", "members": ["Ethernet11"], "mode": "active"}, {"name": "Port-Channel3", "members": ["Ethernet3",... | [{"name": "port-channel10", "members": ["Ethernet10"], "mode": "active"}, {"name": "port-channel11", "members": ["Ethernet11"], "mode": "active"}, {"name": "port-channel3", "members": ["Ethernet3",... | {"lags[0] {'name': 'Port-Channel10'}": {"name": {"source": "Port-Channel10", "target": "port-channel10"}}, "lags[1] {'name': 'Port-Channel11'}": {"name": {"source": "Port-Channel11", "target": "por... |
@@ -610,13 +606,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "arista:sha512:$6$hpdQay6BcrZvWaw5$wBAFmW/kOk8NAArSekZd1b5G3LafQIVAiOoT22HmatoqEBuaYv8Qp5sBv7S0/P1B.ZDUBc8vebNu0sY1hNEES0", "role": "net... | [] | all 2 local_users dropped |
 | routing_instances | DRIFT | [{"name": "MGMT", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "customer1", "instance_type": "mac-vrf", "route... | [{"name": "MGMT", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "customer1", "instance_type": "vrf", "route_dis... | {"routing_instances[1] {'name': 'customer1'}": {"instance_type": {"source": "mac-vrf", "target": "vrf"}}, "routing_instances[2] {'name': 'customer10'}": {"instance_type": {"source": "mac-vrf", "tar... |
 
-### arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt → dell_os10  (WARN 15/21)
+### arista_eos/dtn_dcs_7050sx3_48yc8_eos4321.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.net |  | domain: 'example.net' → '' |
-| dns_servers | DRIFT | ["10.14.0.1"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["1.pool.ntp.org"] | [] | all 1 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "P2P_LINK_TO_R2-SITE1-WAN1_Ethernet6", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9214, "ip_mtu": null, "ipv4_addr... | [{"name": "Ethernet1", "default_name": "", "description": "P2P_LINK_TO_R2-SITE1-WAN1_Ethernet6", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9214, "ip_mtu": null, "ipv4_addr... | {"interfaces[1] {'name': 'Ethernet1.10'}": {"dot1q_vlan": {"source": 10, "target": null}}, "interfaces[2] {'name': 'Ethernet1.11'}": {"dot1q_vlan": {"source": 11, "target": null}}, "interfaces[3] {... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "arista:sha512:$6$hpdQay6BcrZvWaw5$wBAFmW/kOk8NAArSekZd1b5G3LafQIVAiOoT22HmatoqEBuaYv8Qp5sBv7S0/P1B.ZDUBc8vebNu0sY1hNEES0", "role": "net... | [{"name": "admin", "privilege_level": 15, "hashed_password": "$6$hpdQay6BcrZvWaw5$wBAFmW/kOk8NAArSekZd1b5G3LafQIVAiOoT22HmatoqEBuaYv8Qp5sBv7S0/P1B.ZDUBc8vebNu0sY1hNEES0", "role": "sysadmin"}, {"nam... | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "arista:sha512:$6$hpdQay6BcrZvWaw5$wBAFmW/kOk8NAArSekZd1b5G3LafQIVAiOoT22HmatoqEBuaYv8Qp5sBv7S0/P1B.ZDUBc8vebNu0sY1hNEES0", "targ... |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 2, "vni": 10002, "mcast_group": "", "flood_list": [], "source_interface": "Loopback1", "udp_port": 4789}, {"vlan_id": 3, "vni": 10003, "mcast_group": "", "flood_list": [], "source_inte... | [] | all 14 vxlan_vnis dropped |
@@ -823,14 +816,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "switch2 **** Ethernet1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip... | [{"name": "Ethernet1", "default_name": "", "description": "switch2 **** Ethernet1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip... | {"interfaces[65] {'name': 'Management1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "network-admin"}, {"name": "arista", "privilege_level": 15, "hashed_password": "arista:sha512:$6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZ... | [{"name": "telemetry", "privilege_level": 1, "hashed_password": "5 $1$vA97cJ5S$ac7KClc1KmrHRCyWKBXfq1", "role": "network-operator"}] | count drift: 5 → 1 (local_users) |
 
-### arista_eos/ksator_dcs_7150s64_eos4224.txt → dell_os10  (WARN 15/21)
+### arista_eos/ksator_dcs_7150s64_eos4224.txt → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | lab.local |  | domain: 'lab.local' → '' |
-| dns_servers | DRIFT | ["10.83.28.52"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["10.83.28.52"] | [] | all 1 ntp_servers dropped |
-| syslog_servers | DRIFT | ["10.83.28.52"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "switch2 **** Ethernet1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip... | [{"name": "Ethernet1", "default_name": "", "description": "switch2 **** Ethernet1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip... | {"interfaces[65] {'name': 'Management1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "network-admin"}, {"name": "arista", "privilege_level": 15, "hashed_password": "arista:sha512:$6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZ... | [{"name": "arista", "privilege_level": 15, "hashed_password": "$6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZUGUlCzh7QlrNyWrwkE2iFSosNl5JUc4PfYp69vdYsaKgyzuYwpJ1NuePXby46LLGs7pruDbUGyM.", "role": "sysadmin"}, {"na... | count drift: 5 → 2 (local_users) |
 
@@ -1725,11 +1714,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "port-channel1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "port-channel1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/aruba_central_5memberstack_rendered.cfg → dell_os10  (WARN 17/21)
+### aruba_aoss/aruba_central_5memberstack_rendered.cfg → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["192.168.10.4"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchpor... | {"interfaces[0] {'name': '1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '1/10'}": {"interface_type": {"source": "ianaift:ether... |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
@@ -1940,11 +1928,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["48", "49", "50", "51", "52"], "ipv4_addresses": []}, {"id": 10, "name": "wifi", "description": "", "tag... | {"vlans[6] {'id': 4, 'name': 'internet sdsl'}": {"name": {"source": "internet sdsl", "target": "internet_sdsl"}}, "vlans[9] {'id': 7, 'name': 'printer leraarskamer'}": {"name": {"source": "printer ... |
 | local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
-### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → dell_os10  (WARN 18/21)
+### aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["192.168.2.11"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "s... | [{"name": "1", "default_name": "", "description": "scorpio", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | count drift: 61 → 64 (interfaces) |
 | local_users | DRIFT | [{"name": "manager", "privilege_level": 15, "hashed_password": "", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -2412,12 +2399,6 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 |---|---|---|---|---|
 | syslog_servers | DRIFT | ["1.2.3.4", "dead:beef::1", "10.246.131.130", "... and 3 more"] | [] | all 6 syslog_servers dropped |
 
-### cisco_iosxe/batfish_cisco_logging.txt → dell_os10  (WARN 20/21)
-
-| Field | Disposition | Source | Target | Drift |
-|---|---|---|---|---|
-| syslog_servers | DRIFT | ["1.2.3.4", "dead:beef::1", "10.246.131.130", "... and 3 more"] | [] | all 6 syslog_servers dropped |
-
 ### cisco_iosxe/batfish_cisco_logging.txt → fortigate_cli  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
@@ -2501,11 +2482,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.150.0.... | [{"name": "GigabitEthernet0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.150.0.130", "pr... | {"interfaces[0] {'name': 'GigabitEthernet0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/1'}": {"interface_typ... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "cisco", "role": ""}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "cisco", "role": "network-admin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "", "target": "network-admin"}}} |
 
-### cisco_iosxe/batfish_iosxe_basic_vrrp.txt → dell_os10  (WARN 18/21)
+### cisco_iosxe/batfish_iosxe_basic_vrrp.txt → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.lab |  | domain: 'test.lab' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.150.0.... | [{"name": "GigabitEthernet0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.150.0.130", "pr... | {"interfaces[0] {'name': 'GigabitEthernet0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/1'}": {"interface_typ... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "cisco", "role": ""}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "cisco", "role": "sysadmin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -2834,11 +2814,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "... | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addr... | {"interfaces[0] {'name': 'GigabitEthernet1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet2'}": {"interface_type": ... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "9 $9$lgJxy7Ga.Th5FU$gocFhcHC/8pvixGr.s2wB7X59FiGVvwYawfCPrmaJuY", "role": ""}] | [] | all 1 local_users dropped |
 
-### cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt → dell_os10  (WARN 18/21)
+### cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | cisco.com |  | domain: 'cisco.com' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "... | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addr... | {"interfaces[0] {'name': 'GigabitEthernet1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet2'}": {"interface_type": ... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "9 $9$lgJxy7Ga.Th5FU$gocFhcHC/8pvixGr.s2wB7X59FiGVvwYawfCPrmaJuY", "role": ""}] | [] | all 1 local_users dropped |
 
@@ -2917,11 +2896,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "... | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addr... | {"interfaces[0] {'name': 'GigabitEthernet1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet2'}": {"interface_type": ... |
 | local_users | DRIFT | [{"name": "developer", "privilege_level": 15, "hashed_password": "5 $1$Anez$e3JokiVvI4unDNdZ20HEG1", "role": ""}, {"name": "root", "privilege_level": 15, "hashed_password": "5 $1$mB0Z$srZ2lQWnzAC5J... | [{"name": "developer", "privilege_level": 15, "hashed_password": "5 $1$Anez$e3JokiVvI4unDNdZ20HEG1", "role": "network-admin"}, {"name": "root", "privilege_level": 15, "hashed_password": "5 $1$mB0Z$... | {"local_users[0] {'name': 'developer'}": {"role": {"source": "", "target": "network-admin"}}, "local_users[1] {'name': 'root'}": {"role": {"source": "", "target": "network-admin"}}} |
 
-### cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt → dell_os10  (WARN 18/21)
+### cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| syslog_servers | DRIFT | ["1.1.1.2", "1.1.1.3"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "... | [{"name": "GigabitEthernet1", "default_name": "", "description": "MANAGEMENT INTERFACE - DON'T TOUCH ME", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addr... | {"interfaces[0] {'name': 'GigabitEthernet1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet2'}": {"interface_type": ... |
 | local_users | DRIFT | [{"name": "developer", "privilege_level": 15, "hashed_password": "5 $1$Anez$e3JokiVvI4unDNdZ20HEG1", "role": ""}, {"name": "root", "privilege_level": 15, "hashed_password": "5 $1$mB0Z$srZ2lQWnzAC5J... | [] | all 2 local_users dropped |
 
@@ -3221,11 +3199,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "root-lr"}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "network-admin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "root-lr", "target": "network-admin"}}} |
 
-### cisco_iosxr/batfish_ebgp_border01.txt → dell_os10  (WARN 16/21)
+### cisco_iosxr/batfish_ebgp_border01.txt → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.com |  | domain: 'test.com' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | vlans | DRIFT | [{"id": 35, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}] | [] | all 1 vlans dropped |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "root-lr"}] | [] | all 1 local_users dropped |
@@ -3329,11 +3306,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Fyyl$4hCQrSP.yZElIJXxvK5Nv0", "role": "root-lr"}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Fyyl$4hCQrSP.yZElIJXxvK5Nv0", "role": "network-admin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "root-lr", "target": "network-admin"}}} |
 
-### cisco_iosxr/batfish_ebgp_border02.txt → dell_os10  (WARN 16/21)
+### cisco_iosxr/batfish_ebgp_border02.txt → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.com |  | domain: 'test.com' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": false, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | vlans | DRIFT | [{"id": 35, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}] | [] | all 1 vlans dropped |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Fyyl$4hCQrSP.yZElIJXxvK5Nv0", "role": "root-lr"}] | [] | all 1 local_users dropped |
@@ -3440,11 +3416,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "Bundle-Ether23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "Bundle-Ether45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | [{"name": "port-channel23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "port-channel45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | {"lags[0] {'name': 'Bundle-Ether23'}": {"name": {"source": "Bundle-Ether23", "target": "port-channel23"}}, "lags[1] {'name': 'Bundle-Ether45'}": {"name": {"source": "Bundle-Ether45", "target": "por... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "root-lr"}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "network-admin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "root-lr", "target": "network-admin"}}} |
 
-### cisco_iosxr/batfish_ibgp_border01.txt → dell_os10  (WARN 17/21)
+### cisco_iosxr/batfish_ibgp_border01.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.com |  | domain: 'test.com' → '' |
 | interfaces | DRIFT | [{"name": "Bundle-Ether23", "default_name": "", "description": "To_RR", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.188.24... | [{"name": "Bundle-Ether23", "default_name": "", "description": "To_RR", "enabled": true, "interface_type": "ianaift:other", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.188.248.17", "... | {"interfaces[0] {'name': 'Bundle-Ether23'}": {"interface_type": {"source": "ianaift:ieee8023adLag", "target": "ianaift:other"}}, "interfaces[1] {'name': 'Bundle-Ether45'}": {"interface_type": {"sou... |
 | lags | DRIFT | [{"name": "Bundle-Ether23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "Bundle-Ether45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$Joxi$FOgljf610R6off2td9BC.1", "role": "root-lr"}] | [] | all 1 local_users dropped |
@@ -3540,11 +3515,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "Bundle-Ether23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "Bundle-Ether45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | [{"name": "port-channel23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "port-channel45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | {"lags[0] {'name': 'Bundle-Ether23'}": {"name": {"source": "Bundle-Ether23", "target": "port-channel23"}}, "lags[1] {'name': 'Bundle-Ether45'}": {"name": {"source": "Bundle-Ether45", "target": "por... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$CwTp$5pWzabK7SXgMMiFdRtyyE1", "role": "root-lr"}] | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$CwTp$5pWzabK7SXgMMiFdRtyyE1", "role": "network-admin"}] | {"local_users[0] {'name': 'cisco'}": {"role": {"source": "root-lr", "target": "network-admin"}}} |
 
-### cisco_iosxr/batfish_ibgp_rr.txt → dell_os10  (WARN 17/21)
+### cisco_iosxr/batfish_ibgp_rr.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | lab.com |  | domain: 'lab.com' → '' |
 | interfaces | DRIFT | [{"name": "Bundle-Ether23", "default_name": "", "description": "To_BORDER01", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.... | [{"name": "Bundle-Ether23", "default_name": "", "description": "To_BORDER01", "enabled": true, "interface_type": "ianaift:other", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.188.248.... | {"interfaces[0] {'name': 'Bundle-Ether23'}": {"interface_type": {"source": "ianaift:ieee8023adLag", "target": "ianaift:other"}}, "interfaces[1] {'name': 'Bundle-Ether45'}": {"interface_type": {"sou... |
 | lags | DRIFT | [{"name": "Bundle-Ether23", "members": ["GigabitEthernet0/0/0/2", "GigabitEthernet0/0/0/3"], "mode": "active"}, {"name": "Bundle-Ether45", "members": ["GigabitEthernet0/0/0/4", "GigabitEthernet0/0/... | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "5 $1$CwTp$5pWzabK7SXgMMiFdRtyyE1", "role": "root-lr"}] | [] | all 1 local_users dropped |
@@ -3637,11 +3611,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.1", ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "7 030752180500", "role": "root-lr"}] | [] | all 1 local_users dropped |
 
-### cisco_iosxr/batfish_vpnv4_pe1.txt → dell_os10  (WARN 17/21)
+### cisco_iosxr/batfish_vpnv4_pe1.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.lab |  | domain: 'test.lab' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.1", ... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "cisco", "privilege_level": 15, "hashed_password": "7 030752180500", "role": "root-lr"}] | [] | all 1 local_users dropped |
 | routing_instances | DRIFT | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "10.254.1.1:65101", "rt_imports": ["65101:1", "65101:3"], "rt_exports": ["65101:1", "65101:3"], "description": "", "l3_vni": null}, ... | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "management", "instance_type": "vrf", "route_di... | {"routing_instances[0] {'name': 'blue'}": {"route_distinguisher": {"source": "10.254.1.1:65101", "target": ""}, "rt_exports": {"source": ["65101:1", "65101:3"], "target": []}, "rt_imports": {"sourc... |
@@ -3739,11 +3712,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.10",... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$iC1s$pkD9YjYDKF4HLFk8x/uK.0", "role": "root-lr"}, {"name": "cisco", "privilege_level": 15, "hashed_password": "7 070C285F4D06", "r... | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$iC1s$pkD9YjYDKF4HLFk8x/uK.0", "role": "network-admin"}] | count drift: 2 → 1 (local_users) |
 
-### cisco_iosxr/batfish_vpnv4_pe2.txt → dell_os10  (WARN 17/21)
+### cisco_iosxr/batfish_vpnv4_pe2.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.lab |  | domain: 'test.lab' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "RR1", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.10",... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$iC1s$pkD9YjYDKF4HLFk8x/uK.0", "role": "root-lr"}, {"name": "cisco", "privilege_level": 15, "hashed_password": "7 070C285F4D06", "r... | [] | all 2 local_users dropped |
 | routing_instances | DRIFT | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": ["65101:1", "65101:3"], "rt_exports": ["65101:1", "65101:3"], "description": "", "l3_vni": null}, {"name": "manage... | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "management", "instance_type": "vrf", "route_di... | {"routing_instances[0] {'name': 'blue'}": {"rt_exports": {"source": ["65101:1", "65101:3"], "target": []}, "rt_imports": {"source": ["65101:1", "65101:3"], "target": []}}, "routing_instances[2] {'n... |
@@ -3837,11 +3809,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.18", "p... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$agS0$XZBWI9uxBFUCxMHc/blS4/", "role": "root-lr"}, {"name": "cisco", "privilege_level": 15, "hashed_password": "7 05080F1C2243", "r... | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$agS0$XZBWI9uxBFUCxMHc/blS4/", "role": "network-admin"}] | count drift: 2 → 1 (local_users) |
 
-### cisco_iosxr/batfish_vpnv4_pe3.txt → dell_os10  (WARN 17/21)
+### cisco_iosxr/batfish_vpnv4_pe3.txt → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | test.lab |  | domain: 'test.lab' → '' |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.... | [{"name": "GigabitEthernet0/0/0/0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.1.18", "p... | {"interfaces[0] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/1'}": {"inter... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $1$agS0$XZBWI9uxBFUCxMHc/blS4/", "role": "root-lr"}, {"name": "cisco", "privilege_level": 15, "hashed_password": "7 05080F1C2243", "r... | [] | all 2 local_users dropped |
 | routing_instances | DRIFT | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "10.254.1.4:65101", "rt_imports": ["65101:1", "65101:3"], "rt_exports": ["65101:1", "65101:3"], "description": "", "l3_vni": null}, ... | [{"name": "blue", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "management", "instance_type": "vrf", "route_di... | {"routing_instances[0] {'name': 'blue'}": {"route_distinguisher": {"source": "10.254.1.4:65101", "target": ""}, "rt_exports": {"source": ["65101:1", "65101:3"], "target": []}, "rt_imports": {"sourc... |
@@ -3941,11 +3912,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "Bundle-Ether2123", "members": [], "mode": "active"}, {"name": "Bundle-Ether2124", "members": [], "mode": "active"}, {"name": "Bundle-Ether321", "members": ["TenGigE0/0/0/18", "TenGigE0/0... | [{"name": "port-channel321", "members": ["TenGigE0/0/0/18", "TenGigE0/0/0/30"], "mode": "active"}, {"name": "port-channel421", "members": ["TenGigE0/0/0/19", "TenGigE0/0/0/31"], "mode": "active"}, ... | count drift: 5 → 3 (lags) |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "10 $6$fakeSalt000000.$0123456789abcdefFAKEhashFAKEhashFAKEhashFAKEhashFAKEhashFAKEhashFAKEhash0123456789ab", "role": "root-lr"}, {"name... | [] | all 3 local_users dropped |
 
-### cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg → dell_os10  (WARN 16/21)
+### cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["198.51.100.118", "192.0.2.3"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "BVI500", "default_name": "", "description": "\"BVI for cBR8 port HA, requires static MAC\"", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addres... | [{"name": "BVI500", "default_name": "", "description": "'BVI for cBR8 port HA, requires static MAC'", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresse... | {"interfaces[0] {'name': 'BVI500'}": {"description": {"source": "\"BVI for cBR8 port HA, requires static MAC\"", "target": "'BVI for cBR8 port HA, requires static MAC'"}}, "interfaces[1] {'name': '... |
 | vlans | DRIFT | [{"id": 200, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}] | [] | all 1 vlans dropped |
 | lags | DRIFT | [{"name": "Bundle-Ether2123", "members": [], "mode": "active"}, {"name": "Bundle-Ether2124", "members": [], "mode": "active"}, {"name": "Bundle-Ether321", "members": ["TenGigE0/0/0/18", "TenGigE0/0... | [] | all 5 lags dropped |
@@ -4275,11 +4245,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | routing_instances | DRIFT | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto", "65000:901002"], "rt_exports": ["auto"], "description": "", "l3_vni": 901001}, {"name":... | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["65000:901002"], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "VRF_SERVICE_CU... | {"routing_instances[0] {'name': 'VRF_SERVICE_CUST_1'}": {"l3_vni": {"source": 901001, "target": null}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto", "65000:901... |
 | anycast_gateway_mac | DRIFT | 00:00:00:5e:12:34 |  | anycast_gateway_mac: '00:00:00:5e:12:34' → '' |
 
-### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → dell_os10  (WARN 16/21)
+### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | lab.karneliuk.com |  | domain: 'lab.karneliuk.com' → '' |
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "pref... | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "pref... | {"interfaces[7] {'name': 'Vlan1'}": {"name": {"source": "Vlan1", "target": "vlan1"}}, "interfaces[8] {'name': 'Vlan10'}": {"description": {"source": "", "target": "user_svi_1_vrf_service_cust_1"}, ... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["Ethernet1/3", "Ethernet1/4", "port-channel1"], "ipv4_addresses": []}, {"id": 10, "name": "user_svi_1_vrf_service_cu... | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["Ethernet1/3", "Ethernet1/4", "port-channel1"], "ipv4_addresses": []}, {"id": 10, "name": "user_svi_1_vrf_service_cu... | {"vlans[1] {'id': 10, 'name': 'user_svi_1_vrf_service_cust_1'}": {"ipv4_addresses": {"source": [{"ip": "192.168.10.1", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "192.16... |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 10, "vni": 100010, "mcast_group": "239.11.11.10", "flood_list": [], "source_interface": "loopback0", "udp_port": 4789}, {"vlan_id": 20, "vni": 100020, "mcast_group": "239.11.11.20", "f... | [] | all 5 vxlan_vnis dropped |
@@ -5393,13 +5362,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 100, "name": "vlan100", "description": "", "tagged_ports": [], "untagged_ports": []... | [] | all 47 vlans dropped |
 | snmp | UNSUPPORTED (by design) | {"community": "secure", "location": "Network to Code - NYC \| NY", "contact": "netadmin", "trap_hosts": ["10.1.1.1"], "v3_users": [{"name": "ntc", "group": "network-admin", "auth_protocol": "md5", ... |  | snmp: {'community': 'secure', 'location': 'Network to Code - NYC \| NY', 'contact': 'netadmin', 'trap_hosts': ['10.1.1.1'], 'v3_users': [{'name': 'ntc', 'group': 'network-admin', 'auth_protocol': '... |
 
-### cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt → dell_os10  (WARN 16/21)
+### cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | infra.ntc.com |  | domain: 'infra.ntc.com' → '' |
-| ntp_servers | DRIFT | ["10.1.1.1", "10.2.2.2"] | [] | all 2 ntp_servers dropped |
-| syslog_servers | DRIFT | ["10.125.1.171"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.5", "pr... | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.5", "pr... | count drift: 67 → 113 (interfaces) |
 | snmp | DRIFT | {"community": "secure", "location": "Network to Code - NYC \| NY", "contact": "netadmin", "trap_hosts": ["10.1.1.1"], "v3_users": [{"name": "ntc", "group": "network-admin", "auth_protocol": "md5", ... | {"community": "secure", "location": "Network to Code - NYC \| NY", "contact": "netadmin", "trap_hosts": ["10.1.1.1"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 
@@ -5684,19 +5650,23 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "arista:plaintext:<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "arista:pl... | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "<ADMIN_PASSWORD>", "target": "arista:plaintext:<ADMIN_PASSWORD>"}, "role": {"source": "sysadmin", "target": "network-admin"}}, "... |
 
-### dell_os10/azlocal_tor1.txt → aruba_aoscx  (WARN 17/21)
+### dell_os10/azlocal_tor1.txt → aruba_aoscx  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| dns_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 dns_servers dropped |
+| ntp_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:other", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_address... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowe... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_ports": [], "untagg... | {"vlans[0] {'id': 1, 'name': ''}": {"untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}": {"tagged_ports": {"source": ["ethernet1/1... |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": [{"name": "iicsnmp", "group": "", "auth_protocol": "sha", "auth_passphras... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "administrators"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role"... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "administrators"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "administrators"}}} |
 
-### dell_os10/azlocal_tor1.txt → aruba_aoss  (WARN 17/21)
+### dell_os10/azlocal_tor1.txt → aruba_aoss  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv... | count drift: 25 → 13 (interfaces) |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
@@ -5707,6 +5677,9 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | UNSUPPORTED (by design) | tor1-iic-azlocal |  | hostname: 'tor1-iic-azlocal' → '' |
+| dns_servers | UNSUPPORTED (by design) | ["10.0.0.10", "10.0.0.11"] | [] | all 2 dns_servers dropped |
+| ntp_servers | UNSUPPORTED (by design) | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | UNSUPPORTED (by design) | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"mtu": {"source": 9194, "target": null}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"source": [1, 700, 710, "... an... |
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 710, "name": "mgmt 10.0.1.0/24", "description": "", "tagged_p... | count drift: 13 → 12 (vlans) |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
@@ -5739,10 +5712,11 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role":... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}} |
 
-### dell_os10/azlocal_tor1.txt → fortigate_cli  (WARN 16/21)
+### dell_os10/azlocal_tor1.txt → fortigate_cli  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | count drift: 25 → 26 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "vlan700", "description": "oob-mgmt 10.0.0.0/24", "tagged_ports":... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}, "untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}"... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
@@ -5758,30 +5732,34 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor1.txt → mikrotik_routeros  (WARN 16/21)
+### dell_os10/azlocal_tor1.txt → mikrotik_routeros  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "bridge1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | count drift: 25 → 27 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "vlan700", "description": "oob-mgmt 10.0.0.0/24", "tagged_ports":... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}, "untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}"... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "", "auth_protocol": "sha", "aut... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "full"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "full"}] | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "full"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "full"}}} |
 
-### dell_os10/azlocal_tor1.txt → opnsense  (WARN 16/21)
+### dell_os10/azlocal_tor1.txt → opnsense  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| ntp_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "swi... | count drift: 25 → 26 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor1.txt → vyos  (WARN 17/21)
+### dell_os10/azlocal_tor1.txt → vyos  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "swi... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"s... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
@@ -5796,19 +5774,23 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "arista:plaintext:<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "arista:pl... | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "<ADMIN_PASSWORD>", "target": "arista:plaintext:<ADMIN_PASSWORD>"}, "role": {"source": "sysadmin", "target": "network-admin"}}, "... |
 
-### dell_os10/azlocal_tor2.txt → aruba_aoscx  (WARN 17/21)
+### dell_os10/azlocal_tor2.txt → aruba_aoscx  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| dns_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 dns_servers dropped |
+| ntp_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:other", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_address... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowe... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_ports": [], "untagg... | {"vlans[0] {'id': 1, 'name': ''}": {"untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}": {"tagged_ports": {"source": ["ethernet1/1... |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": [{"name": "iicsnmp", "group": "", "auth_protocol": "sha", "auth_passphras... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "administrators"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role"... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "administrators"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "administrators"}}} |
 
-### dell_os10/azlocal_tor2.txt → aruba_aoss  (WARN 17/21)
+### dell_os10/azlocal_tor2.txt → aruba_aoss  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv... | count drift: 25 → 13 (interfaces) |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
@@ -5819,6 +5801,9 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | UNSUPPORTED (by design) | tor2-iic-azlocal |  | hostname: 'tor2-iic-azlocal' → '' |
+| dns_servers | UNSUPPORTED (by design) | ["10.0.0.10", "10.0.0.11"] | [] | all 2 dns_servers dropped |
+| ntp_servers | UNSUPPORTED (by design) | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | UNSUPPORTED (by design) | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"mtu": {"source": 9194, "target": null}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"source": [1, 700, 710, "... an... |
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 710, "name": "mgmt 10.0.1.0/24", "description": "", "tagged_p... | count drift: 13 → 12 (vlans) |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
@@ -5851,10 +5836,11 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "network-admin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role":... | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "network-admin"}}} |
 
-### dell_os10/azlocal_tor2.txt → fortigate_cli  (WARN 16/21)
+### dell_os10/azlocal_tor2.txt → fortigate_cli  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | count drift: 25 → 26 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "vlan700", "description": "oob-mgmt 10.0.0.0/24", "tagged_ports":... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}, "untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}"... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
@@ -5870,30 +5856,34 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor2.txt → mikrotik_routeros  (WARN 16/21)
+### dell_os10/azlocal_tor2.txt → mikrotik_routeros  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "bridge1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | count drift: 25 → 27 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 700, "name": "vlan700", "description": "oob-mgmt 10.0.0.0/24", "tagged_ports":... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}, "untagged_ports": {"source": ["ethernet1/1/1"], "target": []}}, "vlans[1] {'id': 700, 'name': 'oob-mgmt 10.0.0.0/24'}"... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "", "auth_protocol": "sha", "aut... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "full"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "full"}] | {"local_users[0] {'name': 'admin'}": {"role": {"source": "sysadmin", "target": "full"}}, "local_users[1] {'name': 'iicadmin'}": {"role": {"source": "sysadmin", "target": "full"}}} |
 
-### dell_os10/azlocal_tor2.txt → opnsense  (WARN 16/21)
+### dell_os10/azlocal_tor2.txt → opnsense  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| ntp_servers | DRIFT | ["10.0.0.10", "10.0.0.11"] | [] | all 2 ntp_servers dropped |
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "swi... | count drift: 25 → 26 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "10.0.0.1", "interface": "", "metric": 0, "description": "", "vrf": "management"}] | [] | all 1 static_routes dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sysadmin"}, {"name": "iicadmin", "privilege_level": 15, "hashed_password": "<ADMIN_PASSWORD>", "role": "sys... | [] | all 2 local_users dropped |
 
-### dell_os10/azlocal_tor2.txt → vyos  (WARN 17/21)
+### dell_os10/azlocal_tor2.txt → vyos  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| syslog_servers | DRIFT | ["10.0.0.20"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv... | [{"name": "ethernet1/1/1", "default_name": "", "description": "CUSTOMER.UPLINK", "enabled": true, "interface_type": "", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "swi... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "trunk", "target": null}, "trunk_allowed_vlans": {"s... |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": ["ethernet1/1/1"], "ipv4_addresses": []}, {"id": 700, "name": "oob-mgmt 10.0.0.0/24", "description": "", "tagged_port... | [] | all 13 vlans dropped |
 | snmp | DRIFT | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": ["10.0.0.20"], "v3_users": [{"name": "iicsnmp", "group": "iicsnmp", "auth_protocol": "sha... | {"community": "", "location": "IIC Azure Local Rack 1", "contact": "IIC Infrastructure Team", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["trap_hosts", "v3_users"]} |
@@ -6098,10 +6088,12 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | count drift: 26 → 27 (interfaces) |
 | lags | DRIFT | [{"name": "port-channel101", "members": [], "mode": "active"}, {"name": "port-channel150", "members": ["ethernet1/1/51", "ethernet1/1/52"], "mode": "active"}] | [] | all 2 lags dropped |
 
-### dell_os10/canu_sw-leaf-bmc-001.cfg → aruba_aoscx  (WARN 18/21)
+### dell_os10/canu_sw-leaf-bmc-001.cfg → aruba_aoscx  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| dns_servers | DRIFT | ["10.92.100.225"] | [] | all 1 dns_servers dropped |
+| ntp_servers | DRIFT | ["192.168.4.4", "192.168.4.5", "192.168.4.6"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:other", "mtu": 9194, "ip_mtu": null, "ipv4_addresses"... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"access_vlan": {"source": 4, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"so... |
 | vlans | DRIFT | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": ["port-channel101"], "ipv4_addresses": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtua... | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "RIVER_NMN", "description": "", "tagged_ports": [], "untagged_ports":... | {"vlans[0] {'id': 1, 'name': 'MTL'}": {"ipv4_addresses": {"source": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac": ""}], "... |
 | lags | DRIFT | [{"name": "port-channel101", "members": [], "mode": "active"}, {"name": "port-channel150", "members": ["ethernet1/1/51", "ethernet1/1/52"], "mode": "active"}] | [{"name": "lag 150", "members": ["ethernet1/1/51", "ethernet1/1/52"], "mode": "static"}] | count drift: 2 → 1 (lags) |
@@ -6118,6 +6110,8 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | UNSUPPORTED (by design) | sw-leaf-bmc-001 |  | hostname: 'sw-leaf-bmc-001' → '' |
+| dns_servers | UNSUPPORTED (by design) | ["10.92.100.225"] | [] | all 1 dns_servers dropped |
+| ntp_servers | UNSUPPORTED (by design) | ["192.168.4.4", "192.168.4.5", "192.168.4.6"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_a... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"access_vlan": {"source": 4, "target": null}, "mtu": {"source": 9194, "target": null}, "switchport_mode": {"source": "access", "target": null}}, "interf... |
 | vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": ["port-channel101"], "ipv4_addresses": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtua... | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtual_gateway_address... | {"vlans[0] {'id': 1, 'name': 'MTL'}": {"untagged_ports": {"source": ["port-channel101"], "target": []}}, "vlans[1] {'id': 2, 'name': 'RIVER_NMN'}": {"tagged_ports": {"source": ["port-channel101"], ... |
 | lags | UNSUPPORTED (by design) | [{"name": "port-channel101", "members": [], "mode": "active"}, {"name": "port-channel150", "members": ["ethernet1/1/51", "ethernet1/1/52"], "mode": "active"}] | [] | all 2 lags dropped |
@@ -6158,10 +6152,11 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | [{"name": "bridge1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | count drift: 26 → 28 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": ["port-channel101"], "ipv4_addresses": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtua... | [{"id": 1, "name": "vlan1", "description": "MTL", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "vlan2", "description": "RIVER_NMN", "tagged_ports": [], "untagg... | {"vlans[0] {'id': 1, 'name': 'MTL'}": {"description": {"source": "", "target": "MTL"}, "ipv4_addresses": {"source": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtual_gate... |
 
-### dell_os10/canu_sw-leaf-bmc-001.cfg → opnsense  (WARN 19/21)
+### dell_os10/canu_sw-leaf-bmc-001.cfg → opnsense  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
+| ntp_servers | DRIFT | ["192.168.4.4", "192.168.4.5", "192.168.4.6"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9194, "ip_mtu": null, "ipv4_a... | [{"name": "ethernet1/1/1", "default_name": "", "description": "sw-leaf-bmc-001:1==>ncn-m001:bmc:1", "enabled": true, "interface_type": "", "mtu": 9194, "ip_mtu": null, "ipv4_addresses": [], "ipv6_a... | {"interfaces[0] {'name': 'ethernet1/1/1'}": {"access_vlan": {"source": 4, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "acces... |
 | vlans | DRIFT | [{"id": 1, "name": "MTL", "description": "", "tagged_ports": [], "untagged_ports": ["port-channel101"], "ipv4_addresses": [{"ip": "192.168.1.12", "prefix_length": 16, "is_secondary": false, "virtua... | [] | all 3 vlans dropped |
 
@@ -6571,11 +6566,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_70g_branch.conf → dell_os10  (WARN 16/21)
+### fortigate/kevinguenay_fgt_70g_branch.conf → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport... | [{"name": "HUB1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_... | {"interfaces[0] {'name': 'HUB1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'LAG_INTERNAL'}": {"interface_type": {"source": "ianaift:i... |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "LAG_INTERNAL", "members": ["port1", "port2"], "mode": "active"}, {"name": "fortilink", "members": ["a", "b"], "mode": "active"}] | [] | all 2 lags dropped |
@@ -6666,11 +6660,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC PB2z24R16jC1lJBExcPWAZ+0zd6yLBypIIRvtCDXHv4jSrREhFNCzaj4Fa9F+tV1OT46xChKTs1iPN8rT5Jec2TD62IHeZs933Om3zTDshga+g=", "role": "... | [] | all 1 local_users dropped |
 
-### fortigate/kevinguenay_fgt_vm_hub.conf → dell_os10  (WARN 16/21)
+### fortigate/kevinguenay_fgt_vm_hub.conf → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["96.45.45.45", "96.45.46.46"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:tunnel", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_... | [{"name": "BRANCHES1-O1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.30.1.254", "prefix_l... | {"interfaces[0] {'name': 'BRANCHES1-O1'}": {"interface_type": {"source": "ianaift:tunnel", "target": "ianaift:other"}}, "interfaces[1] {'name': 'BRANCHES1-O2'}": {"interface_type": {"source": "iana... |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": ["96.45.45.45", "96.45.46.46"], "lease_time": 604... | [] | all 1 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}] | [] | all 1 lags dropped |
@@ -6787,12 +6780,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC fakeEncodedSecretExampleValueNotRealXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "192.168.20.20", "key": "fortios:ENC fakeEncodedSecretExampleValueNotRealXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX... | [] | all 1 radius_servers dropped |
 
-### fortigate/user_contrib_fg100e_fos7213.conf → dell_os10  (WARN 14/21)
+### fortigate/user_contrib_fg100e_fos7213.conf → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.test |  | domain: 'example.test' → '' |
-| dns_servers | DRIFT | ["1.1.1.1", "8.8.8.8"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "cluster-vlan", "default_name": "", "description": "cluster-vlan", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1... | [{"name": "cluster-vlan", "default_name": "", "description": "cluster-vlan", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.100... | count drift: 34 → 33 (interfaces) |
 | dhcp_servers | DRIFT | [{"interface": "fortilink", "network": "10.255.1.0/24", "start_ip": "10.255.1.2", "end_ip": "10.255.1.254", "gateway": "10.255.1.1", "dns_servers": [], "lease_time": 604800, "domain_name": ""}, {"i... | [] | all 6 dhcp_servers dropped |
 | lags | DRIFT | [{"name": "fortilink", "members": [], "mode": "active"}, {"name": "lacp trunk", "members": ["port1", "port2", "port3", "port4"], "mode": "active"}] | [] | all 2 lags dropped |
@@ -7317,13 +7308,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | apply_groups | DRIFT | ["POC_Lab"] | [] | all 1 apply_groups dropped |
 | group_content | DRIFT | {"POC_Lab": [["system", "host-name", "EX4550-190"], ["system", "backup-router", "172.25.90.1"], ["system", "time-zone", "America/New_York"], ["system", "authentication-order", "radius"], ["system",... | {} | {"only_in_source": ["POC_Lab"], "only_in_target": [], "value_drift_keys": []} |
 
-### junos/ksator_labmgmt_ex4550_junos151.set → dell_os10  (WARN 14/21)
+### junos/ksator_labmgmt_ex4550_junos151.set → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["172.29.131.60"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["66.129.255.62"] | [] | all 1 ntp_servers dropped |
-| syslog_servers | DRIFT | ["172.25.45.6", "172.25.90.135"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "me0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.25.90.190", "prefix_... | [{"name": "me0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "172.25.90.190", "prefix_length": ... | count drift: 4 → 10 (interfaces) |
 | local_users | DRIFT | [{"name": "lab", "privilege_level": 15, "hashed_password": "junos:$1$IzJ6BfCC$MBJ3Q6asq1J3nQuVKt/w/0", "role": "super-user"}] | [{"name": "lab", "privilege_level": 15, "hashed_password": "$1$IzJ6BfCC$MBJ3Q6asq1J3nQuVKt/w/0", "role": "sysadmin"}] | {"local_users[0] {'name': 'lab'}": {"hashed_password": {"source": "junos:$1$IzJ6BfCC$MBJ3Q6asq1J3nQuVKt/w/0", "target": "$1$IzJ6BfCC$MBJ3Q6asq1J3nQuVKt/w/0"}, "role": {"source": "super-user", "targ... |
 | apply_groups | DRIFT | ["POC_Lab"] | [] | all 1 apply_groups dropped |
@@ -7468,13 +7456,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | apply_groups | DRIFT | ["POC_Lab"] | [] | all 1 apply_groups dropped |
 | group_content | DRIFT | {"POC_Lab": [["system", "host-name", "QFX10K2-182"], ["system", "backup-router", "172.25.90.1"], ["system", "authentication-order", "radius"], ["system", "authentication-order", "password"], ["syst... | {} | {"only_in_source": ["POC_Lab"], "only_in_target": [], "value_drift_keys": []} |
 
-### junos/ksator_labmgmt_qfx10k2_junos173.set → dell_os10  (WARN 12/21)
+### junos/ksator_labmgmt_qfx10k2_junos173.set → dell_os10  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["172.29.131.60"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["66.129.255.62"] | [] | all 1 ntp_servers dropped |
-| syslog_servers | DRIFT | ["172.25.45.6", "172.25.90.135"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ae1", "default_name": "", "description": "ESI 22:22 to 5110-169", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | [{"name": "ae1", "default_name": "", "description": "ESI 22:22 to 5110-169", "enabled": true, "interface_type": "ianaift:other", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses":... | count drift: 24 → 30 (interfaces) |
 | lags | DRIFT | [{"name": "ae1", "members": ["et-0/0/1"], "mode": "active"}, {"name": "ae2", "members": ["et-0/0/2"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "lab", "privilege_level": 15, "hashed_password": "junos:$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T.", "role": "super-user"}] | [{"name": "lab", "privilege_level": 15, "hashed_password": "$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T.", "role": "sysadmin"}] | {"local_users[0] {'name': 'lab'}": {"hashed_password": {"source": "junos:$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T.", "target": "$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T."}, "role": {"source": "super-user", "targ... |
@@ -7623,13 +7608,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | apply_groups | DRIFT | ["POC_Lab"] | [] | all 1 apply_groups dropped |
 | group_content | DRIFT | {"POC_Lab": [["system", "host-name", "QFX5100-183"], ["system", "backup-router", "172.25.90.1"], ["system", "authentication-order", "radius"], ["system", "authentication-order", "password"], ["syst... | {} | {"only_in_source": ["POC_Lab"], "only_in_target": [], "value_drift_keys": []} |
 
-### junos/ksator_labmgmt_qfx5100_junos173.set → dell_os10  (WARN 13/21)
+### junos/ksator_labmgmt_qfx5100_junos173.set → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["172.29.131.60"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["66.129.255.62"] | [] | all 1 ntp_servers dropped |
-| syslog_servers | DRIFT | ["172.25.45.6", "172.25.90.135"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ae0", "default_name": "", "description": "LAG to 4500-191", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses... | [{"name": "ae0", "default_name": "", "description": "LAG to 4500-191", "enabled": true, "interface_type": "ianaift:other", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "... | count drift: 12 → 28 (interfaces) |
 | lags | DRIFT | [{"name": "ae0", "members": ["xe-0/0/0", "xe-1/0/0"], "mode": "active"}, {"name": "ae1", "members": ["et-0/0/48", "et-0/0/49", "et-1/0/48", "et-1/0/49"], "mode": "active"}] | [] | all 2 lags dropped |
 | local_users | DRIFT | [{"name": "lab", "privilege_level": 15, "hashed_password": "junos:$1$EUL7Cv53$KB/VblftmUIy5gvRCFhlt0", "role": "super-user"}] | [{"name": "lab", "privilege_level": 15, "hashed_password": "$1$EUL7Cv53$KB/VblftmUIy5gvRCFhlt0", "role": "sysadmin"}] | {"local_users[0] {'name': 'lab'}": {"hashed_password": {"source": "junos:$1$EUL7Cv53$KB/VblftmUIy5gvRCFhlt0", "target": "$1$EUL7Cv53$KB/VblftmUIy5gvRCFhlt0"}, "role": {"source": "super-user", "targ... |
@@ -7768,13 +7750,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | apply_groups | DRIFT | ["POC_Lab"] | [] | all 1 apply_groups dropped |
 | group_content | DRIFT | {"POC_Lab": [["system", "host-name", "QFX5110-169"], ["system", "backup-router", "172.25.90.1"], ["system", "authentication-order", "radius"], ["system", "authentication-order", "password"], ["syst... | {} | {"only_in_source": ["POC_Lab"], "only_in_target": [], "value_drift_keys": []} |
 
-### junos/ksator_labmgmt_qfx5110_junos173.set → dell_os10  (WARN 13/21)
+### junos/ksator_labmgmt_qfx5110_junos173.set → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["172.29.131.60"] | [] | all 1 dns_servers dropped |
-| ntp_servers | DRIFT | ["66.129.255.62"] | [] | all 1 ntp_servers dropped |
-| syslog_servers | DRIFT | ["172.25.45.6"] | [] | all 1 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ae1", "default_name": "", "description": "ESI 55:55 to DC2 Spine", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_ad... | [{"name": "ae1", "default_name": "", "description": "ESI 55:55 to DC2 Spine", "enabled": true, "interface_type": "ianaift:other", "mtu": 9202, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses"... | count drift: 6 → 9 (interfaces) |
 | lags | DRIFT | [{"name": "ae1", "members": ["et-0/0/48", "et-0/0/49"], "mode": "active"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "lab", "privilege_level": 15, "hashed_password": "junos:$1$bi7hLrLa$O/fnQq9lyyD7HIwhKtOjF.", "role": "super-user"}] | [{"name": "lab", "privilege_level": 15, "hashed_password": "$1$bi7hLrLa$O/fnQq9lyyD7HIwhKtOjF.", "role": "sysadmin"}] | {"local_users[0] {'name': 'lab'}": {"hashed_password": {"source": "junos:$1$bi7hLrLa$O/fnQq9lyyD7HIwhKtOjF.", "target": "$1$bi7hLrLa$O/fnQq9lyyD7HIwhKtOjF."}, "role": {"source": "super-user", "targ... |
@@ -7907,14 +7886,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | lags | DRIFT | [{"name": "ae1", "members": ["ge-0/0/0"], "mode": "active"}, {"name": "ae101", "members": ["ge-0/0/28"], "mode": "active"}, {"name": "ae102", "members": ["ge-0/0/29"], "mode": "active"}, "... and 8... | [{"name": "port-channel1", "members": ["ge-0/0/0"], "mode": "active"}, {"name": "port-channel101", "members": ["ge-0/0/28"], "mode": "active"}, {"name": "port-channel102", "members": ["ge-0/0/29"],... | {"lags[0] {'name': 'ae1'}": {"name": {"source": "ae1", "target": "port-channel1"}}, "lags[1] {'name': 'ae101'}": {"name": {"source": "ae101", "target": "port-channel101"}}, "lags[2] {'name': 'ae102... |
 | local_users | DRIFT | [{"name": "engineer", "privilege_level": 15, "hashed_password": "junos:/*", "role": "super-user"}, {"name": "noc-auto", "privilege_level": 15, "hashed_password": "junos:/*", "role": "super-user"}, ... | [] | all 4 local_users dropped |
 
-### junos/saidvandeklundert_snmpv3_junos172.set → dell_os10  (WARN 13/21)
+### junos/saidvandeklundert_snmpv3_junos172.set → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.com |  | domain: 'example.com' → '' |
-| dns_servers | DRIFT | ["203.0.113.222", "203.0.113.220"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["192.0.2.1", "192.0.2.2", "192.0.2.3", "... and 9 more"] | [] | all 12 ntp_servers dropped |
-| syslog_servers | DRIFT | ["10.1.1.1", "10.1.1.2"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ae1", "default_name": "", "description": "Interfaces [ge-0/0/0] TO ISW1", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "... | [{"name": "ae1", "default_name": "", "description": "Interfaces [ge-0/0/0] TO ISW1", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_add... | count drift: 49 → 136 (interfaces) |
 | snmp | DRIFT | {"community": "", "location": "DAL09", "contact": "", "trap_hosts": [], "v3_users": [{"name": "POLLER-1", "group": "view-all", "auth_protocol": "sha", "auth_passphrase": "", "auth_kind": "", "priv_... | {"community": "", "location": "DAL09", "contact": "", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "ae1", "members": ["ge-0/0/0"], "mode": "active"}, {"name": "ae101", "members": ["ge-0/0/28"], "mode": "active"}, {"name": "ae102", "members": ["ge-0/0/29"], "mode": "active"}, "... and 8... | [] | all 11 lags dropped |
@@ -8194,12 +8169,11 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | dhcp_servers | DRIFT | [{"interface": "gn-mgmt", "network": "10.99.99.0/24", "start_ip": "10.99.99.10", "end_ip": "10.99.99.100", "gateway": "10.99.99.1", "dns_servers": ["10.99.99.1"], "lease_time": 600, "domain_name": ... | [] | all 2 dhcp_servers dropped |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "public", "group": "", "auth_protocol": "md5", "auth_passphrase": "", "auth_kind": "", "priv_protocol": "des... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'public', 'group': '', 'auth_protocol': 'md5', 'auth_passphrase': '', 'auth_kind': '', 'priv_protocol'... |
 
-### mikrotik/routeros_diff_verbose_export.rsc → dell_os10  (WARN 16/21)
+### mikrotik/routeros_diff_verbose_export.rsc → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | DRIFT | Quinta Router | Quinta_Router | hostname: 'Quinta Router' → 'Quinta_Router' |
-| ntp_servers | DRIFT | ["10.200.0.15"] | [] | all 1 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "downstream", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_len... | [{"name": "downstream", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_leng... | {"interfaces[0] {'name': 'downstream'}": {"interface_type": {"source": "ianaift:bridge", "target": "ianaift:other"}}, "interfaces[1] {'name': 'ether1'}": {"default_name": {"source": "ether1", "targ... |
 | dhcp_servers | DRIFT | [{"interface": "gn-mgmt", "network": "10.99.99.0/24", "start_ip": "10.99.99.10", "end_ip": "10.99.99.100", "gateway": "10.99.99.1", "dns_servers": ["10.99.99.1"], "lease_time": 600, "domain_name": ... | [] | all 2 dhcp_servers dropped |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "public", "group": "", "auth_protocol": "md5", "auth_passphrase": "", "auth_kind": "", "priv_protocol": "des... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'public', 'group': '', 'auth_protocol': 'md5', 'auth_passphrase': '', 'auth_kind': '', 'priv_protocol'... |
@@ -8288,11 +8262,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "bridge-lan", "default_name": "", "description": "Main LAN Switch", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.... | [{"name": "bridge-lan", "default_name": "", "description": "Main LAN Switch", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1... | {"interfaces[0] {'name': 'bridge-lan'}": {"interface_type": {"source": "ianaift:bridge", "target": "ianaift:other"}}, "interfaces[1] {'name': 'ether2'}": {"default_name": {"source": "ether2", "targ... |
 | dhcp_servers | DRIFT | [{"interface": "bridge-lan", "network": "192.168.1.0/24", "start_ip": "192.168.1.20", "end_ip": "192.168.1.199", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1", "8.8.8.8"], "lease_time": 8... | [] | all 1 dhcp_servers dropped |
 
-### mikrotik/taqavi_initial_provisioning.rsc → dell_os10  (WARN 18/21)
+### mikrotik/taqavi_initial_provisioning.rsc → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time.google.com"] | [] | all 1 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "bridge-lan", "default_name": "", "description": "Main LAN Switch", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.... | [{"name": "bridge-lan", "default_name": "", "description": "Main LAN Switch", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1... | {"interfaces[0] {'name': 'bridge-lan'}": {"interface_type": {"source": "ianaift:bridge", "target": "ianaift:other"}}, "interfaces[1] {'name': 'ether2'}": {"default_name": {"source": "ether2", "targ... |
 | dhcp_servers | DRIFT | [{"interface": "bridge-lan", "network": "192.168.1.0/24", "start_ip": "192.168.1.20", "end_ip": "192.168.1.199", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1", "8.8.8.8"], "lease_time": 8... | [] | all 1 dhcp_servers dropped |
 
@@ -8476,11 +8449,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | dhcp_servers | DRIFT | [{"interface": "mismatch0", "network": "192.168.1.0/24", "start_ip": "192.168.1.100", "end_ip": "192.168.1.199", "gateway": "", "dns_servers": [], "lease_time": 86400, "domain_name": ""}] | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}, {"name": "test1", "privilege_level": 1, "hashed_passw... | [] | all 5 local_users dropped |
 
-### opnsense/opnsense_acl_test_config.xml → dell_os10  (WARN 17/21)
+### opnsense/opnsense_acl_test_config.xml → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | localdomain |  | domain: 'localdomain' → '' |
 | interfaces | DRIFT | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_length": 24, "virt... | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_lengt... | {"interfaces[0] {'name': 'mismatch0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'mismatch1'}": {"dhcp_client": {"source": true, "target": false}, "dhc... |
 | dhcp_servers | DRIFT | [{"interface": "mismatch0", "network": "192.168.1.0/24", "start_ip": "192.168.1.100", "end_ip": "192.168.1.199", "gateway": "", "dns_servers": [], "lease_time": 86400, "domain_name": ""}] | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}, {"name": "test1", "privilege_level": 1, "hashed_passw... | [] | all 5 local_users dropped |
@@ -8573,11 +8545,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_length": 24, "virt... | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_lengt... | {"interfaces[0] {'name': 'mismatch0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'mismatch1'}": {"dhcp_client": {"source": true, "target": false}, "dhc... |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}] | [] | all 1 local_users dropped |
 
-### opnsense/opnsense_core_default.xml → dell_os10  (WARN 18/21)
+### opnsense/opnsense_core_default.xml → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | internal |  | domain: 'internal' → '' |
 | interfaces | DRIFT | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_length": 24, "virt... | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_lengt... | {"interfaces[0] {'name': 'mismatch0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'mismatch1'}": {"dhcp_client": {"source": true, "target": false}, "dhc... |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}] | [] | all 1 local_users dropped |
 
@@ -8673,12 +8644,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | dhcp_servers | DRIFT | [{"interface": "em0", "network": "192.168.1.0/24", "start_ip": "192.168.1.10", "end_ip": "192.168.1.245", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1"], "lease_time": 86400, "domain_name... | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": ""}] | [] | all 1 local_users dropped |
 
-### opnsense/opnsense_docs_carp_ha_backup.xml → dell_os10  (WARN 16/21)
+### opnsense/opnsense_docs_carp_ha_backup.xml → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | localdomain |  | domain: 'localdomain' → '' |
-| dns_servers | DRIFT | ["8.8.8.8"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "em0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.20", "prefix_length": 24, "virtual_g... | [{"name": "em0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.20", "prefix_length": 2... | {"interfaces[0] {'name': 'em0'}": {"dhcp_client_v6": {"source": "track6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other"}, "vrrp_groups": {"source": [{"group_id": 3, "mod... |
 | dhcp_servers | DRIFT | [{"interface": "em0", "network": "192.168.1.0/24", "start_ip": "192.168.1.10", "end_ip": "192.168.1.245", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1"], "lease_time": 86400, "domain_name... | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": ""}] | [{"name": "root", "privilege_level": 15, "hashed_password": "$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": "sysadmin"}] | {"local_users[0] {'name': 'root'}": {"hashed_password": {"source": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "target": "$6$$Y8Et6wWDdXO2tJ... |
@@ -8783,12 +8752,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | dhcp_servers | DRIFT | [{"interface": "em0", "network": "192.168.1.0/24", "start_ip": "192.168.1.10", "end_ip": "192.168.1.245", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1"], "lease_time": 86400, "domain_name... | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": ""}] | [] | all 1 local_users dropped |
 
-### opnsense/opnsense_docs_carp_ha_master.xml → dell_os10  (WARN 16/21)
+### opnsense/opnsense_docs_carp_ha_master.xml → dell_os10  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | localdomain |  | domain: 'localdomain' → '' |
-| dns_servers | DRIFT | ["8.8.8.8"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "em0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.10", "prefix_length": 24, "virtual_g... | [{"name": "em0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.10", "prefix_length": 2... | {"interfaces[0] {'name': 'em0'}": {"dhcp_client_v6": {"source": "track6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other"}, "vrrp_groups": {"source": [{"group_id": 3, "mod... |
 | dhcp_servers | DRIFT | [{"interface": "em0", "network": "192.168.1.0/24", "start_ip": "192.168.1.10", "end_ip": "192.168.1.245", "gateway": "192.168.1.1", "dns_servers": ["192.168.1.1"], "lease_time": 86400, "domain_name... | [] | all 1 dhcp_servers dropped |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": ""}] | [{"name": "root", "privilege_level": 15, "hashed_password": "$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "role": "sysadmin"}] | {"local_users[0] {'name': 'root'}": {"hashed_password": {"source": "bcrypt:$6$$Y8Et6wWDdXO2tJZRabvSfQvG2Lc8bAS6D9COIsMXEJ2KjA27wqDuAyd/CdazBQc3H3xQX.JXMKxJeRz2OqTkl.", "target": "$6$$Y8Et6wWDdXO2tJ... |
@@ -8882,11 +8849,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_length": 24, "virt... | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_lengt... | {"interfaces[0] {'name': 'mismatch0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'mismatch1'}": {"dhcp_client": {"source": true, "target": false}, "dhc... |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}] | [] | all 1 local_users dropped |
 
-### opnsense/opnsense_paramiko_shell_capture.xml → dell_os10  (WARN 18/21)
+### opnsense/opnsense_paramiko_shell_capture.xml → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | internal |  | domain: 'internal' → '' |
 | interfaces | DRIFT | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_length": 24, "virt... | [{"name": "mismatch0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "192.168.1.1", "prefix_lengt... | {"interfaces[0] {'name': 'mismatch0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'mismatch1'}": {"dhcp_client": {"source": true, "target": false}, "dhc... |
 | local_users | DRIFT | [{"name": "root", "privilege_level": 15, "hashed_password": "bcrypt:$2y$10$YRVoF4SgskIsrXOvOQjGieB9XqHPRra9R7d80B3BZdbY/j21TwBfS", "role": ""}] | [] | all 1 local_users dropped |
 
@@ -9051,12 +9017,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "igc0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "ac... | [{"name": "igc0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | {"interfaces[0] {'name': 'igc0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcp6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other"... |
 | local_users | DRIFT | [{"name": "api", "privilege_level": 15, "hashed_password": "bcrypt:$2y$11$fakeBcryptHashForApiUserExampleValueNotRealXXXXXXXX", "role": ""}, {"name": "root", "privilege_level": 15, "hashed_password... | [] | all 2 local_users dropped |
 
-### opnsense/user_contrib_supergate_opn25.xml → dell_os10  (WARN 17/21)
+### opnsense/user_contrib_supergate_opn25.xml → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.test |  | domain: 'example.test' → '' |
-| dns_servers | DRIFT | ["9.9.9.9", "1.1.1.2"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "igc0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "ac... | [{"name": "igc0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | {"interfaces[0] {'name': 'igc0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcp6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other"... |
 | local_users | DRIFT | [{"name": "api", "privilege_level": 15, "hashed_password": "bcrypt:$2y$11$fakeBcryptHashForApiUserExampleValueNotRealXXXXXXXX", "role": ""}, {"name": "root", "privilege_level": 15, "hashed_password... | [] | all 2 local_users dropped |
 
@@ -9142,11 +9106,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchp... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → dell_os10  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": nu... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchp... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": ""}] | [] | all 1 local_users dropped |
 
@@ -9229,11 +9192,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_le... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$km/6j4hX0Ayo$dk2z5LeUOayHopgLGZJII0whBMidnvsd4LfT6LcIcR9ReabX0kcXjZOlmmqDGWuo1FvpnV.X2IRl5NeEZpuI31", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/metasploit-vyos-config.conf → dell_os10  (WARN 18/21)
+### vyos/metasploit-vyos-config.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_length": 24, "v... | [{"name": "eth0", "default_name": "", "description": "desc two", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.10.10.10", "prefix_le... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$km/6j4hX0Ayo$dk2z5LeUOayHopgLGZJII0whBMidnvsd4LfT6LcIcR9ReabX0kcXjZOlmmqDGWuo1FvpnV.X2IRl5NeEZpuI31", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$km/6j4hX0Ayo$dk2z5LeUOayHopgLGZJII0whBMidnvsd4LfT6LcIcR9ReabX0kcXjZOlmmqDGWuo1FvpnV.X2IRl5NeEZpuI31", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9307,11 +9269,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 30, "virtual_g... | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 3... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}} |
 | local_users | DRIFT | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": ""}, {"name": "vyos... | [] | all 2 local_users dropped |
 
-### vyos/pc5-round1-border.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round1-border.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 30, "virtual_g... | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 3... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}} |
 | local_users | DRIFT | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": ""}, {"name": "vyos... | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": "sysadmin"}, {"name... | {"local_users[0] {'name': 'user'}": {"role": {"source": "", "target": "sysadmin"}}, "local_users[1] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9383,11 +9344,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.2", "prefix_length": 30, "virtual_g... | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.2", "prefix_length": 3... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": ""}, {"name": "vyos... | [] | all 2 local_users dropped |
 
-### vyos/pc5-round1-core.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round1-core.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.2", "prefix_length": 30, "virtual_g... | [{"name": "eth0", "default_name": "", "description": "lan", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.2", "prefix_length": 3... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": ""}, {"name": "vyos... | [{"name": "user", "privilege_level": 15, "hashed_password": "$6$8cXre.UraT7V3kMY$tK1NowJx7m3hF.ejKUsd8QTVHCUMh2aAIRpT23YZGCaQonFDvbzzd7zOvlxsP3ZtGRVIBBjCMpAED4wJlEc3X.", "role": "sysadmin"}, {"name... | {"local_users[0] {'name': 'user'}": {"role": {"source": "", "target": "sysadmin"}}, "local_users[1] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9459,11 +9419,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:3a7f::1"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$a.9PeSKSRzbzoSQq$97/dbD1FfeBK1mS/B4Kw2spQh6aCH.5aKQqvwZgWdzu5AWNasb58O/sdEDS2YWg8PCeWw9HrooIIAltVz.VOK/", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/pc5-round3b-routera.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round3b-routera.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:3a7f::1"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$a.9PeSKSRzbzoSQq$97/dbD1FfeBK1mS/B4Kw2spQh6aCH.5aKQqvwZgWdzu5AWNasb58O/sdEDS2YWg8PCeWw9HrooIIAltVz.VOK/", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$a.9PeSKSRzbzoSQq$97/dbD1FfeBK1mS/B4Kw2spQh6aCH.5aKQqvwZgWdzu5AWNasb58O/sdEDS2YWg8PCeWw9HrooIIAltVz.VOK/", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9535,11 +9494,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:3a7f::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$tv35FGLJH9f1q17P$YWNaT6RwH2xSXLQxYgXSzUAzQgEvUJ4Dx.zkPJa6YwVd5ZLAoKMq5s1f19iWdRWwSh5HxCSYzlqfJSLZ0LfUl0", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/pc5-round3b-routerb.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round3b-routerb.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:3a7f::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$tv35FGLJH9f1q17P$YWNaT6RwH2xSXLQxYgXSzUAzQgEvUJ4Dx.zkPJa6YwVd5ZLAoKMq5s1f19iWdRWwSh5HxCSYzlqfJSLZ0LfUl0", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$tv35FGLJH9f1q17P$YWNaT6RwH2xSXLQxYgXSzUAzQgEvUJ4Dx.zkPJa6YwVd5ZLAoKMq5s1f19iWdRWwSh5HxCSYzlqfJSLZ0LfUl0", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9611,11 +9569,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:b6d2::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$HUawQVmi4rZUmxsW$BEz2w5GZA7euBP5u43QN3B6vGXr0PsvtXkeMkSuy4ypATg7q0z5KMSgoQrbyXtz/hqglxEHmQpUH7iLLM36un/", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/pc5-round3b-routerd.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round3b-routerd.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:b6d2::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$HUawQVmi4rZUmxsW$BEz2w5GZA7euBP5u43QN3B6vGXr0PsvtXkeMkSuy4ypATg7q0z5KMSgoQrbyXtz/hqglxEHmQpUH7iLLM36un/", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$HUawQVmi4rZUmxsW$BEz2w5GZA7euBP5u43QN3B6vGXr0PsvtXkeMkSuy4ypATg7q0z5KMSgoQrbyXtz/hqglxEHmQpUH7iLLM36un/", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9687,11 +9644,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:c8f1::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$5BlhDtYATek1wNyq$VmV1kibxHoHdv5VZVOUuyflCF.CdfC0adJAi2TvJ2OnEyoVV6k6WPi9024/64IoNjfbrdHte1sO1xVw2xkawd0", "role": ""}] | [] | all 1 local_users dropped |
 
-### vyos/pc5-round3b-routere.conf → dell_os10  (WARN 18/21)
+### vyos/pc5-round3b-routere.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:abcd:c8f1::2"... | [{"name": "eth0", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [{"ip": "2001:0db8:... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$5BlhDtYATek1wNyq$VmV1kibxHoHdv5VZVOUuyflCF.CdfC0adJAi2TvJ2OnEyoVV6k6WPi9024/64IoNjfbrdHte1sO1xVw2xkawd0", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$5BlhDtYATek1wNyq$VmV1kibxHoHdv5VZVOUuyflCF.CdfC0adJAi2TvJ2OnEyoVV6k6WPi9024/64IoNjfbrdHte1sO1xVw2xkawd0", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9781,13 +9737,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addre... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "scott", "privilege_level": 15, "hashed_password": "$6$xxxxxxx", "role": ""}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$xxxxxxxxx", "role": ""}] | [] | all 2 local_users dropped |
 
-### vyos/scottlaird-vyos-parser.conf → dell_os10  (WARN 16/21)
+### vyos/scottlaird-vyos-parser.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | internal.sigkill.org |  | domain: 'internal.sigkill.org' → '' |
-| dns_servers | DRIFT | ["10.1.5.70", "8.8.8.8", "8.8.4.4"] | [] | all 3 dns_servers dropped |
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "... and 2 more"] | [] | all 5 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "eth0", "default_name": "", "description": "router1 to swb;swb;et18/1;SWB-ROUTER1;CORE;40000", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addre... | {"interfaces[0] {'name': 'eth0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "scott", "privilege_level": 15, "hashed_password": "$6$xxxxxxx", "role": ""}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$xxxxxxxxx", "role": ""}] | [{"name": "scott", "privilege_level": 15, "hashed_password": "$6$xxxxxxx", "role": "sysadmin"}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$xxxxxxxxx", "role": "sysadmin"}] | {"local_users[0] {'name': 'scott'}": {"role": {"source": "", "target": "sysadmin"}}, "local_users[1] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 
@@ -9959,11 +9912,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [] | all 1 local_users dropped |
 | vxlan_vnis | DRIFT | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.11"], "source_interface": "", "udp_port": 8472}] | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.11"], "source_interface": "", "udp_port": 4789}] | {"vxlan_vnis[0] {'vni': 10, 'vlan_id': 10}": {"udp_port": {"source": 8472, "target": 4789}}} |
 
-### vyos/wcni-kind-gw0.conf → dell_os10  (WARN 18/21)
+### vyos/wcni-kind-gw0.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.5.1", "prefix_length": 24, ... | {"interfaces[0] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth2'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.11"], "source_interface": "", "udp_port": 8472}] | [] | all 1 vxlan_vnis dropped |
@@ -10051,11 +10003,10 @@ One section per non-OK real-capture cell (1147 total).  Sections are ordered by 
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [] | all 1 local_users dropped |
 | vxlan_vnis | DRIFT | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.10"], "source_interface": "", "udp_port": 8472}] | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.10"], "source_interface": "", "udp_port": 4789}] | {"vxlan_vnis[0] {'vni': 10, 'vlan_id': 10}": {"udp_port": {"source": 8472, "target": 4789}}} |
 
-### vyos/wcni-kind-gw1.conf → dell_os10  (WARN 18/21)
+### vyos/wcni-kind-gw1.conf → dell_os10  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, "virtual_gate... | [{"name": "eth1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.8.1", "prefix_length": 24, ... | {"interfaces[0] {'name': 'eth1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'eth2'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "i... |
 | local_users | DRIFT | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": ""}] | [{"name": "vyos", "privilege_level": 15, "hashed_password": "$6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/", "role": "sysadmin"}] | {"local_users[0] {'name': 'vyos'}": {"role": {"source": "", "target": "sysadmin"}}} |
 | vxlan_vnis | UNSUPPORTED (by design) | [{"vlan_id": 10, "vni": 10, "mcast_group": "", "flood_list": ["172.12.1.10"], "source_interface": "", "udp_port": 8472}] | [] | all 1 vxlan_vnis dropped |
@@ -10180,13 +10131,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "network-admin"}, {"name": "operator", "privilege_level": 15, "hashed_password": "arista:sha512:$6$fakeSalt$fakeHashSha512Ab... | [{"name": "readonly", "privilege_level": 1, "hashed_password": "5 $1$fakeSalt$fakeMd5Hash01234", "role": "network-operator"}] | count drift: 3 → 1 (local_users) |
 | routing_instances | DRIFT | [{"name": "TENANT_A", "instance_type": "vrf", "route_distinguisher": "10.255.0.1:50100", "rt_imports": ["65000:50100", "65000:99999"], "rt_exports": ["65000:50100"], "description": "", "l3_vni": 50... | [{"name": "TENANT_A", "instance_type": "vrf", "route_distinguisher": "10.255.0.1:50100", "rt_imports": ["65000:50100", "65000:99999"], "rt_exports": ["65000:50100"], "description": "", "l3_vni": 50... | {"routing_instances[1] {'name': 'TENANT_A_DATA'}": {"instance_type": {"source": "mac-vrf", "target": "vrf"}}} |
 
-### arista_eos/kitchen_sink.txt → dell_os10  (WARN 11/21)
+### arista_eos/kitchen_sink.txt → dell_os10  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.net |  | domain: 'example.net' → '' |
-| dns_servers | DRIFT | ["10.0.0.53", "10.0.0.54"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["10.0.0.123", "10.0.0.124"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "Ethernet1", "default_name": "", "description": "Spine uplink (L3 routed)", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9214, "ip_mtu": null, "ipv4_addresses": [{"... | [{"name": "Ethernet1", "default_name": "", "description": "Spine uplink (L3 routed)", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9214, "ip_mtu": null, "ipv4_addresses": [{"... | count drift: 13 → 15 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "USERS", "description": "", "tagged_ports": ["Ethernet3"], "untagged_po... | [{"id": 10, "name": "USERS", "description": "", "tagged_ports": ["Ethernet3"], "untagged_ports": ["Ethernet2"], "ipv4_addresses": []}, {"id": 100, "name": "Tenant A data SVI", "description": "", "t... | count drift: 5 → 4 (vlans) |
 | dhcp_servers | DRIFT | [{"interface": "Vlan100", "network": "10.100.0.0/24", "start_ip": "10.100.0.100", "end_ip": "10.100.0.200", "gateway": "10.100.0.1", "dns_servers": ["10.0.0.53", "10.0.0.54"], "lease_time": 43200, ... | [] | all 2 dhcp_servers dropped |
@@ -10462,12 +10410,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:fa1cefa1cefa1cefa1cefa1cefa1cefa1cefa1ce", "role": "manager"}, {"name": "siteops", "privilege_level": 1, "hashed_password": "plain... | [{"name": "siteops", "privilege_level": 1, "hashed_password": "fakeRedactedPlaintext", "role": "network-operator"}] | count drift: 2 → 1 (local_users) |
 | radius_servers | DRIFT | [{"host": "10.0.20.10", "key": "fakeRadiusSecret-A", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.20.11", "key": "fakeRadiusSecret-B", "auth_port": 1812, "acct_port": 1813}] | [] | all 2 radius_servers dropped |
 
-### aruba_aoss/kitchen_sink.cfg → dell_os10  (WARN 14/21)
+### aruba_aoss/kitchen_sink.cfg → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["10.0.10.53", "10.0.10.54"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["10.0.10.123", "10.0.10.124"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "user-desk-01", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [... | [{"name": "1", "default_name": "", "description": "user-desk-01", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | count drift: 34 → 35 (interfaces) |
 | snmp | DRIFT | {"community": "public", "location": "Synthetic-Lab Rack 7", "contact": "netops@example.invalid", "trap_hosts": ["10.0.10.200", "10.0.10.201"], "v3_users": [{"name": "monitor-usr", "group": "auth-pr... | {"community": "public", "location": "Synthetic-Lab Rack 7", "contact": "netops@example.invalid", "trap_hosts": ["10.0.10.200", "10.0.10.201"], "v3_users": [{"name": "monitor-usr", "group": "auth-pr... | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "trk1", "members": ["23", "24"], "mode": "active"}, {"name": "trk2", "members": ["A3", "A4"], "mode": "static"}] | [] | all 2 lags dropped |
@@ -10694,14 +10640,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin1", "privilege_level": 15, "hashed_password": "5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "role": ""}, {"name": "admin2", "privilege_level": 15, "hashed_password": "9 $9$fakeSCRYPTsaltA... | [{"name": "admin1", "privilege_level": 15, "hashed_password": "5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.", "role": "network-admin"}] | count drift: 3 → 1 (local_users) |
 | radius_servers | DRIFT | [{"host": "198.51.100.40", "key": "iosxe:7 fakeRadiusSharedSecret01", "auth_port": 1812, "acct_port": 1813}, {"host": "198.51.100.41", "key": "iosxe:7 fakeRadiusSharedSecret02", "auth_port": 1812, ... | [] | all 2 radius_servers dropped |
 
-### cisco_iosxe_cli/kitchen_sink.txt → dell_os10  (WARN 9/21)
+### cisco_iosxe_cli/kitchen_sink.txt → dell_os10  (WARN 13/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | kitchensink.example.com |  | domain: 'kitchensink.example.com' → '' |
-| dns_servers | DRIFT | ["198.51.100.53", "198.51.100.54", "2001:db8:53::1"] | [] | all 3 dns_servers dropped |
-| ntp_servers | DRIFT | ["198.51.100.123", "198.51.100.124"] | [] | all 2 ntp_servers dropped |
-| syslog_servers | DRIFT | ["198.51.100.200", "198.51.100.201"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_... | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses... | {"interfaces[0] {'name': 'GigabitEthernet0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0'}": {"interface_typ... |
 | vlans | DRIFT | [{"id": 10, "name": "USERS", "description": "", "tagged_ports": [], "untagged_ports": ["GigabitEthernet0/0/1", "Port-channel1", "TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "ipv4_addresse... | [{"id": 10, "name": "Users SVI", "description": "", "tagged_ports": [], "untagged_ports": ["GigabitEthernet0/0/1", "Port-channel1", "TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "ipv4_addr... | {"vlans[0] {'id': 10, 'name': 'USERS'}": {"name": {"source": "USERS", "target": "Users SVI"}}, "vlans[1] {'id': 20, 'name': 'SERVERS'}": {"name": {"source": "SERVERS", "target": "Servers SVI"}}, "v... |
 | dhcp_servers | DRIFT | [{"interface": "Vlan10", "network": "192.168.10.0/24", "start_ip": "192.168.10.2", "end_ip": "192.168.10.254", "gateway": "192.168.10.1", "dns_servers": ["198.51.100.53", "198.51.100.54"], "lease_t... | [] | all 2 dhcp_servers dropped |
@@ -10839,11 +10781,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | lags | DRIFT | [{"name": "Bundle-Ether1", "members": ["GigabitEthernet0/0/0/3", "GigabitEthernet0/0/0/4"], "mode": "active"}] | [{"name": "port-channel1", "members": ["GigabitEthernet0/0/0/3", "GigabitEthernet0/0/0/4"], "mode": "active"}] | {"lags[0] {'name': 'Bundle-Ether1'}": {"name": {"source": "Bundle-Ether1", "target": "port-channel1"}}} |
 | local_users | DRIFT | [{"name": "netops", "privilege_level": 15, "hashed_password": "10 $6$abcdefghij$0PqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwX", "role": "root-lr"}, {"name": "readonly", "privilege_level": 1, "hash... | [] | all 2 local_users dropped |
 
-### cisco_iosxr/kitchen_sink.cfg → dell_os10  (WARN 15/21)
+### cisco_iosxr/kitchen_sink.cfg → dell_os10  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | lab.example.net |  | domain: 'lab.example.net' → '' |
 | interfaces | DRIFT | [{"name": "Bundle-Ether1", "default_name": "", "description": "backbone bundle", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "... | [{"name": "Bundle-Ether1", "default_name": "", "description": "backbone bundle", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1... | {"interfaces[0] {'name': 'Bundle-Ether1'}": {"interface_type": {"source": "ianaift:ieee8023adLag", "target": "ianaift:other"}}, "interfaces[1] {'name': 'GigabitEthernet0/0/0/0'}": {"interface_type"... |
 | vlans | DRIFT | [{"id": 100, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}] | [] | all 1 vlans dropped |
 | lags | DRIFT | [{"name": "Bundle-Ether1", "members": ["GigabitEthernet0/0/0/3", "GigabitEthernet0/0/0/4"], "mode": "active"}] | [] | all 1 lags dropped |
@@ -11258,12 +11199,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "fortios:ENC fakeAdminHashEEEEEEEEEEEEEE==", "role": "super_admin"}, {"name": "auditor", "privilege_level": 1, "hashed_password": "forti... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "10.50.0.20", "key": "fortios:ENC fakeRadiusSecret11111111==", "auth_port": 1812, "acct_port": 1813}, {"host": "10.50.0.21", "key": "fortios:ENC fakeRadiusSecret22222222==", "auth_port": ... | [] | all 2 radius_servers dropped |
 
-### fortigate_cli/kitchen_sink.conf → dell_os10  (WARN 13/21)
+### fortigate_cli/kitchen_sink.conf → dell_os10  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["1.1.1.1", "8.8.8.8"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "time.google.com"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "VL_200", "default_name": "", "description": "voice-vlan-200", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.200.0... | [{"name": "VL_200", "default_name": "", "description": "voice-vlan-200", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.200.0.1", "pr... | {"interfaces[0] {'name': 'VL_200'}": {"dot1q_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ieee8023adLag", "target": "ianaift:other"}, "vlan_parent": {"source": "agg... |
 | dhcp_servers | DRIFT | [{"interface": "port4", "network": "10.10.0.0/24", "start_ip": "10.10.0.100", "end_ip": "10.10.0.200", "gateway": "10.10.0.1", "dns_servers": ["1.1.1.1", "8.8.8.8"], "lease_time": 86400, "domain_na... | [] | all 2 dhcp_servers dropped |
 | snmp | DRIFT | {"community": "public-ro", "location": "data-center-rack-7", "contact": "noc@example.org", "trap_hosts": ["10.50.0.10", "10.50.0.11"], "v3_users": [{"name": "monitor-readonly", "group": "", "auth_p... | {"community": "public-ro", "location": "data-center-rack-7", "contact": "noc@example.org", "trap_hosts": ["10.50.0.10", "10.50.0.11"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
@@ -11426,14 +11365,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | apply_groups | DRIFT | ["GLOBAL-SETTINGS"] | [] | all 1 apply_groups dropped |
 | group_content | DRIFT | {"GLOBAL-SETTINGS": [["interfaces", "ge-0/0/0", "description", "Inherited from GLOBAL-SETTINGS apply-group"], ["interfaces", "ge-0/0/0", "mtu", "9000"], ["system", "syslog", "host", "10.0.0.252", "... | {} | {"only_in_source": ["GLOBAL-SETTINGS"], "only_in_target": [], "value_drift_keys": []} |
 
-### juniper_junos/kitchen_sink.set → dell_os10  (WARN 9/21)
+### juniper_junos/kitchen_sink.set → dell_os10  (WARN 13/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | lab.example.net |  | domain: 'lab.example.net' → '' |
-| dns_servers | DRIFT | ["10.0.0.53", "10.0.0.54"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["10.0.0.123", "10.0.0.124"] | [] | all 2 ntp_servers dropped |
-| syslog_servers | DRIFT | ["10.0.0.252", "10.0.0.250", "10.0.0.251"] | [] | all 3 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "ae0", "default_name": "", "description": "Bonded uplink to spine", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": 9178, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.... | [{"name": "ae0", "default_name": "", "description": "Bonded uplink to spine", "enabled": true, "interface_type": "ianaift:other", "mtu": 9178, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.1.0.1", ... | count drift: 15 → 20 (interfaces) |
 | dhcp_servers | DRIFT | [{"interface": "ge-0/0/1.0", "network": "192.168.10.0/24", "start_ip": "192.168.10.100", "end_ip": "192.168.10.200", "gateway": "192.168.10.1", "dns_servers": ["8.8.8.8", "1.1.1.1"], "lease_time": ... | [] | all 1 dhcp_servers dropped |
 | snmp | DRIFT | {"community": "public", "location": "Synthetic Lab Rack 7", "contact": "noc@example.net", "trap_hosts": ["10.0.0.250", "10.0.0.251"], "v3_users": [{"name": "monitor", "group": "netadmin", "auth_pro... | {"community": "public", "location": "Synthetic Lab Rack 7", "contact": "noc@example.net", "trap_hosts": ["10.0.0.250", "10.0.0.251"], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
@@ -11603,12 +11538,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "full"}, {"name": "auditor", "privilege_level": 1, "hashed_password": "", "role": "read"}, {"name": "operator", "privilege_l... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "10.0.0.10", "key": "fake-radius-shared-secret-1", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.0.11", "key": "fake-radius-shared-secret-2", "auth_port": 1645, "acct_port": 1646}] | [] | all 2 radius_servers dropped |
 
-### mikrotik_routeros/kitchen_sink.rsc → dell_os10  (WARN 11/21)
+### mikrotik_routeros/kitchen_sink.rsc → dell_os10  (WARN 13/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["1.1.1.1", "8.8.8.8"] | [] | all 2 dns_servers dropped |
-| ntp_servers | DRIFT | ["10.0.0.123", "pool.ntp.org"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "bond1", "default_name": "", "description": "LACP bond to upstream core", "enabled": true, "interface_type": "ianaift:ieee8023adLag", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip"... | [{"name": "bond1", "default_name": "", "description": "LACP bond to upstream core", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.25... | {"interfaces[0] {'name': 'bond1'}": {"interface_type": {"source": "ianaift:ieee8023adLag", "target": "ianaift:other"}}, "interfaces[1] {'name': 'bond2'}": {"interface_type": {"source": "ianaift:iee... |
 | vlans | DRIFT | [{"id": 100, "name": "vlan100", "description": "Users VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 200, "name": "vlan200", "description": "Voice VLAN", "tagged_por... | [{"id": 100, "name": "Users VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "10.100.0.1", "prefix_length": 24, "is_secondary": false, "virtual_gateway_... | {"vlans[0] {'id': 100, 'name': 'vlan100'}": {"description": {"source": "Users VLAN", "target": ""}, "ipv4_addresses": {"source": [], "target": [{"ip": "10.100.0.1", "prefix_length": 24, "is_seconda... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.1", "interface": "", "metric": 0, "description": "Default route to ISP", "vrf": ""}, {"destination": "10.50.0.0/16", "gateway": "10.0.0.254", "i... | [{"destination": "0.0.0.0/0", "gateway": "198.51.100.1", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.50.0.0/16", "gateway": "10.0.0.254", "interface": "", "metr... | {"static_routes[0] {'destination': '0.0.0.0/0'}": {"description": {"source": "Default route to ISP", "target": ""}}, "static_routes[1] {'destination': '10.50.0.0/16'}": {"description": {"source": "... |
@@ -11748,12 +11681,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | local_users | DRIFT | [{"name": "netops", "privilege_level": 15, "hashed_password": "bcrypt:$2b$10$fakeAJhashNetopsAccountPlaceholderObviouslySynthetic000", "role": ""}, {"name": "readonly", "privilege_level": 1, "hashe... | [] | all 3 local_users dropped |
 | radius_servers | DRIFT | [{"host": "10.0.0.50", "key": "fakeRadiusSharedSecret01", "auth_port": 1812, "acct_port": 1813}, {"host": "10.0.0.51", "key": "fakeRadiusSharedSecret02", "auth_port": 11812, "acct_port": 11813}] | [] | all 2 radius_servers dropped |
 
-### opnsense/kitchen_sink.xml → dell_os10  (WARN 13/21)
+### opnsense/kitchen_sink.xml → dell_os10  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| domain | DRIFT | example.net |  | domain: 'example.net' → '' |
-| dns_servers | DRIFT | ["1.1.1.1", "9.9.9.9"] | [] | all 2 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "em0", "default_name": "", "description": "WAN uplink to upstream carrier", "enabled": true, "interface_type": "", "mtu": 1500, "ip_mtu": null, "ipv4_addresses": [{"ip": "198.51.100.2", "... | [{"name": "em0", "default_name": "", "description": "WAN uplink to upstream carrier", "enabled": true, "interface_type": "ianaift:other", "mtu": 1500, "ip_mtu": null, "ipv4_addresses": [{"ip": "198... | {"interfaces[0] {'name': 'em0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'em1'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "int... |
 | static_routes | DRIFT | [{"destination": "172.16.0.0/12", "gateway": "10.0.0.254", "interface": "", "metric": 0, "description": "Corporate transit", "vrf": ""}] | [{"destination": "172.16.0.0/12", "gateway": "10.0.0.254", "interface": "", "metric": 0, "description": "", "vrf": ""}] | {"static_routes[0] {'destination': '172.16.0.0/12'}": {"description": {"source": "Corporate transit", "target": ""}}} |
 | dhcp_servers | DRIFT | [{"interface": "em1", "network": "192.168.10.0/24", "start_ip": "192.168.10.100", "end_ip": "192.168.10.199", "gateway": "192.168.10.1", "dns_servers": ["1.1.1.1", "9.9.9.9"], "lease_time": 7200, "... | [] | all 1 dhcp_servers dropped |
@@ -11884,11 +11815,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | lags | DRIFT | [{"name": "bond0", "members": ["eth4", "eth5"], "mode": "active"}] | [{"name": "port-channel0", "members": ["eth4", "eth5"], "mode": "active"}] | {"lags[0] {'name': 'bond0'}": {"name": {"source": "bond0", "target": "port-channel0"}}} |
 | local_users | DRIFT | [{"name": "netops", "privilege_level": 15, "hashed_password": "$6$FAKEKITCHENSINKHASHnetops", "role": ""}, {"name": "vyos", "privilege_level": 15, "hashed_password": "$6$FAKEKITCHENSINKHASHvyos", "... | [] | all 2 local_users dropped |
 
-### vyos/kitchen_sink.conf → dell_os10  (WARN 16/21)
+### vyos/kitchen_sink.conf → dell_os10  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["0.pool.ntp.org", "1.pool.ntp.org"] | [] | all 2 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "bond0", "default_name": "", "description": "server lag", "enabled": true, "interface_type": "", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.50.0.1", "prefix_length": 24, "... | [{"name": "bond0", "default_name": "", "description": "server lag", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ip_mtu": null, "ipv4_addresses": [{"ip": "10.50.0.1", "prefix_l... | {"interfaces[0] {'name': 'bond0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "interfaces[1] {'name': 'dum0'}": {"interface_type": {"source": "", "target": "ianaift:other"}}, "... |
 | snmp | DRIFT | {"community": "FAKEPUBLIC", "location": "rack 4 / row B", "contact": "netops@example.com", "trap_hosts": [], "v3_users": [{"name": "snmpv3admin", "group": "operators", "auth_protocol": "sha", "auth... | {"community": "FAKEPUBLIC", "location": "rack 4 / row B", "contact": "netops@example.com", "trap_hosts": [], "v3_users": []} | {"only_in_source": [], "only_in_target": [], "value_drift_keys": ["v3_users"]} |
 | lags | DRIFT | [{"name": "bond0", "members": ["eth4", "eth5"], "mode": "active"}] | [] | all 1 lags dropped |
