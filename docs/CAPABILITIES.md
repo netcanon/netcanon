@@ -1026,7 +1026,7 @@ and true of the same sentence — they are not in the output:
   ethernet 1/1/14`, as Dell types it) is one name, and is read as
   the name the switch prints (`ethernet1/2`, `ethernet1/1/14`).
 * **A command's words** (OS10, Arista EOS, Cisco NX-OS, Aruba AOS-CX,
-  Cisco IOS XR, Aruba AOS-S) — each kind of line in
+  Cisco IOS XR, Aruba AOS-S, Cisco IOS-XE CLI) — each kind of line in
   column 0 that no reader of the parser takes and no pattern of the
   detector names.  On OS10: `clock timezone`, `spanning-tree mode`,
   `nve`, `virtual-network`, an `ntp server`, `logging server` or `ip
@@ -1074,7 +1074,22 @@ and true of the same sentence — they are not in the output:
   `snmp-server community` line, a `no logging` line (its row is
   those words alone: what follows `logging` is a server) and the
   like; the line the switch prints before the configuration
-  (`Running configuration:`) is not.
+  (`Running configuration:`) is not.  On IOS-XE: `spanning-tree
+  mode`, `line con` and `line vty`, `ip ssh`, `ip http`, `ip
+  routing`, `ip dhcp snooping`, `service` and `no service` lines,
+  `aaa new-model` and the other `aaa` lines, `router ospf` and
+  `router bgp` (each with the lines of its stanza), `snmp-server
+  enable`, an SNMP host named by an IPv6 address, a `username`
+  line of a form the parser does not read (`algorithm-type`), a
+  `logging` line that names no host address (its row is the word
+  alone: a syslog host's name or address can come right after
+  it), a second `hostname`, `ip domain` or `snmp-server community`
+  line, a second line of a local user's name and the like; the
+  lines the device prints around the configuration (`Building
+  configuration...`, `Current configuration : <n> bytes`, `Using
+  <n> out of <n> bytes`, the boot markers) are not.  The IOS-XE
+  renderer writes its own `service timestamps` lines, so an IOS-XE
+  output read again has that row.
   The row is the line's command
   word, and the word after it where that says which command it
   is, never a value; one row a kind, however many lines it has,
@@ -1087,8 +1102,8 @@ and true of the same sentence — they are not in the output:
   else is `partial`, "No source constructs were recognized", as
   one that gives no row.  An indented line of a stanza the parser
   reads that the stanza's reader does not take has no row.  Until
-  2026-11-12 (OS10) and 2026-11-13 (EOS, NX-OS, AOS-CX, IOS XR)
-  such lines were in no output and no row.
+  2026-11-12 (OS10) and 2026-11-13 (EOS, NX-OS, AOS-CX, IOS XR,
+  AOS-S, IOS-XE) such lines were in no output and no row.
 * **`<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has
   no interface`** (OPNsense) — a DHCP pool keyed by a zone no
   device is assigned to.  It has no interface to be on, and is

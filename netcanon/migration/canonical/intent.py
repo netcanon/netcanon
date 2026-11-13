@@ -1092,8 +1092,9 @@ class CanonicalIntent(BaseModel):
             section of its own (an ``interface range`` or
             ``interface breakout`` header in a text read as IOS-XE
             or IOS XR, an OPNsense ``<dhcpd>`` zone that has no
-            device, each kind of OS10, EOS, NX-OS, AOS-CX, IOS XR or
-            AOS-S line in column 0 that no reader takes); the codec's
+            device, each kind of OS10, EOS, NX-OS, AOS-CX, IOS XR,
+            AOS-S or IOS-XE line in column 0 that no reader takes); the
+            codec's
             ``parse()`` puts a
             parser's rows after the detector's.  The row that counts
             lines of no command the parser knows is no sign that
