@@ -1918,7 +1918,14 @@ class TestTheWholeCorridorWithoutTypingTheSource:
             REGISTRY,
         )
         job = run_plan_with_models(AOSS, AOSS, CAPTURE_2930F_48, source, target)
-        assert job.status == MigrationJobStatus.completed
+        # Held for the manager account AOS-S leaves out (it holds no
+        # password in this printout), and for no port.
+        assert job.status == MigrationJobStatus.partial
+        assert job.error == (
+            "The target left out 1 record(s), or wrote them otherwise than the "
+            "source states them, for a reason of its own; the job's warnings "
+            "name each."
+        )
         assert job.port_renames["49"] == "1/A1"
         assert len(job.port_mapping_plan.used_pairings) == 52
 

@@ -817,8 +817,12 @@ correct mapping.
 ### "My job is `partial` and the validation report is clean"
 
 The validation report is one reason for `partial`; the port names
-are another.  `job.error` (the status banner on the migrate page)
-says which.  If it begins **"Port mapping is incomplete"** you
+are another, and what the target leaves out is a third.  `job.error`
+(the status banner on the migrate page) says which.  If it says
+**"The target left out N record(s)"**, the target left a record out
+of the output, or wrote it otherwise, for a reason of its own: see
+[that section](#the-job-says-the-target-left-out-n-records).  If it
+begins **"Port mapping is incomplete"** you
 declared both devices: see that section below.  If it says **"Port
 names are not settled"**, names were translated by the shape of the
 name — every name, where you declared no devices; with both
@@ -1764,6 +1768,27 @@ alone (the server and the group are kept).  A warning names each
 place, never the value (`snmp.community held a line break or a
 control character: ...`).  Re-create what was left out on the
 device.  See [`CAPABILITIES.md`](CAPABILITIES.md) § C3.
+
+### The job says "The target left out N record(s)"
+
+The target left a record out of the output, or wrote it otherwise
+than the source states it, for a reason of its own.  The validation
+report can be clean: it is made before the renderer decides.  Each
+record is a warning of the job, which names it and never a secret of
+it.  For example:
+
+* `Local user "<name>" is not written for <target>: no password
+  for it was read from the source ...`.  Add the account on the
+  device, with a password.
+* A DHCP pool, a VLAN interface or an account the target has no
+  form for.  Where the target writes a line for it under `review:`,
+  search the output for `review:`.
+
+Do on the device what each warning says was not done.  A `review:`
+line with no warning beside it -- a password hash the target does
+not take, a RADIUS secret it cannot carry -- does not make the job
+`partial` yet, so search a `completed` output for `review:` too.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § D.
 
 ### The job says `refused:` — "my config was refused"
 

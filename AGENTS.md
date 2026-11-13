@@ -987,7 +987,14 @@ tests use these exclusively — never CSS classes or element structure.  See
   the finished run for all three and makes such a job `partial`,
   with the names as fields (`fused_ports`, `unresolved_ports`,
   `untranslated_ports`), and every plan endpoint reaches it through
-  `run_translation`.  What it took.  The
+  `run_translation`.  The same was true of what a TARGET leaves out
+  for a reason of its own (`render_warnings`): the validation report
+  is made from the tree before the renderer decides, and an account
+  that holds no password was left out under a warning in a job that
+  said `completed`, between two configs of one codec too.  `run_plan`
+  makes such a job `partial`; a `review:` line with no warning (a
+  hash the target does not take, a RADIUS secret) does not yet.  What
+  it took.  The
   condition is over EVERY name the translator rewrites: with no
   pairing to protect, the model path's reason for looking only at a
   clash that has a hardware port in it does not apply, and the two

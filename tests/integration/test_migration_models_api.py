@@ -56,6 +56,27 @@ def _models_body(**extra) -> dict:
     )
 
 
+#: What AOS-S leaves out of :data:`CAPTURE_2930F`, onto itself, for a
+#: reason of its own: the manager account, which holds no password in
+#: a printout made without credentials.  A job of it is ``partial``
+#: for that alone, in these words, where nothing else holds it.
+_LEFT_OUT_ONE = (
+    "The target left out 1 record(s), or wrote them otherwise than the "
+    "source states them, for a reason of its own; the job's warnings "
+    "name each."
+)
+
+
+def _held_for_the_account_alone(job: dict) -> bool:
+    """Whether *job*, of :data:`CAPTURE_2930F` onto AOS-S, is held
+    for the manager account AOS-S leaves out and for nothing else."""
+    said = [
+        w for w in job["warnings"]
+        if w.startswith("Local user ") and "(manager) is not written" in w
+    ]
+    return job["status"] == "partial" and len(said) == 1 and job["error"] == _LEFT_OUT_ONE
+
+
 # ---------------------------------------------------------------------------
 # Model families
 # ---------------------------------------------------------------------------
@@ -291,8 +312,9 @@ class TestPlanWithDeclaredDevices:
     def test_ports_are_paired_by_position(self, client: TestClient) -> None:
         resp = client.post("/api/v1/migration/plan", json=_models_body())
         assert resp.status_code == 200
-        assert resp.headers["X-Netcanon-Job-Status"] == "completed"
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial"
         job = resp.json()
+        assert _held_for_the_account_alone(job)
         assert job["port_renames"]["1"] == "1/1"
         assert job["port_renames"]["49"] == "1/A1"
         assert len(job["port_renames"]) == 52
@@ -390,7 +412,8 @@ class TestPlanWithDeclaredDevices:
         assert job["port_renames"]["49"] == "1/A4", path
         assert job["port_drops"] == ["52"], path
         assert job["port_mapping_plan"]["overridden"] == ["49", "52"], path
-        assert resp.headers["X-Netcanon-Job-Status"] == "completed", path
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        assert _held_for_the_account_alone(job), path
 
     @pytest.mark.parametrize(
         "path",
@@ -485,7 +508,9 @@ class TestPlanWithDeclaredDevices:
             "members": [{"model": "JL320A", "modules": {"A": "JL083A"}}],
         }
         resp = client.post(f"/api/v1/migration{path}", json=body)
-        assert resp.headers["X-Netcanon-Job-Status"] == "completed", path
+        # Held for the manager account alone: nothing about a port.
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        assert _held_for_the_account_alone(resp.json()), path
         assert resp.json()["port_mapping_plan"]["unresolved_ports"] == [], path
 
     def test_profile_keys_work_on_both_sides(self, client: TestClient) -> None:
@@ -1590,7 +1615,7 @@ class TestPortNamesWithNoDevices:
         short = client.post("/api/v1/migration/plan", json=body).json()
         assert len(short["port_mapping_plan"]["unresolved_ports"]) == 24
         assert (short["fused_ports"], short["unresolved_ports"]) == ({}, [])
-        assert short["error"].startswith("Port mapping is incomplete: ")
+        assert short["error"].startswith(_LEFT_OUT_ONE + " Port mapping is incomplete: ")
         assert "Port names are not settled" not in short["error"]
 
     def test_the_api_document_describes_each(self, client: TestClient) -> None:
@@ -2091,7 +2116,7 @@ class TestDetectDeployment:
         job = client.post("/api/v1/migration/plan", json=_plan_body(
             source_deployment=proposal["deployment"], target_deployment=TARGET_2930M,
         )).json()
-        assert job["status"] == "completed"
+        assert _held_for_the_account_alone(job)
         assert job["port_renames"]["49"] == "1/A1"
 
     def test_a_device_no_family_describes_is_an_answer_not_an_error(

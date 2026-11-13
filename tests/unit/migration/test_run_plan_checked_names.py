@@ -2056,7 +2056,9 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # job that was `partial` for those alone before any name was checked
     # passes the validation report and lists its names (+1 a hardware
     # port dropped).
-    "arista_eos": (0, 0, 20, 1, 0, 2),
+    # And from (0, 0, 20, 1, 0, 2): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-4 a hardware port dropped: onto IOS-XE CLI, NX-OS, OS10 and Junos).
+    "arista_eos": (0, 0, 16, 1, 0, 2),
     # From (0, 0, 6, 0, 0, 0): onto Junos the global table has one
     # loopback, unit 0 of lo0.  The two arch3 leafs have `loopback 0`
     # and `loopback 1` there; `loopback 1` was written `lo1`, an
@@ -2078,7 +2080,9 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # jobs that were `partial` for those alone before any name was
     # checked pass the validation report and list their names (+1 a name
     # left as the source has it, +1 several).
-    "aruba_aoss": (7, 0, 0, 0, 11, 2),
+    # And from (7, 0, 0, 0, 11, 2): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-4 left as the source has it: two onto OS10, two onto Junos).
+    "aruba_aoss": (7, 0, 0, 0, 7, 2),
     # From (10, 0, 0, 0, 3, 20): the IOSv capture whose every line is
     # at column 0 is refused by the IOS-XE CLI parser now, and is no
     # longer among the captures (it is under `refused/`); two of its
@@ -2154,7 +2158,9 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # well, and no longer counts (-2 several); onto OPNsense the job of
     # the capture whose only routes were blackholes has no route to
     # report, and the names hold it alone (+1 several).
-    "fortigate_cli": (0, 0, 0, 0, 0, 11),
+    # And from (0, 0, 0, 0, 0, 11): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-5 several: three onto IOS-XE CLI, one onto EOS, one onto OPNsense).
+    "fortigate_cli": (0, 0, 0, 0, 0, 6),
     # From (0, 0, 7, 0, 5, 7): no record is made for a bare `irb`
     # or `st0` that no line configures, so it is no longer a name
     # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
@@ -2189,7 +2195,9 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # jobs that were `partial` for those alone before any name was
     # checked pass the validation report and list their names (+1 a name
     # shared with a hardware port, +2 several).
-    "juniper_junos": (5, 0, 10, 0, 2, 9),
+    # And from (5, 0, 10, 0, 2, 9): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-1 several, onto EOS).
+    "juniper_junos": (5, 0, 10, 0, 2, 8),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -2207,7 +2215,9 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # a capture with one pool had been `partial` for that path alone;
     # the validation report passes it now, and the two names it left
     # as the source has them, listed before as well, hold it (+1 left).
-    "mikrotik_routeros": (0, 0, 0, 0, 21, 8),
+    # And from (0, 0, 0, 0, 21, 8): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-1 left as the source has it, onto AOS-S).
+    "mikrotik_routeros": (0, 0, 0, 0, 20, 8),
     # From (4, 0, 0, 0, 23, 1): a VLAN device on a port is a
     # sub-interface of it, so the supergate capture's five devices on
     # `ixl0` are `TenGigE0/0/0/0.10` and the like onto IOS-XR, and
@@ -2228,7 +2238,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # jobs that were `partial` for those alone before any name was
     # checked pass the validation report and list their names (+2 a name
     # left as the source has it).
-    "opnsense": (10, 0, 0, 0, 27, 0),
+    # And from (10, 0, 0, 0, 27, 0): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-4 left as the source
+    # has it: onto EOS, IOS-XE CLI, FortiOS and Junos).
+    "opnsense": (10, 0, 0, 0, 23, 0),
     # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
     # is written `Ethernet1` there, as `eth1` is: two ports on one name
     # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
@@ -2240,7 +2253,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # jobs that were `partial` for those alone before any name was
     # checked pass the validation report and list their names (+9 a name
     # shared with a hardware port).
-    "vyos": (43, 0, 0, 0, 0, 0),
+    # And from (43, 0, 0, 0, 0, 0): a job whose target leaves a record out is
+    # `partial` for that before a name is checked (-5 a name shared with
+    # a hardware port: onto EOS, AOS-S, OS10, FortiOS and RouterOS).
+    "vyos": (38, 0, 0, 0, 0, 0),
 }
 
 #: Names the translator left as the source config has them that a
@@ -2307,8 +2323,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [102, 0, 75, 5, 66, 52]
-        assert sum(by_reason) == 300
+        assert by_reason == [97, 0, 71, 5, 57, 46]
+        assert sum(by_reason) == 276
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
