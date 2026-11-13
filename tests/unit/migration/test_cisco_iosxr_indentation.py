@@ -647,6 +647,19 @@ FLAT_SHAPES = {
         "interface GigabitEthernet0/0/0/0\n!! the uplink\ninterface GigabitEthernet0/0/0/1\n!\n", None,
     ),
     "a header, then end": ("interface GigabitEthernet0/0/0/0\nend\n", None),
+    # A submode's ``!``, printed indented, kept by a text that lost
+    # the indentation of the bodies: no indentation either.
+    "a body at the margin, and an indented !": (
+        "hostname r1\ninterface GigabitEthernet0/0/0/0\ndescription uplink\n"
+        "ipv4 address 192.0.2.1 255.255.255.0\n !\n!\n",
+        2,
+    ),
+    "a body at the margin, and a ! after a tab": (
+        "hostname r1\ninterface GigabitEthernet0/0/0/0\ndescription uplink\n\t!\n!\n", 2,
+    ),
+    "an indented !, then another header": (
+        "interface GigabitEthernet0/0/0/0\n !\ninterface GigabitEthernet0/0/0/1\n!\n", None,
+    ),
 }
 
 
@@ -912,8 +925,29 @@ def _flat_check_with(old: str, new: str) -> Callable[..., int | None]:
     return space["first_flat_stanza"]
 
 
+#: The flat check's handling of a bare ``!``: passed over at any depth.
+_A_BANG_AT_ANY_DEPTH = (
+    '        if stripped == "!":\n'
+    '            # The end of a stanza, at any depth: no body line, and no\n'
+    '            # indentation.\n'
+    '            waiting = None\n'
+    '            continue\n'
+    '        if stripped.startswith("!"):\n'
+)
+#: ...and as it was before an indented one was no indentation: passed
+#: over at the margin only.
+_A_BANG_AT_THE_MARGIN = (
+    '        if stripped == "!" and line[0] not in " \\t":\n'
+    '            waiting = None\n'
+    '            continue\n'
+    '        if stripped.startswith("!") and stripped != "!":\n'
+)
+#: A bare ``!`` read as a line of a stanza's body.
+_A_BANG_AS_A_BODY_LINE = '        if stripped.startswith("!") and stripped != "!":\n'
+
+
 def test_the_comment_checks_fail_when_a_comment_is_a_body_line(monkeypatch: pytest.MonkeyPatch) -> None:
-    defect = _flat_check_with('if stripped.startswith("!") and stripped != "!":', "if False:")
+    defect = _flat_check_with('if stripped.startswith("!"):', "if False:")
     monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
     for name in ("a comment, then the stanza's own !", "a comment, then another header"):
         with pytest.raises(ParseError):
@@ -922,12 +956,20 @@ def test_the_comment_checks_fail_when_a_comment_is_a_body_line(monkeypatch: pyte
 
 def test_the_indented_comment_check_fails_when_a_comment_is_indentation(monkeypatch: pytest.MonkeyPatch) -> None:
     defect = _flat_check_with(
-        'if stripped.startswith("!") and stripped != "!":',
-        'if line[0] not in " \\t" and stripped.startswith("!") and stripped != "!":',
+        'if stripped.startswith("!"):',
+        'if line[0] not in " \\t" and stripped.startswith("!"):',
     )
     monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
     with pytest.raises((AssertionError, pytest.fail.Exception)):
         _check_flat_shape("an indented comment between a header and its body")
+
+
+def test_the_indented_bang_check_fails_when_a_bang_is_indentation(monkeypatch: pytest.MonkeyPatch) -> None:
+    defect = _flat_check_with(_A_BANG_AT_ANY_DEPTH, _A_BANG_AT_THE_MARGIN)
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
+    for name in ("a body at the margin, and an indented !", "a body at the margin, and a ! after a tab"):
+        with pytest.raises((AssertionError, pytest.fail.Exception)):
+            _check_flat_shape(name)
 
 
 def test_the_end_check_fails_when_end_is_a_body_line(monkeypatch: pytest.MonkeyPatch) -> None:

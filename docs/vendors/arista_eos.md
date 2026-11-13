@@ -321,7 +321,8 @@ Spans 6 distinct EOS majors (4.20 + 4.21 + 4.22 + 4.23 + 4.26 + 4.32).
   were not affected).
 - **Paste the config as the switch prints it, with its
   indentation.**  This parser tells which lines belong to a stanza by
-  their indentation.  A text with no line indented but a comment, the
+  their indentation.  A text with no line indented but a comment or a
+  bare `!`, the
   lines of a stanza it reads (`interface`, `vlan <id>`, `vrf instance`
   / `vrf definition`, `dhcp server`, `ip dhcp pool`, `router bgp`) at the left
   margin, is refused: the job is `failed`, its error `parse failed:

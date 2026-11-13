@@ -139,7 +139,11 @@ def first_flat_stanza(
       the margin a text with indentation.
     * A bare ``!`` is the end of a stanza as a device prints it,
       ``exit`` the end of a mode, and ``end`` the end of the config;
-      none of them is a body line.
+      none of them is a body line.  A bare ``!`` is passed over at
+      any depth, as a comment is: IOS XR and EOS print one indented
+      at the end of a submode, and a text that kept those and lost
+      the indentation of its stanzas' bodies is a text with none
+      (its bodies' lines would be read as the top level).
     * A text with SOME lines indented is not this shape (``None``): it
       is read by its indentation.  The answer is ``None`` as soon as an
       indented line is met.
@@ -152,7 +156,12 @@ def first_flat_stanza(
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith("!") and stripped != "!":
+        if stripped == "!":
+            # The end of a stanza, at any depth: no body line, and no
+            # indentation.
+            waiting = None
+            continue
+        if stripped.startswith("!"):
             # A comment belongs to the line after it, at any depth.
             continue
         if line[0] in " \t":
@@ -162,7 +171,7 @@ def first_flat_stanza(
         opens = any(header.match(line) for header in headers)
         if (
             waiting is not None and flat_at is None and not opens
-            and stripped != "!" and stripped.lower() not in ("exit", "end")
+            and stripped.lower() not in ("exit", "end")
         ):
             flat_at = waiting
         waiting = number if opens else None

@@ -326,7 +326,7 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   that then failed reported.  What the router does with such text
   typed or pasted at its prompt is not established.  A text with no
   indentation at all, the lines of a stanza this parser reads at the
-  left margin, is refused (an indented comment is no indentation, nor
+  left margin, is refused (an indented comment or a bare `!` is no indentation, nor
   is a no-break space in front of a line, which the `ntp` reader
   takes for the margin; `exit`, like `!` and `end`, is no line of a
   stanza's body): the job is `failed`,
@@ -345,7 +345,8 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   local users with no secret, in jobs that said `completed`.  A
   translation made from such a text then holds interfaces and VRFs
   the router does not have, and none of its addresses: make it again
-  from `show running-config`.
+  from `show running-config`.  So was, up to 0.7.7, a text whose only
+  indented lines were a submode's bare `!`.
 - **A whole `show running-config formal` config is refused, not
   read.**  A formal text is recognised by its `interface` lines: a
   line in column 0 that states an interface's setting on the

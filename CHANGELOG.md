@@ -1401,6 +1401,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A text whose only indented lines are a bare `!` is a text with no
+  indentation.**  IOS XR and EOS print a `!` indented at the end of a
+  submode.  The check that refuses a config with no indentation, which
+  the IOS XR, EOS, AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers share,
+  passed over a comment at any depth but took an indented bare `!` for
+  indentation, so a text that kept those `!` lines and lost the
+  indentation of its stanzas' bodies was read by its indentation: each
+  body's lines were read as the top level, and an interface came back
+  with no address, in a job that said `completed`.  A bare `!` is now
+  passed over at any depth, and such a text is refused in words as a
+  text with no indentation is.  A text with any other indented line is
+  read by its indentation as before; no committed input moves.
+
 - **A VyOS set-form paste is detected as VyOS from its interface
   names.**  VyOS names an interface by its type and a number (vyos-1x:
   `bond[0-9]+`, `tun[0-9]+`, `wg[0-9]+`; an ethernet port also
