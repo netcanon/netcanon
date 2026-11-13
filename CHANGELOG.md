@@ -1426,6 +1426,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX line that nothing translates is said.**  The Aruba
+  AOS-CX parser reads a hostname, the release, interfaces, VLANs,
+  VRFs, static routes, LAGs, local users, SNMP and VXLAN, and the
+  AOS-CX Tier-3 patterns name routing protocols, access lists,
+  route maps, classes, policies and VSF; every other line in column
+  0 was in no output and no row -- the `vsx` and `evpn` stanzas,
+  NTP, DNS and SSH settings, spanning tree, prefix lists, TACACS
+  servers, the access lists a config applies (`apply access-list`),
+  `router vrrp`, a second `snmp-server community` line and a second
+  line of a local user's name -- in jobs that said `completed`.  Now
+  each kind of such line is a row of `dropped_tier3_sections`, as
+  EOS's, NX-OS's and OS10's are: its command word, and the word
+  after it where that says which command it is (`ntp server`,
+  `spanning-tree priority`, `router vrrp`), never a value.  A line
+  that begins with a word AOS-CX configurations are not seen to
+  begin with is counted in one row that shows none of its text.  The
+  readers of a hostname, the release, a local user, an SNMP
+  community, location, contact and SNMPv3 user read their own line:
+  the white space between their words could be a line break, so an
+  `snmp-server system-location` line with no value was read with the
+  next line for its location, and a `hostname` or `user` line with
+  none with the next line for the hostname or the account.  A `vlan`
+  line in digits of another script was read as the VLAN those digits
+  stand for, and is a row.  An indented line of a stanza that the
+  stanza's reader does not take still has no row.  The committed
+  AOS-CX inputs gain rows; no output moves.
+
 - **An NX-OS line that nothing translates is said.**  The Cisco NX-OS
   parser reads a hostname, the release, a domain, DNS, NTP and syslog
   servers, interfaces, VLANs, VRFs, static routes, SNMP, local users,

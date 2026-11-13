@@ -216,7 +216,8 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         bar`` / ``deactivate foo`` had a row and was ``completed`` with
         nothing in it.  Nor is the row that counts lines that begin with
         no command the parser knows (``_tier3_detection.is_no_command_row``,
-        the OS10, EOS and NX-OS parsers'): any text that is not a config gives it.
+        the OS10, EOS, NX-OS and AOS-CX parsers'): any text that is not a
+        config gives it.
 
     Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
     exemption so the backend signal is at least as precise as the banner.
