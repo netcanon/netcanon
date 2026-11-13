@@ -158,6 +158,17 @@ _CANON_TO_OS10_LAG_MODE = {
     ACTIVE_BACKUP: "on",
 }
 
+
+def lag_channel(lag_name: str) -> int | None:
+    """The port-channel a member of the LAG *lag_name* is written
+    into (``channel-group <N>``), or None where OS10 reads the name
+    as no port-channel and the member is written with no channel
+    line.  The renderer and the job's warning for an active-backup
+    LAG (``DellOS10Codec.aggregate_written_for``) both read it."""
+    ident = _port_names.classify_port_name(lag_name)
+    return ident.index if ident.kind == "lag" else None
+
+
 #: Interface-kind render order, matching the order a real switch prints
 #: (measured on the JetPack dumps): SVIs, then port-channels, then the
 #: management port, then physical ethernet, then loopbacks.  Ordering is
@@ -716,14 +727,14 @@ def _render_interface(
     block.append(" no shutdown" if iface.enabled else " shutdown")
 
     if iface.lag_member_of:
-        ident = _port_names.classify_port_name(iface.lag_member_of)
-        if ident.kind == "lag" and ident.index is not None:
+        index = lag_channel(iface.lag_member_of)
+        if index is not None:
             canonical = lag_mode_by_name.get(iface.lag_member_of, "active")
             mode = _CANON_TO_OS10_LAG_MODE.get(canonical, "active")
-            block.append(f" channel-group {ident.index} mode {mode}")
+            block.append(f" channel-group {index} mode {mode}")
             if canonical == ACTIVE_BACKUP:
                 block.append(
-                    f" ! {active_backup_review(f'port-channel{ident.index}')}"
+                    f" ! {active_backup_review(f'port-channel{index}')}"
                 )
 
     block.extend(_render_switchport_lines(iface, untagged_stated))

@@ -1401,6 +1401,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A job onto EOS or OS10 says a bond is written as a static
+  aggregate only where it is.**  A bond that needs no aggregate of
+  its peer (a RouterOS `active-backup` bond, an OPNsense `failover`
+  lagg, a FortiOS redundant interface) is written onto a switch as a
+  static aggregate, and the job warns of it.  EOS and OS10 write a
+  member's `channel-group` only where the LAG's name is one they
+  read; a LAG under another name -- a FortiOS `red1` sent with no
+  entry -- had its members written into no aggregate, and the job,
+  `partial` for the name, still said it was written as one.  The
+  warning is now asked of the same function the renderer writes
+  by.  No committed input moves.
+
 - **An AOS-S port range of more than 1,025 ports is read as the ports
   it names.**  The parser read such a range as its two end ports --
   `tagged 1-1026` was ports 1 and 1026 -- with a line in the server's

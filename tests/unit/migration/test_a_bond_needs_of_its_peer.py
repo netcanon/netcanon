@@ -38,7 +38,12 @@ here too, never by the codec's parser:
 A switch has no bond that needs nothing of its peer: it writes such a
 LAG as a static aggregate, with a review line beside it (IOS XR, which
 writes no review line, says it in the job's warnings alone) and a
-warning in the job.
+warning in the job.  And the job says it only of a LAG whose members
+are written into an aggregate: EOS and OS10 write a member's
+``channel-group`` only where the LAG's name is one they read, and up
+to 0.7.7 a job onto either said a LAG of another name was written as
+a static aggregate, beside an output that wrote its members into
+none.
 """
 
 from __future__ import annotations
@@ -492,3 +497,78 @@ def test_a_reader_is_not_its_own_oracle():
     assert peer_needs(
         "aruba_aoscx", "interface lag 1\n    lacp mode active\n!\n",
     ) == [LACP]
+
+
+# ---------------------------------------------------------------------------
+# The warning is what the output writes
+# ---------------------------------------------------------------------------
+
+#: A line of each switch grammar that writes a port into an aggregate,
+#: whatever the aggregate's own stanza is called.
+_MEMBER_LINE = {
+    "arista_eos": _CHANNEL_GROUP,
+    "cisco_iosxe_cli": _CHANNEL_GROUP,
+    "cisco_nxos": _CHANNEL_GROUP,
+    "dell_os10": _CHANNEL_GROUP,
+    "cisco_iosxr": _BUNDLE,
+    "aruba_aoss": _AOSS_TRUNK,
+    "aruba_aoscx": re.compile(r"(?m)^[ \t]+lag \d+[ \t]*$"),
+    "juniper_junos": _JUNOS_MEMBER_OF,
+}
+
+#: The targets that write a bond that needs nothing as a static
+#: aggregate.
+_SWITCHES = sorted(t for t in _TARGETS if t not in HOSTS and t not in WRITES_NO_LAG)
+
+#: A FortiOS redundant interface under a name no switch reads as a LAG
+#: of its own, sent with no entry: the job is ``partial`` and lists the
+#: name.  Its members are written into an aggregate on some targets and
+#: into none on others (EOS and OS10).
+_UNREAD_NAME = _fortigate("redundant").replace('"bond1"', '"red1"')
+
+
+def check_unread(target: str) -> None:
+    """Onto *target*, the job says the bond is written as a static
+    aggregate exactly where the output writes its members into one.
+
+    The review line is not asked after here: it is written beside the
+    aggregate, and on AOS-CX the members of a LAG whose name it does not
+    read are written into a ``lag <N>`` that has no stanza for it."""
+    job = run_plan_with_checked_names(
+        get_codec("fortigate_cli"), get_codec(target), _UNREAD_NAME, port_rename_map={},
+    )
+    written = bool(_MEMBER_LINE[target].search(job.rendered or ""))
+    said = [w for w in job.warnings if SAID in w]
+    assert job.status.value == "partial", (target, job.status)
+    assert bool(said) == written, (target, written, said)
+
+
+def test_every_switch_has_a_member_reader():
+    assert sorted(_MEMBER_LINE) == _SWITCHES
+
+
+@pytest.mark.parametrize("target", _SWITCHES)
+def test_the_job_says_an_aggregate_only_where_one_is_written(target):
+    check_unread(target)
+
+
+def test_the_member_readers_read_the_lines():
+    assert _MEMBER_LINE["arista_eos"].search("interface Ethernet1\n   channel-group 1 mode on\n")
+    assert _MEMBER_LINE["cisco_iosxr"].search("interface Gi0/0/0/1\n bundle id 1 mode on\n")
+    assert _MEMBER_LINE["aruba_aoscx"].search("interface 1/1/1\n    lag 1\n")
+    assert not _MEMBER_LINE["aruba_aoscx"].search("interface lag 1\n    no shutdown\n")
+    assert _MEMBER_LINE["aruba_aoss"].search("trunk 1-2 trk1 trunk\n")
+    assert _MEMBER_LINE["juniper_junos"].search("set interfaces ge-0/0/1 ether-options 802.3ad ae0\n")
+
+
+def test_the_check_fails_where_every_lag_is_said_to_be_written(monkeypatch):
+    """Up to 0.7.7 the warning was given for every active-backup LAG:
+    EOS and OS10 wrote the members of ``red1`` into no aggregate, and
+    the job said it was one."""
+    for target in ("arista_eos", "dell_os10"):
+        check_unread(target)
+        monkeypatch.setattr(
+            type(get_codec(target)), "aggregate_written_for", lambda self, name: True,
+        )
+        with pytest.raises(AssertionError):
+            check_unread(target)

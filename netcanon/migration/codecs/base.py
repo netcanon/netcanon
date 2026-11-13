@@ -15,6 +15,11 @@ Every vendor adapter subclasses :class:`CodecBase` and ships:
       the pipeline adds to the job (default: one for each local user
       with no password, for a codec that sets
       ``local_user_target_label``).
+    * ``aggregate_written_for(lag_name)`` -- optional: whether
+      ``render`` writes a LAG's members into an aggregate, which
+      the default ``render_warnings`` asks before it says an
+      active-backup LAG is written as a static aggregate (default:
+      every LAG is).
 
 The contract's key invariant is the round-trip::
 
@@ -573,7 +578,8 @@ class CodecBase(ABC):
             administrator leaves out
             (:func:`netcanon.migration._roles.below_admin_warnings`);
             then one for each active-backup LAG, where
-            :attr:`active_backup_written_as` is ``"static"``
+            :attr:`active_backup_written_as` is ``"static"`` and
+            :meth:`aggregate_written_for` says the LAG is written
             (:func:`netcanon.migration._bonds.active_backup_warnings`).
         """
         warnings: list[str] = []
@@ -584,8 +590,34 @@ class CodecBase(ABC):
                 users, getattr(tree, "source_vendor", ""), self.name, label,
             )
         if self.active_backup_written_as == "static":
-            warnings += active_backup_warnings(getattr(tree, "lags", None) or [])
+            warnings += active_backup_warnings(
+                lag for lag in getattr(tree, "lags", None) or []
+                if self.aggregate_written_for(getattr(lag, "name", ""))
+            )
         return warnings
+
+    def aggregate_written_for(self, lag_name: str) -> bool:
+        """Whether :meth:`render` writes the member ports of the LAG
+        named *lag_name* into an aggregate.
+
+        The warning for an active-backup LAG says it is written as a
+        static aggregate (:meth:`render_warnings`), which is true only
+        of a LAG the renderer writes.  The default is True: the
+        renderer writes every LAG of the tree.  A renderer that writes
+        a member's aggregate line only for a LAG whose name it reads
+        (EOS, OS10) answers from the same function it renders by, and
+        a LAG it writes no aggregate for -- a name no entry has given
+        the target's form, which the job lists -- is warned of by
+        nothing that says it was written.
+
+        Args:
+            lag_name: The LAG's name in the tree that is rendered.
+
+        Returns:
+            True where the LAG's members are written into an
+            aggregate.
+        """
+        return True
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield canonical xpaths for every leaf in *tree*.

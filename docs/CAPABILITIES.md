@@ -1453,7 +1453,11 @@ in rendered output find every such site.
       such bond, and it is written as a static aggregate, which its
       peer must be configured as
 
-  and the job warns of it; IOS XR, which writes no review line, says
+  and the job warns of it, wherever the members are written into the
+  aggregate.  (Onto EOS and OS10 the members of a LAG whose name
+  no entry has given their form are written into none, in a job
+  that is `partial` for the name, and the job does not say they are
+  an aggregate.)  IOS XR, which writes no review line, says
   it in the job's warnings alone.  Onto RouterOS, VyOS, OPNsense and
   FortiOS it is written as their own (`mode=active-backup`, `mode
   active-backup`, `failover`, `set type redundant`), and a static

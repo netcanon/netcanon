@@ -134,6 +134,18 @@ def _radius_key_text(key: str) -> str:
     return unwrap_native_secret(key)
 
 
+def lag_channel(lag_name: str) -> str | None:
+    """The channel a member of the LAG *lag_name* is written into
+    (``channel-group <N>``), or None where the name is no
+    ``Port-Channel<N>`` of EOS's and the member is written with no
+    channel line.  The renderer and the job's warning for an
+    active-backup LAG (``AristaEOSCodec.aggregate_written_for``)
+    both read it."""
+    target = _normalise_lag_name_to_arista(lag_name) or lag_name
+    m = re.match(r"^Port-Channel(\d+)$", target)
+    return m.group(1) if m is not None else None
+
+
 def _normalise_lag_name_to_arista(name: str) -> str | None:
     """Translate a canonical LAG name to Arista's ``Port-Channel<N>`` form.
 
@@ -917,15 +929,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # silently dropped — the symptom that closed the
         # ``ksator_qfx5100`` cell of the Phase 4 Junos→Arista mesh.
         if iface.lag_member_of:
-            normalised_member = _normalise_lag_name_to_arista(
-                iface.lag_member_of,
-            )
-            target_lag_name = normalised_member or iface.lag_member_of
-            m = re.match(r"^Port-Channel(\d+)$", target_lag_name)
-            if m is not None:
-                chan_id = m.group(1)
+            chan_id = lag_channel(iface.lag_member_of)
+            if chan_id is not None:
                 mode = lag_mode_by_name.get(
-                    target_lag_name, "active",
+                    f"Port-Channel{chan_id}", "active",
                 )
                 # Normalise canonical mode strings to EOS CLI tokens.
                 # EOS has no active-backup bond: a static aggregate,

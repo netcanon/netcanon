@@ -793,9 +793,14 @@ the policy locally:
   with none writes a static aggregate with `active_backup_review(...)`
   beside it in its comment syntax and leaves the attribute at its
   default `"static"`, so that the base class's `render_warnings` warns
-  of each such LAG (a codec that overrides `render_warnings` without
-  calling the base calls `active_backup_warnings` itself, as AOS-S
-  does).  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`
+  of each such LAG whose members it writes into the aggregate
+  (`aggregate_written_for`, True unless the codec says otherwise:
+  EOS and OS10 write a member's `channel-group` only for a LAG name
+  they read, and answer from the function their renderer writes by).
+  A codec that overrides `render_warnings` without calling the base
+  calls `active_backup_warnings` itself, over the LAGs
+  `aggregate_written_for` passes, as AOS-S does.
+  `tests/unit/migration/test_a_bond_needs_of_its_peer.py`
   holds the attribute to the output, and a new public codec needs a
   reader of its grammar there.
 

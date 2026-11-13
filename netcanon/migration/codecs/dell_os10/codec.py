@@ -60,7 +60,7 @@ from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
 from .parse import parse_intent, without_banner_bodies
-from .render import render_intent
+from .render import lag_channel, render_intent
 
 
 @register
@@ -793,6 +793,12 @@ class DellOS10Codec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def aggregate_written_for(self, lag_name: str) -> bool:
+        """A member is written into ``channel-group <N>`` only where
+        the LAG's name is one OS10 reads as a port-channel
+        (:func:`.render.lag_channel`)."""
+        return lag_channel(lag_name) is not None
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

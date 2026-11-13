@@ -53,7 +53,9 @@ it where it has one (FortiOS: a redundant interface)
 A switch has no bond of that kind: it writes the LAG as a static
 aggregate, which its peer then has to be configured as, with a review
 line beside it (:func:`active_backup_review`) and a warning in the job
-(:func:`active_backup_warnings`).
+(:func:`active_backup_warnings`), for a LAG whose members it writes
+into the aggregate
+(:meth:`~netcanon.migration.codecs.base.CodecBase.aggregate_written_for`).
 """
 
 from __future__ import annotations
