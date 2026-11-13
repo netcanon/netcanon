@@ -262,6 +262,12 @@ def run_plan(
     Returns a fully-populated :class:`MigrationJob` regardless of
     outcome — successful runs reach ``completed``; any stage failure
     moves the job to ``failed`` with the error captured in ``.error``.
+    A run that rendered is ``partial`` instead when the validation
+    report blocks, when nothing of the input was recognised, when a
+    secret was left out for the characters it holds, or when the
+    target's :meth:`~netcanon.migration.codecs.base.CodecBase.render_warnings`
+    says it leaves a record out or writes it otherwise than it
+    stands; ``.error`` then says why.
     A config that asks for more than the limits in force allow is a
     ``failed`` job too, with ``.refusal`` set and an ``.error`` that
     begins ``refused:`` (:mod:`netcanon.migration.limits`).
@@ -343,6 +349,9 @@ def run_plan(
     # The secrets left out for holding a line break or a control
     # character (Stage 3), which hold the job `partial`.
     secrets: list[str] = []
+    # What the target leaves out or writes otherwise (Stage 5),
+    # which holds the job `partial` too.
+    target_said: list[str] = []
     try:
         # Stage 2 — parse
         job.status = MigrationJobStatus.parsing
@@ -398,7 +407,8 @@ def run_plan(
         # What the target leaves out for a reason of its own, said as
         # the job's warnings (an AOS-S switch holds one manager and one
         # operator account): the renderer itself returns text only.
-        job.warnings.extend(target.render_warnings(tree))
+        target_said = target.render_warnings(tree)
+        job.warnings.extend(target_said)
         job.rendered = target.render(tree)
 
     except LimitExceeded as exc:
@@ -488,6 +498,22 @@ def run_plan(
                 )
         else:
             job.status = MigrationJobStatus.completed
+        if target_said:
+            # A record the target leaves out, or writes otherwise
+            # than the source states it, is in no validation
+            # report: the report is made from the tree, before the
+            # renderer decides.  A warning is not a status.
+            message = (
+                f"The target left out {len(target_said)} record(s), or "
+                "wrote them otherwise than the source states them, "
+                "for a reason of its own; the job's warnings name "
+                "each."
+            )
+            if job.status == MigrationJobStatus.completed:
+                job.status = MigrationJobStatus.partial
+                job.error = message
+            else:
+                job.error = f"{job.error} {message}" if job.error else message
         if secrets:
             # A secret left out is a loss the output does not show.
             message = (

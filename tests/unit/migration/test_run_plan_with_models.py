@@ -61,6 +61,24 @@ CAPTURE_2930F = (
     REPO_ROOT / "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg"
 ).read_text(encoding="utf-8")
 
+#: What AOS-S leaves out of :data:`CAPTURE_2930F`, onto itself, for a
+#: reason of its own: the manager account, which holds no password in
+#: a printout made without credentials.  A job of it is ``partial``
+#: for that alone, in these words, where nothing else holds it.
+_LEFT_OUT_ONE = (
+    "The target left out 1 record(s), or wrote them otherwise than the "
+    "source states them, for a reason of its own; the job's warnings "
+    "name each."
+)
+
+
+def _held_for_the_account_alone(job: MigrationJob) -> bool:
+    """Whether *job*, of :data:`CAPTURE_2930F` onto AOS-S, is held
+    for the manager account AOS-S leaves out and for nothing else."""
+    said = [w for w in job.warnings if w.startswith("Local user ") and "(manager) is not written" in w]
+    return job.status == MigrationJobStatus.partial and len(said) == 1 and job.error == _LEFT_OUT_ONE
+
+
 #: A real one-member 2930M stack: JL323A with a JL083A.
 CAPTURE_2930M = (
     REPO_ROOT / "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"
@@ -700,7 +718,7 @@ class TestStandalone2930FOntoStacked2930M:
         assert plan is not None and plan.applied and plan.is_clean
         assert len(plan.used_pairings) == 52
         assert plan.unplaced == [] and plan.off_inventory == []
-        assert job.status == MigrationJobStatus.completed
+        assert _held_for_the_account_alone(job)
         assert job.port_drops == []
 
     def test_access_ports_take_the_member_number(self, job) -> None:
@@ -795,8 +813,7 @@ class TestOntoASmallerSwitch:
             AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G,
             port_rename_map=decided,
         )
-        assert job.status == MigrationJobStatus.completed
-        assert job.error is None
+        assert _held_for_the_account_alone(job)
         assert job.port_mapping_plan.overridden == sorted(decided)
         assert job.port_drops == _bare(25, 24)
 
@@ -938,7 +955,7 @@ class TestOtherShapes:
         job = run_plan_with_models(
             AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, SOURCE_2930F_48G,
         )
-        assert job.status == MigrationJobStatus.completed
+        assert _held_for_the_account_alone(job)
         assert job.port_renames == {}
         assert len(job.port_mapping_plan.pairings) == 52
         assert sorted(job.source_ports, key=int) == _bare(1, 52)
@@ -1755,7 +1772,7 @@ class TestLegacyProfilesAsDevices:
         # Devices were declared and no pairing was made: every name
         # went by name shape, which is what declaring them was for.
         assert job.status == MigrationJobStatus.partial
-        assert job.error.startswith("Port mapping was not made: the target device")
+        assert job.error.startswith(_LEFT_OUT_ONE + " Port mapping was not made: the target device")
 
     def test_a_plan_that_was_not_made_drops_nothing_of_its_own(self) -> None:
         """Two Junos management ports both become ``oobm`` on AOS-S by
@@ -2156,7 +2173,7 @@ class TestOverridesThatDoNotFit:
             port_rename_map={"5": "77"},
         )
         assert job.port_mapping_plan.off_target == ["77"]
-        assert job.status == MigrationJobStatus.completed
+        assert _held_for_the_account_alone(job)
         assert any(
             "override target(s) are not names the declared target device lists" in w
             and ": 77;" in w for w in job.warnings
@@ -3078,12 +3095,14 @@ class TestSubInterfaces:
         assert plan.untagged_units == {} and plan.unresolved_ports == []
         # Nothing more is said of its tag; but an entry that names the
         # unit does not give AOS-S a form for it, and the renderer says
-        # it is not written (the job is not held for it: CHANGELOG,
-        # Known limitations).
+        # it is not written -- which holds the job, as every record a
+        # target leaves out does.
         said = [w for w in job.warnings if "802.1Q" in w]
         assert said == ([] if answer is None else [_AOSS_NO_UNIT_OF_A_PORT[len("; review: "):]])
         assert "interface 1.54" not in job.rendered.splitlines()
-        assert job.status == MigrationJobStatus.completed
+        assert job.status == (
+            MigrationJobStatus.completed if answer is None else MigrationJobStatus.partial
+        )
         # And that is the end of it.  The plan's line says to name
         # the unit; a unit of a port the target lists is where the
         # plan itself puts one, so the entry is not then reported
@@ -3505,7 +3524,7 @@ class TestAnOverrideAsItIsTyped:
             port_rename_map={"999": "77"},
         )
         assert job.port_mapping_plan.off_target == []
-        assert job.status == MigrationJobStatus.completed
+        assert _held_for_the_account_alone(job)
 
 
 class TestTheRunIsRepeatedOnlyWhenItMustBe:

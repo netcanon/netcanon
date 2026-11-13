@@ -345,9 +345,9 @@ port translator sends it after its port as `2.100` or `Trk1.100`.
 Where it holds an address, a VRRP group, a description or an MTU, a
 `; review:` line and a warning say so; one that holds none of them
 loses nothing, and nothing is said.  Up to 0.7.7 it was written
-`interface 2.100` with its address.  With no devices declared, or
-where an entry of the port map names the unit, the job is not `partial`
-for it: the review line and a warning say it.  A unit of a name of no
+`interface 2.100` with its address.  The warning holds the job
+`partial`, as every record AOS-S leaves out does, with no devices
+declared as well.  A unit of a name of no
 AOS-S form (`ge-0/0/2.100`, where the port was not translated) is
 written as every such name is, for a reviewer.
 

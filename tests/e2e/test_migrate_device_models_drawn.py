@@ -51,6 +51,7 @@ from tests.e2e.test_migrate_device_models import (
     _ROUTEROS_NAMED,
     CAPTURE_2930F,
     CAPTURE_2930M,
+    LEFT_OUT_THE_ACCOUNT,
     REPO_ROOT,
     SOURCE_2930F_48G,
     TARGET_2930M_24G,
@@ -2981,7 +2982,8 @@ class TestNothingPairedIsNotSaidToBePaired:
         # Accepting what is on screen records the decisions.  It pairs nothing.
         page.locator(_tid("migrate-rename-plan-accept")).click()
         job = _apply_and_read(page)
-        assert job["status"] == "completed"
+        # Held for the manager account alone: nothing about a port.
+        assert (job["status"], job["error"]) == ("partial", LEFT_OUT_THE_ACCOUNT)
         expect(title).to_have_text("No port was paired by position")
         expect(_plan(page)).to_have_attribute("data-state", "warn")
         expect(_plan(page)).to_have_attribute("data-outcome", "nothing-paired")

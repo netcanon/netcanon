@@ -261,7 +261,14 @@ class TestModelTranslationServedByEmbeddedServer:
         assert "does not say which device" in unstated["notes"][0]
 
         # A plan with both devices declared pairs ports by position.
-        assert job["status"] == "completed"
+        # It is ``partial`` for the manager account alone, which holds
+        # no password in this printout and which AOS-S does not write.
+        assert job["status"] == "partial"
+        assert job["error"] == (
+            "The target left out 1 record(s), or wrote them otherwise than "
+            "the source states them, for a reason of its own; the job's "
+            "warnings name each."
+        )
         assert job["port_renames"]["49"] == "1/A1"
         assert len(job["port_mapping_plan"]["pairings"]) == 52
         assert "untagged 1/48,1/A1,1/A2,1/A3,1/A4" in job["rendered"]

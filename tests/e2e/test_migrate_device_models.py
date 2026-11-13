@@ -56,6 +56,25 @@ CAPTURE_2930M = (
     REPO_ROOT / "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"
 ).read_text(encoding="utf-8")
 
+#: What AOS-S leaves out of :data:`CAPTURE_2930F`, onto itself, for a
+#: reason of its own: the manager account, which holds no password in
+#: a printout made without credentials.  A job of it is ``partial``
+#: for that alone, in these words, where nothing else holds it.
+LEFT_OUT_THE_ACCOUNT = (
+    "The target left out 1 record(s), or wrote them otherwise than the "
+    "source states them, for a reason of its own; the job's warnings "
+    "name each."
+)
+
+
+def _held_for_the_account_alone(mp: MigratePage) -> None:
+    """The job on the page is ``partial`` for the account AOS-S leaves
+    out of :data:`CAPTURE_2930F` and for nothing else: its banner
+    holds that one sentence."""
+    expect(mp.status_summary).to_contain_text("partial")
+    expect(mp.banner).to_have_text("Error: " + LEFT_OUT_THE_ACCOUNT)
+
+
 #: A switch numbered 2, with its type on the line that provisions it.
 _CISCO_SWITCH_2 = """hostname test-sw
 !
@@ -635,7 +654,7 @@ class TestStandalone2930FOntoStacked2930M:
         expect(page.locator(_tid("migrate-rename-why-49"))).to_have_text("uplink 1")
         expect(page.locator(_tid("migrate-rename-why-1"))).to_have_text("access 1")
         expect(aoss_2930f.output).to_contain_text("untagged 1/48,1/A1,1/A2,1/A3,1/A4")
-        expect(aoss_2930f.status_summary).to_contain_text("completed")
+        _held_for_the_account_alone(aoss_2930f)
         # The per-kind count banner gives way to the plan, which names
         # the ports instead of counting them by the shape of a name.
         expect(page.locator(_tid("migrate-rename-fitcheck"))).to_be_hidden()
@@ -783,7 +802,7 @@ class TestPortsWithNoPlace:
         }
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         expect(page.locator(_tid("migrate-rename-plan-accept"))).to_have_count(0)
-        expect(aoss_2930f.status_summary).to_contain_text("completed")
+        _held_for_the_account_alone(aoss_2930f)
 
     def test_an_unplaced_port_can_be_given_any_port_of_the_target(
         self, aoss_2930f: MigratePage, page: Page,

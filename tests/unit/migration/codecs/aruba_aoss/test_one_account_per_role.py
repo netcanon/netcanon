@@ -431,7 +431,9 @@ _IOSXE = (
 class TestThroughThePipeline:
     def test_the_job_says_which_account_has_the_role(self) -> None:
         job = run_plan(get_codec("cisco_iosxe_cli"), ArubaAOSSCodec(), _IOSXE)
-        assert job.status == MigrationJobStatus.completed
+        # An account left out holds the job: the report cannot see it.
+        assert job.status == MigrationJobStatus.partial
+        assert job.error.startswith("The target left out ")
         assert live_accounts(job.rendered) == [
             ("manager", "admin2", "adminpw"), ("operator", "viewer", "viewerpw"),
         ]

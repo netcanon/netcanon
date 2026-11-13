@@ -1426,6 +1426,30 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A job whose target leaves a record out is `partial`.**  A
+  target that leaves a record out of its output, or writes it
+  otherwise than the source states it, for a reason of its own says
+  so in a warning of the job (`render_warnings`): a local user that
+  holds no password, an account past the one AOS-S has for its role,
+  a DHCP pool the target can be given no range for, a VLAN interface
+  AOS-S cannot place, a unit of a port AOS-S can write only as the
+  VLAN of a tag it was not given.  The status did not hear of it.
+  The validation report is made from the tree before the renderer
+  decides, so such a job said `completed` whenever nothing else held
+  it.  Over the committed inputs, onto every public codec with no
+  port map, 23 jobs did, 12 of them between two configs of one
+  codec, each for a local account the target left out: one that
+  holds no password, or one below an administrator that the target
+  has no role for.  Such a job is now `partial`, and its `error` says "The
+  target left out N record(s)".  A job that is `partial` for
+  another reason as well says both: these words come after the
+  validation report's (or that nothing was recognised), and before
+  what the port names or the declared devices add.  Still open: a
+  line the target writes under `review:` with no warning -- a
+  password hash the target does not take, a RADIUS secret it cannot
+  carry -- does not hold the job (Known limitations).  Guarded by
+  `tests/unit/migration/test_a_render_warning_holds_the_job.py`.
+
 - **A FortiGate output holds each resolver in a slot of its
   address family.**  FortiOS has two IPv4 resolver slots, `set
   primary` and `set secondary`, and two IPv6 ones, `set
@@ -2444,10 +2468,9 @@ timestamp if your timezone matters for an audit.
   the job; otherwise nothing of it is lost, and nothing is said.  A
   route out of it has a review line of its own, as before.  A unit of
   a name of no AOS-S form (`ge-0/0/2.100`, where the port was not
-  translated) is still written as every such name is, for a reviewer.  With no
-  devices declared, or where an entry of the port map names the unit,
-  the job is not held for it: the review line and a warning say it
-  (Known limitations).  Guarded by
+  translated) is still written as every such name is, for a reviewer.  The
+  warning holds the job `partial`, with no devices declared as well
+  (a job whose target leaves a record out, above).  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_an_interface_that_stands_for_a_vlan.py`.
 - **A VLAN interface is written onto AOS-S whatever its grammar calls
   it, and an interface whose name only begins `vlan` is written at
@@ -7236,6 +7259,13 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A `review:` line with no warning does not hold the job.**  A
+  target that refuses a password hash it does not take, or a RADIUS
+  shared secret it cannot carry, writes a `review:` line in the
+  output and no warning of the job, so a job whose only loss is such
+  a secret can say `completed`.  What a target leaves out under a
+  warning holds the job `partial`; these do not yet.  Search a
+  `completed` output for `review:`.
 - **A destination whose next hops mix a stated and an unstated
   distance keeps its order only where the two platforms' defaults
   agree.**  "Not stated" is one value in the tree, and each target
@@ -7854,17 +7884,15 @@ timestamp if your timezone matters for an audit.
   declared the job is `partial` for it (`fused_ports`), and with
   devices declared as well.  A unit
   that did follow is written without an 802.1Q tag where none was
-  read for it — every AOS-CX and OS10 sub-interface, whose parsers
-  read none: a warning says so, and with devices declared it is held
-  for a decision (`untagged_units`).  Between two AOS-CX configs,
-  or two OS10 configs, the same tag is lost — as it is on every
-  path, and as it was — and there nothing in the job says so.  A
-  target with no routed
+  read for it — every OS10 sub-interface, whose parser reads none:
+  a warning says so, and with devices declared it is held for a
+  decision (`untagged_units`); with no devices declared the job is
+  not `partial` for it.  Between two OS10 configs the same tag is
+  lost — as it is on every path, and as it was — and there nothing
+  in the job says so.  A target with no routed
   sub-interface gets an interface named `<port>.<unit>`, but for
   AOS-S, which leaves such a unit out under a `; review:` line where
-  it holds something; with no devices declared the job is not
-  `partial` for it either way, nor onto AOS-S where an entry of the
-  port map names the unit.  Some
+  it holds something, in a warning that holds the job `partial`.  Some
   firewall pseudo-interfaces the source codec does not
   classify are reported as off-inventory, and onto another vendor a
   FortiGate's stock `fortilink` aggregate is reported as displaced or
