@@ -21,8 +21,14 @@ via `dropped_tier3_sections`, **not** translated.
 > **Input forms.**  Both `config.boot` (curly-brace) and `show
 > configuration commands` (set-form) are accepted — set-form is
 > converted to curly-brace up front so the brace-stack walker is
-> reused.  The probe disambiguates VyOS set-form from the Junos
-> set-form that the `juniper_junos` codec owns.
+> reused.  Set-form is detected as VyOS from an interface of VyOS's
+> own name (`ethernet eth0`, `bonding bond0`, `loopback lo`, …), a
+> `set service`, a `set protocols static route` or a `set vrf name`
+> line; a Junos-only line (`set version`, a port such as
+> `ge-0/0/0`, `routing-options`, `routing-instances`, …) leaves it to
+> the `juniper_junos` codec.  ⚠️ Up to 0.7.7 an interface name did not
+> count, and a paste of interfaces, `protocols bgp` and a host name
+> was detected as Junos.
 
 ## What translates well
 
@@ -302,9 +308,11 @@ real set-form) capture are welcomed via
   unit number, a VLAN it is not tagged with; translate such a config
   again.
 - **`protocols bgp` / `protocols ospf` are SHARED with Junos.**  Both
-  VyOS and Junos use `set protocols …` — the probe disambiguates by
-  config shape, not by that keyword alone.  Pick the right vendor in
-  the target dropdown if detection is ambiguous.
+  VyOS and Junos use `set protocols …`, `set system host-name` and
+  `set firewall`, so a set-form text is told apart by its interface
+  names and its other lines (above), never by those.  A short paste
+  of nothing but shared lines is detected as no codec, or as Junos;
+  pick **VyOS as the source vendor** then.
 - **Curly-brace vs set-form.**  Either input works — `config.boot`
   (curly-brace) is the native form; `show configuration commands`
   (set-form) is converted up front.  Distinct from the `juniper_junos`
