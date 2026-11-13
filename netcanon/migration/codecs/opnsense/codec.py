@@ -188,6 +188,8 @@ class OPNsenseCodec(CodecBase):
     name: ClassVar[str] = "opnsense"
     #: See ``CodecBase.local_user_target_label``.
     local_user_target_label: ClassVar[str | None] = "OPNsense"
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     version_hint: ClassVar[str | None] = "25.x"
     input_format: ClassVar[str] = "xml-opnsense"
     direction: ClassVar[str] = "bidirectional"

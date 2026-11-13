@@ -61,6 +61,7 @@ from ..registry import register
 from . import port_names as _port_names
 from .parse import parse_intent, without_banner_bodies
 from .render import lag_channel, render_intent
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 
 @register
@@ -796,6 +797,11 @@ class DellOS10Codec(CodecBase):
         the LAG's name is one OS10 reads as a port-channel
         (:func:`.render.lag_channel`)."""
         return lag_channel(lag_name) is not None
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

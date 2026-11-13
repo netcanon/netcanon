@@ -58,12 +58,11 @@ from typing import Any
 from ..._bonds import ACTIVE_BACKUP
 from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
-    FORTIOS_ENVELOPE,
-    radius_secret_is_migratable,
-    unwrap_native_secret,
+    format_review_comment as format_radius_review_comment,
 )
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
+    radius_secret_is_migratable,
+    unwrap_native_secret,
 )
 from ..._roles import below_admin, format_below_admin_comment, own_role
 from ..._user_secrets import (
@@ -1319,9 +1318,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # portable passphrase is emitted WITHOUT the prefix, which is
                 # how an operator types one and FortiOS encrypts it on save.
                 # Policy: :mod:`netcanon.migration._usm_keys`.
-                if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
-                    u, tree.source_vendor, "fortigate_cli",
-                ):
+                if refuses_snmpv3_user(u, tree.source_vendor):
                     kind = user_usm_kind(u, tree.source_vendor)
                     out.append(
                         f"# snmpv3 user {u.name} -- review: a {kind} USM key "
@@ -1484,17 +1481,20 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Now: the ``fortios:`` envelope round-trips natively (this
             # is the reference same-vendor path), a plaintext secret is
             # emitted WITHOUT the ENC marker so FortiOS stores it as
-            # typed, and anything else is refused.
+            # typed, and anything else is refused.  The envelope is
+            # unwrapped only where the shared policy has cleared the
+            # value: one that arrives from another platform's config is
+            # not FortiOS's own, whatever it begins with.  The codec asks
+            # the same question for the job's warning
+            # (``CodecBase.refuses_radius_secret``).
             if server.key:
-                if server.key.startswith(FORTIOS_ENVELOPE):
+                if radius_secret_is_migratable(
+                    server.key, tree.source_vendor, "fortigate_cli",
+                ):
                     out.append(
                         f"        set secret "
                         f"{unwrap_native_secret(server.key)}"
                     )
-                elif radius_secret_is_migratable(
-                    server.key, tree.source_vendor, "fortigate_cli",
-                ):
-                    out.append(f"        set secret {server.key}")
                 else:
                     out.append(
                         "    "
@@ -1573,3 +1573,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("end")
 
     return "\n".join(out) + "\n"
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on FortiOS
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol or user.priv_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "fortigate_cli",
+    )

@@ -53,6 +53,7 @@ from .render import (
     render_intent,
     vlan_interface_warnings,
 )
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -194,6 +195,8 @@ class ArubaAOSSCodec(CodecBase):
     #: :mod:`._svi_absorption`; the value is imported from there so
     #: the rule has a single source of truth.
     absorbs_svi_into_vlan: ClassVar[bool] = ABSORBS_SVI_INTO_VLAN
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Aruba AOS-S "
         "(ProCurve / ArubaOS-Switch 16.x) device.  NOT the same as "
@@ -767,7 +770,13 @@ class ArubaAOSSCodec(CodecBase):
                 if self.aggregate_written_for(getattr(lag, "name", ""))
             ),
             *management_warnings(tree),
+            *self.credential_warnings(tree, "AOS-S"),
         ]
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

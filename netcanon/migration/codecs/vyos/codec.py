@@ -66,6 +66,7 @@ from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
 from .parse import parse_intent
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 from .render import render_intent
 
 #: Every walkable path this codec writes nothing for -- a record it has
@@ -785,6 +786,11 @@ class VyOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

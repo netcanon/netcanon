@@ -59,6 +59,7 @@ from . import port_names as _port_names
 from .dhcp_pools import render_pools
 from .parse import parse_intent, without_bodies
 from .render import lag_channel, render_intent
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 #: Every walkable path this codec writes only in some cases, or a record
 #: it writes without the field, by the reason.  Spread into
@@ -88,6 +89,8 @@ class AristaEOSCodec(CodecBase):
     name: ClassVar[str] = "arista_eos"
     #: See ``CodecBase.local_user_target_label``.
     local_user_target_label: ClassVar[str | None] = "Arista EOS"
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     version_hint: ClassVar[str | None] = "EOS 4.20+"
     input_format: ClassVar[str] = "cli-arista"
     direction: ClassVar[str] = "bidirectional"
@@ -564,6 +567,11 @@ class AristaEOSCodec(CodecBase):
             interfaces = [*tree.interfaces, *synthesize_svis_from_vlan_l3(tree)]
             warnings += render_pools(tree.dhcp_servers, interfaces).warnings
         return warnings
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

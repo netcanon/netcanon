@@ -898,7 +898,8 @@ translate it again from `show running-config` as the device prints it.
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Hash portability.**  A local user keeps its secret where the
   target takes that form, and is otherwise left out under a
-  `review:` line in the output (the job still says `completed`):
+  `review:` line in the output, and the job is `partial` with a
+  warning that names the account:
   type 5 (`$1$`) onto EOS, NX-OS, IOS-XR, Junos and VyOS; type 7, 8
   and 9 onto IOS-XR (and back onto IOS-XE); a typed password
   (`password 0`) onto every target that takes one.  IOS-XE takes no

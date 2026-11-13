@@ -49,6 +49,7 @@ from .parse import (
     without_quoted_values,
 )
 from .render import _esc, render_intent
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 # Re-export the internal helpers that tests pin against the codec's
 # structural contract (see module docstring).
@@ -156,6 +157,8 @@ class FortiGateCLICodec(CodecBase):
     name: ClassVar[str] = "fortigate_cli"
     #: See ``CodecBase.local_user_target_label``.
     local_user_target_label: ClassVar[str | None] = "FortiOS"
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     version_hint: ClassVar[str | None] = "7.x"
     input_format: ClassVar[str] = "cli-fortigate"
     direction: ClassVar[str] = "bidirectional"
@@ -755,6 +758,11 @@ class FortiGateCLICodec(CodecBase):
         if isinstance(tree, CanonicalIntent):
             warnings += render_pools(tree.dhcp_servers, tree.interfaces, _esc)[1]
         return warnings
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

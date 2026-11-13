@@ -448,9 +448,7 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
             )
 
     for user in snmp.v3_users:
-        if user.auth_protocol and not user_usm_is_migratable(
-            user, source_vendor, "dell_os10",
-        ):
+        if refuses_snmpv3_user(user, source_vendor):
             kind = user_usm_kind(user, source_vendor)
             lines.append(
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
@@ -884,3 +882,17 @@ def _render_static_route(route) -> str:
     if route.metric:
         out += f" {route.metric}"
     return out
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on Dell OS10
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "dell_os10",
+    )

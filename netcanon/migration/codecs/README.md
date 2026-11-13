@@ -626,7 +626,10 @@ the policy locally:
   plaintext (would leak the hash literal as the password).  A codec
   that renders users states `local_user_target_label` in its class
   body; the base class's `render_warnings` then warns of each account
-  with no password (`test_no_target_writes_an_account_with_no_password`
+  with no password, and of each whose password the codec's
+  `takes_password` refuses -- the question its renderer asks, which
+  is `is_migratable()` unless the renderer asks otherwise and says so
+  there (Junos) (`test_no_target_writes_an_account_with_no_password`
   in `tests/unit/migration/test_an_account_with_no_password.py` fails
   for a codec in `_USER_RENDERING_TARGETS` with no warning or no
   review line).
@@ -680,7 +683,25 @@ the policy locally:
   comment — the operator needs to see the half-configured server.
   A new rendering codec goes in `_TARGET_ACCEPTS` here AND in
   `_RENDERING_TARGETS` in
-  `tests/unit/migration/test_radius_secret_portability.py`.
+  `tests/unit/migration/test_radius_secret_portability.py`, and sets
+  `writes_radius_servers = True`, so that the base class's
+  `render_warnings` warns of each secret `refuses_radius_secret`
+  refuses (`refused_secret_warning(...)`).
+
+* **`netcanon/migration/_usm_keys.py`** — SNMPv3 USM key
+  portability.  Public API: `classify_usm_key(value, source_vendor,
+  kind)`, `usm_is_migratable(...)`, `user_usm_is_migratable(user,
+  source_vendor, target_vendor)`, `user_usm_kind(user,
+  source_vendor)`, `usm_warning(user, source_vendor, target_label)`.
+  A localised key belongs to the device that made it; across vendors
+  only a passphrase crosses.  A codec that renders SNMPv3 users asks
+  a module function `refuses_snmpv3_user(user, source_vendor)` of
+  each user, writes a review line in place of one it refuses, and
+  returns the same function from the codec's `refuses_snmpv3_user`,
+  so that the base class's `render_warnings` warns of the same users
+  (`test_a_credential_review_line_has_its_warning` in
+  `tests/unit/migration/test_a_render_warning_holds_the_job.py`
+  fails for a target whose review lines and warnings disagree).
 
 * **`netcanon/migration/_one_value.py`** — a credential or an
   account's name is written as ONE value of the place it goes, or not

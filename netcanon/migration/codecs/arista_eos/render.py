@@ -322,9 +322,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # yields a user that commits cleanly and authenticates nobody.
             # Refuse it; a passphrase source was already correct and is
             # untouched.  Policy: :mod:`netcanon.migration._usm_keys`.
-            if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
-                u, tree.source_vendor, "arista_eos",
-            ):
+            if refuses_snmpv3_user(u, tree.source_vendor):
                 kind = user_usm_kind(u, tree.source_vendor)
                 out.append(
                     f"! snmpv3 user {u.name} -- review: a {kind} USM key "
@@ -1147,3 +1145,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     out.append("end")
     return "\n".join(out) + "\n"
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on Arista EOS
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol or user.priv_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "arista_eos",
+    )

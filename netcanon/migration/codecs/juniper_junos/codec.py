@@ -70,6 +70,8 @@ from ..registry import register
 from . import port_names as _port_names
 from .parse import _looks_like_blockform, drop_session_lines, read_intent
 from .render import dhcp_pool_warnings, render_intent, vrrp_placement_warnings
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
+from .render import takes_password as _takes_password
 
 #: Every walkable path this codec writes only in some cases, or a record
 #: it writes without the field, by the reason.  Spread into
@@ -556,6 +558,16 @@ class JunosCodec(CodecBase):
             warnings += dhcp_pool_warnings(tree)
             warnings += vrrp_placement_warnings(tree)
         return warnings
+
+    def takes_password(self, hashed: str) -> bool:
+        """The question the renderer asks of a password
+        (:func:`.render.takes_password`)."""
+        return _takes_password(hashed)
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

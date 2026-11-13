@@ -1610,10 +1610,13 @@ has for its role, a DHCP pool the target can be given no range for,
 a VLAN interface AOS-S cannot place.  The validation report is made
 from the tree before the renderer decides, so it does not list
 these.  Each is a warning of the job, and the job's `error` says
-"The target left out N record(s)".  A line the target writes under
-`review:` with no warning -- a password hash the target does not
-take, a RADIUS secret it cannot carry -- does not hold the job yet:
-search the output for `review:`.
+"The target left out N record(s)".  So is a credential the target
+cannot carry: a local user whose password it does not take, an
+SNMPv3 user whose key belongs to the source device, a RADIUS secret
+it cannot re-use (the server is written, without its secret).  A
+line the target writes under `review:` for another reason, with no
+warning -- a VLAN FortiOS can give no parent -- does not hold the job
+yet: search the output for `review:`.
 
 ### D1. Port names that are not settled (`fused_ports` / `unresolved_ports` / `untranslated_ports`)
 

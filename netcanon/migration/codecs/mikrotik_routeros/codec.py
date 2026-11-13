@@ -80,6 +80,7 @@ from . import port_names as _port_names
 from .dhcp_pools import render_pools
 from .parse import parse_intent
 from .render import _quote_if_needed, render_intent, system_lo_notes
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 __all__ = ["MikroTikRouterOSCodec"]
 
@@ -189,6 +190,8 @@ class MikroTikRouterOSCodec(CodecBase):
     name: ClassVar[str] = "mikrotik_routeros"
     #: See ``CodecBase.local_user_target_label``.
     local_user_target_label: ClassVar[str | None] = "RouterOS"
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     version_hint: ClassVar[str | None] = "7.x"
     input_format: ClassVar[str] = "cli-mikrotik"
     direction: ClassVar[str] = "bidirectional"
@@ -714,6 +717,11 @@ class MikroTikRouterOSCodec(CodecBase):
             )[1]
             warnings += [warning for _, warning in system_lo_notes(tree)]
         return warnings
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

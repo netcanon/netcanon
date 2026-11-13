@@ -65,6 +65,7 @@ from . import port_names as _port_names
 from .dhcp_pools import render_pools
 from .parse import parse_intent, without_banner_bodies
 from .render import _cidr_to_dest_mask, render_intent
+from .render import refuses_snmpv3_user as _refuses_snmpv3_user
 
 #: Every walkable path this codec writes nothing for -- a record it has
 #: no form for, or a field of a record declared unsupported -- by the
@@ -123,6 +124,8 @@ class CiscoIOSXECLICodec(CodecBase):
     name: ClassVar[str] = "cisco_iosxe_cli"
     #: See ``CodecBase.local_user_target_label``.
     local_user_target_label: ClassVar[str | None] = "Cisco IOS-XE"
+    #: See ``CodecBase.writes_radius_servers``.
+    writes_radius_servers: ClassVar[bool] = True
     version_hint: ClassVar[str | None] = "15.x / 16.x / 17.x"
     input_format: ClassVar[str] = "cli-ios"
     direction: ClassVar[str] = "bidirectional"
@@ -606,6 +609,11 @@ class CiscoIOSXECLICodec(CodecBase):
             # Back-compat fallback for old-shape trees.
             from ..cisco_iosxe.codec import _walk
             yield from _walk(tree, "")
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """The question the renderer asks of an SNMPv3 user
+        (:func:`.render.refuses_snmpv3_user`)."""
+        return _refuses_snmpv3_user(user, source_vendor)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

@@ -876,9 +876,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # `snmpv3 group ... user ...` line naming a user that was never
             # created is a dangling reference.
             # Policy: :mod:`netcanon.migration._usm_keys`.
-            if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
-                u, tree.source_vendor, "aruba_aoss",
-            ):
+            if refuses_snmpv3_user(u, tree.source_vendor):
                 kind = user_usm_kind(u, tree.source_vendor)
                 lines.append(
                     f'; snmpv3 user "{u.name}" -- review: a {kind} USM key '
@@ -1510,3 +1508,17 @@ def _route_line(route: Any, not_a_vlan: frozenset[str] = frozenset()) -> str:
 
 def _route_review(route: Any, why: str) -> str:
     return f"; review: static route {route.destination} {why}; not written"
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on AOS-S
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol or user.priv_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "aruba_aoss",
+    )

@@ -301,7 +301,11 @@ class TestNoOperatorWithoutAManager:
         assert "$9$" not in out
         line = next(x for x in out.splitlines() if 'user-name "viewer"' in x)
         assert "manager access" in line
-        assert len(warnings) == 1 and '"viewer"' in warnings[0]
+        # One a user: the manager for its secret, the operator for want
+        # of the manager.
+        assert len(warnings) == 2
+        assert '"root"' in warnings[0] and "hash (9)" in warnings[0]
+        assert '"viewer"' in warnings[1] and "manager access" in warnings[1]
 
     def test_no_manager_at_all(self) -> None:
         out, warnings = _render(_user("viewer", 1, "sha1:bb22"))
@@ -344,8 +348,23 @@ class TestASecretAosSCannotTake:
         assert line.startswith("; ")
         assert "bcrypt" in line
         assert 'password manager user-name "root", which asks for the password' in line
-        # Said in the output, as on every other target.
-        assert warnings == []
+        # And in the job, as on every other target: an account left out.
+        assert len(warnings) == 1
+        assert warnings[0].startswith('Local user "root" (manager) is not written for AOS-S: ')
+        assert "hash (bcrypt)" in warnings[0] and "$2y$" not in warnings[0]
+
+    @pytest.mark.parametrize(("name", "secret", "said"), [
+        ('my "root"', "plaintext:rootpw", "white space or a quote"),
+        ("root", 'plaintext:a "b"', "white space or a quote"),
+        ("", "plaintext:rootpw", "A local user with no name (manager)"),
+    ])
+    def test_an_account_held_for_its_value_is_said(
+        self, name: str, secret: str, said: str,
+    ) -> None:
+        out, warnings = _render(_user(name, 15, secret))
+        assert live_accounts(out) == []
+        assert len(warnings) == 1 and said in warnings[0]
+        assert "rootpw" not in warnings[0] and '"b"' not in warnings[0]
 
     def test_beside_an_account_of_the_role_it_does_not(self) -> None:
         out, _warnings = _render(
@@ -438,7 +457,10 @@ class TestThroughThePipeline:
             ("manager", "admin2", "adminpw"), ("operator", "viewer", "viewerpw"),
         ]
         said = [w for w in job.warnings if w.startswith("Local user ")]
-        assert len(said) == 1 and '"bob"' in said[0] and '"admin2"' in said[0]
+        # "root" for its secret, "bob" for the role "admin2" has.
+        assert len(said) == 2
+        assert '"root"' in said[0] and "hash (9)" in said[0]
+        assert '"bob"' in said[1] and '"admin2"' in said[1]
         assert job.validation.severity == "warn"
         assert any(
             lp.path == "/local-users/user/privilege-level"
@@ -453,7 +475,9 @@ class TestThroughThePipeline:
         assert live_accounts(job.rendered) == [
             ("manager", "bob", "bobpw"), ("operator", "viewer", "viewerpw"),
         ]
-        assert not [w for w in job.warnings if w.startswith("Local user ")]
+        # Only "root", whose secret no map can make AOS-S take.
+        said = [w for w in job.warnings if w.startswith("Local user ")]
+        assert len(said) == 1 and '"root"' in said[0]
 
     def test_no_manager_no_operator(self) -> None:
         raw = (
@@ -469,8 +493,11 @@ class TestThroughThePipeline:
         )
 
     def test_another_target_is_not_told(self) -> None:
+        """Of AOS-S's one account a role: EOS is told only of the
+        secret it cannot take."""
         job = run_plan(get_codec("cisco_iosxe_cli"), get_codec("arista_eos"), _IOSXE)
-        assert not [w for w in job.warnings if w.startswith("Local user ")]
+        said = [w for w in job.warnings if w.startswith("Local user ")]
+        assert len(said) == 1 and '"root"' in said[0] and "hash (9)" in said[0]
 
     def test_a_hashed_manager_from_a_switch(self) -> None:
         raw = (
