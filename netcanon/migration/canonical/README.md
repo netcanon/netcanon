@@ -199,7 +199,8 @@ and the codec's `CapabilityMatrix` declarations:
   `juniper_junos`, `cisco_iosxe_cli`, `arista_eos` — `logging host
   <ip>` / `set system syslog host <ip>`, promotions #1/#11 — plus
   `cisco_nxos` `logging server <ip>` (#4), `cisco_iosxr` bare
-  `logging <ip>` (#13) and `dell_os10` bare `logging server <host>`) —
+  `logging <ip>` (#13), `dell_os10` bare `logging server <host>` and
+  `aruba_aoss` bare `logging <ip>`) —
   for these
   two, an unwired codec is a known gap (declared `unsupported` in its
   `CapabilityMatrix` where the drop should raise the cross-vendor

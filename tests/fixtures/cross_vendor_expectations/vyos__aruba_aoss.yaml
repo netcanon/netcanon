@@ -75,46 +75,33 @@ per_field_expectation:
     references: [vyos-aoss-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      Does not survive the round-trip.  Measured on the single cell that
-      populates it (`scottlaird-vyos-parser.conf`): `internal.sigkill.org`
-      comes back as the empty string.  aruba_aoss declares `/system/domain`
-      unsupported, so the disposition matches the declaration.
-      One correction worth carrying, because it changes the operator advice:
-      the declaration's stated reason is "Render emits no system domain-name",
-      and that is not what the code does.  `aruba_aoss/render.py` DOES emit
-      `ip dns domain-name <name>` (added under finding 12 of
-      `tests/fixtures/real/user_smoke_findings.md`), and the rendered config
-      for that cell carries `ip dns domain-name internal.sigkill.org` on line
-      3.  What is missing is the READ-BACK — the AOS-S parser has a regex for
-      `ip dns server-address` and none for `ip dns domain-name`.  So the
-      domain suffix IS present in the config you hand the switch; it is the
-      canonical view that loses it.  Recorded, not fixed — this file does not
-      change codecs.
+    disposition: good
+    note: >
+      The vyos parser reads the domain, and the aruba_aoss renderer
+      writes `ip dns domain-name <name>` (since 2026-11-13), read back
+      by its parser.  Measured over 13 cells: drifted on 0, preserved on
+      1, both sides empty on 12.
     references: [vyos-aoss-surface]
 
   dns_servers:
     disposition: good
     note: >
-      Preserved on the single cell that populates it — three servers in, the
-      same three out, rendered as `ip dns server-address priority 1 <ip>`.
-      Both matrices declare `/system/dns-server` supported.  One cell is thin
-      coverage; the declaration carries the rest of the weight.
+      The vyos parser reads the resolvers, and the aruba_aoss renderer
+      writes `ip dns server-address priority <1-3> <ip>` (since
+      2026-11-13), read back by its parser.  Measured over 13 cells:
+      drifted on 0, preserved on 1, both sides empty on 12.
     references: [vyos-aoss-surface]
 
   ntp_servers:
-    disposition: good
-    note: >
-      Preserved on all 12 cells that populate it, list order included.
-      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
-      nothing under it, on one line (`server time1.vyos.net { }`).  Until
-      2026-10 the VyOS parser kept the ` { }` in the name, the AOS-S render
-      wrote it out (`sntp server priority 1 time1.vyos.net { }`), and that
-      cell drifted.  The parser now reads such a line as the node it is, the
-      reading the set form gives the same path
-      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
-      Both matrices declare `/system/ntp-server` supported.
+    disposition: lossy
+    reason: >
+      The vyos parser reads the NTP servers, and the aruba_aoss renderer
+      writes `sntp server priority <1-3> <ip>` with `timesync sntp` and
+      `sntp unicast` (since 2026-11-13), read back by its parser; AOS-S
+      takes a time server by its address only, and three at most; one
+      the source gives by a name, or after the third, is left out under
+      a `; review:` line and the job is `partial`.  Measured over 13
+      cells: drifted on 12, preserved on 0, both sides empty on 1.
     references: [vyos-aoss-surface]
 
   timezone:
@@ -130,11 +117,11 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      Both matrices declare `/system/syslog-server` unsupported — a symmetric
-      gap, not a target limitation.  aruba_aoss states it plainly ("Render
-      emits no logging/syslog config").  Trivially empty on all 13 cells, so
-      this is declared rather than observed.  Re-enter logging hosts on the
-      target by hand.
+      The vyos matrix declares `/system/syslog-server` unsupported: its
+      parser reads no syslog server, so nothing reaches the aruba_aoss
+      renderer, which writes `logging <ip>` (since 2026-11-13), and no
+      committed input of the pair states a syslog server.  Measured over
+      13 cells: drifted on 0, preserved on 0, both sides empty on 13.
     references: [vyos-aoss-surface]
 
   # -- Interfaces -- inventory shrinks, surviving records are clean ----------

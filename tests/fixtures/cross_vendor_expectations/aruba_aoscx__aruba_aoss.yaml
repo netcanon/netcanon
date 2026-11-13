@@ -80,28 +80,32 @@ per_field_expectation:
   domain:
     disposition: unsupported
     reason: >
-      Symmetric gap: BOTH matrices declare `/system/domain` unsupported — the
-      aruba_aoss reason is "Render emits no system domain-name; intent.domain is
-      dropped on migration", and aruba_aoscx never parses one to begin with.  No
-      committed cell populates the field.  Set the domain name on the target by
-      hand; no part of this migration carries it.
+      The aruba_aoscx matrix declares `/system/domain` unsupported: its
+      parser reads no domain, so nothing reaches the aruba_aoss
+      renderer, which writes `ip dns domain-name <name>` (since
+      2026-11-13), and no committed input of the pair states a domain.
+      Measured over 7 cells: drifted on 0, preserved on 0, both sides
+      empty on 7.
     references: [aoscx-aoss-surface]
 
   dns_servers:
     disposition: not_applicable
     note: >
-      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported, so
-      nothing reaches the target.  aruba_aoss declares it SUPPORTED, so
-      re-authoring name-servers on the AOS-S side will stick — worth doing by
-      hand as part of the cutover rather than assuming the field is unavailable.
+      The aruba_aoscx matrix declares `/system/dns-server` unsupported:
+      its parser reads no resolver, so nothing reaches the aruba_aoss
+      renderer, which writes `ip dns server-address priority <1-3> <ip>`
+      (since 2026-11-13).  Measured over 7 cells: drifted on 0,
+      preserved on 0, both sides empty on 7.
     references: [aoscx-aoss-surface]
 
   ntp_servers:
     disposition: not_applicable
     note: >
-      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
-      `/system/ntp-server` unsupported while aruba_aoss declares it SUPPORTED.
-      Re-author the NTP peers on the target.
+      The aruba_aoscx matrix declares `/system/ntp-server` unsupported:
+      its parser reads no time server, so nothing reaches the aruba_aoss
+      renderer, which writes `sntp server priority <1-3> <ip>` with
+      `timesync sntp` and `sntp unicast` (since 2026-11-13).  Measured
+      over 7 cells: drifted on 0, preserved on 0, both sides empty on 7.
     references: [aoscx-aoss-surface]
 
   timezone:
@@ -117,11 +121,12 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      Symmetric gap: both matrices declare `/system/syslog-server` unsupported
-      (aruba_aoss: "Render emits no logging/syslog config; intent.syslog_servers
-      are dropped on migration").  Unlike `dns_servers` and `ntp_servers`, there
-      is no target-side declaration to fall back on, so logging hosts must be
-      re-authored outside the migration entirely.
+      The aruba_aoscx matrix declares `/system/syslog-server`
+      unsupported: its parser reads no syslog server, so nothing reaches
+      the aruba_aoss renderer, which writes `logging <ip>` (since
+      2026-11-13), and no committed input of the pair states a syslog
+      server.  Measured over 7 cells: drifted on 0, preserved on 0, both
+      sides empty on 7.
     references: [aoscx-aoss-surface]
 
   # -- Interfaces -- the structural loss on this pair ------------------------

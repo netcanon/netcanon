@@ -120,38 +120,34 @@ per_field_expectation:
     references: [system_services]
 
   domain:
-    disposition: lossy
-    reason: >
-      Arista emits ``dns domain <fqdn>`` (or ``ip domain-name
-      <fqdn>`` legacy form) as a top-level directive.  The
-      aruba_aoss codec does not currently parse or render a
-      separate domain directive (AOS-S folds the FQDN into the
-      hostname via ``hostname "<host>.<domain>"`` when set).
-      Cross-vendor render drops the bare-domain field with no
-      banner — a known codec-side wire-up gap.
+    disposition: good
+    note: >
+      The arista_eos parser reads the domain, and the aruba_aoss
+      renderer writes `ip dns domain-name <name>` (since 2026-11-13),
+      read back by its parser.  Measured over 8 cells: drifted on 0,
+      preserved on 3, both sides empty on 5.
     references: [system_services]
 
   dns_servers:
     disposition: good
     note: >
-      Arista's flat ``ip name-server <addr>`` list (with optional
-      ``vrf default`` qualifier the codec strips on parse) maps
-      to Aruba's ``ip dns server-address priority N <addr>`` form
-      with synthesised priorities (1, 2, ... in source order).
-      Round-trip is lossless on the address list.
+      The arista_eos parser reads the resolvers, and the aruba_aoss
+      renderer writes `ip dns server-address priority <1-3> <ip>` (since
+      2026-11-13), read back by its parser.  Measured over 8 cells:
+      drifted on 0, preserved on 5, both sides empty on 3.
     references: [system_services]
 
   ntp_servers:
     disposition: lossy
     reason: >
-      Arista uses NTP (``ntp server <addr>``); Aruba uses SNTP
-      (``sntp server priority N <addr>``).  The protocol-keyword
-      distinction is lost on the canonical layer (field is
-      ``list[str]`` of addresses).  Per-server modifiers (Arista
-      ``prefer`` / ``iburst``; Aruba priority overrides) drop
-      on round-trip.  Functional equivalence at the server-list
-      level since AOS-S's SNTP client successfully queries NTP
-      servers.
+      The arista_eos parser reads the NTP servers, and the aruba_aoss
+      renderer writes `sntp server priority <1-3> <ip>` with `timesync
+      sntp` and `sntp unicast` (since 2026-11-13), read back by its
+      parser; AOS-S takes a time server by its address only, and three
+      at most; one the source gives by a name, or after the third, is
+      left out under a `; review:` line and the job is `partial`.
+      Measured over 8 cells: drifted on 3, preserved on 2, both sides
+      empty on 3.
     references: [system_services]
 
   timezone:
@@ -169,11 +165,12 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      aruba_aoss declares ``/system/syslog-server`` unsupported and its
-      render emits no logging/syslog stanza, so the source host list
-      drops on migration and the cross-vendor unsupported banner fires.
+    disposition: good
+    note: >
+      The arista_eos parser reads the syslog servers, and the aruba_aoss
+      renderer writes `logging <ip>` (since 2026-11-13), read back by
+      its parser.  Measured over 8 cells: drifted on 0, preserved on 1,
+      both sides empty on 7.
     references: [system_services]
 
   interfaces:

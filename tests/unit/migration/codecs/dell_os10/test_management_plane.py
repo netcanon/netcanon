@@ -32,6 +32,8 @@ import re
 import pytest
 
 from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.aruba_aoss import codec as aoss_codec
+from netcanon.migration.codecs.aruba_aoss import management_plane as aoss_plane
 from netcanon.migration.codecs.dell_os10 import parse as os10_parse
 from netcanon.migration.codecs.dell_os10 import render as os10_render
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
@@ -351,7 +353,8 @@ _PATHS = {
 @pytest.mark.parametrize("target", list_public_codecs())
 def test_what_a_target_says_it_takes_is_in_its_output(target: str) -> None:
     """From OS10 onto every public codec, each value of a path the
-    target's matrix calls supported is in the output's text."""
+    target's matrix calls supported is in the output's text, or is
+    one the target says it cannot be given."""
     codec = get_codec(target)
     job = run_plan_with_checked_names(
         get_codec("dell_os10"), codec,
@@ -359,7 +362,66 @@ def test_what_a_target_says_it_takes_is_in_its_output(target: str) -> None:
         port_rename_map={},
     )
     assert job.rendered, job.error
-    for path, values in _PATHS.items():
-        if codec.capabilities.classify(path) == "supported":
-            for value in values:
-                assert value in job.rendered, (path, value)
+    _check_what_it_takes(target, job)
+
+
+#: Values of a supported path that a target cannot be given, which it
+#: leaves out and says: AOS-S takes a time server and a syslog server
+#: by its address, never by a name (HPE: ``sntp server priority <1-3>
+#: <ip-addr>``, ``ntp server <IP-ADDR|IPV6-ADDR>``, ``logging
+#: <syslog-ip-addr>``).  Compared for equality with what is measured,
+#: so that closing one fails until its pin is taken out.
+_SAID_NOT_TAKEN = {
+    "aruba_aoss": {
+        ("/system/ntp-server", "time.example.org"),
+        ("/system/syslog-server", "log.example.org"),
+    },
+}
+
+
+def _check_what_it_takes(target: str, job) -> None:
+    """Each value of a path the target's matrix calls supported is in
+    the output's text, but for the values the target says it cannot be
+    given: those are not in it, a review line stands for each, and the
+    job is ``partial`` and says that the target left records out (a
+    job can be ``partial`` for another reason)."""
+    codec = get_codec(target)
+    missing = {
+        (path, value)
+        for path, values in _PATHS.items()
+        if codec.capabilities.classify(path) == "supported"
+        for value in values
+        if value not in job.rendered
+    }
+    said = _SAID_NOT_TAKEN.get(target, set())
+    assert missing == said, target
+    if said:
+        assert job.status == "partial", job.status
+        left_out = re.search(r"The target left out ([0-9]+) record", job.error or "")
+        assert left_out and int(left_out.group(1)) >= len(said), job.error
+        reviews = [line for line in job.rendered.splitlines() if "review:" in line]
+        assert len(reviews) >= len(said), len(reviews)
+
+
+def _aoss_job():
+    return run_plan_with_checked_names(
+        get_codec("dell_os10"), get_codec("aruba_aoss"),
+        PLANE + "interface ethernet1/1/1\n no switchport\n!\n",
+        port_rename_map={},
+    )
+
+
+def test_the_check_fails_for_a_target_that_writes_a_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(aoss_plane, "_given", lambda value: True)
+    with pytest.raises(AssertionError):
+        _check_what_it_takes("aruba_aoss", _aoss_job())
+
+
+def test_the_check_fails_for_a_job_that_says_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(aoss_codec, "management_warnings", lambda tree: [])
+    with pytest.raises(AssertionError):
+        _check_what_it_takes("aruba_aoss", _aoss_job())

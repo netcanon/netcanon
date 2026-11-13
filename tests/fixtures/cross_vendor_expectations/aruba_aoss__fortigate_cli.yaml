@@ -148,40 +148,32 @@ per_field_expectation:
     references: [system_services]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S has no first-class domain directive in the codec's
-      parse surface (the AOS-S CLI folds the FQDN into the hostname
-      via ``hostname "<host>.<domain>"`` when set).  Field is always
-      empty on this direction so nothing renders on the FortiGate
-      target.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13), and the fortigate_cli renderer writes the domain it
+      is given.  Measured over 7 cells: drifted on 0, preserved on 1,
+      both sides empty on 6.
     references: [system_services]
 
   dns_servers:
     disposition: good
     note: >
-      The aruba_aoss parser reads the name servers, and the
-      fortigate_cli renderer writes each resolver in a slot of its
-      address family (since 2026-11-12): `set primary` and `set
-      secondary` for IPv4, `set ip6-primary` and `set ip6-secondary` for
-      IPv6, read back by its parser.  Measured over 7 cells: drifted on
-      0, preserved on 3, both sides empty on 4.
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the fortigate_cli
+      renderer writes the resolvers it is given.  Measured over 7 cells:
+      drifted on 0, preserved on 3, both sides empty on 4.
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Aruba uses **SNTP** (``sntp server priority N <addr>``) as its
-      time-protocol primitive while FortiOS uses **NTP** (``config
-      system ntp / config ntpserver / set server <addr>``).  The
-      protocol distinction (full NTP vs SNTP) is lost on the
-      canonical layer (field is ``list[str]`` of addresses).
-      FortiOS additionally requires ``set ntpsync enable`` and
-      ``set type custom`` outside the per-server table; the Aruba
-      source never populates these as canonical scalars.  Per-server
-      modifiers (Aruba priority overrides; FortiOS per-server
-      ``set authentication``) drop on round-trip.  Functional
-      equivalence at the server-list level.
+    disposition: good
+    note: >
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13), and the fortigate_cli renderer writes
+      the NTP servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 3, both sides empty on 4.
     references: [system_services]
 
   timezone:
@@ -200,15 +192,14 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Aruba ``logging <addr>`` host list maps to FortiOS's ``config
-      log syslogd setting / set server`` (single primary server)
-      plus the ``syslogd2`` / ``syslogd3`` peers.  FortiOS therefore
-      caps at three syslog backends; AOS-S sources with longer
-      lists drop the tail.  Severity / facility tokens (Aruba
-      ``logging facility local6`` / ``logging severity info``) are
-      not modelled — drop on round-trip.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13); the fortigate_cli matrix declares
+      `/system/syslog-server` unsupported, its renderer writes no syslog
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 7 cells: drifted on 2, preserved on 0, both sides
+      empty on 5.
     references: [system_services]
 
   interfaces:

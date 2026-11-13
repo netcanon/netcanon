@@ -1426,6 +1426,40 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **AOS-S reads and writes its management plane.**  The parser
+  read each `ip dns server-address` and `sntp server` line whatever
+  its priority and whatever came after the address, and read a time
+  server whether or not the switch ran an SNTP client; it read no
+  `ntp server` line (the time client of AOS-S 16.x), no `ip dns
+  domain-name` and no `logging` line, and the job did not say so.
+  The renderer wrote every resolver and every time server at
+  priority 1, which the switch refuses after the first, and the
+  time servers with no `sntp unicast` and no `timesync`, so that the
+  switch would not poll them; and it wrote the domain while the
+  matrix declared `/system/domain` unsupported, so that a job was
+  `partial` for a value it had written.  Now, from HPE's
+  ArubaOS-Switch 16.08 Management and Configuration Guide: the
+  parser reads the domain, each resolver by its priority (a second
+  line for a priority, which the switch refuses, is not read), the
+  time servers the switch polls -- SNTP servers by priority where
+  SNTP is in unicast mode and `timesync` selects it, NTP servers
+  where `timesync ntp`, `ntp unicast` and `ntp enable` are stated --
+  and up to six `logging` servers.  A time server the switch does
+  not poll is left out and said (`disabled: sntp server`,
+  `disabled: ntp server`), and one of an NTP client in broadcast
+  mode, its default, is not translated, since no HPE page says
+  whether such a client polls it; the words after an address, a
+  server's `key-id` and the lines no field of the tree holds (`time
+  timezone`, ...) are rows that name no value.  The renderer writes
+  the domain, each resolver at the next priority, the time servers
+  in SNTP form with `timesync sntp` and `sntp unicast`, and a
+  `logging` line for each IPv4 syslog server; a fourth resolver or
+  time server, a seventh syslog server, a value that is no address
+  AOS-S can be given there and an IPv6 syslog server are each a `;
+  review:` line and a warning, which holds the job `partial`.
+  `/system/domain` and `/system/syslog-server` are declared
+  supported.
+
 - **A job whose target leaves a record out is `partial`.**  A
   target that leaves a record out of its output, or writes it
   otherwise than the source states it, for a reason of its own says

@@ -1195,8 +1195,9 @@ one the source had deactivated.  The IOS XR codec lists an
 `interface preconfigure` stanza, which the router holds for an
 interface it does not have, with a row of the same kind:
 `preconfigure: ...`; the AOS-S codec a DHCP pool of a server that is
-not enabled, `disabled: ...`, and one the server discards,
-`incomplete: ...`.)  A row shows a statement's path and never a
+not enabled, `disabled: ...`, one the server discards,
+`incomplete: ...`, and a time server the switch does not poll,
+`disabled: ...`.)  A row shows a statement's path and never a
 value: a left-out row is cut after a word with a secret's name in
 it (`shown_words`), and a detector's whole-line label after a word
 one of whose parts is one (`_shown_label`, so that `crypto isakmp

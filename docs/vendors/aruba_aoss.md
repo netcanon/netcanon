@@ -20,9 +20,22 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
-- `hostname`, DNS / NTP servers (`domain`, `syslog_servers` and
-  `timezone` + DST rule are declared **unsupported** on this codec —
-  see the capability matrix; they do not round-trip)
+- `hostname`, and the management plane: the domain (`ip dns
+  domain-name`), up to three resolvers by priority, the time servers
+  the switch polls (SNTP in unicast mode, or NTP where `timesync
+  ntp`, `ntp unicast` and `ntp enable` say so; written in SNTP form,
+  with `timesync sntp` and `sntp unicast`) and up to six IPv4 syslog
+  servers (`logging <ip>`).  A time server the switch does not poll
+  is left out and said, and one of an NTP client in broadcast mode,
+  its default, is not translated: no HPE page says whether such a
+  client polls it.  What AOS-S cannot be given (a fourth resolver or
+  time server, a seventh syslog server, a name, an IPv6 syslog
+  server) is a `; review:` line and holds the job `partial`.
+  `timezone` and the DST rule are declared **unsupported**: `time
+  timezone` is a row.  ⚠️ Up to 0.7.7 no `ntp server`, `ip dns
+  domain-name` or `logging` line was read, and every resolver and
+  time server was written at priority 1 with no `sntp unicast`.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § A
 - Interfaces — slot-port and letter-slot-port (`A1-A24`, `B1-B24`
   on modular 5400R) port-id ranges, descriptions, IPv4 SVI L3
 - VLANs — ID, name, tagged/untagged port lists with comma-separated
@@ -790,8 +803,9 @@ have.
 - **A `"` in a host name, VLAN name, description or the SNMP location
   or contact is written `'` as a target**, for the same reason, with a
   `review:` line for each place; up to 0.7.7 it was written behind a
-  backslash, which no HPE page documents.  An NTP or DNS server, the
-  domain or a route's gateway that holds white space or a `"` is left
+  backslash, which no HPE page documents.  An NTP, DNS or syslog
+  server, the domain or a route's gateway that holds white space or a
+  `"` is left
   out and said, the route whole.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
 - **`snmp-server contact "IT" location "1OG"` is two values.**  The

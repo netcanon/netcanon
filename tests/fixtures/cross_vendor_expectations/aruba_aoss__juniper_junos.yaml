@@ -200,31 +200,31 @@ per_field_expectation:
     references: [aruba-system-services, junos-initial-config]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Aruba AOS-S has no first-class domain directive in the codec's
-      parse surface; the field is always empty on this direction so
-      Junos render emits no ``set system domain-name`` line.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13), and the juniper_junos renderer writes the domain it
+      is given.  Measured over 7 cells: drifted on 0, preserved on 1,
+      both sides empty on 6.
 
   dns_servers:
     disposition: good
     note: >
-      Aruba ``ip dns server-address priority N <addr>`` collapses to
-      a bare address list on canonical (priority sort applied).
-      Junos render emits ``set system name-server <addr>`` lines in
-      that order.  The priority numeric drops on the canonical layer.
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the juniper_junos
+      renderer writes the resolvers it is given.  Measured over 7 cells:
+      drifted on 0, preserved on 3, both sides empty on 4.
     references: [aruba-system-services, junos-initial-config]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Aruba uses SNTP (``sntp server priority N <addr>``) as its
-      time-protocol primitive while Junos uses NTP
-      (``set system ntp server <addr>``).  The protocol distinction
-      is lost on the canonical layer (field is ``list[str]`` of
-      addresses).  Per-server modifiers (Aruba priority overrides;
-      Junos ``prefer`` / ``key``) drop on round-trip.  Functional
-      equivalence at the server-list level for typical deployments.
+    disposition: good
+    note: >
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13), and the juniper_junos renderer writes
+      the NTP servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 3, both sides empty on 4.
     references: [aruba-system-services, junos-initial-config]
 
   timezone:
@@ -236,12 +236,12 @@ per_field_expectation:
       source so Junos render emits no ``set system time-zone`` line.
 
   syslog_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      The aruba_aoss codec parser does not extract ``logging <host>``
-      directives today; the canonical list is always empty on Aruba
-      source so Junos render emits no ``set system syslog host``
-      lines.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13), and the juniper_junos renderer writes the syslog
+      servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 2, both sides empty on 5.
     references: [aruba-system-services]
 
   # ── Tier 1 — interfaces ──

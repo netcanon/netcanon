@@ -116,8 +116,9 @@ names the canonical surface, not a blanket guarantee.
   of codecs: `timezone` on none as of this release; `syslog_servers` on
   juniper_junos, cisco_iosxe_cli, arista_eos (`logging host <ip>`,
   promotions #1/#11), cisco_nxos (`logging server <ip>`, #4),
-  cisco_iosxr (bare `logging <ip>`, #13) and dell_os10 (bare
-  `logging server <host>`).  These are
+  cisco_iosxr (bare `logging <ip>`, #13), dell_os10 (bare
+  `logging server <host>`) and aruba_aoss (bare `logging <ip>`).
+  These are
   Tier-1 by data shape but NOT yet a cross-vendor guarantee — the §A
   per-codec panels are authoritative.  An unwired field is dropped on
   parse and surfaces the cross-vendor banner where the codec declares it
@@ -431,6 +432,7 @@ text").
 | `/interfaces/interface/dot1q-native` | Unsupported | Which routed sub-interface takes the untagged frames of its port (IOS-XE `encapsulation dot1Q N native`, Junos `native-vlan-id N` with the unit of that `vlan-id`): AOS-S writes a routed sub-interface as a VLAN tagged on its port, and has no form for one that also takes the port's untagged frames.  Such a sub-interface is left out under a `; review:` line. |
 | `/interfaces/interface/dot1q-inner-vlan` | Unsupported | The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco `encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags outer N inner M`) has no form on AOS-S, whose VLAN is one tag.  Such a sub-interface is left out under a `; review:` line. |
 | `/interfaces/interface/address-beside-sub-interfaces` | Lossy (warn) | A port's own address beside its sub-interfaces (an EOS or IOS-XE routed port with units): AOS-S has no sub-interface, so the address is written on the port and each sub-interface as a VLAN of the switch (`/interfaces/interface/dot1q-vlan`), and nothing is beside it. |
+| `/system/{domain,dns-server,ntp-server,syslog-server}` | Supported | The management plane (HPE, ArubaOS-Switch 16.08 Management and Configuration Guide): `ip dns domain-name`, `ip dns server-address priority <1-3>`, the time servers the switch polls, and `logging <ip>`.  The parser reads each resolver and SNTP server by its priority (a second line for a priority, which the switch refuses, is not read), the SNTP servers where SNTP is in unicast mode and `timesync` selects it, and the NTP servers where `timesync ntp`, `ntp unicast` and `ntp enable` are stated; a time server the switch does not poll is left out and said, and one of an NTP client in broadcast mode, its default, is not translated, no HPE page saying whether such a client polls it.  The renderer writes the time servers in SNTP form, with `timesync sntp` and `sntp unicast`.  A fourth resolver or time server, a seventh syslog server, a value that is no address AOS-S can be given there (a name, the unspecified address, a link-local address whose scope names no VLAN) and an IPv6 syslog server are each a `; review:` line and a warning, and the job is `partial`.  `time timezone` and the DST rule are rows, not translated (`/system/timezone` is unsupported).  ⚠️ Up to 0.7.7 every resolver and time server was written at priority 1 with no `sntp unicast`, the domain was written while its path was declared unsupported, and no `ntp server`, `ip dns domain-name` or `logging` line was read.  See [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md). |
 | `/dhcp-servers/pool` | Supported | The switch's own DHCP server (HPE, ArubaOS-Switch Management and Configuration Guide, "DHCPv4 server"): a `dhcp-server pool` stanza for each pool after the static routes, as a 2930F prints one, `dhcp-server` in the stanza of the VLAN that serves it, and `dhcp-server enable` last.  A VLAN serves a pool where its stanza holds an address of the pool's network and stands for the pool's interface (`Vlan<N>`, or a name that encodes the VLAN's id, such as a Junos `irb.<N>`; a routed sub-interface or a VLAN interface is written as its VLAN, `/interfaces/interface/dot1q-vlan`); a pool on any other interface is written with a `; review:` line, and the switch serves it only to clients a DHCP relay forwards to it.  What AOS-S cannot be given as the tree has it -- a pool with no network or range, which the switch discards; a pool that states no whole range, given the addresses it hands out less the output's own; a lease not in whole minutes or past 99 days; a gateway or DNS server that is not IPv4, DNS servers past eight; a domain that cannot stand between AOS-S's quotes -- is a `; review:` line and a warning of the job.  The parser reads the stanzas back.  ⚠️ Up to 0.7.7 a pool was written only as a `;` comment, and the path was declared unsupported.  See [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md). |
 | Fields of records the codec does not write: `/routing-instances/instance/*`, `/vxlan-vnis/{vlan-id,mcast-group,flood-list}`, `…/{ipv4,ipv6}/address/virtual-gateway-mac`, `/evpn-type5-routes/route` | Unsupported | No VRF, VNI, virtual gateway or EVPN route is written, so no field of one is.  Each field is declared on its own (`_NOT_RENDERED`). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
@@ -961,7 +963,11 @@ an IOS-XE route of administrative distance 255, which IOS does not
 install, as `disabled: ip route <destination>` (`ipv6 route` for an
 IPv6 one).  A FortiGate route of `status disable` is listed as
 `disabled: config router static edit <id>` (`router static6` for an
-IPv6 one).  An AOS-CX `interface vxlan` that is down (it says
+IPv6 one).  An AOS-S time server the switch does not poll -- an SNTP
+server where SNTP has no unicast mode or `timesync` selects another
+protocol, an NTP server where NTP is not enabled or `timesync` is
+not `ntp` -- is listed as `disabled: sntp server` or `disabled: ntp
+server`.  An AOS-CX `interface vxlan` that is down (it says
 `shutdown`, or no `no shutdown`) carries none of its VNIs, and is
 listed as `shutdown: interface vxlan <N>`; none of its VNIs is in
 the output.  The banner counts only the sections,

@@ -144,27 +144,31 @@ per_field_expectation:
   domain:
     disposition: not_applicable
     note: >
-      Same parse-side wire-up gap.  Even with hypothetical wire-up,
-      AOS-S has no first-class domain directive surfaced by the
-      target codec, so this would flip to lossy rather than good.
+      The cisco_iosxe matrix declares `/system/domain` unsupported: its
+      parser reads no domain, so nothing reaches the aruba_aoss
+      renderer, which writes `ip dns domain-name <name>` (since
+      2026-11-13).  Measured over 1 cell: drifted on 0, preserved on 0,
+      both sides empty on 1.
     references: [oc-system]
 
   dns_servers:
     disposition: not_applicable
     note: >
-      Parse-side wire-up gap — parser doesn't read
-      `<system><dns><servers>`.  AOS-S target accepts host-list
-      cleanly, so this flips to good once the parser is wired.
+      The cisco_iosxe matrix declares `/system/dns-server` unsupported:
+      its parser reads no resolver, so nothing reaches the aruba_aoss
+      renderer, which writes `ip dns server-address priority <1-3> <ip>`
+      (since 2026-11-13).  Measured over 1 cell: drifted on 0, preserved
+      on 0, both sides empty on 1.
     references: [oc-system]
 
   ntp_servers:
     disposition: not_applicable
     note: >
-      Parse-side wire-up gap.  Even after wire-up, the AOS-S target
-      uses SNTP rather than NTP — protocol-distinction loss
-      already collapsed on the canonical layer (both vendors
-      stored as `list[str]` of addresses).  Flips to lossy once
-      wired (host-list survives; protocol semantic doesn't).
+      The cisco_iosxe matrix declares `/system/ntp-server` unsupported:
+      its parser reads no time server, so nothing reaches the aruba_aoss
+      renderer, which writes `sntp server priority <1-3> <ip>` with
+      `timesync sntp` and `sntp unicast` (since 2026-11-13).  Measured
+      over 1 cell: drifted on 0, preserved on 0, both sides empty on 1.
     references: [oc-system]
 
   timezone:
@@ -180,10 +184,11 @@ per_field_expectation:
   syslog_servers:
     disposition: not_applicable
     note: >
-      Parse-side wire-up gap — parser doesn't read
-      `<system><logging><remote-servers>`.  AOS-S accepts host-
-      list as `logging <addr>` cleanly, so this flips to good
-      once wired.
+      The cisco_iosxe matrix declares `/system/syslog-server`
+      unsupported: its parser reads no syslog server, so nothing reaches
+      the aruba_aoss renderer, which writes `logging <ip>` (since
+      2026-11-13).  Measured over 1 cell: drifted on 0, preserved on 0,
+      both sides empty on 1.
     references: [oc-system]
 
   interfaces:

@@ -67,9 +67,11 @@ def test_timezone_declared_unsupported_on_every_codec() -> None:
 # both #4 and #13 wire the whole Cisco management plane, not just syslog).
 # dell_os10: bare ``logging server <host>``, with the rest of its management
 # plane (a line with a tail -- a VRF, a severity -- is not read).
+# aruba_aoss: ``logging <ip>``, six at most, with the rest of its management
+# plane (words after the address are a row).
 _SYSLOG_WIRED = {
-    "arista_eos", "cisco_iosxe_cli", "cisco_iosxr", "cisco_nxos",
-    "dell_os10", "juniper_junos",
+    "arista_eos", "aruba_aoss", "cisco_iosxe_cli", "cisco_iosxr",
+    "cisco_nxos", "dell_os10", "juniper_junos",
 }
 
 

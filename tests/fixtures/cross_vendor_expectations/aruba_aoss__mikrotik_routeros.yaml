@@ -124,38 +124,33 @@ per_field_expectation:
     references: [system_services]
 
   domain:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Aruba AOS-S has no first-class domain directive in the
-      codec's parse surface; the field is always empty after Aruba
-      parse, so the RouterOS render emits no ``/ip dns / set
-      domain=`` line.  This is a parse-side absence (Aruba folds
-      FQDNs into the quoted hostname when set) plus a render-side
-      mismatch (RouterOS uses domain as a DNS-resolver attribute,
-      not a device-identity attribute).  Inverse direction is
-      not_applicable for the same reason.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13); the mikrotik_routeros matrix declares
+      `/system/domain` unsupported, its renderer writes no domain, and
+      the value is dropped under the cross-vendor banner.  Measured over
+      7 cells: drifted on 1, preserved on 0, both sides empty on 6.
     references: [system_services]
 
   dns_servers:
     disposition: good
     note: >
-      Aruba ``ip dns server-address priority N <addr>`` collapses
-      to the bare address list (sorted by priority) on parse;
-      RouterOS render emits ``/ip dns / set servers=<addr>,<addr>``
-      as a single comma-separated value.  Round-trip preserves the
-      address list and ordering.
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the mikrotik_routeros
+      renderer writes the resolvers it is given.  Measured over 7 cells:
+      drifted on 0, preserved on 3, both sides empty on 4.
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Aruba ``sntp server priority N <addr>`` (SNTP) -> RouterOS
-      ``/system ntp client / set servers=<addr>,...`` (NTPv4).
-      The protocol distinction (SNTP vs full NTP) is lost on the
-      canonical layer (field is ``list[str]`` of addresses).  Per-
-      server modifiers (Aruba priority overrides; RouterOS none)
-      drop on round-trip.  Functional equivalence at the server-
-      list level for typical campus deployments.
+    disposition: good
+    note: >
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13), and the mikrotik_routeros renderer
+      writes the NTP servers it is given.  Measured over 7 cells:
+      drifted on 0, preserved on 3, both sides empty on 4.
     references: [system_services]
 
   timezone:
@@ -174,16 +169,14 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Aruba ``logging <addr>`` -> RouterOS ``/system logging
-      action add target=remote remote=<addr>`` plus ``/system
-      logging add action=remote topics=...``.  RouterOS splits
-      destination from filter; canonical surface stores host
-      addresses only.  The aruba_aoss codec does not currently
-      parse syslog hosts (field is empty after Aruba parse), so
-      RouterOS render emits no syslog config in this direction
-      regardless.  Per-severity / per-facility semantics drop.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13); the mikrotik_routeros matrix declares
+      `/system/syslog-server` unsupported, its renderer writes no syslog
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 7 cells: drifted on 2, preserved on 0, both sides
+      empty on 5.
     references: [system_services]
 
   interfaces:

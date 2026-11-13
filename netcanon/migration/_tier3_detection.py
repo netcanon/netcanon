@@ -574,6 +574,12 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
         "over another, an address reserved twice, or a subnet over another), "
         "so it serves nothing; not translated",
     ),
+    "unpolled": (
+        "disabled: ",
+        "a time server the source does not poll: its client is not enabled, "
+        "not in unicast mode, or not the protocol the source's timesync "
+        "selects; not translated",
+    ),
     "shutdown": (
         "shutdown: ",
         "a VXLAN interface the source holds shut, so it carries none of "
@@ -633,7 +639,9 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
             DHCP pool the server discards) or ``"disabled-subnet"``
             (an EOS DHCP server's subnet that EOS disables) or
             ``"shutdown"`` (an AOS-CX ``interface vxlan`` that is
-            down, with every VNI under it).
+            down, with every VNI under it) or ``"unpolled"`` (an
+            AOS-S SNTP or NTP server whose client the switch does
+            not run).
         path: The words of the statement's path, outermost first.
 
     Returns:

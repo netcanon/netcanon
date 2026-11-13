@@ -1,5 +1,8 @@
 # System services (hostname / domain / DNS / NTP / syslog / timezone): OPNsense versus Aruba AOS-S
 
+<!-- aoss-management-plane -->
+> **Update 2026-11-13 — AOS-S reads and writes its management plane.**  This page was measured when the aruba_aoss parser read each `ip dns server-address` and `sntp server` line whatever its priority and whether or not the switch polled the server, and read no `ip dns domain-name`, `ntp server` or `logging` line, and when its renderer wrote every resolver and time server at priority 1 with no `sntp unicast`.  It now reads the domain, the resolvers by priority, the time servers the switch polls and up to six syslog servers, and writes each in the form the switch takes (a resolver or time server given by a name or after the third, and a syslog server that is no IPv4 address or after the sixth, left out under a `; review:` line, the job `partial`); the four keys are measured again: `domain` good (preserved on 7, both sides empty on 1 of 8 cells); `dns_servers` good (preserved on 4, both sides empty on 4 of 8 cells); `ntp_servers` unsupported (none of the 8 cells states one); `syslog_servers` unsupported (none of the 8 cells states one).  The sections below for these keys keep the measurement of their date; `tests/fixtures/cross_vendor_expectations/opnsense__aruba_aoss.yaml` holds the current one.
+
 ## OPNsense
 
 Source: [OPNsense General Settings — System: Settings: General](https://docs.opnsense.org/manual/settingsmenu.html)

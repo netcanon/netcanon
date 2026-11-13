@@ -79,28 +79,32 @@ per_field_expectation:
     references: [aoss-iosxr-surface]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Source-side gap: aruba_aoss declares `/system/domain` unsupported, so
-      the source intent never carries a domain for this pair to migrate.
-      cisco_iosxr declares nothing for it either, so there is no target-side
-      claim to test against.  Trivially empty on all 7 cells.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13), and the cisco_iosxr renderer writes the domain it is
+      given.  Measured over 7 cells: drifted on 0, preserved on 1, both
+      sides empty on 6.
     references: [aoss-iosxr-surface]
 
   dns_servers:
     disposition: good
     note: >
-      Preserved on all 3 cells that populate it; both matrices declare
-      `/system/dns-server` supported and the render emits one
-      `domain name-server <ip>` line per server.
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the cisco_iosxr
+      renderer writes the resolvers it is given.  Measured over 7 cells:
+      drifted on 0, preserved on 3, both sides empty on 4.
     references: [aoss-iosxr-surface]
 
   ntp_servers:
     disposition: good
     note: >
-      Preserved on the 1 cell that populates it (`kitchen_sink.cfg`); both
-      matrices declare `/system/ntp-server` supported.  Thin coverage — one
-      cell — so this is a real observation but not a broad one.
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13), and the cisco_iosxr renderer writes
+      the NTP servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 3, both sides empty on 4.
     references: [aoss-iosxr-surface]
 
   timezone:
@@ -115,12 +119,12 @@ per_field_expectation:
     references: [aoss-iosxr-surface]
 
   syslog_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Source-side gap: aruba_aoss declares `/system/syslog-server`
-      unsupported, so nothing reaches the target.  cisco_iosxr declares it
-      SUPPORTED, so re-authoring logging hosts on the XR side will stick —
-      worth doing by hand as part of the cutover.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13), and the cisco_iosxr renderer writes the syslog
+      servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 2, both sides empty on 5.
     references: [aoss-iosxr-surface]
 
   # -- Interfaces -- the inventory survives; the classification does not -----

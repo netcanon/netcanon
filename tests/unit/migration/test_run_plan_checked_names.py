@@ -2108,7 +2108,11 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # checked pass the validation report and list their names (+1 a name
     # shared with a hardware port, +1 a name left as the source has it,
     # +1 several).
-    "cisco_iosxe_cli": (13, 0, 0, 1, 4, 16),
+    # And from (13, 0, 0, 1, 4, 16): AOS-S reads and writes the domain and the syslog
+    # servers now, and onto it one job that was `partial` for those alone
+    # before any name was checked passes the validation report and
+    # lists its names (+1 a name shared with a hardware port).
+    "cisco_iosxe_cli": (14, 0, 0, 1, 4, 16),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     # And onto RouterOS a sub-interface is a VLAN interface on its
@@ -2143,7 +2147,11 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # jobs that were `partial` for those alone before any name was
     # checked pass the validation report and list their names (+5 a name
     # shared with a hardware port).
-    "cisco_iosxr": (24, 0, 14, 1, 1, 4),
+    # And from (24, 0, 14, 1, 1, 4): AOS-S reads and writes the domain and the syslog
+    # servers now, and onto it one job that was `partial` for those alone
+    # before any name was checked passes the validation report and
+    # lists its names (+1 several).
+    "cisco_iosxr": (24, 0, 14, 1, 1, 5),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
@@ -2197,7 +2205,11 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # shared with a hardware port, +2 several).
     # And from (5, 0, 10, 0, 2, 9): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-1 several, onto EOS).
-    "juniper_junos": (5, 0, 10, 0, 2, 8),
+    # And from (5, 0, 10, 0, 2, 8): AOS-S reads and writes the domain and the syslog
+    # servers now, and onto it two jobs that were `partial` for those alone
+    # before any name was checked pass the validation report and
+    # list their names (+1 a name shared with a hardware port, +1 several).
+    "juniper_junos": (6, 0, 10, 0, 2, 9),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -2241,7 +2253,11 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (10, 0, 0, 0, 27, 0): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-4 left as the source
     # has it: onto EOS, IOS-XE CLI, FortiOS and Junos).
-    "opnsense": (10, 0, 0, 0, 23, 0),
+    # And from (10, 0, 0, 0, 23, 0): AOS-S reads and writes the domain and the syslog
+    # servers now, and onto it two jobs that were `partial` for those alone
+    # before any name was checked pass the validation report and
+    # list their names (+2 a name left as the source has it).
+    "opnsense": (10, 0, 0, 0, 25, 0),
     # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
     # is written `Ethernet1` there, as `eth1` is: two ports on one name
     # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
@@ -2256,7 +2272,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # And from (43, 0, 0, 0, 0, 0): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-5 a name shared with
     # a hardware port: onto EOS, AOS-S, OS10, FortiOS and RouterOS).
-    "vyos": (38, 0, 0, 0, 0, 0),
+    # And from (38, 0, 0, 0, 0, 0): AOS-S takes a time server by its
+    # address only (`sntp server priority <1-3> <ip-addr>`), and the
+    # VyOS captures name theirs by host name: onto AOS-S each job is
+    # `partial` for that before a name is checked, under a review line
+    # (-7 a name shared with a hardware port).
+    "vyos": (31, 0, 0, 0, 0, 0),
 }
 
 #: Names the translator left as the source config has them that a
@@ -2323,8 +2344,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [97, 0, 71, 5, 57, 46]
-        assert sum(by_reason) == 276
+        assert by_reason == [92, 0, 71, 5, 59, 48]
+        assert sum(by_reason) == 275
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

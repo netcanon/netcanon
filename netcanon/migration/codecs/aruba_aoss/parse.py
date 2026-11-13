@@ -44,7 +44,9 @@ privilege level of a ``Level-N`` group and at 1 in any other.  The
 two accounts come first in the tree, the local users after them.
 
 Wire-format surfaces handled (mirrors the codec's CapabilityMatrix
-``supported`` list): hostname, DNS, NTP, syslog, SNMP (community /
+``supported`` list): hostname, the domain, DNS, NTP (the time
+servers the switch polls) and syslog, read by
+:mod:`.management_plane`, SNMP (community /
 location / contact / trap-host / v3 USM users with separate
 ``snmpv3 user`` and ``snmpv3 group`` lines), local users, RADIUS
 servers, VLANs (with absorbed SVI L3), physical interfaces
@@ -109,6 +111,8 @@ from .._helpers import GrowingIndex, _coalesce_vlan_ids, _mask_to_prefix, _parse
 from .._input_shape import detect_input_shape
 from .._scanner import Body, ends_anywhere, without_text_bodies
 from ..base import ParseError
+from .management_plane import MANAGEMENT_LINE_RE as _MANAGEMENT_LINE_RE
+from .management_plane import ManagementPlane
 from .port_names import one_spelling
 
 logger = logging.getLogger(__name__)
@@ -168,13 +172,6 @@ _SNMPV3_GROUP_BIND_RE = re.compile(
 )
 _SNMP_HOST_RE = re.compile(
     r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)', re.IGNORECASE,
-)
-_DNS_SERVER_RE = re.compile(
-    r"^ip\s+dns\s+server-address\s+priority\s+\d+\s+(\S+)",
-    re.IGNORECASE,
-)
-_SNTP_SERVER_RE = re.compile(
-    r"^sntp\s+server\s+priority\s+\d+\s+(\S+)", re.IGNORECASE,
 )
 _DEFAULT_GW_RE = re.compile(
     r"^ip\s+default-gateway\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE,
@@ -627,8 +624,7 @@ _TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
     _SNMP_HOST_RE,
     _SNMPV3_USER_RE,
     _SNMPV3_GROUP_BIND_RE,
-    _DNS_SERVER_RE,
-    _SNTP_SERVER_RE,
+    _MANAGEMENT_LINE_RE,
     _DEFAULT_GW_RE,
     _IPV6_ROUTE_RE,
     _IPV6_ROUTE_NAMED_RE,
@@ -2297,6 +2293,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     memberships = _Memberships(intent)
     # The DHCP server's lines: what is in force is known after the last.
     dhcp = _DhcpServer()
+    # The resolvers, the time client and syslog: which time servers
+    # the switch polls is known after the last line.
+    plane = ManagementPlane(memberships.say)
     # The account each role has (the last line's), and each local user
     # by name (the last line's): the tree is given the two accounts
     # first, after the last line.
@@ -2409,15 +2408,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i += 1
             continue
 
-        dns = _DNS_SERVER_RE.match(stripped_line)
-        if dns:
-            intent.dns_servers.append(dns.group(1))
-            i += 1
-            continue
-
-        ntp = _SNTP_SERVER_RE.match(stripped_line)
-        if ntp:
-            intent.ntp_servers.append(ntp.group(1))
+        if _MANAGEMENT_LINE_RE.match(stripped_line):
+            plane.read(stripped_line)
             i += 1
             continue
 
@@ -2800,9 +2792,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # is in force and has no place in the tree is said with the lines
     # above, and what is not in force is left out and said after them.
     intent.dhcp_servers, dhcp_left_out = dhcp.finish(intent.vlans, memberships.say)
+    # The management plane: a time server the switch does not poll is
+    # left out and said after the DHCP server's statements.
+    plane_read = plane.finish()
+    intent.domain = plane_read.domain
+    intent.dns_servers = plane_read.dns_servers
+    intent.ntp_servers = plane_read.ntp_servers
+    intent.syslog_servers = plane_read.syslog_servers
     intent.dropped_tier3_sections = [
         *memberships.rows(),
-        *left_out_rows(dhcp_left_out, rest="disabled"),
+        *left_out_rows([*dhcp_left_out, *plane_read.left_out], rest="disabled"),
     ]
 
     # LAG-member linkage post-pass.  The inline linking at the

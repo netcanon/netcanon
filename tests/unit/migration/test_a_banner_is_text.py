@@ -1021,7 +1021,11 @@ def _digest(codec: str, path: str) -> str:
 #: OS10 input with a bare ``ip name-server``, ``ntp server`` or
 #: ``logging server`` line, when the management plane was read, its
 #: rows for those lines gone and the rest of its tree as it was
-#: (``codecs/dell_os10/test_management_plane.py``).
+#: (``codecs/dell_os10/test_management_plane.py``); and every AOS-S
+#: input with an ``ip dns``, ``sntp``, ``ntp`` or ``logging`` line,
+#: when its management plane was read by priority and by what the
+#: switch polls, its rows for those lines changed and the rest of its
+#: tree as it was (``codecs/aruba_aoss/test_management_plane.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1032,18 +1036,18 @@ BEFORE: dict[str, str] = {
     # shape (test_a_typed_password_is_not_a_hash.py): was "48321a06dd41".
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "f2d625215300",
     "synthetic/aruba_aoscx/kitchen_sink.cfg": "1c1097aeb766",
-    "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
+    "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "97743fa41ea1",
     # Moved on purpose: `snmp-server contact "IT" location "1OG"` is read
     # as a contact and a location (test_snmp_contact_and_location.py).
     # And again, by its local users and nothing else: its bare
     # `password manager` and `password operator` are each an account
     # that holds no secret (codecs/aruba_aoss/test_every_account_form.py):
     # was "fffcddd76bc4".
-    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "b9824a4ed0be",
+    "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "573a2595bde3",
     # Moved on purpose, by its local users and nothing else: its bare
     # `password manager` is an account that holds no secret
     # (test_every_account_form.py): was "06c7aeab8a24".
-    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "09066a0fddd7",
+    "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "61aacba2b1c0",
     # Moved on purpose, by its DHCP pools and nothing else: the switch's
     # server is enabled, and its three `dhcp-server pool` stanzas are
     # read (test_dhcp_server_pools.py): was "dd1030133a7a".
@@ -1053,7 +1057,7 @@ BEFORE: dict[str, str] = {
     # (TestArubaAOSSStack): were "a4e275c2c670" and "fa27e0f87457".
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": "f9c207ff3706",
     "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "9287eeaca4b7",
-    "synthetic/aruba_aoss/kitchen_sink.cfg": "ea25a4c23fb5",
+    "synthetic/aruba_aoss/kitchen_sink.cfg": "6f113fd102a8",
     "aruba_aoss/show_run_simple.txt": "8a4bc3fe9e9d",
     "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
     # Moved on purpose, by its tunnels' ends and a row and nothing

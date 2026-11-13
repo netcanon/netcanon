@@ -75,31 +75,32 @@ per_field_expectation:
     references: [aoss-nxos-surface]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Source-side absence, not a target gap.  The aruba_aoss matrix declares
-      `/system/domain` unsupported (AOS-S folds the FQDN into the hostname),
-      so `intent.domain` is empty on all 7 cells.  NX-OS *can* render
-      `ip domain-name`, so closing the AOS-S parse side would move this row to
-      `good`, not leave it here.
+      The aruba_aoss parser reads `ip dns domain-name <name>` (since
+      2026-11-13), and the cisco_nxos renderer writes the domain it is
+      given.  Measured over 7 cells: drifted on 0, preserved on 1, both
+      sides empty on 6.
     references: [aoss-nxos-surface]
 
   dns_servers:
     disposition: good
     note: >
-      AOS-S `ip dns server-address priority N <addr>` collapses to a plain
-      address list; NX-OS renders `ip name-server <addr>`.  Preserved on all 3
-      cells that populate it.
+      The aruba_aoss parser reads `ip dns server-address priority <1-3>
+      <ip>`, by priority (since 2026-11-13), and the cisco_nxos renderer
+      writes the resolvers it is given.  Measured over 7 cells: drifted
+      on 0, preserved on 3, both sides empty on 4.
     references: [aoss-nxos-surface]
 
   ntp_servers:
     disposition: good
     note: >
-      AOS-S uses SNTP (`sntp server priority N <addr>`) and NX-OS uses NTP
-      (`ntp server <addr>`); the canonical model carries only the address
-      list, which is preserved on the one cell that populates it.  The
-      protocol distinction and any per-server modifiers are outside the
-      canonical surface, so re-check `sntp`/`ntp` client mode on the target.
+      The aruba_aoss parser reads the time servers the switch polls
+      (`sntp server priority <1-3> <ip>` in unicast mode, `ntp server
+      <ip>` where `timesync ntp`, `ntp unicast` and `ntp enable` are
+      stated) (since 2026-11-13), and the cisco_nxos renderer writes the
+      NTP servers it is given.  Measured over 7 cells: drifted on 0,
+      preserved on 3, both sides empty on 4.
     references: [aoss-nxos-surface]
 
   timezone:
@@ -115,13 +116,12 @@ per_field_expectation:
     references: [aoss-nxos-surface]
 
   syslog_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Source-side absence: the aruba_aoss matrix declares
-      `/system/syslog-server` unsupported, so an AOS-S `logging <addr>` line
-      never reaches the canonical tree and `intent.syslog_servers` is empty on
-      all 7 cells.  NX-OS renders `logging server <addr>` fine, so this row
-      moves to `good` the moment the AOS-S parse side lands.
+      The aruba_aoss parser reads `logging <ip>`, six at most (since
+      2026-11-13), and the cisco_nxos renderer writes the syslog servers
+      it is given.  Measured over 7 cells: drifted on 0, preserved on 2,
+      both sides empty on 5.
     references: [aoss-nxos-surface]
 
   # -- Interfaces.  Sub-field keys only: the interface RECORD survives on
