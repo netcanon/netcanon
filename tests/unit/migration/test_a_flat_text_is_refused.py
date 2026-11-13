@@ -495,6 +495,16 @@ def _shapes(codec: str) -> dict[str, tuple[str, int | None]]:
             f"hostname sw1\n!\ninterface {port}\n\u3000description up\n!\n", None,
         ),
         "a body indented with a tab": (f"hostname sw1\n!\ninterface {port}\n\tdescription up\n!\n", None),
+        # A submode's ``!``, printed indented, kept by a text that
+        # lost the indentation of the bodies: no indentation either,
+        # whatever white space stands before it.
+        "a body at the margin, and an indented !": (
+            f"hostname sw1\n!\ninterface {port}\ndescription up\n !\n!\n", 3,
+        ),
+        "a body at the margin, and a ! after a no-break space": (
+            f"hostname sw1\n!\ninterface {port}\ndescription up\n\u00a0!\n!\n", 3,
+        ),
+        "an indented !, then another header": (f"interface {port}\n !\nhostname sw1\n", None),
     }
 
 
@@ -733,6 +743,30 @@ def test_the_no_break_space_checks_fail_when_only_a_space_or_a_tab_is_indentatio
         _check_no_break_spaces(codec, KITCHEN_SINKS[codec])
     with pytest.raises(ParseError):
         _check_shape(codec, "a body indented with no-break spaces")
+
+
+def test_the_indented_bang_check_fails_when_a_bang_is_indentation(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The flat check as it was: a bare ``!`` passed over at the
+    # margin only, so an indented one was indentation.
+    defect = _with_a_defect(
+        _scanner, "first_flat_stanza",
+        '        if stripped == "!":\n'
+        '            # The end of a stanza, at any depth: no body line, and no\n'
+        '            # indentation.\n'
+        '            waiting = None\n'
+        '            continue\n'
+        '        if stripped.startswith("!"):\n',
+        '        if stripped == "!" and not line[0].isspace():\n'
+        '            waiting = None\n'
+        '            continue\n'
+        '        if stripped.startswith("!") and stripped != "!":\n',
+    )
+    for module in MODULES.values():
+        monkeypatch.setattr(module, "first_flat_stanza", defect)
+    for codec in MODULES:
+        for name in ("a body at the margin, and an indented !", "a body at the margin, and a ! after a no-break space"):
+            with pytest.raises(_FAILS):
+                _check_shape(codec, name)
 
 
 def test_the_no_break_space_checks_fail_when_the_helper_ignores_its_parameter(

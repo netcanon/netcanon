@@ -124,7 +124,10 @@ FLAT = {
     "an indented line anywhere": ("item a\nattr x\nitem b\n  attr y\n", None),
     "a tab is indentation": ("item a\nattr x\n\tattr y\n", None),
     "a no-break space is no indentation": ("item a\n\u00a0attr x\nitem b\n\u00a0\u00a0attr y\n", 1),
-    "an indented bare ! is indentation": ("item a\nattr x\n  !\n", None),
+    # A bare ``!`` is passed over at any depth: a submode's, printed
+    # indented, says nothing of where the bodies' lines stand.
+    "an indented bare ! is no indentation": ("item a\nattr x\n  !\n", 1),
+    "an indented bare !, then a header": ("item a\n  !\nitem b\n", None),
     "a comment between a header and its body": ("item a\n!! note\nattr x\n", 1),
     "an indented comment is no indentation": ("item a\n  !! note\nattr x\n", 1),
     "a comment, then a !": ("item a\n! note\n!\n", None),

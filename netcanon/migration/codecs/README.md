@@ -1290,6 +1290,8 @@ the policy locally:
   `FLAT_TEXT_MESSAGE`.  Indentation is what the parser's readers take
   for it: a space or a tab by default, any white space with
   `any_white_space` (the readers of the last four ask `str.isspace`).
+  A comment and a bare `!` are passed over at any depth: a submode's
+  `!`, printed indented, says nothing of where the bodies' lines stand.
 
 * **`netcanon/migration/codecs/_hsrp.py`** -- what an HSRP group
   states, read the same way from the IOS-XE CLI grammar (`standby

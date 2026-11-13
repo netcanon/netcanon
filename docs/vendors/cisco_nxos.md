@@ -284,7 +284,7 @@ interfaces, VLANs and routes the switch does not have.
 
 The parser reads a stanza's lines by their indentation: `show running-config`
 prints an interface's lines, a VLAN's and a VRF context's indented under it.  A text with NO indentation -- no
-line but a comment begins with white space, and a stanza is followed
+line but a comment or a bare `!` begins with white space, and a stanza is followed
 by a line at the left margin that is no other stanza, no `!` and no
 `exit` or `end` -- is refused in words (`parse failed: cisco_nxos: this
 text has no indentation. ...`), naming the line of the first such

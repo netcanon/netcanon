@@ -1503,7 +1503,7 @@ running-config` prints, and nothing of it was read.  Both name a line
 number and quote nothing of the text.
 
 - **`cisco_iosxr: this text has no indentation. ...`** -- no line of
-  the text but a comment is indented, and the line it names opens a
+  the text but a comment or a bare `!` is indented, and the line it names opens a
   stanza with the line after it at the left margin.  IOS XR places
   each line of a configuration by its indentation when it loads a file
   (what that rests on is on the vendor page), so neither the router
@@ -1538,7 +1538,7 @@ running-config` prints, and nothing of it was read.  Both name a line
 number and quote nothing of the text.
 
 - **`arista_eos: this text has no indentation. ...`** -- no line of
-  the text but a comment is indented, and the line it names opens a
+  the text but a comment or a bare `!` is indented, and the line it names opens a
   stanza with the line after it at the left margin.  The parser tells
   which lines belong to a stanza by their indentation, and without it
   cannot tell where a stanza ends.  (What the switch makes of such a
@@ -1568,7 +1568,7 @@ gotchas".
 
 - **`<codec>: this text has no indentation. ...`** (`aruba_aoscx`,
   `cisco_iosxe_cli`, `cisco_nxos`, `dell_os10`) -- no line of the text
-  but a comment begins with white space, and the line it names opens a
+  but a comment or a bare `!` begins with white space, and the line it names opens a
   stanza with a line after it at the left margin.  The parser tells
   which lines belong to a stanza by their indentation, and without it
   cannot tell where a stanza ends: an `ip route` after an empty NX-OS
