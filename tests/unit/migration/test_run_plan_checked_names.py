@@ -2171,7 +2171,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
     # that before a name is checked (-9).
     "cisco_nxos": (0, 0, 2, 0, 0, 0),
-    "dell_os10": (0, 0, 14, 0, 0, 0),
+    # From (0, 0, 14, 0, 0, 0): a job whose target writes a name as one
+    # word, since it does not read it as one, is `partial` for that
+    # before a name is checked (-2).
+    "dell_os10": (0, 0, 12, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
     # `/dhcp-servers/pool` is supported there.  Onto AOS-S the job of
     # a capture with one pool had been `partial` for that path alone;
@@ -2377,8 +2380,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [51, 0, 40, 1, 26, 15]
-        assert sum(by_reason) == 133
+        assert by_reason == [51, 0, 38, 1, 26, 15]
+        assert sum(by_reason) == 131
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
