@@ -274,12 +274,12 @@ Observed: `username admin password $6$… role sysadmin priv-lvl 15`.
 
 ```
 hostname <name>
-ip name-server <ip>
+ip name-server <ip> [<ip> <ip>]
 ip domain-name <name>
 ip domain-list <name>
-ntp server <ip>
+ntp server <hostname|ip> [key <id>] [prefer]
 ntp enable vrf <name>
-logging server <ip> [tcp|udp|tls] [port] [severity <level>] [vrf <name>]
+logging server <hostname|ip> [tcp|udp|tls] [port] [severity <level>] [vrf <name>]
 logging source-interface mgmt 1/1/1
 logging console disable
 logging audit enable
@@ -289,6 +289,11 @@ spanning-tree rstp priority 28672
 lldp enable
 dcbx enable
 ```
+
+`ntp server` and `logging server` take `{hostname | ipv4-address |
+ipv6-address}`, and `ip name-server` up to three addresses (OS10
+Enterprise Edition User Guide 10.4.1.0, the command reference entry of
+each; corrected 2026-11-12 from `<ip>` alone).
 
 ---
 

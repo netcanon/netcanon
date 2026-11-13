@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 9, 'good': 16, 'not_applicable': 6, 'lossy': 15}
+# Dispositions: {'unsupported': 9, 'good': 19, 'not_applicable': 2, 'lossy': 16}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/dell_os10_to_cisco_iosxr/
@@ -83,21 +83,22 @@ per_field_expectation:
     references: [os10-iosxr-surface]
 
   dns_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `ip name-server <ip>` (since
+      2026-11-12), and the cisco_iosxr renderer writes the name servers
+      it is given.  Measured over 10 cells: drifted on 0, preserved on
+      3, both sides empty on 7.
     references: [os10-iosxr-surface]
 
   domain:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `ip domain-name <name>` (since
+      2026-11-12), and the cisco_iosxr matrix declares `/system/domain`
+      supported; no committed input of the pair states a domain.
+      Measured over 10 cells: drifted on 0, preserved on 0, both sides
+      empty on 10.
     references: [os10-iosxr-surface]
 
   evpn_type5_routes:
@@ -246,12 +247,12 @@ per_field_expectation:
     references: [os10-iosxr-surface]
 
   ntp_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `ntp server <host>` (since 2026-11-12),
+      and the cisco_iosxr renderer writes the NTP servers it is given.
+      Measured over 10 cells: drifted on 0, preserved on 3, both sides
+      empty on 7.
     references: [os10-iosxr-surface]
 
   radius_servers:
@@ -346,12 +347,12 @@ per_field_expectation:
     references: [os10-iosxr-surface]
 
   syslog_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `logging server <host>` (since
+      2026-11-12), and the cisco_iosxr renderer writes the syslog
+      servers it is given.  Measured over 10 cells: drifted on 0,
+      preserved on 2, both sides empty on 8.
     references: [os10-iosxr-surface]
 
   timezone:

@@ -7,7 +7,9 @@ the like).  Every other line in column 0 was in no output and no row:
 an OS10 config's NTP and syslog servers, its DNS, its time zone, its
 spanning tree, its DCBX and LLDP settings and its VXLAN overlay (``nve``,
 ``virtual-network``) were dropped in jobs that said ``completed``, and
-the vendor page said "loss is reported, never silent".
+the vendor page said "loss is reported, never silent".  (The bare
+forms of the NTP, syslog and DNS lines are read now:
+``test_management_plane.py``.  A line of one with a tail is not.)
 
 Now each kind of such line is a row of ``dropped_tier3_sections``
 (``dell_os10.parse._rows_for_what_no_reader_takes``): its command word,
@@ -25,6 +27,7 @@ every line and with one that takes none, and has to fail.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 
 import pytest
@@ -61,6 +64,34 @@ READ_BY_HAND = (
     "interface ",
 )
 
+
+def _an_address(word: str) -> bool:
+    try:
+        ipaddress.ip_address(word)
+    except ValueError:
+        return False
+    return True
+
+
+def _a_bare_management_line(words: list[str]) -> bool:
+    """Whether *words* are a management-plane line in the bare form
+    the parser reads: ``ip domain-name <name>``, ``ip name-server <ip>
+    [<ip> ...]``, ``ntp server <host>`` or ``logging server <host>``,
+    a host being an address or a host name (a name with a letter)."""
+    def a_name(word: str) -> bool:
+        return re.fullmatch(r"[a-z0-9][a-z0-9.-]*", word) is not None and word != "vrf"
+
+    if words[:2] == ["ip", "domain-name"]:
+        return len(words) == 3 and a_name(words[2])
+    if words[:2] == ["ip", "name-server"]:
+        return len(words) > 2 and all(_an_address(w) for w in words[2:])
+    if words[:2] in (["ntp", "server"], ["logging", "server"]):
+        return len(words) == 3 and (
+            _an_address(words[2])
+            or (a_name(words[2]) and re.search(r"[a-z]", words[2]) is not None)
+        )
+    return False
+
 #: Words of a session, not of the configuration.
 SESSION = frozenset({"configure", "end", "exit", "write"})
 
@@ -89,10 +120,10 @@ CONFIG = (
     "!\n"
     "ip route 0.0.0.0/0 10.1.0.254\n"
     "ntp server 192.0.2.10\n"  # 15
-    "ntp server 192.0.2.11\n"
-    "ip name-server 192.0.2.53\n"
+    "ntp server 192.0.2.11 key 1 prefer\n"
+    "ip name-server vrf management 192.0.2.53\n"
     "clock timezone UTC 0 0\n"
-    "logging server 192.0.2.20\n"
+    "logging server 192.0.2.20 severity log-info\n"
     "spanning-tree mode rstp\n"  # 20
     "router bgp 65001\n"
     " router-id 10.0.0.1\n"
@@ -126,22 +157,20 @@ CONFIG_ROWS = [
 ]
 
 #: Every row the committed OS10 inputs give, together: typed by hand.
-#: One of them begins with a title line that is no command.
+#: One of them begins with a title line that is no command.  Their
+#: NTP, syslog and DNS lines are all in the bare form, which is read.
 COMMITTED_ROWS = {
     ONE_UNKNOWN.format(first=1),
     "clock timezone",
     "dcbx enable",
     "exec-timeout",
-    "ip name-server",
     "ip ssh",
     "line vty",
     "lldp enable",
     "logging audit",
     "logging console",
-    "logging server",
     "logging source-interface",
     "no ip access-list",
-    "ntp server",
     "rest api",
     "snmp-server enable",
     "snmp-server group",
@@ -168,6 +197,8 @@ def _unread_lines(text: str) -> list[tuple[int, list[str]]]:
             continue
         flat = " ".join(_words(line)) + " "
         if flat.split()[0] in SESSION or flat.startswith(READ_BY_HAND):
+            continue
+        if _a_bare_management_line(_words(line)):
             continue
         if detect_tier3_sections_dellos10(line):
             continue
@@ -278,7 +309,8 @@ def test_a_job_says_the_rows() -> None:
     assert job.rendered, job.error
     for row in CONFIG_ROWS:
         assert row in job.dropped_tier3_sections, row
-    assert "ntp server" not in job.rendered
+    for server in ("192.0.2.11", "192.0.2.53", "192.0.2.20"):
+        assert server not in job.rendered, server
 
 
 def test_the_row_that_counts_lines_is_known_by_its_form() -> None:
@@ -305,10 +337,10 @@ def test_a_text_that_is_no_config_is_still_said_to_be_none() -> None:
     assert job.status is MigrationJobStatus.partial
     assert job.error and "recognized" in job.error.lower()
     known = run_plan_with_checked_names(
-        get_codec("dell_os10"), get_codec("cisco_iosxe_cli"), "ntp server 192.0.2.10\n",
+        get_codec("dell_os10"), get_codec("cisco_iosxe_cli"), "clock timezone UTC 0 0\n",
         port_rename_map={},
     )
-    assert known.dropped_tier3_sections == ["ntp server"]
+    assert known.dropped_tier3_sections == ["clock timezone"]
     assert known.status is MigrationJobStatus.completed
 
 
@@ -324,7 +356,7 @@ def test_the_check_fails_for_a_reader_that_takes_every_line(
 ) -> None:
     """A reader said to take every line leaves lines nothing reads with
     no row: the check fails."""
-    monkeypatch.setattr(os10_parse, "_TOP_LEVEL_READERS", (re.compile(r".*"),))
+    monkeypatch.setattr(os10_parse, "_TOP_LEVEL_READERS", (re.compile(r".*").match,))
     with pytest.raises(AssertionError):
         _check_every_unread_line_is_said(CONFIG)
 

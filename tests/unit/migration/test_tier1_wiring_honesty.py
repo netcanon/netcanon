@@ -9,7 +9,8 @@ fail-open undeclared path).  The docs were corrected to say so.
 Since then the syslog surface graduated on two more codecs — ``cisco_iosxe_cli``
 and ``arista_eos`` now parse-harvest + render ``logging host <ip>`` (promotions
 #1/#11), and ``juniper_junos``'s existing round-trip was declared explicit — so
-the roster is now ``{arista_eos, cisco_iosxe_cli, juniper_junos}``.
+the roster was then ``{arista_eos, cisco_iosxe_cli, juniper_junos}``; the
+comment on :data:`_SYSLOG_WIRED` keeps it current.
 
 These guards pin the underlying matrix facts so a codec that wires (or
 regresses) either field trips the test — forcing the Tier-1 docs to be updated
@@ -64,9 +65,11 @@ def test_timezone_declared_unsupported_on_every_codec() -> None:
 # ``logging host <ip>`` (promotions #1/#11).  cisco_nxos: ``logging server
 # <ip>`` (promotion #4).  cisco_iosxr: bare ``logging <ip>`` (promotion #13 —
 # both #4 and #13 wire the whole Cisco management plane, not just syslog).
+# dell_os10: bare ``logging server <host>``, with the rest of its management
+# plane (a line with a tail -- a VRF, a severity -- is not read).
 _SYSLOG_WIRED = {
     "arista_eos", "cisco_iosxe_cli", "cisco_iosxr", "cisco_nxos",
-    "juniper_junos",
+    "dell_os10", "juniper_junos",
 }
 
 

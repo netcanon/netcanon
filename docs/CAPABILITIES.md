@@ -55,7 +55,7 @@ the L2/L3 layer only.  The two-clause test for setting it lives in
 | `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
 | `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`, and `bondN.<vid>` under a bond) + `protocols static` routes of the global table and of a VRF (`vrf name <X> protocols static`) + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); symmetric-IRB L3VNI remains a later phase) |
-| `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP; validated against the real captures committed under `tests/fixtures/real/dell_os10/`, which all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because no committed capture states its OS10 release; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
+| `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP + the management plane in its bare forms (`ip domain-name`, `ip name-server`, `ntp server`, `logging server`); validated against the real captures committed under `tests/fixtures/real/dell_os10/`, which all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because no committed capture states its OS10 release; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
 
 Backup-side device-definition YAMLs ship for every codec family above
 (plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
@@ -115,14 +115,16 @@ names the canonical surface, not a blanket guarantee.
   `syslog_servers` and `timezone`, which are wired on only a **subset**
   of codecs: `timezone` on none as of this release; `syslog_servers` on
   juniper_junos, cisco_iosxe_cli, arista_eos (`logging host <ip>`,
-  promotions #1/#11), cisco_nxos (`logging server <ip>`, #4) and
-  cisco_iosxr (bare `logging <ip>`, #13).  These are
+  promotions #1/#11), cisco_nxos (`logging server <ip>`, #4),
+  cisco_iosxr (bare `logging <ip>`, #13) and dell_os10 (bare
+  `logging server <host>`).  These are
   Tier-1 by data shape but NOT yet a cross-vendor guarantee — the §A
   per-codec panels are authoritative.  An unwired field is dropped on
   parse and surfaces the cross-vendor banner where the codec declares it
   unsupported; for `syslog_servers` and `timezone` every codec declares
-  the path (`syslog_servers` 5 supported + 7 unsupported, `timezone`
-  unsupported on all 12), so those drops are always bannered, never silent.
+  the path (`syslog_servers` supported on the codecs above and
+  unsupported on the rest, `timezone` unsupported on every codec), so
+  those drops are always bannered, never silent.
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
   across the bidirectional codecs, most of which write one protocol
@@ -854,6 +856,14 @@ its indentation").
 
 Broad supported surface (Tier-1 + L2 switchport/LAG + SVI-derived VLANs
 + local users + SNMP v2c/v3 + real VRRP + VRF + per-VRF static).
+The management plane is read and written in its bare forms (`ip
+domain-name <name>`, `ip name-server <ip>`, `ntp server <host>`,
+`logging server <host>`, a host being a host name or an address): a
+line with a tail -- a VRF, an NTP key or `prefer`, a syslog
+transport, port or severity -- is not read and is a row, and a value
+the form does not take (a name server that is not an address, a
+domain not shaped as a domain name), or a resolver after the third,
+is not written and is said in a `! review:` line.
 Distinct from Dell's older Force10 **OS9 / FTOS** grammar, which this
 codec REFUSES rather than mis-parse.  A banner, ended by a line that
 is its delimiter alone, is text and is not read as configuration; one
@@ -889,7 +899,7 @@ text").  The lossy / unsupported exceptions:
 | `/vxlan-vnis/{vni,vlan-id,source-interface,mcast-group,flood-list,udp-port}` | Unsupported | OS10 reaches an overlay through a `virtual-network <vnid>` indirection deferred past v1; no VXLAN is rendered. |
 | `/evpn-type5-routes/route` | Unsupported | No EVPN is rendered; BGP / EVPN is Tier-3 on OS10. |
 | `/anycast-gateway-mac` | Unsupported | No distributed-anycast-gateway concept (see the virtual-gateway rows above). |
-| `/system/{domain,dns-server,ntp-server,syslog-server,timezone}` | Unsupported | v1 parses no `ip domain-name` / `ip name-server` / `ntp server` / `logging server` / clock stanza.  Re-apply the management plane on the target. |
+| `/system/timezone` | Unsupported | No `clock timezone` line is read (it is a row) or written.  Re-apply the time zone on the target. |
 | `/dhcp-servers/pool` + `/dhcp-servers/pool/{range,interface,gateway,dns-servers,domain-name,lease-time}` | Unsupported | v1 parses no DHCP server pool. |
 | `/radius-servers/server/{host,key}` | Unsupported | v1 parses no AAA `radius-server` config. |
 | `/interfaces/interface/dot1q-vlan` | Unsupported | Per-port dot1q sub-interface VLAN tagging is not modelled. |
@@ -1001,9 +1011,10 @@ and true of the same sentence — they are not in the output:
   the name the switch prints (`ethernet1/2`, `ethernet1/1/14`).
 * **A command's words** (OS10) — each kind of line in column 0
   that no reader of the OS10 parser takes and no pattern of the
-  detector names: `ntp server`, `logging server`, `ip
-  name-server`, `clock timezone`, `spanning-tree mode`, `nve`,
-  `virtual-network` and the like.  The row is the line's command
+  detector names: `clock timezone`, `spanning-tree mode`, `nve`,
+  `virtual-network`, an `ntp server`, `logging server` or `ip
+  name-server` line with a tail (a VRF, a key, a severity) and the
+  like.  The row is the line's command
   word, and the word after it where that says which command it
   is, never a value; one row a kind, however many lines it has,
   and past the bound one row counts the kinds not listed.  A line

@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 7, 'good': 14, 'not_applicable': 6, 'lossy': 19}
+# Dispositions: {'unsupported': 6, 'good': 21, 'not_applicable': 5, 'lossy': 14}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/dell_os10_to_aruba_aoss/
@@ -77,24 +77,22 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   dns_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `ip name-server <ip>` (since
+      2026-11-12), and the aruba_aoss renderer writes the name servers
+      it is given.  Measured over 10 cells: drifted on 0, preserved on
+      3, both sides empty on 7.
     references: [os10-aoss-surface]
 
   domain:
     disposition: unsupported
     reason: >
-      AOS-S renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no system domain-name;
-      intent.domain is dropped on migration. Measured over 1 cell:
-      drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `ip domain-name <name>` (since
+      2026-11-12); the aruba_aoss matrix declares `/system/domain`
+      unsupported, and no committed input of the pair states a domain.
+      Measured over 10 cells: drifted on 0, preserved on 0, both sides
+      empty on 10.
     references: [os10-aoss-surface]
 
   evpn_type5_routes:
@@ -285,12 +283,12 @@ per_field_expectation:
     references: [os10-aoss-surface]
 
   ntp_servers:
-    disposition: not_applicable
+    disposition: good
     note: >
-      Measured empty on both sides of all 1 cells: Dell OS10 declares
-      this surface unsupported, so it never enters the canonical tree
-      from this source. Re-author it on the target rather than assume
-      there was nothing there.
+      The dell_os10 parser reads `ntp server <host>` (since 2026-11-12),
+      and the aruba_aoss renderer writes the NTP servers it is given.
+      Measured over 10 cells: drifted on 0, preserved on 3, both sides
+      empty on 7.
     references: [os10-aoss-surface]
 
   radius_servers:
@@ -384,13 +382,12 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      AOS-S renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no logging/syslog config;
-      intent.syslog_servers are dropped on migration. Measured over 1
-      cell: drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `logging server <host>` (since
+      2026-11-12); the aruba_aoss matrix declares
+      `/system/syslog-server` unsupported, its renderer writes no syslog
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 10 cells: drifted on 2, preserved on 0, both sides
+      empty on 8.
     references: [os10-aoss-surface]
 
   timezone:

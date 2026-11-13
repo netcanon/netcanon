@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 13 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 18, 'lossy': 15}
+# Dispositions: {'unsupported': 9, 'good': 24, 'lossy': 13}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/cisco_nxos_to_dell_os10/
@@ -76,25 +76,22 @@ per_field_expectation:
     references: [nxos-os10-surface]
 
   dns_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. NOT EXERCISED BY THIS
-      CORPUS — all 13 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 1
-      parses no `ip name-server`. Measured over 13 cells: drifted on
-      0, preserved on 0, both sides empty on 13.
+    disposition: good
+    note: >
+      The dell_os10 renderer writes `ip name-server <ip>` (since
+      2026-11-12), read back by its parser, and the cisco_nxos matrix
+      declares `/system/dns-server` supported; no committed input of the
+      pair states a name server.  Measured over 13 cells: drifted on 0,
+      preserved on 0, both sides empty on 13.
     references: [nxos-os10-surface]
 
   domain:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ip
-      domain-name`. Measured over 13 cells: drifted on 2, preserved on
-      0, both sides empty on 11. Sample drift: domain:
-      'lab.karneliuk.com' → ''.
+    disposition: good
+    note: >
+      The cisco_nxos parser reads the domain, and the dell_os10 renderer
+      writes `ip domain-name <name>` (since 2026-11-12), read back by
+      its parser.  Measured over 13 cells: drifted on 0, preserved on 2,
+      both sides empty on 11.
     references: [nxos-os10-surface]
 
   evpn_type5_routes:
@@ -285,12 +282,12 @@ per_field_expectation:
     references: [nxos-os10-surface]
 
   ntp_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no `ntp
-      server`. Measured over 13 cells: drifted on 1, preserved on 0,
-      both sides empty on 12. Sample drift: all 2 ntp_servers dropped.
+    disposition: good
+    note: >
+      The cisco_nxos parser reads the NTP servers, and the dell_os10
+      renderer writes `ntp server <host>` (since 2026-11-12), read back
+      by its parser.  Measured over 13 cells: drifted on 0, preserved on
+      1, both sides empty on 12.
     references: [nxos-os10-surface]
 
   radius_servers:
@@ -384,13 +381,12 @@ per_field_expectation:
     references: [nxos-os10-surface]
 
   syslog_servers:
-    disposition: unsupported
-    reason: >
-      Dell OS10 renders no instance of this surface, so the record
-      cannot exist on the target side at all. Phase 1 parses no
-      `logging server`. Measured over 13 cells: drifted on 1,
-      preserved on 0, both sides empty on 12. Sample drift: all 1
-      syslog_servers dropped.
+    disposition: good
+    note: >
+      The cisco_nxos parser reads the syslog servers, and the dell_os10
+      renderer writes `logging server <host>` (since 2026-11-12), read
+      back by its parser.  Measured over 13 cells: drifted on 0,
+      preserved on 1, both sides empty on 12.
     references: [nxos-os10-surface]
 
   timezone:

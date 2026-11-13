@@ -578,6 +578,31 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **OS10 reads and writes its management plane.**  An OS10 config's
+  domain, resolvers, NTP servers and syslog servers were read by
+  nothing (each line a row of the sections not translated), and a
+  tree from another platform lost all four onto OS10 under the
+  unsupported banner.  The parser now reads `ip domain-name <name>`,
+  `ip name-server <ip> [<ip> ...]`, `ntp server <host>` and `logging
+  server <host>` -- the forms Dell's User Guide gives (a host is a
+  host name or an address) and the committed captures print -- and
+  the renderer writes them after the static routes, one server a
+  line; the four paths are declared supported.  Only the bare form is
+  read: a line with a tail (a VRF, an NTP key or `prefer`, a syslog
+  transport, port or severity) says what the tree cannot hold, and
+  written without it the server would be another statement, so it
+  keeps its row.  A value the form does not take -- a name server
+  that is not an address, an NTP or syslog server that is neither an
+  address nor a host name, a domain not shaped as a domain name --
+  is not written, nor are the resolvers after the three the guide
+  says OS10 takes, and the output says so in a `! review:` line that
+  names the kind and no value.  `clock timezone` is still a row and
+  `/system/timezone` still unsupported, as on every codec.  Guarded
+  by `tests/unit/migration/codecs/dell_os10/test_management_plane.py`,
+  which reads the output with a reader of its own and holds each
+  value a target's matrix calls supported to that target's output,
+  from OS10 onto every public codec.
+
 - **The Cisco Catalyst 9300 can be declared as a source or target
   device.**  Two model families: `C9300` (the 24/48-port T, P, U, H
   and S models, the C9300-24UX, -48UXM and -48UN) and
@@ -7177,6 +7202,13 @@ timestamp if your timezone matters for an audit.
   profile under `tests/fixtures/target_profiles/`.
 
 ### Known limitations
+
+- **FortiOS is written two resolvers.**  The FortiGate renderer
+  writes `set primary` and `set secondary` under `config system
+  dns`, and a third resolver of the tree is in no line and no
+  review line of the output.  Pinned by name in
+  `tests/unit/migration/codecs/dell_os10/test_management_plane.py`
+  (`DROPS_A_RESOLVER`).
 
 - **A destination whose next hops mix a stated and an unstated
   distance keeps its order only where the two platforms' defaults

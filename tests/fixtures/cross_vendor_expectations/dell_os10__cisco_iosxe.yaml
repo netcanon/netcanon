@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 21, 'good': 9, 'lossy': 14, 'not_applicable': 2}
+# Dispositions: {'unsupported': 19, 'good': 12, 'lossy': 13, 'not_applicable': 2}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/dell_os10_to_cisco_iosxe/
@@ -83,27 +83,21 @@ per_field_expectation:
   dns_servers:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE (NETCONF) renders no instance of this surface, so
-      the record cannot exist on the target side at all. NOT EXERCISED
-      BY THIS CORPUS — all 1 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 0.5
-      stub render emits no `<system><dns>` element. intent.dns_servers
-      dropped on render. Measured over 1 cell: drifted on 0, preserved
-      on 0, both sides empty on 1.
+      The dell_os10 parser reads `ip name-server <ip>` (since
+      2026-11-12); the cisco_iosxe matrix declares `/system/dns-server`
+      unsupported, its renderer writes no name server, and the value is
+      dropped under the cross-vendor banner.  Measured over 10 cells:
+      drifted on 3, preserved on 0, both sides empty on 7.
     references: [os10-iosxe-nc-surface]
 
   domain:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE (NETCONF) renders no instance of this surface, so
-      the record cannot exist on the target side at all. NOT EXERCISED
-      BY THIS CORPUS — all 1 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 0.5
-      stub render emits only interfaces; intent.domain dropped on
-      render. Measured over 1 cell: drifted on 0, preserved on 0, both
-      sides empty on 1.
+      The dell_os10 parser reads `ip domain-name <name>` (since
+      2026-11-12); the cisco_iosxe matrix declares `/system/domain`
+      unsupported, and no committed input of the pair states a domain.
+      Measured over 10 cells: drifted on 0, preserved on 0, both sides
+      empty on 10.
     references: [os10-iosxe-nc-surface]
 
   evpn_type5_routes:
@@ -256,14 +250,11 @@ per_field_expectation:
   ntp_servers:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE (NETCONF) renders no instance of this surface, so
-      the record cannot exist on the target side at all. NOT EXERCISED
-      BY THIS CORPUS — all 1 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 0.5
-      stub render emits no `<system><ntp>` element. intent.ntp_servers
-      dropped on render. Measured over 1 cell: drifted on 0, preserved
-      on 0, both sides empty on 1.
+      The dell_os10 parser reads `ntp server <host>` (since 2026-11-12);
+      the cisco_iosxe matrix declares `/system/ntp-server` unsupported,
+      its renderer writes no NTP server, and the value is dropped under
+      the cross-vendor banner.  Measured over 10 cells: drifted on 3,
+      preserved on 0, both sides empty on 7.
     references: [os10-iosxe-nc-surface]
 
   radius_servers:
@@ -378,14 +369,12 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE (NETCONF) renders no instance of this surface, so
-      the record cannot exist on the target side at all. NOT EXERCISED
-      BY THIS CORPUS — all 1 cells are empty on both sides, so this
-      disposition rests on the target codec's own capability
-      declaration rather than on an observed round-trip. Phase 0.5
-      stub render emits only interfaces; intent.syslog_servers dropped
-      on render. Measured over 1 cell: drifted on 0, preserved on 0,
-      both sides empty on 1.
+      The dell_os10 parser reads `logging server <host>` (since
+      2026-11-12); the cisco_iosxe matrix declares
+      `/system/syslog-server` unsupported, its renderer writes no syslog
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 10 cells: drifted on 2, preserved on 0, both sides
+      empty on 8.
     references: [os10-iosxe-nc-surface]
 
   timezone:

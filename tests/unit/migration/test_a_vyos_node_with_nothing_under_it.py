@@ -90,7 +90,7 @@ set system ntp server time2.example.net
 
 #: Public codecs that render no NTP server at all (a capability gap of
 #: the target, declared in its matrix), typed by hand.
-_NO_NTP = {"aruba_aoscx", "cisco_iosxe", "dell_os10", "opnsense"}
+_NO_NTP = {"aruba_aoscx", "cisco_iosxe", "opnsense"}
 
 
 def _parse(text: str) -> CanonicalIntent:

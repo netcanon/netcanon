@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
-# Dispositions: {'not_applicable': 6, 'good': 18, 'unsupported': 10, 'lossy': 12}
+# Dispositions: {'not_applicable': 6, 'good': 20, 'unsupported': 10, 'lossy': 10}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/dell_os10_to_aruba_aoscx/
@@ -76,25 +76,21 @@ per_field_expectation:
   dns_servers:
     disposition: unsupported
     reason: >
-      AOS-CX renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no name-server config;
-      intent.dns_servers are dropped on migration. Measured over 1
-      cell: drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `ip name-server <ip>` (since
+      2026-11-12); the aruba_aoscx matrix declares `/system/dns-server`
+      unsupported, its renderer writes no name server, and the value is
+      dropped under the cross-vendor banner.  Measured over 10 cells:
+      drifted on 3, preserved on 0, both sides empty on 7.
     references: [os10-aoscx-surface]
 
   domain:
     disposition: unsupported
     reason: >
-      AOS-CX renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no system domain-name;
-      intent.domain is dropped on migration. Measured over 1 cell:
-      drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `ip domain-name <name>` (since
+      2026-11-12); the aruba_aoscx matrix declares `/system/domain`
+      unsupported, and no committed input of the pair states a domain.
+      Measured over 10 cells: drifted on 0, preserved on 0, both sides
+      empty on 10.
     references: [os10-aoscx-surface]
 
   evpn_type5_routes:
@@ -247,13 +243,11 @@ per_field_expectation:
   ntp_servers:
     disposition: unsupported
     reason: >
-      AOS-CX renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no NTP config;
-      intent.ntp_servers are dropped on migration. Measured over 1
-      cell: drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `ntp server <host>` (since 2026-11-12);
+      the aruba_aoscx matrix declares `/system/ntp-server` unsupported,
+      its renderer writes no NTP server, and the value is dropped under
+      the cross-vendor banner.  Measured over 10 cells: drifted on 3,
+      preserved on 0, both sides empty on 7.
     references: [os10-aoscx-surface]
 
   radius_servers:
@@ -355,13 +349,12 @@ per_field_expectation:
   syslog_servers:
     disposition: unsupported
     reason: >
-      AOS-CX renders no instance of this surface, so the record cannot
-      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
-      all 1 cells are empty on both sides, so this disposition rests
-      on the target codec's own capability declaration rather than on
-      an observed round-trip. Render emits no logging/syslog config;
-      intent.syslog_servers are dropped on migration. Measured over 1
-      cell: drifted on 0, preserved on 0, both sides empty on 1.
+      The dell_os10 parser reads `logging server <host>` (since
+      2026-11-12); the aruba_aoscx matrix declares
+      `/system/syslog-server` unsupported, its renderer writes no syslog
+      server, and the value is dropped under the cross-vendor banner.
+      Measured over 10 cells: drifted on 2, preserved on 0, both sides
+      empty on 8.
     references: [os10-aoscx-surface]
 
   timezone:
