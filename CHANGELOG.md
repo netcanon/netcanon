@@ -1426,6 +1426,15 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-CX `logging` line's row shows no host.**  AOS-CX takes
+  a syslog server's address, FQDN or host name straight after
+  `logging`, and the row of a line nothing translates showed the
+  word after `logging` wherever it looked like a sub-command: a
+  server named by one word (`logging loghost`) was in the row,
+  where a row shows a command's words and never a value.  The row
+  is `logging` alone now, for every such line.  No committed
+  AOS-CX input has a `logging` line; no output moves.
+
 - **An IOS XR line that nothing translates is said.**  The Cisco
   IOS XR parser reads a hostname, a domain, the release, DNS, NTP
   and syslog servers, interfaces, VRFs, static routes, LAGs and

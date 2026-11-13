@@ -1048,16 +1048,18 @@ and true of the same sentence — they are not in the output:
   NX-OS job onto NX-OS has those rows as well.  On AOS-CX: `vsx`,
   `evpn`, `ntp server`, `ip dns`, `ip prefix-list`, `ssh server`,
   `spanning-tree priority`, `tacacs-server host`, `apply
-  access-list`, `router vrrp`, a `vlan` line of a list, a range or
-  an id no switch has, a second `hostname` or `snmp-server
-  community` line, a second line of a local user's name and the
-  like.  On IOS XR: `snmp-server community`, `ssh server`, `line
-  default`, `telemetry model-driven`, `group` and `apply-group`,
-  `segment-routing`, `lldp`, `router hsrp`, a `logging` line that
-  names no host address (its row is the word alone: IOS XR takes
-  a host's name right after it), a `domain` line other than `domain name` and `domain
-  name-server`, a second `hostname` or `domain name` line, a
-  second line of a local user's name and the like; the lines the
+  access-list`, `router vrrp`, a `logging` line (the word alone:
+  AOS-CX takes a syslog server's host name right after it), a
+  `vlan` line of a list, a range or an id no switch has, a second
+  `hostname` or `snmp-server community` line, a second line of a
+  local user's name and the like.  On IOS XR: `snmp-server
+  community`, `ssh server`, `line default`, `telemetry
+  model-driven`, `group` and `apply-group`, `segment-routing`,
+  `lldp`, `router hsrp`, a `logging` line that names no host
+  address (its row is the word alone: IOS XR takes a host's name
+  right after it), a `domain` line other than `domain name` and
+  `domain name-server`, a second `hostname` or `domain name` line,
+  a second line of a local user's name and the like; the lines the
   router prints before the configuration (`Building
   configuration...`, the time) and the line that ends a block
   (`end-policy`, `end-set`, `end-group`) are not.

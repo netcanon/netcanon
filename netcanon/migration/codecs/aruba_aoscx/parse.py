@@ -660,11 +660,14 @@ _COMMAND_WORDS = frozenset({
 #: ``router vrrp``, ``ssh server``).  After any other the second word
 #: is often a name the operator chose (``hostname``, ``user``,
 #: ``vrf``, ``route-map``, ``profile``), which a row does not show
-#: (``_tier3_detection.command_label``).
+#: (``_tier3_detection.command_label``).  ``logging`` is not one:
+#: AOS-CX takes a syslog server's address, FQDN or host NAME straight
+#: after the word (HPE's AOS-CX command reference, ``logging``), and
+#: a name is a value.
 _FAMILIES = frozenset({
     "aaa", "access-list", "apply", "banner", "class", "clock",
     "configuration-lockout", "https-server", "ip", "ipv6", "led", "lldp",
-    "logging", "loop-protect", "ntp", "router", "snmp-server", "snmpv3",
+    "loop-protect", "ntp", "router", "snmp-server", "snmpv3",
     "spanning-tree", "ssh", "system", "tacacs-server",
 })
 
