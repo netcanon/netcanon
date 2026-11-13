@@ -714,6 +714,7 @@ VLANs" against a device.
 | `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
+| `routes` | static routes, wherever one is made; a RouterOS route with a list of gateways is one for each gateway | 50,000 | 500,000 | 2,000,000 |
 | `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
 | `words` | words of set commands written out from block-form Junos, or from a Junos set line's bracket list | 250,000 | 4,000,000 | 16,000,000 |
 | `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
@@ -958,10 +959,14 @@ What bounds a renderer is the counts: it writes a tree that passed them.
   Under `small` the largest answer is 38 MB, for the text that reaches
   every limit at once: its 50,000 memberships are 9.5 MB of that, and the
   static routes that fill its two megabytes are most of the rest.
-* **Records that no limit counts**: static routes, addresses, users, DHCP
-  pools.  They are bounded by the cap on the text and by nothing else.  In
-  the container, two megabytes of static routes took an instance to
-  198 MB translated two at once, and to 156 MB sanitised.
+* **Records that no limit counts**: addresses, users, DHCP pools.  They
+  are bounded by the cap on the text and by nothing else.  Static routes
+  are counted (`routes`): a RouterOS route with a list of gateways is a
+  route a gateway, a few bytes each, where a route of the other
+  platforms is a line.  Two megabytes of one-line routes are fewer than
+  `small` allows (about 41,000 IOS-XE `ip route` lines); in the
+  container they took an instance to 198 MB translated two at once, and
+  to 156 MB sanitised.
 * **A renderer, a transform or one call into C that runs long**, as above.
 * **Linux.**  The megabytes in this section are a Windows process's, except
   where a container is named.
@@ -1567,7 +1572,7 @@ constrains the *application* (the container).
 | A RADIUS key stored in a platform's own form | An IOS-XE `key 7` / `key 6`, an EOS `key 7`, an AOS-S `encrypted-key` or a FortiOS `ENC` secret is not decoded: onto another platform the server is written with no key and a review line, and the job still says `completed`.  A plaintext secret that begins with one of the envelopes the parsers put on such a form (`iosxe:`, `eos:`, `aoss:`, `fortios:`) is read as that form | Documented | Refusing keeps the server where the operator can see and finish it, and writes no secret that authenticates nobody.  Cisco type 7 could be decoded and is not; whether EOS type 7 is Cisco's is not established (`netcanon/migration/_radius_secrets.py`) |
 | Translation requests in flight are limited only under `small` | Every config limit is for one request.  Under `small` (the public demo) one request that reads config text works at a time and 2 may wait; under `standard`, `large` and `unlimited` several large ones at once multiply the memory, and nothing counts them.  Under `small` a request is also counted before its body is read and an answer nobody reads is let go at the request's deadline; under the other sets every body is read and every answer kept.  Under every set nothing limits how many connections are opened and kept | Accepted | A deployment that takes text from people it does not trust puts a limit on connections, a memory limit that stops the worker and -- unless it runs `small` -- a limit on requests in flight, in front of the application.  See "Input Validation — Config Text" |
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
-| The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
+| The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); addresses are bounded only by the cap on the text, and static routes by `routes` as well | Documented | See "Input Validation — Config Text" |
 | A format character in a value reaches the output | A zero-width space or a bidirectional override (Unicode's `Cf`) a value holds is written as it stands, and can make a line on a terminal or in an editor read otherwise than it is | Documented (not mended) | A control character and a line break are mended on the way ("Config Text (what reaches the output)"); a format character is also part of text in several scripts, and is not taken out.  Read an output with an editor that shows such characters |
 | A value with white space written bare into a line read a word at a time | A target whose line a device reads a word at a time (IOS-XE CLI, NX-OS, EOS, AOS-CX, AOS-S, OS10, IOS XR) may read a value from another vendor with white space in it -- an SNMP community, a RADIUS key -- as more words on its line | Documented (not audited) | The RouterOS renderer writes such a value as a string; the other renderers have not been read for it.  See "Input Validation — Config Text (a value is not script)" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |

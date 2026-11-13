@@ -500,11 +500,33 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   resolved in the main table (`ether3@main`, `192.0.2.9@main`) is
   that gateway: `main` is where a gateway that names no table is
   resolved.  ⚠️ Up to 0.7.7 the `@main` was written as part of the
-  next hop.  A list of gateways (`gateway=ether1,ether2`, an ECMP
-  route) is one route, each gateway once, left as written: onto
-  another vendor it is one next hop that no other target reads, in
-  a job that says `completed` -- write such a route there by hand,
-  one route a gateway.  A gateway that is one name
+  next hop.
+- **A list of gateways** (`gateway=ether1,ether2`, an ECMP route) is
+  a route for each gateway it names, once each.  That is how the tree
+  holds ECMP -- several routes to one destination at one distance --
+  and how every target writes it; each route out of a port follows
+  the port, and goes with it when it is dropped.  RouterOS 7 prints
+  ECMP so itself, a route a line, and groups the routes again
+  ("Multiple equally preferred routes are grouped together
+  automatically", MikroTik, [How Packets Are
+  Routed](https://help.mikrotik.com/docs/pages/viewpage.action?pageId=30146592)).
+  Between two
+  RouterOS 6 configs the routes of one destination, distance and
+  comment are written as one list again, after the ports are
+  renamed: a list is the RouterOS 6 form of ECMP.  So two routes a
+  RouterOS 6 config writes on separate lines with one destination
+  and distance are read as ECMP as well, and written there as one
+  list; what RouterOS 6 does with such routes is not established
+  (the same page says the choice of the active route is arbitrary,
+  under a note that asks whether that is still so).  Onto RouterOS
+  from another vendor the routes are written apart, the RouterOS 7
+  form.  The routes a list makes are counted before they are made
+  (`routes`, [`CAPABILITIES.md`](../CAPABILITIES.md) § H).  ⚠️ Up to
+  0.7.7 a list was one route whose next hop was the list as written:
+  onto another vendor one next hop that no target reads, in a job
+  that said `completed`, and between two RouterOS configs a route
+  the port rename did not reach.
+- **A gateway that is one name**
   and not an address is read as the route's interface, the form
   RouterOS output is written in for a route out of an interface.
   ⚠️ Up to 0.7.7 it was read as the route's gateway: onto a target

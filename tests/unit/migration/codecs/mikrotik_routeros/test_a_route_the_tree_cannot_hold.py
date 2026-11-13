@@ -136,16 +136,19 @@ class TestTheTree:
         (route,) = _routes(_text([_KEPT[3]]))
         assert route.description == "via blackhole box"
 
-    def test_a_list_of_gateways_is_one_route_as_written(self) -> None:
-        """An ECMP list stays one route, each gateway once and without
-        ``@main``: a route a gateway is many routes from few bytes, and
-        no limit counts them yet."""
+    def test_a_list_of_gateways_is_a_route_a_gateway(self) -> None:
+        """An ECMP list is a route for each gateway it names, once
+        each and without ``@main`` -- what the tree says of ECMP, and
+        what RouterOS 7 itself prints.  The routes are counted as they
+        are made (``test_limits.TestARouteAGateway``)."""
         routes = _routes(_text([
             "add dst-address=10.220.0.0/16 gateway=192.0.2.9@main,192.0.2.10,192.0.2.9",
             "add dst-address=10.221.0.0/16 gateway=ether3,ether3",
         ]))
-        assert [(r.gateway, r.interface) for r in routes] == [
-            ("192.0.2.9,192.0.2.10", ""), ("", "ether3"),
+        assert [(r.destination, r.gateway, r.interface) for r in routes] == [
+            ("10.220.0.0/16", "192.0.2.9", ""),
+            ("10.220.0.0/16", "192.0.2.10", ""),
+            ("10.221.0.0/16", "", "ether3"),
         ]
 
     def test_a_list_with_a_gateway_in_another_table_is_left_out(self) -> None:

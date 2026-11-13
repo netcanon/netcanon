@@ -1385,14 +1385,10 @@ _ROUTEROS_EXPORT = (
     "# model = CRS310-8G+2S+\n# serial number = FAKESERIAL00\n" + _ROUTEROS_NAMED
 )
 
-_ROUTEROS_GATEWAY_LIST = """/interface ethernet
-set [ find default-name=ether1 ] comment="a"
-set [ find default-name=ether2 ] comment="b"
-/ip address
-add address=192.0.2.2/30 interface=ether1
-add address=192.0.2.6/30 interface=ether2
-/ip route
-add dst-address=0.0.0.0/0 gateway=ether1,ether2
+_JUNOS_UNIT_HOP = """set system host-name sw
+set interfaces xe-0/0/3 unit 0 family inet address 10.0.0.1/30
+set interfaces xe-0/0/1 unit 0 family inet address 10.1.0.1/24
+set routing-options static route 0.0.0.0/0 next-hop xe-0/0/3.0
 """
 
 _FORTIGATE_WITH_AN_AGGREGATE = """config system interface
@@ -1470,14 +1466,14 @@ class TestWhatThePlanSaysBeyondPairs:
     def test_a_route_left_naming_a_port_that_moved_is_said(
         self, page: Page, live_server_url: str,
     ) -> None:
-        """A list of gateways is not followed when its ports move.
-        Only entries that keep the names the route uses clear that, so
-        the strip says it and the job is not a clean success."""
+        """Across vendors a unit of an interface (``next-hop
+        xe-0/0/3.0``) is not followed when its port moves.  Only
+        entries that keep the name the route uses clear that, so the
+        strip says it and the job is not a clean success."""
         mp = _translate(
-            page, live_server_url, "mikrotik_routeros", "mikrotik_routeros",
-            _ROUTEROS_GATEWAY_LIST,
+            page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_UNIT_HOP,
         )
-        _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
+        _declare(page, "QFX5120-48Y", "DCS-7050SX-64")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "warn")
         expect(page.locator(_tid("migrate-rename-plan-stale-routes"))).to_contain_text(

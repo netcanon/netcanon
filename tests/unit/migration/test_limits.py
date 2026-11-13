@@ -209,12 +209,15 @@ class TestTheNumbers:
         ``tests/unit/test_limits_docs_truth.py`` holds them to it.  A
         number changes here, in the module and in the documents, with
         the measurement that says why."""
-        kinds = ("vlan_ids", "memberships", "ports", "interfaces", "copies", "words", "text", "seconds")
+        kinds = (
+            "vlan_ids", "memberships", "ports", "interfaces", "routes", "copies", "words", "text", "seconds",
+        )
         assert {name: tuple(getattr(limits, kind) for kind in kinds) for name, limits in L.PROFILES.items()} == {
-            "small": (1_048_576, 50_000, 2_048, 2_500, 10_000, 250_000, 8_000_000, 20.0),
-            "standard": (16_777_216, 1_000_000, 8_192, 50_000, 100_000, 4_000_000, 64_000_000, 120.0),
-            "large": (67_108_864, 4_000_000, 32_768, 200_000, 400_000, 16_000_000, 256_000_000, 600.0),
-            "unlimited": (None,) * 8,
+            "small": (1_048_576, 50_000, 2_048, 2_500, 50_000, 10_000, 250_000, 8_000_000, 20.0),
+            "standard": (16_777_216, 1_000_000, 8_192, 50_000, 500_000, 100_000, 4_000_000, 64_000_000, 120.0),
+            "large": (67_108_864, 4_000_000, 32_768, 200_000, 2_000_000, 400_000, 16_000_000, 256_000_000,
+                      600.0),
+            "unlimited": (None,) * 9,
         }
         assert kinds == tuple(L.KINDS)
 
@@ -1042,6 +1045,14 @@ _AROUND = {
 }
 
 
+def ros_gateways(count: int, dest: str = "0.0.0.0/0") -> str:
+    """One RouterOS route line whose ``gateway=`` lists *count* interfaces."""
+    return (
+        f"/ip route\nadd dst-address={dest} gateway="
+        + ",".join(f"e{n}" for n in range(count)) + "\n"
+    )
+
+
 def _interfaces(codec: str, count: int) -> str:
     before, after = _AROUND.get(codec, ("", ""))
     return before + "".join(ONE_INTERFACE[codec].format(n=n) for n in range(1, count + 1)) + after
@@ -1117,6 +1128,43 @@ class TestAnInterfaceIsCountedWhereItIsMade:
 # ---------------------------------------------------------------------------
 # 6. The count of a finished tree
 # ---------------------------------------------------------------------------
+
+
+class TestARouteAGateway:
+    """A RouterOS route with a list of gateways is a route a gateway
+    in the tree: a few bytes of text each, where the other platforms
+    write a line a route, which the length of the text bounds."""
+
+    def test_a_list_is_refused_before_its_routes_are_made(self) -> None:
+        limits = replace(TINY, routes=5)
+        with L.limits_scope(limits):
+            assert len(get_codec("mikrotik_routeros").parse(ros_gateways(5)).static_routes) == 5
+        exc = _refused("mikrotik_routeros", ros_gateways(6), limits)
+        assert (exc.kind, exc.asked, exc.cap, exc.exact) == ("routes", 6, 5, False)
+        assert "would make 6 or more static routes; the limit is 5 (at: 0.0.0.0/0)" in str(exc)
+
+    def test_the_lines_count_together(self) -> None:
+        text = ros_gateways(3) + "add dst-address=10.0.0.0/8 gateway=a,b,c\n"
+        exc = _refused("mikrotik_routeros", text, replace(TINY, routes=5))
+        assert (exc.kind, exc.asked, exc.exact) == ("routes", 6, False)
+        assert "(counted over 2 route lines; the last one read: 10.0.0.0/8)" in str(exc)
+
+    def test_a_gateway_written_twice_is_one_route(self) -> None:
+        """The parser makes each gateway of a list once, and charges
+        what it makes: a list that names five gateways seven times is
+        five routes, under a limit of five."""
+        text = "/ip route\nadd dst-address=0.0.0.0/0 gateway=e0,e1,e0,e2,e3,e1,e4\n"
+        with L.limits_scope(replace(TINY, routes=5)):
+            assert len(get_codec("mikrotik_routeros").parse(text).static_routes) == 5
+
+    def test_a_route_a_line_is_counted_once_the_parse_is_done(self) -> None:
+        """No parser but RouterOS makes more than a route of a line,
+        and no other charges one; the count of the finished tree
+        holds them all the same."""
+        text = "hostname T\n" + "".join(f"ip route 10.0.{n}.0 255.255.255.0 10.255.0.1\n" for n in range(6))
+        exc = _refused("cisco_iosxe_cli", text, replace(TINY, routes=5))
+        assert (exc.kind, exc.asked, exc.exact) == ("routes", 6, True)
+        assert "makes 6 static routes; the limit is 5." in str(exc)
 
 
 class TestTheCountOfAFinishedTree:
@@ -1395,6 +1443,9 @@ EACH_LIMIT: dict[str, tuple[str, str, Callable[[], str], Callable[[], str], int]
               60_000_000),
     "text": ("arista_eos", "juniper_junos", lambda: eos_trunks(40, _ODD_IDS), lambda: eos_trunks(60, _ODD_IDS),
              40_000_000),
+    # One line of gateways: refused before one route is made.
+    "routes": ("mikrotik_routeros", "mikrotik_routeros", lambda: ros_gateways(50_000),
+               lambda: ros_gateways(50_001), 12_000_000),
 }
 
 

@@ -1401,6 +1401,26 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS route with a list of gateways is a route for each
+  gateway.**  `gateway=ether1,ether2` -- ECMP on RouterOS -- was one
+  route whose next hop was the list as written: onto another vendor
+  one next hop no target reads, in a job that said `completed`, and
+  between two RouterOS configs with devices declared a route the port
+  rename did not reach, which held the job `partial`.  The parser now
+  makes a route for each gateway, once each, which is how the tree
+  holds ECMP and how every target writes it, and each route out of a
+  port follows the port.  Between two RouterOS 6 configs the routes of
+  one destination, distance and comment are written as one list
+  again; two routes a RouterOS 6 config writes on separate lines with
+  one destination and distance are read as ECMP too, which is not
+  established for RouterOS 6 (`docs/vendors/mikrotik_routeros.md`).
+  A list is a few bytes a route, so the routes are counted before
+  they are made, by a new limit, `routes` (50,000 under `small`,
+  500,000 under `standard`, 2,000,000 under `large`), which refuses in
+  words; the count of every finished parse holds the other platforms'
+  routes to it as well.  `small`'s number was measured in a container
+  shaped like a demo instance (`docs/demo-plan/07-budget.md`).
+
 - **A VTEP source that no record states is not invented on EOS,
   IOS-XE (CLI) or NX-OS.**  The tree holds no VTEP source when the
   source config states none (a VyOS `vxlan` interface with neither

@@ -603,6 +603,16 @@ section of its family.  ⚠️ Up to 0.7.7 no `/ipv6 route` was read
 with nothing said -- and an IPv6 route of another vendor was
 written as an `add` of `/ip route`.
 
+A route with a list of gateways (`gateway=ether1,ether2`, ECMP) is
+a route for each gateway, which is how the tree holds ECMP and how
+every target writes it; a route out of a port follows the port.
+Between two RouterOS 6 configs the routes of one destination,
+distance and comment are written as one list again.  ⚠️ Up to
+0.7.7 the list was one route whose next hop was the list as
+written: one next hop no other target reads, in a job that said
+`completed`.  The routes a list makes are counted before they are
+made (`routes`, § H).
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Lossy (warn) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`; authentication is written as `authentication=` + `password=`.  IETF VRRP only: a group of another protocol (HSRP, CARP) is not written, a `# review:` line in `/interface vrrp` says so, and the redundancy has to be made again on the target.  No tracked interface and no virtual MAC is written, and nothing says so (`…/group/{track-interfaces,virtual-mac}`, lossy).  ⚠️ Up to 0.7.7 the group was declared supported, and this row said tracking was written as a review comment. |
@@ -2498,11 +2508,12 @@ What you get back, on the job's `port_mapping_plan`:
   `unresolved_ports` until you map or drop it.
 * **`stale_next_hops`** — destinations of static routes whose next
   hop still names an interface that has another name in the output,
-  or is not in it: a
-  RouterOS list of gateways (`gateway=ether1,ether2`) or — across
-  vendors — a Junos unit (`next-hop et-0/0/24.0`).  A next hop that
-  is exactly an interface's name follows it and is not listed; nor is a list whose
-  members only changed places among themselves.  A next hop naming a
+  or is not in it: across vendors, a Junos unit (`next-hop
+  et-0/0/24.0`).  A next hop that is exactly an interface's name
+  follows it and is not listed, and so does each route of a RouterOS
+  list of gateways (`gateway=ether1,ether2`), which is a route a
+  gateway.  ⚠️ Up to 0.7.7 such a list was one route, left as
+  written, and listed here.  A next hop naming a
   port of the declared source that the config has no interface
   record for is listed.  The job is `partial` while this is not
   empty.  No entry rewrites the route: correct it in the output, or
@@ -2950,6 +2961,7 @@ a job too, since there is no job to make of a request nobody read:
 | `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
+| `routes` | static routes, wherever one is made; a RouterOS route with a list of gateways is one for each gateway | 50,000 | 500,000 | 2,000,000 |
 | `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
 | `words` | words of set commands written out from block-form Junos, or from a Junos set line's bracket list | 250,000 | 4,000,000 | 16,000,000 |
 | `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
@@ -2993,7 +3005,9 @@ command line.
 that each allow every VLAN.  `memberships`: about three times the most
 (port, VLAN) pairs a vendor verifies on one device.  `ports`: about
 three times the most ports one system has.  `interfaces`: room for a
-router with tens of thousands of sub-interfaces.  `seconds`: the
+router with tens of thousands of sub-interfaces.  `routes`: room for
+a config that states hundreds of thousands of static routes.
+`seconds`: the
 slowest honest request the other limits admit takes seconds on half a
 CPU, not minutes.  Every real capture this project holds is far under
 the `small` limits.
@@ -3013,6 +3027,14 @@ the `small` limits.
   value, each with the line's path, and is counted in words too.
 * Under `small` (the demo): a switch with more than 256 ports that each
   state `all`, or more than 50,000 memberships.
+* **A RouterOS route with a list of gateways is a route for each
+  gateway**, and is counted in `routes` as its routes are made: a list
+  of more than 50,000 gateways under `small` is refused before one of
+  them is ("would make 50,001 or more static routes; the limit is
+  50,000 (at: <destination>)"), and so are lines whose lists add up to
+  more.  A route of the other platforms is a line, and is counted once
+  the parse is done: two megabytes of them are fewer than `small`
+  allows.
 * **A trunk with no allowed line counts as one that states `all`** on
   IOS-XE, NX-OS, EOS and AOS-CX, where such a trunk carries every VLAN
   (on AOS-CX: a `vlan trunk native` line and no `vlan trunk allowed`).
@@ -3025,7 +3047,7 @@ the `small` limits.
 **What the limits do not bound** — requests in flight under every set
 but `small`, how many connections a client opens and leaves open, the
 size of an answer, a renderer that runs long, and records no limit
-counts (static routes, addresses) — is in
+counts (addresses, users, DHCP pools) — is in
 [`SECURITY.md`](../SECURITY.md) "Input Validation — Config Text".
 
 ---

@@ -1322,9 +1322,10 @@ The message can also say **"N static route(s) still name, as next
 hop, an interface that has another name in the output, or is not in
 it"**.
 `port_mapping_plan.stale_next_hops` lists their destinations.  A next
-hop that is exactly an interface's name follows the interface; a
-RouterOS list of gateways (`gateway=ether1,ether2`) and, across
-vendors, a Junos unit (`next-hop et-0/0/24.0`) are left as written.
+hop that is exactly an interface's name follows the interface, and
+so does each route of a RouterOS list of gateways
+(`gateway=ether1,ether2`), which is a route a gateway; across
+vendors, a Junos unit (`next-hop et-0/0/24.0`) is left as written.
 The job is `partial` while a route names an interface that has
 another name in the output.
 No entry rewrites the route: correct it in the output, or keep the
@@ -1778,6 +1779,7 @@ means, and what to do:
 | port memberships | (port, VLAN) pairs: each trunk that allows every VLAN is on every VLAN the config declares, so two ordinary counts multiply — the sentence gives both | Allow more, or translate the trunks and the VLANs you need |
 | different ports named by port ranges / ports that a VLAN's or a LAG's port list names and no interface stanza declares | Ports that exist only as names in a list (AOS-S `tagged 1-1001,...`) | Almost always a range that names ports the device does not have: check the range the sentence quotes |
 | interfaces | Interface records | A router with that many sub-interfaces is real: allow more |
+| static routes | Static routes: a line each on most platforms; on RouterOS a route with a list of gateways is one for each gateway, and the sentence names the destination of the line it stopped at | A list of thousands of gateways is rarely meant: check the line the sentence names.  A router with that many routes is real: allow more |
 | entries copied from an interface-range onto its members | A Junos `interface-range` with addresses on it: every address goes onto every member | Rarely meant; check the range the sentence names |
 | words of set commands written out from block-form text / words of set commands written out from a bracket list | Block-form Junos is converted to set commands, and the whole path is written again for each statement; or a Junos set line's bracket list (`vlan members [ A B ]`), which is one statement a value, each with the line's path | Paste `show configuration \| display set` instead: it is not converted, prints a list one value a line, and is not counted in words |
 | characters of rendered config / characters of nested blocks written out from set lines | The output would be longer than the limit; or VyOS set lines, each written out as nested blocks | A wide VLAN list written to IOS-XE or EOS is a line of every id: allow more, or translate to a target that writes ranges |

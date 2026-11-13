@@ -4722,29 +4722,46 @@ add dst-address=10.25.0.0/16 gateway=192.0.2.1
 
 class TestANextHopTheRewriteDoesNotReach:
     """A next hop that is exactly an interface name follows the
-    interface.  A list of them and -- across vendors -- a unit of an
-    interface are left as written.  The job used to be ``completed``
-    with the route still naming a port that had moved; it now says
-    which routes, and is ``partial``.  (A gateway resolved in the main
-    table, ``ether3@main``, is read as that gateway, and follows.)"""
+    interface; a RouterOS list of them is a route a gateway, and each
+    follows its port.  Across vendors a unit of an interface is left
+    as written.  The job used to be ``completed`` with the route still
+    naming a port that had moved; it now says which routes, and is
+    ``partial``.  (A gateway resolved in the main table,
+    ``ether3@main``, is read as that gateway, and follows.)"""
 
-    def test_a_list_is_reported(self) -> None:
+    def test_each_route_of_a_list_follows_its_port(self) -> None:
+        """Up to 0.7.7 the list was one route whose gateway was the
+        list as written, which the rewrite does not reach: it was
+        listed here, and the job held."""
         mikrotik = get_codec("mikrotik_routeros")
         job = run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS_HOP_FORMS, _profile(_CRS310), _profile(_CCR2004),
         )
         plan = job.port_mapping_plan
-        assert "gateway=ether1,ether2" in job.rendered
+        lines = job.rendered.splitlines()
+        assert "add dst-address=0.0.0.0/0 gateway=sfp-sfpplus1" in lines
+        assert "add dst-address=0.0.0.0/0 gateway=sfp-sfpplus2" in lines
+        assert "gateway=ether1,ether2" not in job.rendered
         # The plain one followed, and so did the one resolved in main;
         # an address is never a port.
         assert "dst-address=10.23.0.0/16 gateway=sfp-sfpplus3" in job.rendered
         assert "dst-address=10.24.0.0/16 gateway=sfp-sfpplus4" in job.rendered
         assert "@main" not in job.rendered
-        assert plan.stale_next_hops == ["0.0.0.0/0"]
-        assert not plan.is_clean
-        assert job.status == MigrationJobStatus.partial
-        assert "1 static route(s) still name, as next hop" in job.error
-        assert any("(0.0.0.0/0)" in w for w in job.warnings)
+        assert plan.stale_next_hops == []
+        assert job.status == MigrationJobStatus.completed
+
+    def test_on_routeros_6_the_list_is_written_with_the_ports_it_went_to(self) -> None:
+        """Between two RouterOS 6 configs the routes are written as
+        one list again -- after the rewrite, so the list names where
+        each port went."""
+        mikrotik = get_codec("mikrotik_routeros")
+        text = "# jan/01/2026 00:00:00 by RouterOS 6.49.10\n" + _ROUTEROS_HOP_FORMS
+        job = run_plan_with_models(
+            mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
+        )
+        assert "add dst-address=0.0.0.0/0 gateway=sfp-sfpplus1,sfp-sfpplus2" in job.rendered.splitlines()
+        assert job.port_mapping_plan.stale_next_hops == []
+        assert job.status == MigrationJobStatus.completed
 
     def test_nothing_is_reported_while_the_named_ports_stay_where_they_are(self) -> None:
         mikrotik = get_codec("mikrotik_routeros")
@@ -4753,14 +4770,20 @@ class TestANextHopTheRewriteDoesNotReach:
         assert job.port_mapping_plan.stale_next_hops == []
         assert job.status == MigrationJobStatus.completed
 
-    def test_a_dropped_port_in_a_list_is_reported_too(self) -> None:
+    def test_a_dropped_port_takes_its_route_of_the_list_with_it(self) -> None:
+        """The route through the port that is kept stays; the one
+        through the port dropped goes with it, and is said."""
         mikrotik = get_codec("mikrotik_routeros")
         same = _profile(_CRS310)
         job = run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS_HOP_FORMS, same, same,
             port_rename_map={"ether2": None},
         )
-        assert job.port_mapping_plan.stale_next_hops == ["0.0.0.0/0"]
+        plan = job.port_mapping_plan
+        assert plan.stale_next_hops == []
+        assert plan.lost_routes == ["0.0.0.0/0"]
+        assert "add dst-address=0.0.0.0/0 gateway=ether1" in job.rendered.splitlines()
+        assert "gateway=ether2" not in job.rendered
 
     def test_across_vendors_a_unit_of_an_interface(self) -> None:
         """``next-hop xe-0/0/1.0`` means unit 0 of the port only on
@@ -4781,6 +4804,22 @@ class TestANextHopTheRewriteDoesNotReach:
         )
         plan = job.port_mapping_plan
         assert plan.stale_next_hops == [] and plan.lost_routes == ["0.0.0.0/0"]
+
+    def test_the_route_is_said_after_the_advice_on_ports(self) -> None:
+        """"Map or drop each one" is about the names listed before
+        it, and a stale route is not one of them: no entry rewrites
+        it.  So the sentence on routes comes after that advice."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        text = _JUNOS_NEXT_HOP.replace("et-0/0/24", "xe-0/0/3") + (
+            "set interfaces xe-0/0/60 unit 0 family inet address 10.9.0.1/24\n"
+        )
+        devices = (_profile("juniper_junos/QFX5120-48Y"), _profile("arista_eos/DCS-7050SX-64"))
+        job = run_plan_with_models(junos, eos, text, *devices)
+        plan = job.port_mapping_plan
+        assert plan.unresolved_ports == ["xe-0/0/60"]
+        assert plan.stale_next_hops == ["0.0.0.0/0"]
+        assert job.status == MigrationJobStatus.partial
+        assert job.error.index("Review the port mapping") < job.error.index("static route(s) still name")
 
     def test_a_route_that_went_with_its_interface_is_not_stale(self) -> None:
         tree = _tree(
@@ -5776,14 +5815,20 @@ class TestMoreNextHops:
         assert job.port_mapping_plan.stale_next_hops == []
         assert job.status == MigrationJobStatus.completed
 
-    def test_a_list_that_names_the_same_ports_afterwards_is_still_right(self) -> None:
+    def test_a_list_whose_two_ports_change_places(self) -> None:
+        """Each route goes with its own port: the two change places
+        and the destination keeps both."""
         mikrotik = get_codec("mikrotik_routeros")
         same = _profile(_CRS310)
         job = run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS_HOP_FORMS, same, same,
             port_rename_map={"ether1": "ether2", "ether2": "ether1"},
         )
-        assert "gateway=ether1,ether2" in job.rendered
+        routes = [line for line in job.rendered.splitlines() if "dst-address=0.0.0.0/0" in line]
+        assert routes == [
+            "add dst-address=0.0.0.0/0 gateway=ether2",
+            "add dst-address=0.0.0.0/0 gateway=ether1",
+        ]
         assert job.port_mapping_plan.stale_next_hops == []
         assert job.status == MigrationJobStatus.completed
 
@@ -5799,22 +5844,25 @@ class TestMoreNextHops:
 
     def test_they_are_read_from_the_run_that_was_kept(self) -> None:
         """From the CCR2004 side its management ``ether1`` is displaced
-        by the cage paired onto ``ether1``, so there are two runs.  The
-        route that names ``ether1`` alone goes with it; what is still
-        stale is read from the second run."""
+        by the cage paired onto ``ether1``, so there are two runs.  In
+        the first ``ether1`` keeps its name; in the second it is
+        dropped, and the route of the list through it goes with it.
+        The route through the cage follows it, and nothing is stale."""
         mikrotik = get_codec("mikrotik_routeros")
         text = _ROUTEROS.replace(
             "/ip address",
             "/ip address\nadd address=10.2.0.1/30 interface=sfp-sfpplus2",
-        ) + "/ip route\nadd dst-address=0.0.0.0/0 gateway=sfp-sfpplus1,sfp-sfpplus2\n"
+        ) + "/ip route\nadd dst-address=0.0.0.0/0 gateway=ether1,sfp-sfpplus2\n"
         job = run_plan_with_models(
             mikrotik, mikrotik, text, _profile(_CCR2004), _profile(_CRS310),
         )
         plan = job.port_mapping_plan
         assert plan.displaced == ["ether1"]
-        assert plan.stale_next_hops == ["0.0.0.0/0"]
+        assert plan.lost_routes == ["0.0.0.0/0"]
+        assert plan.stale_next_hops == []
+        routes = [line for line in job.rendered.splitlines() if "dst-address=" in line]
+        assert routes == ["add dst-address=0.0.0.0/0 gateway=ether2"]
         assert "need a decision" in job.error
-        assert job.error.index("Review the port mapping") < job.error.index("static route(s) still name")
 
     def test_a_followed_unit_hop_is_not_stale(self) -> None:
         junos = get_codec("juniper_junos")

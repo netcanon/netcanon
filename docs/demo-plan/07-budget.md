@@ -160,8 +160,9 @@ of each stage:
 Three things remain.  **The peaks are high.**  One translation of the
 largest text takes an instance to 215 MB of its 268, three at once to
 233, and a burst to 232–237: that is the size of one request, most of
-it nothing a limit counts (two megabytes of static routes), and what the
-process keeps.  **An instance does not come back down**: after ten or more
+it two megabytes of static routes (which no limit counted then, and
+fewer than `routes` allows now), and what the process keeps.
+**An instance does not come back down**: after ten or more
 rounds of the largest requests it holds 148 to 190 MB at rest, where it
 idled at 84.  The next request uses the memory again, so the peaks stop
 rising -- every row was sent until its peak had, or says that it had not
@@ -181,6 +182,38 @@ instance to 238 MB, and sanitised as the page does it 34 times, to
 202 MB; both had stopped rising.  The numbers were not changed.
 Re-measure on the real host with the release's own image, as for the
 numbers above.
+
+**A route a gateway** (measured 2026-11-12, Docker Desktop, a container
+shaped as above and the same stopping rule, with an image of the change
+that added `routes`).  A RouterOS route with a list of gateways is a
+route for each gateway in the tree, a few bytes of text each, where a
+route of the other platforms is a line; `routes` counts them as they
+are made.  Every text is made up for the measurement; a RouterOS one
+is RouterOS 7, its routes written 1,000 gateways to a line.  The
+heaviest is a route out of an interface translated to OPNsense, whose
+answer is the largest, and `small`'s 50,000 was kept because it fits:
+
+| The request | The visitor gets | Most memory | Rounds |
+|---|---|---|---|
+| 50,000 routes out of interfaces (0.34 MB), translated to OPNsense | translated in 3.1–3.4 s, a 40 MB answer | 185 → 210 MB | 51; stopped rising (last rise in round 39) |
+| the same, two at once | both translated, in turn; 6.0–6.4 s in all | 194 → 217 MB | 29; stopped rising (last rise in round 17) |
+| the same, translated to RouterOS | translated in 2.9–3.1 s, a 5.6 MB answer | 158 → 162 MB | 21; stopped rising (last rise in round 9) |
+| the same, sanitised as the page does it: the audit, then the output | 0.6–0.8 s, then 2.0–2.3 s | 135 → 142 MB | 34; stopped rising (last rise in round 22) |
+| 50,000 routes through addresses (0.60 MB), translated to IOS-XE | translated in 2.2–2.5 s, a 5.2 MB answer | 135 → 151 MB | 52; stopped rising (last rise in round 40) |
+| the same, translated to Junos | translated in 2.0–2.3 s, a 6.2 MB answer | 139 → 150 MB | 56; stopped rising (last rise in round 44) |
+| 50,001 routes out of interfaces | `refused` in 0.3–0.5 s | 122 → 127 MB | 16; stopped rising (last rise in round 4) |
+| 1.98 MB of IOS-XE `ip route` lines (41,346 routes), translated to OPNsense | translated in 2.7–3.1 s, a 28 MB answer | 152 → 159 MB | 23; stopped rising (last rise in round 11) |
+| 2,400 interfaces and 50,000 routes out of them (0.46 MB), translated to OPNsense | translated in 3.3–3.7 s, a 41 MB answer | 193 → 207 MB | 42; stopped rising (last rise in round 30) |
+| the same, two at once | both translated, in turn; 6.6–7.2 s in all | 199 → 222 MB | 58; stopped rising (last rise in round 46) |
+| the same, translated to Junos | translated in 3.2–3.5 s, a 14 MB answer | 175 → 180 MB | 16; stopped rising (last rise in round 4) |
+| the same, sanitised as the page does it | 0.6–0.8 s, then 2.2–2.3 s | 140 → 146 MB | 20; stopped rising (last rise in round 8) |
+
+`oom_kill` was 0 in every row.  No row went higher than the rows of
+the first table did; the most, 222 MB, is two of the combined text at
+once, of the 268.  A route a gateway is about 1.6 KB of a parse
+(measured in a process, not a container): at twice the number the
+heaviest row would gain some 80 MB for the parse alone, past the
+instance -- an estimate, which was not measured.
 
 Per-box defaults:
 
