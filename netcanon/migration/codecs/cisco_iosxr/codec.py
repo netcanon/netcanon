@@ -741,8 +741,9 @@ class CiscoIOSXRCodec(CodecBase):
         # (BGP / OSPF / IS-IS / MPLS / route-policy / prefix-set / ACLs /
         # l2vpn / evpn).  Notification-only — never read by render.
         # After them, what the parser itself read and left out: a
-        # row for each ``interface preconfigure`` stanza, and for each
-        # kind of banner.  Read from the text the parser read: a
+        # row for each ``interface preconfigure`` stanza, for each
+        # kind of banner, and for each kind of line in column 0 that
+        # no reader takes.  Read from the text the parser read: a
         # banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = list(dict.fromkeys([
             *detect_tier3_sections_iosxr(without_banner_bodies(raw)),

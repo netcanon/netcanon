@@ -1426,6 +1426,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS XR line that nothing translates is said.**  The Cisco
+  IOS XR parser reads a hostname, a domain, the release, DNS, NTP
+  and syslog servers, interfaces, VRFs, static routes, LAGs and
+  local users, and the IOS XR Tier-3 patterns name routing
+  protocols, MPLS, route policies and their sets, access lists,
+  classes, policies, L2VPN, EVPN and multicast; every other line in
+  column 0 was in no output and no row -- SNMP, SSH and `line`
+  settings, telemetry, configuration groups and the `apply-group`
+  lines that apply them, segment routing, `router hsrp`, a second
+  `hostname` or `domain name` line and a second line of a local
+  user's name -- in jobs that said `completed`.  Now each kind of
+  such line is a row of `dropped_tier3_sections`, as EOS's,
+  NX-OS's, AOS-CX's and OS10's are: its command word, and the word
+  after it where that says which command it is (`ssh server`,
+  `line default`, `router hsrp`), never a value; a `logging`
+  line's row is the word alone, since IOS XR takes a host's name
+  right after it.  A line that
+  begins with a word IOS XR configurations are not seen to begin
+  with is counted in one row that shows none of its text; the lines
+  the router prints before the configuration (`Building
+  configuration...`, the time) and the line that ends a block
+  (`end-policy`, `end-set`, `end-group`) are no row.  The readers of
+  a hostname, a domain, a name server, a syslog host, an NTP server
+  and the release read their own line: the white space between
+  their words could be a line break, so a `hostname` or `domain
+  name` line with no value was read with the next line's first
+  word for the hostname or the domain, and a `logging` line with
+  none with the next line's address for a syslog host.  An indented
+  line of a stanza that the stanza's reader does not take still has
+  no row.  The committed IOS XR inputs gain rows; no output moves.
+
 - **An AOS-CX line that nothing translates is said.**  The Aruba
   AOS-CX parser reads a hostname, the release, interfaces, VLANs,
   VRFs, static routes, LAGs, local users, SNMP and VXLAN, and the
