@@ -877,7 +877,7 @@ interface GigabitEthernet1/0/1
 !
 """
 
-    def test_happy_path_returns_completed_job(self, client):
+    def test_happy_path_returns_the_job(self, client):
         resp = client.post(
             "/api/v1/migration/plan/local_users",
             json={
@@ -887,7 +887,15 @@ interface GigabitEthernet1/0/1
             },
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "completed"
+        body = resp.json()
+        # AOS-S cannot re-use an IOS-XE type 5 hash: each account is a
+        # review comment in the output, and the job says so.
+        assert body["status"] == "partial"
+        said = [w for w in body["warnings"] if w.startswith("Local user ")]
+        assert [w.split('"')[1] for w in said] == [
+            "admin", "operator", "svc-backup-2019",
+        ]
+        assert all("hash (5)" in w for w in said)
 
     def test_rename_is_applied(self, client):
         resp = client.post(

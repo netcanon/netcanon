@@ -992,8 +992,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   is made from the tree before the renderer decides, and an account
   that holds no password was left out under a warning in a job that
   said `completed`, between two configs of one codec too.  `run_plan`
-  makes such a job `partial`; a `review:` line with no warning (a
-  hash the target does not take, a RADIUS secret) does not yet.  What
+  makes such a job `partial`, and a credential the target refuses
+  under a `review:` line is such a record: the renderer and the
+  warning ask one question of it (`takes_password`,
+  `refuses_snmpv3_user`, `refuses_radius_secret`), never two that
+  happen to agree.  A `review:` line of another kind with no warning
+  does not hold the job yet.  What
   it took.  The
   condition is over EVERY name the translator rewrites: with no
   pairing to protect, the model path's reason for looking only at a

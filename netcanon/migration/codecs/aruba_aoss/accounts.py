@@ -26,11 +26,10 @@ renderer writes:
 Which user gets a role is the order of the source; an operator who
 wants another drops the first in the local-user rename map.  The
 renderer writes the lines (:func:`account_lines`) and the job carries a
-warning for each user who is not given an account for a reason of
-AOS-S's own -- a second account of a role, an operator held back for
-want of a manager, an account with no password (:func:`account_warnings`).
-A secret AOS-S cannot take is a comment on every target, and is said
-in the output only, as on the others.
+warning for each user who is not given an account -- a second account
+of a role, an operator held back for want of a manager, an account
+with no password, a secret AOS-S cannot take, a name or a value it
+does not read as one, an account with no name (:func:`account_warnings`).
 
 A live line in a hashed form (``sha1``, ``sha256``) needs settings this
 output does not write.  A 5412R refused ``password manager user-name
@@ -271,6 +270,8 @@ def aoss_accounts(users: Sequence[CanonicalLocalUser]) -> list[Account]:
                     f"and AOS-S has no account without one.  It is a "
                     f"review comment."
                 )
+            else:
+                warning = _held_warning(user, role, alg, value)
             typed = bool(name) and not breaks_its_quotes(name)
             said = "; ".join(
                 part for part in (why, _advice(role, name, kept, typed=typed))
@@ -285,6 +286,33 @@ def aoss_accounts(users: Sequence[CanonicalLocalUser]) -> list[Account]:
             ))
         accounts.extend(live + held)
     return accounts
+
+
+def _held_warning(
+    user: CanonicalLocalUser, role: str, alg: str, value: str,
+) -> str:
+    """The job's warning for an account held back because AOS-S cannot
+    be given it as the source states it: a secret it does not take, a
+    name or a value it does not read as one, no name.  Names the
+    account and the form of its secret, never the secret."""
+    if not user.name:
+        return (
+            f"A local user with no name ({role}) is not written for "
+            f"AOS-S: AOS-S has no account without one.  It is a review "
+            f"comment; re-create it on the switch under a name."
+        )
+    who = f'Local user "{user.name}" ({role}) is not written for AOS-S'
+    if alg == "__unmigratable__":
+        return (
+            f"{who}: its password is a hash ({value}) from the source "
+            f"vendor, which AOS-S cannot re-use.  It is a review comment; "
+            f"set its password on the switch."
+        )
+    return (
+        f"{who}: its name or its password holds white space or a quote, "
+        f"which AOS-S does not read as one value.  It is a review comment; "
+        f"re-create it on the switch."
+    )
 
 
 def _hashed(accounts: Sequence[Account]) -> tuple[list[Account], list[str]]:

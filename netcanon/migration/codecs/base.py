@@ -13,8 +13,13 @@ Every vendor adapter subclasses :class:`CodecBase` and ships:
     * ``render_warnings(tree)`` — optional: a warning for each thing
       ``render`` leaves out for a reason of the target's own, which
       the pipeline adds to the job (default: one for each local user
-      with no password, for a codec that sets
-      ``local_user_target_label``).
+      with no password or with a password the target does not take,
+      each SNMPv3 user and each RADIUS secret it cannot carry, for a
+      codec that sets ``local_user_target_label``).
+    * ``takes_password(hashed)``, ``refuses_snmpv3_user(user,
+      source_vendor)``, ``refuses_radius_secret(server, source_vendor)``
+      -- the questions ``render`` asks of a credential, which the
+      default ``render_warnings`` asks of the same tree.
     * ``aggregate_written_for(lag_name)`` -- optional: whether
       ``render`` writes a LAG's members into an aggregate, which
       the default ``render_warnings`` asks before it says an
@@ -46,8 +51,10 @@ from ...models.migration import CapabilityMatrix
 from .._bonds import active_backup_warnings
 from .._long_numbers import first_long_run, first_long_run_line, parse_refused, render_refused
 from .._one_line import first_control_character, first_line_break
+from .._radius_secrets import radius_secret_is_migratable, refused_secret_warning
 from .._roles import below_admin_warnings
-from .._user_secrets import empty_hash_warnings
+from .._user_secrets import empty_hash_warnings, is_migratable, unmigratable_hash_warnings
+from .._usm_keys import usm_warning
 from ..limits import census, metered
 
 if TYPE_CHECKING:
@@ -223,9 +230,19 @@ class CodecBase(ABC):
     #: user, for a codec that renders local users (``None`` for one
     #: that renders none).  Every such renderer writes a review line,
     #: never the account, for a user that holds no password
-    #: (:func:`netcanon.migration._user_secrets.holds_no_secret`); the
-    #: default :meth:`render_warnings` says so under this name.
+    #: (:func:`netcanon.migration._user_secrets.holds_no_secret`) or a
+    #: password it does not take (:meth:`takes_password`); the default
+    #: :meth:`render_warnings` says so under this name, and of each
+    #: SNMPv3 user and RADIUS secret it cannot carry.
     local_user_target_label: ClassVar[str | None] = None
+
+    #: Whether :meth:`render` writes RADIUS servers, each with its
+    #: shared secret where
+    #: :func:`netcanon.migration._radius_secrets.radius_secret_is_migratable`
+    #: says the target can use it, and with a review line in its place
+    #: where not (the server is kept).  :meth:`refuses_radius_secret`
+    #: asks the same question.
+    writes_radius_servers: ClassVar[bool] = False
 
     #: What :meth:`render` writes for a LAG the tree holds as an
     #: ``active-backup`` bond (:mod:`netcanon.migration._bonds`):
@@ -581,13 +598,22 @@ class CodecBase(ABC):
             :attr:`active_backup_written_as` is ``"static"`` and
             :meth:`aggregate_written_for` says the LAG is written
             (:func:`netcanon.migration._bonds.active_backup_warnings`).
+            Between the two, where the label is set: one for each user
+            whose password :meth:`takes_password` refuses
+            (:func:`netcanon.migration._user_secrets.unmigratable_hash_warnings`),
+            and :meth:`credential_warnings`.
         """
         warnings: list[str] = []
         label = self.local_user_target_label
         if label:
             users = getattr(tree, "local_users", None) or []
-            warnings += empty_hash_warnings(users, label) + below_admin_warnings(
-                users, getattr(tree, "source_vendor", ""), self.name, label,
+            warnings += (
+                empty_hash_warnings(users, label)
+                + unmigratable_hash_warnings(users, label, self.takes_password)
+                + below_admin_warnings(
+                    users, getattr(tree, "source_vendor", ""), self.name, label,
+                )
+                + self.credential_warnings(tree, label)
             )
         if self.active_backup_written_as == "static":
             warnings += active_backup_warnings(
@@ -595,6 +621,61 @@ class CodecBase(ABC):
                 if self.aggregate_written_for(getattr(lag, "name", ""))
             )
         return warnings
+
+    def takes_password(self, hashed: str) -> bool:
+        """Whether :meth:`render` writes a local user's password as the
+        tree holds it (one that holds a password at all).
+
+        The default is the shared policy,
+        :func:`netcanon.migration._user_secrets.is_migratable` for this
+        codec's name, which every renderer of local users asks; a
+        renderer that asks otherwise says so here (Junos).  Where it
+        returns ``False`` the renderer writes a review line in place of
+        the account, and the default :meth:`render_warnings` a warning.
+        """
+        return is_migratable(hashed, self.name)
+
+    def refuses_snmpv3_user(self, user: Any, source_vendor: str) -> bool:
+        """Whether :meth:`render` writes a review line in place of an
+        SNMPv3 user, because a key of it cannot be carried to this
+        target (:mod:`netcanon.migration._usm_keys`).
+
+        ``False`` by default: a codec whose renderer writes SNMPv3
+        users answers with the function its renderer asks.
+        """
+        return False
+
+    def refuses_radius_secret(self, server: Any, source_vendor: str) -> bool:
+        """Whether :meth:`render` writes a RADIUS server without its
+        shared secret, with a review line in its place
+        (:mod:`netcanon.migration._radius_secrets`): where
+        :attr:`writes_radius_servers` is set and the target cannot use
+        the secret.
+        """
+        return (
+            self.writes_radius_servers
+            and bool(server.key)
+            and not radius_secret_is_migratable(server.key, source_vendor, self.name)
+        )
+
+    def credential_warnings(self, tree: Any, target_label: str) -> list[str]:
+        """One warning for each SNMPv3 user :meth:`refuses_snmpv3_user`
+        refuses and each RADIUS secret :meth:`refuses_radius_secret`
+        refuses, under *target_label*: each is a review line of the
+        output and nothing else.  Names the record, never a secret."""
+        source_vendor = getattr(tree, "source_vendor", "") or ""
+        snmp = getattr(tree, "snmp", None)
+        said = [
+            usm_warning(user, source_vendor, target_label)
+            for user in (getattr(snmp, "v3_users", None) or [])
+            if self.refuses_snmpv3_user(user, source_vendor)
+        ]
+        said += [
+            refused_secret_warning(server.host, server.key, target_label)
+            for server in getattr(tree, "radius_servers", None) or []
+            if self.refuses_radius_secret(server, source_vendor)
+        ]
+        return said
 
     def aggregate_written_for(self, lag_name: str) -> bool:
         """Whether :meth:`render` writes the member ports of the LAG

@@ -303,8 +303,11 @@ end
         assert s.key == "fortios:ENC fakeHash=="
 
     def test_render_emits_user_radius(self):
+        # FortiOS's own secret goes back to FortiOS: the tree says it
+        # came from a FortiOS config (from any other, the envelope is
+        # not FortiOS's own, and the secret is refused).
         intent = CanonicalIntent(
-            source_vendor="test", source_format="test",
+            source_vendor="fortigate_cli", source_format="test",
             radius_servers=[CanonicalRADIUSServer(
                 host="10.0.0.4",
                 key="fortios:ENC abc==",

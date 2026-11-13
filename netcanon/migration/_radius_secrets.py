@@ -321,3 +321,34 @@ def format_review_comment(
     # what ends the comment cannot end it.  ``plain`` is the text alone,
     # for the text of an element (OPNsense), which ElementTree escapes.
     return comment(body, comment_syntax)
+
+
+def refused_secret_warning(host: str, secret: str, target_label: str) -> str:
+    """The job's warning for a server written without its shared
+    secret, beside the line of :func:`format_review_comment`.
+
+    The server is written; its secret is not.  The sentence names the
+    server and the form the secret was stored in, never the secret.
+
+    Args:
+        host: The server's address, as the record holds it.
+        secret: The refused value, for the form it names.
+        target_label: The target's name in the sentence ("Junos").
+    """
+    form = stored_form(secret)
+    if form:
+        why = (
+            f"the source device stored it in its own encoded form "
+            f"({form}), which is not carried"
+        )
+    elif classify_radius_secret(secret) == "unknown":
+        why = "it is in a form Netcanon does not recognise, so it is not carried"
+    else:
+        why = (
+            f"the source device stored it encrypted under its own device "
+            f"key, so {target_label} cannot re-use it"
+        )
+    return (
+        f"RADIUS server {host} is written for {target_label} without its "
+        f"shared secret: {why}.  Re-enter the secret on the device."
+    )

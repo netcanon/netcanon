@@ -1783,13 +1783,23 @@ it.  For example:
 * `Local user "<name>" is not written for <target>: no password
   for it was read from the source ...`.  Add the account on the
   device, with a password.
+* `Local user "<name>" is not written for <target>: its password is
+  a hash (<form>) from the source vendor ...`, or `... the source
+  holds its password as typed ...`.  Add the account on the device
+  and set its password there.
+* `SNMPv3 user "<name>" is not written for <target>: ...`.  Create
+  the user on the device and key it there: a USM key belongs to the
+  device that made it.
+* `RADIUS server <address> is written for <target> without its
+  shared secret: ...`.  The server is in the output; re-enter its
+  secret on the device.
 * A DHCP pool, a VLAN interface or an account the target has no
   form for.  Where the target writes a line for it under `review:`,
   search the output for `review:`.
 
 Do on the device what each warning says was not done.  A `review:`
-line with no warning beside it -- a password hash the target does
-not take, a RADIUS secret it cannot carry -- does not make the job
+line with no warning beside it -- one that is not about a credential,
+such as a VLAN FortiOS can give no parent -- does not make the job
 `partial` yet, so search a `completed` output for `review:` too.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § D.
 

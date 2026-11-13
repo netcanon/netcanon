@@ -467,9 +467,7 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
         # portable shape: emitted WITHOUT the keyword, NX-OS localises it
         # itself, so those now migrate correctly instead of being mislabelled.
         # Policy: :mod:`netcanon.migration._usm_keys`.
-        if user.auth_protocol and not user_usm_is_migratable(
-            user, source_vendor, "cisco_nxos",
-        ):
+        if refuses_snmpv3_user(user, source_vendor):
             kind = user_usm_kind(user, source_vendor)
             lines.append(
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
@@ -838,3 +836,17 @@ def _sort_interfaces_nxos(interfaces: list):
         return (kind_rank, nums, iface.name)
 
     return sorted(interfaces, key=_key)
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on Cisco NX-OS
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "cisco_nxos",
+    )

@@ -2058,12 +2058,18 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # port dropped).
     # And from (0, 0, 20, 1, 0, 2): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-4 a hardware port dropped: onto IOS-XE CLI, NX-OS, OS10 and Junos).
-    "arista_eos": (0, 0, 16, 1, 0, 2),
+    # And from (0, 0, 16, 1, 0, 2): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-13).
+    "arista_eos": (0, 0, 4, 0, 0, 2),
     # From (0, 0, 6, 0, 0, 0): onto Junos the global table has one
     # loopback, unit 0 of lo0.  The two arch3 leafs have `loopback 0`
     # and `loopback 1` there; `loopback 1` was written `lo1`, an
     # interface Junos does not have, and is dropped and listed (+2).
-    "aruba_aoscx": (0, 0, 6, 2, 0, 0),
+    # And from (0, 0, 6, 2, 0, 0): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-7).
+    "aruba_aoscx": (0, 0, 1, 0, 0, 0),
     # From (8, 0, 0, 0, 6, 0): an AOS-S stanza ends at its `exit`, not
     # at a line in column 0.  The KB.15.15 capture, every line at
     # column 0, had been read as three empty VLANs; its 48 letter-slot
@@ -2082,7 +2088,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # left as the source has it, +1 several).
     # And from (7, 0, 0, 0, 11, 2): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-4 left as the source has it: two onto OS10, two onto Junos).
-    "aruba_aoss": (7, 0, 0, 0, 7, 2),
+    # And from (7, 0, 0, 0, 7, 2): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-9).
+    "aruba_aoss": (0, 0, 0, 0, 7, 0),
     # From (10, 0, 0, 0, 3, 20): the IOSv capture whose every line is
     # at column 0 is refused by the IOS-XE CLI parser now, and is no
     # longer among the captures (it is under `refused/`); two of its
@@ -2112,7 +2121,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # servers now, and onto it one job that was `partial` for those alone
     # before any name was checked passes the validation report and
     # lists its names (+1 a name shared with a hardware port).
-    "cisco_iosxe_cli": (14, 0, 0, 1, 4, 16),
+    # And from (14, 0, 0, 1, 4, 16): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-17).
+    "cisco_iosxe_cli": (8, 0, 0, 0, 3, 7),
     # From (4, 0, 13, 0, 1, 2): batfish_ibgp_rr has two loopbacks in
     # the global table; onto Junos `Loopback123` was `lo123` (+1).
     # And onto RouterOS a sub-interface is a VLAN interface on its
@@ -2151,8 +2163,14 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # servers now, and onto it one job that was `partial` for those alone
     # before any name was checked passes the validation report and
     # lists its names (+1 several).
-    "cisco_iosxr": (24, 0, 14, 1, 1, 5),
-    "cisco_nxos": (0, 0, 11, 0, 0, 0),
+    # And from (24, 0, 14, 1, 1, 5): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-19).
+    "cisco_iosxr": (14, 0, 11, 1, 0, 0),
+    # And from (0, 0, 11, 0, 0, 0): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-9).
+    "cisco_nxos": (0, 0, 2, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     # From (0, 0, 0, 0, 0, 11): AOS-S writes a DHCP pool, and
     # `/dhcp-servers/pool` is supported there.  Onto AOS-S the job of
@@ -2168,7 +2186,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # report, and the names hold it alone (+1 several).
     # And from (0, 0, 0, 0, 0, 11): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-5 several: three onto IOS-XE CLI, one onto EOS, one onto OPNsense).
-    "fortigate_cli": (0, 0, 0, 0, 0, 6),
+    # And from (0, 0, 0, 0, 0, 6): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-6).
+    "fortigate_cli": (0, 0, 0, 0, 0, 0),
     # From (0, 0, 7, 0, 5, 7): no record is made for a bare `irb`
     # or `st0` that no line configures, so it is no longer a name
     # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
@@ -2209,7 +2230,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # servers now, and onto it two jobs that were `partial` for those alone
     # before any name was checked pass the validation report and
     # list their names (+1 a name shared with a hardware port, +1 several).
-    "juniper_junos": (6, 0, 10, 0, 2, 9),
+    # And from (6, 0, 10, 0, 2, 9): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-8).
+    "juniper_junos": (5, 0, 8, 0, 0, 6),
     # From (0, 0, 0, 0, 21, 7): a RouterOS line broken anywhere and
     # continued is read whole, so the CRS310 capture's ports are
     # called by the names the operator gave them (`Desktop`,
@@ -2229,7 +2253,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # as the source has them, listed before as well, hold it (+1 left).
     # And from (0, 0, 0, 0, 21, 8): a job whose target leaves a record out is
     # `partial` for that before a name is checked (-1 left as the source has it, onto AOS-S).
-    "mikrotik_routeros": (0, 0, 0, 0, 20, 8),
+    # And from (0, 0, 0, 0, 20, 8): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-12).
+    "mikrotik_routeros": (0, 0, 0, 0, 16, 0),
     # From (4, 0, 0, 0, 23, 1): a VLAN device on a port is a
     # sub-interface of it, so the supergate capture's five devices on
     # `ixl0` are `TenGigE0/0/0/0.10` and the like onto IOS-XR, and
@@ -2257,7 +2284,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # servers now, and onto it two jobs that were `partial` for those alone
     # before any name was checked pass the validation report and
     # list their names (+2 a name left as the source has it).
-    "opnsense": (10, 0, 0, 0, 25, 0),
+    # And from (10, 0, 0, 0, 25, 0): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-27).
+    "opnsense": (8, 0, 0, 0, 0, 0),
     # From (17, 0, 0, 0, 0, 0): EOS counts a port from 1, and `eth0`
     # is written `Ethernet1` there, as `eth1` is: two ports on one name
     # (+9).  Onto AOS-CX and OS10 the same pair is on one name, in jobs
@@ -2277,7 +2307,10 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # VyOS captures name theirs by host name: onto AOS-S each job is
     # `partial` for that before a name is checked, under a review line
     # (-7 a name shared with a hardware port).
-    "vyos": (31, 0, 0, 0, 0, 0),
+    # And from (31, 0, 0, 0, 0, 0): a job whose target refuses a credential
+    # (a password, an SNMPv3 key, a RADIUS secret) is `partial` for
+    # that before a name is checked (-15).
+    "vyos": (16, 0, 0, 0, 0, 0),
 }
 
 #: Names the translator left as the source config has them that a
@@ -2344,8 +2377,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [92, 0, 71, 5, 59, 48]
-        assert sum(by_reason) == 275
+        assert by_reason == [51, 0, 40, 1, 26, 15]
+        assert sum(by_reason) == 133
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

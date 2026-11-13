@@ -273,3 +273,37 @@ def user_usm_kind(user, source_vendor: str) -> str:
             if resolved != PLAINTEXT:
                 return resolved
     return PLAINTEXT
+
+
+def usm_warning(user, source_vendor: str, target_label: str) -> str:
+    """The job's warning for an SNMPv3 user the target leaves out under
+    a review line, because a key of it cannot be carried there.
+
+    It names the user and the kind of its least portable key
+    (:func:`user_usm_kind`), never a key.  A user that carries no key at
+    all is said to: across vendors there is nothing to carry.
+
+    Args:
+        user: The :class:`CanonicalSNMPv3User` left out.
+        source_vendor: The tree's ``source_vendor``.
+        target_label: The target's name in the sentence ("Junos").
+    """
+    if not (user.auth_passphrase or user.priv_passphrase):
+        why = "no USM key of it was read from the source"
+    else:
+        kind = user_usm_kind(user, source_vendor)
+        if kind == PLAINTEXT:
+            why = (
+                f"its USM key is a passphrase, which is not written for "
+                f"{target_label} from another vendor's config"
+            )
+        else:
+            why = (
+                f"its USM key is {kind}, bound to the source device, and "
+                f"{target_label} cannot use it"
+            )
+    return (
+        f'SNMPv3 user "{user.name}" is not written for {target_label}: '
+        f"{why}.  It is a review comment; create the user on the device "
+        f"and key it there."
+    )

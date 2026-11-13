@@ -959,9 +959,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # authenticates nobody.  The review comment carries no
                 # `key=value` token, so `_parse_snmp_community` skips it.
                 # Policy: :mod:`netcanon.migration._usm_keys`.
-                if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
-                    u, tree.source_vendor, "mikrotik_routeros",
-                ):
+                if refuses_snmpv3_user(u, tree.source_vendor):
                     kind = user_usm_kind(u, tree.source_vendor)
                     lines.append(
                         f"# snmpv3 user {u.name} -- review: a {kind} USM key "
@@ -1560,3 +1558,17 @@ def _vlan_id_for(name: str, vlans: list[CanonicalVlan]) -> int | None:
     if m:
         return int(m.group(1))
     return None
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on RouterOS
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol or user.priv_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "mikrotik_routeros",
+    )

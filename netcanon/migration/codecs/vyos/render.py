@@ -589,14 +589,13 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
     usable = [u for u in users if u.auth_protocol]
     if not usable:
         return []
-    same_vendor = source_vendor == "vyos"
     # One pass sorts them into the two.  (``u not in carried`` compared
     # every user with every carried one, field by field: the square of
     # the users, for a list that a same-vendor render carries whole.)
     carried: list = []
     refused: list = []
     for u in sorted(usable, key=lambda x: x.name):
-        (carried if same_vendor and u.auth_passphrase else refused).append(u)
+        (refused if refuses_snmpv3_user(u, source_vendor) else carried).append(u)
     out = [_snmp_v3_review(u.name, source_vendor) for u in refused]
     if not carried:
         return out
@@ -772,3 +771,18 @@ def _render_vxlan(vxlans: list) -> list[str]:
         out.append(f"        port {v.udp_port}")
         out.append("    }")
     return out
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user: one with an auth protocol whose key VyOS did not make --
+    a key from another vendor, or none at all
+    (:func:`_render_snmp_v3`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol) and not (
+        source_vendor == "vyos" and bool(user.auth_passphrase)
+    )

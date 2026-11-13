@@ -94,6 +94,8 @@ Configuration surface:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ._comments import comment
 
 # ---------------------------------------------------------------------------
@@ -543,3 +545,47 @@ def empty_hash_warnings(users, target_label: str) -> list[str]:
         for user in users
         if holds_no_secret(user.hashed_password)
     ]
+
+
+def unmigratable_hash_warnings(
+    users, target_label: str, takes: Callable[[str], bool],
+) -> list[str]:
+    """The job's warning for each of ``users`` whose password the target
+    does not take: the account :func:`format_review_comment` stands in
+    for.
+
+    Args:
+        users: The tree's ``local_users``.
+        target_label: The target's name in the sentence ("Junos").
+        takes: Whether the target takes a password as the tree holds
+            it -- the question its renderer asks
+            (:meth:`~netcanon.migration.codecs.base.CodecBase.takes_password`).
+
+    Returns:
+        One sentence an account, naming it and the form of its
+        password, never a secret of it.  An account that holds no
+        password is :func:`empty_hash_warnings`'s, not this one's.
+    """
+    said: list[str] = []
+    for user in users:
+        hashed = user.hashed_password
+        if holds_no_secret(hashed) or takes(hashed):
+            continue
+        algorithm = classify_hash(hashed)[0]
+        if algorithm == "plaintext":
+            why = (
+                f"the source holds its password as typed, and "
+                f"{target_label} takes a password into its config only as "
+                f"a hash"
+            )
+        else:
+            why = (
+                f"its password is a hash ({algorithm}) from the source "
+                f"vendor, which {target_label} cannot re-use"
+            )
+        said.append(
+            f'Local user "{user.name}" is not written for {target_label}: '
+            f"{why}.  It is a review comment; add it on the device and set "
+            f"its password there."
+        )
+    return said

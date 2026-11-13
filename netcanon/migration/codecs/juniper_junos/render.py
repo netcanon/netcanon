@@ -216,12 +216,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # is refused here too: Junos takes one only at the prompt of
         # ``plain-text-password``, and ``encrypted-password "<typed>"``
         # made the typed string the hash (``_TARGET_ACCEPTS`` notes).
-        if (
-            user.hashed_password
-            and not user.hashed_password.startswith("junos:")
-            and not is_migratable(user.hashed_password, "juniper_junos")
-            and not _is_md5crypt_tagged(user.hashed_password)
-        ):
+        if user.hashed_password and not takes_password(user.hashed_password):
             algorithm, _payload = classify_hash(user.hashed_password)
             out.append(
                 format_review_comment(
@@ -1244,9 +1239,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # VACM binding with it -- a security-name with no usable key
             # authenticates nobody), and Junos's own value goes back verbatim.
             # Policy: :mod:`netcanon.migration._usm_keys`.
-            if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
-                u, tree.source_vendor, "juniper_junos",
-            ):
+            if refuses_snmpv3_user(u, tree.source_vendor):
                 kind = user_usm_kind(u, tree.source_vendor)
                 out.append(
                     f"# snmpv3 user {u.name} -- review: a {kind} USM key "
@@ -2150,3 +2143,34 @@ def _quote_always(s: str) -> str:
     """
     escaped = s.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def refuses_snmpv3_user(user, source_vendor: str) -> bool:
+    """Whether an SNMPv3 user is written as a review line in place of
+    the user, because a key of it cannot be used on Junos
+    (:mod:`netcanon.migration._usm_keys`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.refuses_snmpv3_user`
+    asks it of the same tree for the job's warning.
+    """
+    return bool(user.auth_protocol or user.priv_protocol) and not user_usm_is_migratable(
+        user, source_vendor, "juniper_junos",
+    )
+
+
+def takes_password(hashed: str) -> bool:
+    """Whether a local user's password is written for Junos as the tree
+    holds it: Junos's own (``junos:``), one the shared policy lets
+    through (:func:`is_migratable`), or an md5crypt one under any tag
+    (:func:`_is_md5crypt_tagged`).
+
+    The renderer asks it, and the codec's
+    :meth:`~netcanon.migration.codecs.base.CodecBase.takes_password`
+    asks it of the same tree for the job's warning.
+    """
+    return (
+        hashed.startswith("junos:")
+        or is_migratable(hashed, "juniper_junos")
+        or _is_md5crypt_tagged(hashed)
+    )
