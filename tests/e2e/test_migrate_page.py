@@ -898,6 +898,44 @@ class TestADeactivatedStatement:
             "the target by hand only if it is to be in force there."
         )
 
+    def test_a_vxlan_interface_that_is_down(self, page: Page, base_url: str):
+        """An AOS-CX ``interface vxlan`` that is down carries none of
+        its VNIs: none in the output, and a row under the heading of
+        statements the source held and did not run, with a sentence of
+        its own."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("aruba_aoscx")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(
+            "hostname sw1\nvlan 11\n"
+            "interface vlan 11\n    ip address 192.0.2.1/24\n"
+            "interface vxlan 1\n    source ip 198.51.100.1\n    shutdown\n"
+            "    vni 10011\n        vlan 11\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("192.0.2.1")
+        expect(mig.output).not_to_contain_text("10011")
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Statements the source held and did not run")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "shutdown: interface vxlan 1 (a VXLAN interface the source holds "
+            "shut, so it carries none of its VNIs; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
+            "A line that begins shutdown: is a VXLAN interface the source "
+            "holds shut: it carried none of its VNIs there, and is left out "
+            "here with them for that reason. Write it on the target by hand "
+            "only if the overlay is to carry traffic there."
+        )
+
     def test_more_routes_than_are_listed(self, page: Page, base_url: str):
         """Past the rows a job lists, one row counts the rest, and it
         begins with the word of its kind.  For a route that word begins

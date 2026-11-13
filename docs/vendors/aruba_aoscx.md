@@ -59,7 +59,15 @@ translatable with caveats:
 - Local users — named AOS-CX `group` (administrators / operators /
   auditors / custom) + `password ciphertext` blob
 - VXLAN — VLAN↔VNI binding (`interface vxlan 1 / vni <VNI>` with
-  nested `vlan <VLAN>`)
+  nested `vlan <VLAN>`).  A VTEP that is down (`shutdown`, or no
+  `no shutdown`) carries none of its VNIs: it is left out with
+  them, and said in a `shutdown: interface vxlan <N>` row.  ⚠️ Up
+  to 0.7.7 its state was not read, and the VNIs of a shut VTEP
+  were written onto every target that writes an overlay, onto
+  AOS-CX under `no shutdown`.  As a target, AOS-CX writes the VTEP
+  as `interface vxlan 1`, whatever number the source gave it:
+  every committed AOS-CX input numbers it 1, and whether a switch
+  takes another number is not established.
 
 > **Management-plane caveat.**  When AOS-CX is the **target**, the
 > codec renders no `ip domain-name` / `ip dns` / `ntp server` /

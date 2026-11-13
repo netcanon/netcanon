@@ -80,6 +80,13 @@ static edit <id>` row (`static6` for IPv6) a FortiGate route of
 the route is to be in force on the target — then write it there by
 hand.
 
+A row that begins `shutdown:` is an AOS-CX VXLAN interface
+(`interface vxlan <N>`) that is down: it says `shutdown`, or no `no
+shutdown`, and AOS-CX brings it up only on `no shutdown`.  It
+carried none of its VNIs, and is left out with them for that
+reason.  **Action:** none, unless the overlay is to carry traffic
+on the target — then write it there by hand.
+
 Some rows are sections the parser itself took out, and are in no
 output: an `interface range ...` header in a text read as IOS-XE or
 IOS XR (configure the ports it covers by hand), a header that names

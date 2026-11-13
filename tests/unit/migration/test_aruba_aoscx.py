@@ -321,6 +321,7 @@ def test_render_vxlan_grammar(codec: ArubaAOSCXCodec) -> None:
         "vlan 10\n"
         "vlan 20\n"
         "interface vxlan 1\n"
+        "    no shutdown\n"
         "    source ip 10.0.0.1\n"
         "    vni 10010\n"
         "        vlan 10\n"
