@@ -130,7 +130,7 @@ One hand-authored fixture per codec exercising every field the codec's :class:`C
 | aruba_aoscx/kitchen_sink.cfg | WARN 16/21 | OK 21/21 | WARN 15/21 | WARN 19/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 14/21 |
 | aruba_aoss/kitchen_sink.cfg | WARN 18/21 | WARN 13/21 | OK 21/21 | WARN 20/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 | WARN 15/21 |
 | cisco_iosxe/kitchen_sink.xml | WARN 19/21 | WARN 18/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 18/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
-| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 13/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 12/21 |
+| cisco_iosxe_cli/kitchen_sink.txt | WARN 15/21 | WARN 9/21 | WARN 13/21 | WARN 20/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 13/21 | WARN 14/21 | WARN 16/21 | WARN 12/21 | WARN 12/21 | WARN 12/21 |
 | cisco_iosxr/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 15/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 |
 | cisco_nxos/kitchen_sink.cfg | WARN 15/21 | WARN 14/21 | WARN 14/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 15/21 | WARN 13/21 |
 | dell_os10/kitchen_sink.cfg | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 20/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 |
@@ -10653,11 +10653,10 @@ One section per non-OK synthetic cell (160 total).  Sections are ordered by sour
 | radius_servers | DRIFT | [{"host": "198.51.100.40", "key": "iosxe:7 fakeRadiusSharedSecret01", "auth_port": 1812, "acct_port": 1813}, {"host": "198.51.100.41", "key": "iosxe:7 fakeRadiusSharedSecret02", "auth_port": 1812, ... | [] | all 2 radius_servers dropped |
 | routing_instances | DRIFT | [{"name": "CUSTOMER-A", "instance_type": "vrf", "route_distinguisher": "65000:100", "rt_imports": ["65000:100", "65000:999"], "rt_exports": ["65000:100"], "description": "Tenant A \u2014 corp-overl... | [{"name": "CUSTOMER-A", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": null}, {"name": "Mgmt-vrf", "instance_type": "vrf", "rout... | {"routing_instances[0] {'name': 'CUSTOMER-A'}": {"description": {"source": "Tenant A \u2014 corp-overlay", "target": ""}, "route_distinguisher": {"source": "65000:100", "target": ""}, "rt_exports":... |
 
-### cisco_iosxe_cli/kitchen_sink.txt → fortigate_cli  (WARN 13/21)
+### cisco_iosxe_cli/kitchen_sink.txt → fortigate_cli  (WARN 14/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| dns_servers | DRIFT | ["198.51.100.53", "198.51.100.54", "2001:db8:53::1"] | ["198.51.100.53", "198.51.100.54"] | count drift: 3 → 2 (dns_servers) |
 | syslog_servers | DRIFT | ["198.51.100.200", "198.51.100.201"] | [] | all 2 syslog_servers dropped |
 | interfaces | DRIFT | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_... | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management in", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ip_mtu": null, "ipv4_address... | {"interfaces[0] {'name': 'GigabitEthernet0'}": {"description": {"source": "Out-of-band management interface", "target": "Out-of-band management in"}, "vrf": {"source": "Mgmt-vrf", "target": ""}}, "... |
 | vlans | DRIFT | [{"id": 10, "name": "USERS", "description": "", "tagged_ports": [], "untagged_ports": ["GigabitEthernet0/0/1", "Port-channel1", "TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "ipv4_addresse... | [] | all 4 vlans dropped |

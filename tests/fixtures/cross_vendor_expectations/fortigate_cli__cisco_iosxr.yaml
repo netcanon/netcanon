@@ -88,10 +88,13 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      Both matrices declare `/system/dns-server` supported and the round-trip
-      agrees on 4 of 4 cells: FortiOS `config system dns / set primary` +
-      `set secondary` becomes one `domain name-server <ip>` line per server,
-      order preserved.
+      The fortigate_cli parser reads the resolver slots of `config
+      system dns` (since 2026-11-12): `set primary` and `set secondary`
+      for IPv4, `set ip6-primary` and `set ip6-secondary` for IPv6; a
+      slot printed as the unspecified address holds none, and the
+      cisco_iosxr renderer writes the name servers it is given.
+      Measured over 4 cells: drifted on 0, preserved on 4, both sides
+      empty on 0.
     references: [fortigate-iosxr-surface]
 
   ntp_servers:

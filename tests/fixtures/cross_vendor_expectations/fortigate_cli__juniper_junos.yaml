@@ -244,11 +244,13 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      FortiOS schemas DNS into ``set primary`` + ``set secondary`` (and
-      a hidden ``set tertiary``) — at most three servers.  Junos accepts
-      arbitrarily many ``set system name-server X`` directives, so the
-      canonical list always fits the Junos render.  No truncation in
-      this direction.
+      The fortigate_cli parser reads the resolver slots of `config
+      system dns` (since 2026-11-12): `set primary` and `set secondary`
+      for IPv4, `set ip6-primary` and `set ip6-secondary` for IPv6; a
+      slot printed as the unspecified address holds none, and the
+      juniper_junos renderer writes the name servers it is given.
+      Measured over 4 cells: drifted on 0, preserved on 4, both sides
+      empty on 0.
     references: [fortios-cli-reference, junos-initial-config]
 
   ntp_servers:

@@ -80,12 +80,13 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      Both matrices declare `/system/dns-server` supported.  No committed
-      fixture on this pair populates the field (0 of 13 cells), so this rests
-      on the declarations rather than an observed round-trip — stated rather
-      than left implicit.  FortiOS schemas DNS as `set primary` / `set
-      secondary` under `config system dns`, so a source list longer than the
-      FortiOS slots would need checking when a fixture finally exercises it.
+      The cisco_nxos matrix declares `/system/dns-server` supported, and
+      the fortigate_cli renderer writes each resolver in a slot of its
+      address family (since 2026-11-12): `set primary` and `set
+      secondary` for IPv4, `set ip6-primary` and `set ip6-secondary` for
+      IPv6, read back by its parser; no committed input of the pair
+      states a name server.  Measured over 13 cells: drifted on 0,
+      preserved on 0, both sides empty on 13.
     references: [nxos-fortigate-surface]
 
   ntp_servers:

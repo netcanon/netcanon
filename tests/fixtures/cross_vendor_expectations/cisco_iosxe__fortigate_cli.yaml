@@ -144,13 +144,14 @@ per_field_expectation:
 
   dns_servers:
     disposition: not_applicable
-    note: >
-      Same parse-side wire-up gap.  cisco_iosxe parser doesn't read
-      `<system><dns><servers>` today.  Once wired, flips to lossy
-      because FortiOS schemas DNS into `set primary` / `set secondary`
-      (and a hidden `set tertiary`) — at most three; Cisco-side
-      configurations with more than three servers would lose the tail
-      on FortiGate render.
+    reason: >
+      The cisco_iosxe matrix declares `/system/dns-server` unsupported;
+      the fortigate_cli renderer writes each resolver in a slot of its
+      address family (since 2026-11-12): `set primary` and `set
+      secondary` for IPv4, `set ip6-primary` and `set ip6-secondary` for
+      IPv6, read back by its parser, and no committed input of the pair
+      states a name server.  Measured over 1 cell: drifted on 0,
+      preserved on 0, both sides empty on 1.
     references: [openconfig_yang_scope, oc_system]
 
   ntp_servers:

@@ -67,6 +67,7 @@ both modules.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 import shlex
@@ -447,13 +448,36 @@ def _apply_system_global(block: _ConfigBlock, intent: CanonicalIntent) -> None:
         intent.hostname = hostname[0]
 
 
+#: The resolver slots of ``config system dns`` by the address family
+#: each takes, in the order the tree keeps them: ``primary`` and
+#: ``secondary`` take an IPv4 address, ``ip6-primary`` and
+#: ``ip6-secondary`` an IPv6 one (Fortinet's CLI reference, 7.6.6).
+#: ``alt-primary`` and ``alt-secondary`` are not read: the reference
+#: says neither is "used as a failover DNS server".
+RESOLVER_SLOTS: dict[int, tuple[str, str]] = {
+    4: ("primary", "secondary"),
+    6: ("ip6-primary", "ip6-secondary"),
+}
+
+
+def names_a_resolver(value: str) -> bool:
+    """Whether a resolver slot holding *value* names a resolver: any
+    value but the unspecified address, which is the slot's default
+    (``0.0.0.0``, ``::``) and how a printout of the whole configuration
+    says that it holds none.  A value that is no address is kept as it
+    stands, for the target's renderer to write or to leave out."""
+    try:
+        return not ipaddress.ip_address(value).is_unspecified
+    except ValueError:
+        return True
+
+
 def _apply_system_dns(block: _ConfigBlock, intent: CanonicalIntent) -> None:
-    primary = block.settings.get("primary")
-    if primary:
-        intent.dns_servers.append(primary[0])
-    secondary = block.settings.get("secondary")
-    if secondary:
-        intent.dns_servers.append(secondary[0])
+    for slots in RESOLVER_SLOTS.values():
+        for slot in slots:
+            value = block.settings.get(slot)
+            if value and names_a_resolver(value[0]):
+                intent.dns_servers.append(value[0])
     # ``set domain "<fqdn>"`` is the FortiOS-native domain-name form
     # inside ``config system dns`` (mirrors render emit at
     # ``fortigate_cli/render.py`` ~line 450).  Without this read the

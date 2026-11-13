@@ -1,5 +1,8 @@
 # System services (hostname / NTP / DNS / logging / clock): FortiGate FortiOS versus Cisco IOS-XE
 
+<!-- fortios-resolver-slots -->
+> **Update 2026-11-12 — the FortiGate parser reads the IPv6 resolver slots, and a slot printed as the unspecified address as none.**  It read `set primary` and `set secondary` of `config system dns` only, and read a slot printed as `0.0.0.0` as a resolver.  It now reads `set ip6-primary` and `set ip6-secondary` too -- Fortinet's CLI reference (7.6.6) gives FortiOS these four slots, two IPv4 and two IPv6, and no third of either family -- and a slot printed as `0.0.0.0` or `::` (its default, which a printout of the whole configuration shows) as none.  No measurement of this pair moved: the committed FortiGate inputs state IPv4 resolvers only.  A sentence below that gives FortiOS a third slot is not borne out by that reference.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__cisco_iosxe_cli.yaml`.
+
 This is the reverse-direction sibling of
 [`../cisco_iosxe_cli_to_fortigate_cli/system_services.md`](../cisco_iosxe_cli_to_fortigate_cli/system_services.md).
 The vendor surfaces and source URLs are unchanged; this file flips
