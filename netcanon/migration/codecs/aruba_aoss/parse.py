@@ -822,17 +822,6 @@ _AOS_PORT_SHAPE_RE = re.compile(
     r"^(?:[Tt][Rr][Kk]\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
 )
 
-#: DoS clamp on port-range expansion.  A fully-stacked AOS-S chassis tops out
-#: at ~10 stack members x 48 ports ~= 500 ports, so 1024 is generous headroom
-#: for any real device.  Without it, ``_expand_port_range`` materialises
-#: ``range(lo, hi + 1)`` unbounded and the ``_AOS_PORT_SHAPE_RE`` gate accepts
-#: an unbounded ``\d+`` endpoint — so a ~20-byte ``tagged 1-999999999`` in a
-#: VLAN stanza would allocate ~1e9 strings and OOM the worker.  Reachable from
-#: ``POST /plan`` and blind to the 10 MB raw_text cap (amplification, not raw
-#: size).
-_MAX_PORT_RANGE_SPAN = 1024
-
-
 def _parse_port_list(text: str) -> list[str]:
     """Expand AOS-S port-list syntax into individual port names.
 
@@ -899,7 +888,14 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
       * ``2/1-2/48``    — second stack member
 
     Trailing digits vary; everything else must match between lo and
-    hi.  Pre-:commit: WC.16.11.0025 2930M fixture landing, the old
+    hi.  A range is the ports it names, however many: nothing here
+    knows which ports the switch has.  What it makes is counted
+    before it is made, and a range past the limit in force is
+    refused (:class:`~netcanon.migration.limits.LimitExceeded`).
+    Up to 0.7.7 a range of more than 1,025 ports was read as its two
+    end ports, in a job that said nothing of it.
+
+    Pre-:commit: WC.16.11.0025 2930M fixture landing, the old
     regex ``^([A-Za-z]*)(\\d+)(?:/(\\d+))?$`` silently dropped the
     slot prefix when expanding ``1/1-1/47`` (produced ``["1"]``) and
     failed to match ``1/A1-1/A4`` at all (returned the two endpoints
@@ -920,27 +916,13 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     prefix_hi, num_hi = m_hi.group(1), int(m_hi.group(2))
     if prefix_lo != prefix_hi or num_hi < num_lo:
         return [lo, hi]
-    if num_hi - num_lo > _MAX_PORT_RANGE_SPAN:
-        # Implausible span — refuse to materialise (DoS clamp).  Keep the two
-        # endpoints as literal port names; a real AOS-S range never exceeds a
-        # few hundred ports, so this only ever fires on malformed / hostile
-        # input, and we log it rather than silently dropping coverage.  Log
-        # only the derived span + cap (integers) — NOT the raw ``lo``/``hi``
-        # tokens, which are parsed config values (CodeQL clear-text-logging).
-        logger.warning(
-            "aruba_aoss: refusing to expand an implausible port range "
-            "(span %d > cap %d); keeping the two endpoints as literal port "
-            "names instead of materialising the range.",
-            num_hi - num_lo + 1, _MAX_PORT_RANGE_SPAN,
-        )
-        return [lo, hi]
     # Counted before the names are made, whatever the line then does
-    # with them: a line can hold hundreds of ranges, and the clamp
-    # above is on each one.  Then the DIFFERENT ports that ranges have
-    # named so far: a range can name ports no device has, and every
-    # one of them is a port to everything that reads the tree.  (One
-    # range is at most ``_MAX_PORT_RANGE_SPAN`` + 1 names, so making it
-    # before that second count costs nothing worth counting.)
+    # with them: ``1-999999999`` is a billion ports in a dozen bytes,
+    # and is refused here before one of them is made.  Then the
+    # DIFFERENT ports that ranges have named so far: a range can name
+    # ports no device has, and every one of them is a port to
+    # everything that reads the tree.  (What a range makes before that
+    # second count is what the first one charged.)
     charge("memberships", num_hi - num_lo + 1, f"{lo}-{hi}")
     names = [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
     distinct("ports", names, f"{lo}-{hi}")

@@ -1401,6 +1401,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-S port range of more than 1,025 ports is read as the ports
+  it names.**  The parser read such a range as its two end ports --
+  `tagged 1-1026` was ports 1 and 1026 -- with a line in the server's
+  log and nothing in the job, so the VLAN or the LAG came out on two
+  ports the line does not name, in a job that said `completed`.  That
+  bound is older than the config size limits.  A range is now read
+  whole, and what it makes is counted before it is made: past
+  `memberships` (`tagged 1-999999999`) it is refused before one port
+  of it is made, and past `ports` once its different ports are
+  counted, in words, as any range is.  Ports are still not checked
+  against the switch's model.  No committed input moves.
+
 - **A text whose only indented lines are a bare `!` is a text with no
   indentation.**  IOS XR and EOS print a `!` indented at the end of a
   submode.  The check that refuses a config with no indentation, which

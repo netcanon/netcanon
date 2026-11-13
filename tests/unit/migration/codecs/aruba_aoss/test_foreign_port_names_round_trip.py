@@ -100,25 +100,28 @@ class TestParseDoesNotShredForeignPortNames:
         # Real wire form from cross-vendor ksator_qfx5100 round-trip.
         assert _parse_port_list("xe-0/0/2,1/1") == ["xe-0/0/2", "1/1"]
 
-    def test_implausible_range_is_clamped_not_materialised(self):
-        """PERF-1 (2026-07-03 review): an absurd port-range span must NOT be
-        expanded — the ``_AOS_PORT_SHAPE_RE`` gate accepts an unbounded
-        ``\\d+`` endpoint, so ``tagged 1-999999999`` (reachable via POST
-        /plan) would otherwise allocate ~1e9 strings and OOM the worker.
+    def test_an_implausible_range_is_refused_before_it_is_made(self):
+        """PERF-1: an absurd port-range span must NOT be made -- the
+        ``_AOS_PORT_SHAPE_RE`` gate accepts an unbounded ``\\d+``
+        endpoint, so ``tagged 1-999999999`` (reachable via POST /plan)
+        would otherwise allocate ~1e9 strings and OOM the worker.
 
-        The clamp keeps the two endpoints as literal port names and returns
-        near-instantly instead of materialising the range.
+        It is counted before it is made, and refused at once (outside
+        any scope the default limits hold it alone).  A range of more
+        ports than a switch has, and fewer than the limits, is read
+        whole: up to 0.7.7 it was its two end ports.
         """
         import time
 
+        from netcanon.migration.limits import LimitExceeded
+
         start = time.perf_counter()
-        result = _parse_port_list("1-999999999")
+        with pytest.raises(LimitExceeded) as caught:
+            _parse_port_list("1-999999999")
         elapsed = time.perf_counter() - start
-        assert result == ["1", "999999999"], result
-        assert elapsed < 1.0, f"clamp did not short-circuit ({elapsed:.2f}s)"
-        # A range just past the cap is also clamped (endpoints only).
-        assert _parse_port_list("1-5000") == ["1", "5000"]
-        # A plausible in-cap range still expands fully.
+        assert caught.value.kind == "memberships"
+        assert elapsed < 1.0, f"the range was not refused before it was made ({elapsed:.2f}s)"
+        assert _parse_port_list("1-5000") == [str(n) for n in range(1, 5001)]
         assert _parse_port_list("1-10") == [str(n) for n in range(1, 11)]
 
 

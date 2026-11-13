@@ -42,7 +42,6 @@ import pytest
 
 from netcanon.api.routes import _migration_helpers as helpers
 from netcanon.migration import limits as L
-from netcanon.migration.codecs.aruba_aoss.parse import _MAX_PORT_RANGE_SPAN
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.codecs.vyos.parse import _MAX_SET_DEPTH
 from netcanon_desktop.preferences_dialog import LIMITS_OFFERED
@@ -161,7 +160,10 @@ def _sentences() -> dict[str, list[str]]:
             "`NETCANON_CONFIG_LIMITS=small`",
         ],
         "docs/demo-plan/04-container-hardening.md": ['"NETCANON_CONFIG_LIMITS": "small"'],
-        "docs/vendors/aruba_aoss.md": [f"One range is read up to {_number(_MAX_PORT_RANGE_SPAN + 1)} ports"],
+        "docs/vendors/aruba_aoss.md": [
+            f"under `small` a range of more than {_number(small.ports)} ports is refused, "
+            f"and under `standard` one of more than {_number(standard.ports)}.",
+        ],
         "docs/vendors/vyos.md": [f"A set line nested more than {_MAX_SET_DEPTH} levels deep is a parse failure."],
         "docs/TROUBLESHOOTING.md": ["`NETCANON_CONFIG_LIMITS=large` (or `unlimited`)"],
         "README.md": ["`standard` (the default), `large`, `unlimited`, or `small`, which is what the public demo runs"],

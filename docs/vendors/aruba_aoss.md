@@ -952,16 +952,22 @@ have.
   stanzas.  The output is a
   whole configuration: read into a switch that already has one, a
   port left out here keeps whatever that switch had for it.
-- **A port range that names ports the switch does not have is
-  refused.**  `tagged 1-1001` is 1,001 ports to everything downstream.
-  One range is read up to 1,025 ports; the DIFFERENT ports that ranges
-  name, and the ports that only a VLAN's or a LAG's list names, are
-  held to the server's config size limit (`ports`), and the job says
-  `refused:` with the range that passed it.  Each of those ports is
+- **A port range is not checked against the switch's ports.**
+  `tagged 1-1001` is 1,001 ports to everything downstream, and
+  `tagged 1-2000` is 2,000.  What a range names is counted before it
+  is made (`memberships`); the DIFFERENT ports that ranges name, and
+  the ports that only a VLAN's or a LAG's list names, are held to the
+  server's config size limit (`ports`), and the job says `refused:`
+  with the range that passed it: under `small` a range of more than
+  2,048 ports is refused, and under `standard` one of more than
+  8,192.  Each of those ports is
   then an interface, and counts toward `interfaces` with the ports
   that have a stanza.  An AOS-S OUTPUT is held to the same count of
   the ports its ranges name, where it is written.  See
-  [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.  ⚠️ Up to
+  0.7.7 a range of more than 1,025 ports was read as its two end
+  ports, in a job that said nothing of it: a translation made from
+  such a text has the VLAN or the LAG on those two ports only.
 - **`include-credentials` mode** affects how credentials appear in
   running-config.  Without it a switch prints a bare `password
   manager` marker, which the parser reads as an account that holds
