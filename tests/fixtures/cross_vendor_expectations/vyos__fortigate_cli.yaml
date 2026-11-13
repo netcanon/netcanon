@@ -94,17 +94,14 @@ per_field_expectation:
   dns_servers:
     disposition: lossy
     reason: >
-      A capacity limit, not a concept gap.  Drifts on the one cell that sets
-      more than two resolvers (`scottlaird-vyos-parser.conf`): 3 name-servers
-      in, 2 out.  The rendered `config system dns` block carries exactly
-      `set primary` and `set secondary` and nothing else, so the third
-      resolver has no slot and is dropped; the first two survive in order.
-      Both matrices declare `/system/dns-server` supported, which is why this
-      is `lossy` rather than `unsupported` — the target models the concept,
-      it just holds fewer of them.  Check the source resolver list against
-      the render before cutover; a silently missing third resolver only bites
-      when the first two are unreachable, which is exactly the incident you
-      were relying on it for.
+      The vyos parser reads the name servers.  The fortigate_cli
+      renderer writes each resolver in a slot of its address family
+      (since 2026-11-12): `set primary` and `set secondary` for IPv4,
+      `set ip6-primary` and `set ip6-secondary` for IPv6, read back by
+      its parser; a resolver after the second of its family, or one that
+      is no address, is left out under a review line that names no
+      value.  Measured over 13 cells: drifted on 1, preserved on 0, both
+      sides empty on 12.
     references: [vyos-fortigate-surface]
 
   ntp_servers:

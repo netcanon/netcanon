@@ -1,5 +1,8 @@
 # System services: FortiGate FortiOS versus OPNsense
 
+<!-- fortios-resolver-slots -->
+> **Update 2026-11-12 — the FortiGate parser reads the IPv6 resolver slots, and a slot printed as the unspecified address as none.**  It read `set primary` and `set secondary` of `config system dns` only, and read a slot printed as `0.0.0.0` as a resolver.  It now reads `set ip6-primary` and `set ip6-secondary` too -- Fortinet's CLI reference (7.6.6) gives FortiOS these four slots, two IPv4 and two IPv6, and no third of either family -- and a slot printed as `0.0.0.0` or `::` (its default, which a printout of the whole configuration shows) as none.  No measurement of this pair moved: the committed FortiGate inputs state IPv4 resolvers only.  A sentence below that gives FortiOS a third slot is not borne out by that reference.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__opnsense.yaml`.
+
 Hostname / domain / DNS / NTP / syslog / timezone — the small foundation
 surface that transcribes between any two vendors.
 

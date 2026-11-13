@@ -132,14 +132,14 @@ per_field_expectation:
     references: [system_services]
 
   dns_servers:
-    disposition: lossy
-    reason: >
-      RouterOS ``/ip dns / set servers=<csv>`` (unbounded) versus
-      FortiOS three-server cap (``set primary`` / ``set secondary``
-      / hidden ``set tertiary``).  RouterOS-source lists with four+
-      entries lose the tail on FortiOS render.  Most RouterOS
-      deployments carry only two DNS servers, so the loss is
-      uncommon in practice.
+    disposition: good
+    note: >
+      The mikrotik_routeros parser reads the name servers, and the
+      fortigate_cli renderer writes each resolver in a slot of its
+      address family (since 2026-11-12): `set primary` and `set
+      secondary` for IPv4, `set ip6-primary` and `set ip6-secondary` for
+      IPv6, read back by its parser.  Measured over 5 cells: drifted on
+      0, preserved on 1, both sides empty on 4.
     references: [system_services]
 
   ntp_servers:

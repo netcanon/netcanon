@@ -160,13 +160,14 @@ per_field_expectation:
   dns_servers:
     disposition: unsupported
     reason: >
-      FortiGate parser populates `intent.dns_servers` from `config
-      system dns / set primary / set secondary` (and the hidden
-      `set tertiary`).  cisco_iosxe render emits no `<system><dns>`
-      element (render-side wire-up gap).  Flips to good once wired —
-      FortiGate-source DNS is capped at three by the FortiOS schema,
-      so no truncation when emitted into Cisco's unbounded
-      `<host>/<address>` list.
+      The fortigate_cli parser reads the resolver slots of `config
+      system dns` (since 2026-11-12): `set primary` and `set secondary`
+      for IPv4, `set ip6-primary` and `set ip6-secondary` for IPv6; a
+      slot printed as the unspecified address holds none; the
+      cisco_iosxe matrix declares `/system/dns-server` unsupported, its
+      renderer writes no name server, and the value is dropped under the
+      cross-vendor banner.  Measured over 4 cells: drifted on 4,
+      preserved on 0, both sides empty on 0.
     references: [openconfig_yang_scope, oc_system]
 
   ntp_servers:

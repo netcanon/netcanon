@@ -144,10 +144,13 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      FortiOS ``set primary`` + ``set secondary`` (capped at three
-      total) maps to RouterOS ``/ip dns / set servers=<csv>``
-      (unbounded).  No truncation in this direction; FortiGate-side
-      cap is well within RouterOS's list capacity.
+      The fortigate_cli parser reads the resolver slots of `config
+      system dns` (since 2026-11-12): `set primary` and `set secondary`
+      for IPv4, `set ip6-primary` and `set ip6-secondary` for IPv6; a
+      slot printed as the unspecified address holds none, and the
+      mikrotik_routeros renderer writes the name servers it is given.
+      Measured over 4 cells: drifted on 0, preserved on 4, both sides
+      empty on 0.
     references: [system_services]
 
   ntp_servers:

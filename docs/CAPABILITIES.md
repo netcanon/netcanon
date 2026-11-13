@@ -520,6 +520,16 @@ that ends in a form feed or the like, is refused (see
 [`vendors/fortigate.md`](vendors/fortigate.md) § "A quoted value of
 several lines").  Such a value reaches every target on one line (§ C1).
 
+The resolvers are read from and written to the four slots of
+`config system dns`, two a family: `set primary` and `set
+secondary` take an IPv4 address, `set ip6-primary` and `set
+ip6-secondary` an IPv6 one, and a slot printed as `0.0.0.0` or `::`
+holds none.  A resolver after the second of its family, a value
+that is no address and the unspecified address are not written and
+are said in a `# review:` line, and so is a source that asks an
+IPv6 resolver before an IPv4 one, since which family FortiOS asks
+first is not established.
+
 A DHCP server is read as it hands addresses out: every `config
 ip-range` less every `config exclude-range`, of which the tree keeps
 the largest run (any other is a row of the sections not translated);

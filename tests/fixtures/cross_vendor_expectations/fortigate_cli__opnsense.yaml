@@ -209,12 +209,12 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      FortiOS three-cap (``set primary`` / ``set secondary`` /
-      hidden ``set tertiary`` under ``config system dns``) collapses
-      cleanly to OPNsense's repeated ``<dnsserver>`` elements (no
-      fixed cap).  The canonical list always fits the OPNsense
-      render side; the constraint is on the source side and is
-      already accepted by FortiGate.
+      The fortigate_cli parser reads the resolver slots of `config
+      system dns` (since 2026-11-12): `set primary` and `set secondary`
+      for IPv4, `set ip6-primary` and `set ip6-secondary` for IPv6; a
+      slot printed as the unspecified address holds none, and the
+      opnsense renderer writes the name servers it is given.  Measured
+      over 4 cells: drifted on 0, preserved on 4, both sides empty on 0.
     references: [fgt-system-services, opn-system]
 
   ntp_servers:

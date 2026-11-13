@@ -1426,6 +1426,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A FortiGate output holds each resolver in a slot of its
+  address family.**  FortiOS has two IPv4 resolver slots, `set
+  primary` and `set secondary`, and two IPv6 ones, `set
+  ip6-primary` and `set ip6-secondary` (Fortinet's CLI
+  reference).  The renderer wrote the first two resolvers of the
+  tree into `primary` and `secondary` whatever their family -- an
+  IPv6 resolver in a slot that takes an IPv4 address -- and a
+  third was in no line of the output, in jobs that said
+  `completed`; the parser read neither IPv6 slot, and read a slot
+  printed as `0.0.0.0` (its default, which a printout of the whole
+  configuration shows) as a resolver.  Now each resolver goes in a
+  slot of its own family, and a resolver after the second of its
+  family, a value that is no address and the unspecified address
+  are left out under a `# review:` line that names no value; so is
+  a source that asks an IPv6 resolver before an IPv4 one, since
+  which family FortiOS asks first is not established.  The parser
+  reads the four slots back, and a slot printed as `0.0.0.0` or
+  `::` as none.  Onto FortiOS, the IPv6 resolver of one committed
+  input now arrives, and one with three IPv4 resolvers keeps two
+  and says the third.
+
 - **A timed reading of the cost tests is not a garbage
   collection.**  `tests/unit/test_untrusted_text_cost.py` compares
   the thread's CPU time for a text and for four times the text.  The
@@ -7214,13 +7235,6 @@ timestamp if your timezone matters for an audit.
   profile under `tests/fixtures/target_profiles/`.
 
 ### Known limitations
-
-- **FortiOS is written two resolvers.**  The FortiGate renderer
-  writes `set primary` and `set secondary` under `config system
-  dns`, and a third resolver of the tree is in no line and no
-  review line of the output.  Pinned by name in
-  `tests/unit/migration/codecs/dell_os10/test_management_plane.py`
-  (`DROPS_A_RESOLVER`).
 
 - **A destination whose next hops mix a stated and an unstated
   distance keeps its order only where the two platforms' defaults

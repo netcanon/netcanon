@@ -160,14 +160,12 @@ per_field_expectation:
   dns_servers:
     disposition: good
     note: >
-      Aruba ``ip dns server-address priority N <addr>`` collapses to
-      a bare address list on canonical (sorted by priority).
-      FortiOS schemas DNS into ``set primary`` + ``set secondary``
-      (and a hidden ``set tertiary``) under ``config system dns`` —
-      the AOS-S source rarely carries more than two configured DNS
-      servers (priority 1 / 2) so the FortiOS three-server cap is
-      not a practical bottleneck on this direction.  No truncation
-      observed on real-capture fixtures.
+      The aruba_aoss parser reads the name servers, and the
+      fortigate_cli renderer writes each resolver in a slot of its
+      address family (since 2026-11-12): `set primary` and `set
+      secondary` for IPv4, `set ip6-primary` and `set ip6-secondary` for
+      IPv6, read back by its parser.  Measured over 7 cells: drifted on
+      0, preserved on 3, both sides empty on 4.
     references: [system_services]
 
   ntp_servers:

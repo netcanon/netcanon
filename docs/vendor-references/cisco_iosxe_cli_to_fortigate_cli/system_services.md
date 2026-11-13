@@ -1,5 +1,8 @@
 # System services (hostname / NTP / DNS / logging / clock): Cisco IOS-XE versus FortiGate FortiOS CLI
 
+<!-- fortios-resolver-slots -->
+> **Update 2026-11-12 — each resolver is written in a FortiOS slot of its address family.**  The FortiGate render wrote the first two resolvers of the tree into `set primary` and `set secondary` whatever their family, and left a third out with nothing said; FortiOS takes an IPv4 address in those two slots and an IPv6 one in `set ip6-primary` and `set ip6-secondary` (Fortinet's CLI reference, 7.6.6), and the reference gives it no third slot of either family.  It now writes each resolver in a slot of its own family, and a resolver after the second of its family, a value that is no address or the unspecified address under a `# review:` line that names no value; its parser reads the IPv6 slots back.  Measured on this pair: the one cell that states resolvers states two IPv4 and one IPv6, and now preserves the three (the IPv6 one was lost); `dns_servers`, declared lossy for the two slots, is `good` (13 more cells state none).  Sentences below that describe two slots whatever the family, give FortiOS a third slot, or say a resolver after the second is lost unsaid, describe the codec before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__fortigate_cli.yaml`.
+
 ## Cisco IOS-XE
 
 Source: Cisco IOS XE Network Management Configuration Guide — system

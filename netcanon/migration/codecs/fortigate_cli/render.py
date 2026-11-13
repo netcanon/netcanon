@@ -92,6 +92,7 @@ from ..base import RenderError
 from .dhcp_pools import render_pools
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
+    RESOLVER_SLOTS,
     _prefix_to_mask,
     _split_cidr,
 )
@@ -694,6 +695,67 @@ def _is_fortigate_native_name(name: str) -> bool:
     return bool(_IS_FORTIGATE_PHYSICAL_PORT_RE.match(name))
 
 
+#: The review line for a resolver no slot of ``config system dns``
+#: takes.  It names the kind and never the value.
+_RESOLVER_NOT_TAKEN = (
+    "    # review: the source gives a resolver that is no IPv4 or IPv6 "
+    "address, or is the address FortiOS reads as none (0.0.0.0, ::); "
+    "it is left out, re-create it on the device"
+)
+
+#: The review line for the resolvers of a family after its two slots.
+_RESOLVERS_PAST_TWO = (
+    "    # review: the source gives more IPv{family} resolvers than the "
+    "two FortiOS takes ({first}, {second}); those after the second are "
+    "left out"
+)
+
+#: The review line for a source that asks an IPv6 resolver before an
+#: IPv4 one: the slots do not keep that order, and no Fortinet page
+#: found says which family FortiOS asks first.
+_RESOLVER_ORDER = (
+    "    # review: the source asks an IPv6 resolver before an IPv4 one; "
+    "FortiOS keeps each family in slots of its own, and which family "
+    "it asks first is not established"
+)
+
+
+def _resolver_lines(servers: list[str]) -> tuple[list[str], list[str]]:
+    """The ``set`` lines of *servers* and the review lines for what is
+    left out.  An IPv4 resolver goes in ``primary`` then ``secondary``,
+    an IPv6 one in ``ip6-primary`` then ``ip6-secondary``; a third of a
+    family, a value that is no address and the unspecified address
+    (which the slot reads as none) are left out and said."""
+    by_family: dict[int, list[str]] = {4: [], 6: []}
+    order: list[int] = []
+    not_taken = False
+    for server in servers:
+        try:
+            address = ipaddress.ip_address(server)
+        except ValueError:
+            address = None
+        if address is None or address.is_unspecified:
+            not_taken = True
+            continue
+        by_family[address.version].append(server)
+        order.append(address.version)
+    said = [_RESOLVER_NOT_TAKEN] if not_taken else []
+    lines: list[str] = []
+    for family, slots in RESOLVER_SLOTS.items():
+        taken = by_family[family]
+        if len(taken) > len(slots):
+            said.append(_RESOLVERS_PAST_TWO.format(
+                family=family, first=slots[0], second=slots[1],
+            ))
+        lines += [
+            f"    set {slot} {server}"
+            for slot, server in zip(slots, taken[:len(slots)], strict=False)
+        ]
+    if order != sorted(order):
+        said.append(_RESOLVER_ORDER)
+    return lines, said
+
+
 def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` tree to FortiOS CLI text.
 
@@ -738,12 +800,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # upstream WAN DHCP) still surfaces the FQDN suffix.
     # Reference: docs.fortinet.com/document/fortigate/7.6.6/cli-
     # reference/190194324/config-system-dns.
-    if tree.dns_servers or tree.domain:
+    #
+    # Each resolver goes in a slot of its own address family
+    # (:data:`parse.RESOLVER_SLOTS`), two a family; one that no slot
+    # takes is left out under a review line that names no value.
+    resolvers, resolvers_said = _resolver_lines(tree.dns_servers)
+    if resolvers or resolvers_said or tree.domain:
         out.append("config system dns")
-        if len(tree.dns_servers) >= 1:
-            out.append(f"    set primary {tree.dns_servers[0]}")
-        if len(tree.dns_servers) >= 2:
-            out.append(f"    set secondary {tree.dns_servers[1]}")
+        out += resolvers_said
+        out += resolvers
         if tree.domain:
             out.append(f'    set domain "{_esc(tree.domain)}"')
         out.append("end")

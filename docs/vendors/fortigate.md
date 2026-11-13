@@ -26,7 +26,15 @@ firewall translation is your primary need, see
 
 - `hostname` (alias / hostname), `domain`, DNS / NTP servers
   (`syslog_servers` is declared **unsupported** in the capability
-  matrix and does not round-trip)
+  matrix and does not round-trip).  Each resolver is in a slot of
+  its address family, two a family: `set primary` / `set
+  secondary` for IPv4, `set ip6-primary` / `set ip6-secondary` for
+  IPv6 (Fortinet's CLI reference for `config system dns`); a slot
+  printed as `0.0.0.0` or `::` holds none.  A third resolver of a
+  family, or one that is no address, is not written and is said
+  in a `# review:` line, and so is a source that asks an IPv6
+  resolver before an IPv4 one: which family FortiOS asks first is
+  not established
 - Interfaces — physical (`port1`-`portN`, `wan1`/`wan2`,
   `internal1`-`internalN`), VLAN sub-interfaces (`VL_<id>`,
   `LAN_TRUNK`), aggregate (`fortilink`, `LAG_INTERNAL`), tunnel

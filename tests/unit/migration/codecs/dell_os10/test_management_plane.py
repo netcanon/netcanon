@@ -348,19 +348,10 @@ _PATHS = {
 }
 
 
-#: Targets that write fewer resolvers than the tree holds, with the
-#: ones of :data:`PLANE` they leave out, and say nothing of it: open,
-#: and pinned so that the change which mends one fails here until its
-#: pin is taken out.  FortiOS writes ``set primary`` and ``set
-#: secondary`` only.
-DROPS_A_RESOLVER = {"fortigate_cli": {"192.0.2.54"}}
-
-
 @pytest.mark.parametrize("target", list_public_codecs())
 def test_what_a_target_says_it_takes_is_in_its_output(target: str) -> None:
     """From OS10 onto every public codec, each value of a path the
-    target's matrix calls supported is in the output's text, but for
-    the resolvers :data:`DROPS_A_RESOLVER` pins, which are not."""
+    target's matrix calls supported is in the output's text."""
     codec = get_codec(target)
     job = run_plan_with_checked_names(
         get_codec("dell_os10"), codec,
@@ -368,11 +359,7 @@ def test_what_a_target_says_it_takes_is_in_its_output(target: str) -> None:
         port_rename_map={},
     )
     assert job.rendered, job.error
-    dropped = DROPS_A_RESOLVER.get(target, set())
     for path, values in _PATHS.items():
         if codec.capabilities.classify(path) == "supported":
             for value in values:
-                if path == "/system/dns-server" and value in dropped:
-                    assert value not in job.rendered, (path, value)
-                else:
-                    assert value in job.rendered, (path, value)
+                assert value in job.rendered, (path, value)
