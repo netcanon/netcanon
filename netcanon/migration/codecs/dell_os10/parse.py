@@ -123,10 +123,8 @@ import re
 from collections.abc import Callable
 
 from ..._tier3_detection import (
-    LEFT_OUT_ROWS_SHOWN,
-    _shown_label,
     is_a_dellos10_section_line,
-    no_command_row,
+    unread_top_level_rows,
 )
 from ...canonical.intent import (
     CanonicalIntent,
@@ -854,7 +852,8 @@ _COMMAND_WORDS = frozenset({
 #: The words of :data:`_COMMAND_WORDS` whose second word says which of
 #: their commands a line is (``ntp server``, ``logging server``, ``clock
 #: timezone``, ``snmp-server enable``).  After any other the second word
-#: is often a name the operator chose, which a row does not show.
+#: is often a name the operator chose, which a row does not show
+#: (``_tier3_detection.command_label``).
 _FAMILIES = frozenset({
     "aaa", "banner", "bfd", "boot", "clock", "crypto", "dcbx", "default",
     "enable", "evpn", "hardware", "interface", "ip", "ipv6", "iscsi",
@@ -862,11 +861,6 @@ _FAMILIES = frozenset({
     "ntp", "password-attributes", "radius-server", "rest", "router",
     "service", "snmp-server", "spanning-tree", "system", "tacacs-server",
 })
-
-#: A word that says which command of a family a line is: no digit, dot
-#: or slash, which a value (an address, a number, a time zone) has, and
-#: no longer than a command word.
-_A_SUB_COMMAND_RE = re.compile(r"[a-z][a-z-]{0,63}\Z")
 
 
 def _an_interface_header_is_said(line: str) -> bool:
@@ -879,27 +873,16 @@ def _an_interface_header_is_said(line: str) -> bool:
     )
 
 
-def _command_label(words: list[str]) -> str:
-    """The row for a line in column 0 whose first words are *words*: its
-    command word, and after a word of :data:`_FAMILIES` the word that
-    says which of its commands it is; after ``no``, the same of the
-    command it takes back.  Empty where the command word is not one of
-    :data:`_COMMAND_WORDS`.  Never a value: cut after a word that names
-    a secret, as every row is (``_tier3_detection._shown_label``)."""
-    shown: list[str] = []
-    if words and words[0].lower() == "no":
-        shown.append("no")
-        words = words[1:]
-    if not words or words[0].lower() not in _COMMAND_WORDS:
-        return ""
-    shown.append(words[0].lower())
-    if (
-        shown[-1] in _FAMILIES
-        and len(words) > 1
-        and _A_SUB_COMMAND_RE.match(words[1].lower())
-    ):
-        shown.append(words[1].lower())
-    return _shown_label(" ".join(shown))
+def _taken(line: str) -> bool:
+    """Whether a reader of this module takes the line in column 0
+    *line* (:data:`_TOP_LEVEL_READERS`, an ``interface`` header that
+    :func:`_an_interface_header_is_said`), or a Tier-3 pattern gives it
+    a row of its own (``_tier3_detection.is_a_dellos10_section_line``)."""
+    if line.split(None, 1)[0].lower() == "interface" and _an_interface_header_is_said(line):
+        return True
+    if any(reader(line) for reader in _TOP_LEVEL_READERS):
+        return True
+    return is_a_dellos10_section_line(line)
 
 
 def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
@@ -908,16 +891,14 @@ def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
 
     A line in column 0 is a statement of the top level, or the header
     of a stanza whose lines are under it.  One that no reader takes
-    (:data:`_TOP_LEVEL_READERS`, :func:`_an_interface_header_is_said`),
-    that no Tier-3 pattern gives a row of its own
-    (``_tier3_detection.is_a_dellos10_section_line``) and that is
-    not a word of a session (:data:`_SESSION_WORDS`) is in no output,
-    and a row says so.  It is a row of its command word
-    (:func:`_command_label`), one for each kind of line, past
-    ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one that counts
-    the rest; a line that begins with a word OS10 configurations are
-    not seen to begin with is counted in one row, with the number of
-    the first such line and nothing of its text
+    (:func:`_taken`) and that is not a word of a session
+    (:data:`_SESSION_WORDS`) is in no output, and a row says so
+    (``_tier3_detection.unread_top_level_rows``): a row of its command
+    word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`), one for each
+    kind of line, past ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of
+    them one that counts the rest; a line that begins with a word OS10
+    configurations are not seen to begin with is counted in one row,
+    with the number of the first such line and nothing of its text
     (``_tier3_detection.no_command_row``), which is no sign that the
     text was a config.  A line that does not begin with a letter is
     no command, and is not counted.
@@ -940,37 +921,13 @@ def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
         The rows, in the order their lines come; the row that counts
         lines with no known command word last.
     """
-    rows: dict[str, None] = {}
-    unknown = 0
-    first_unknown = 0
-    for number, line in enumerate(ticked(raw.splitlines()), start=1):
-        if not line[:1].isalpha():
-            continue
-        words = line.split(None, 3)
-        head = words[0].lower()
-        if head in _SESSION_WORDS:
-            continue
-        if head == "interface" and _an_interface_header_is_said(line):
-            continue
-        if any(reader(line) for reader in _TOP_LEVEL_READERS):
-            continue
-        if is_a_dellos10_section_line(line):
-            continue
-        label = _command_label(words)
-        if label:
-            rows[label] = None
-            continue
-        unknown += 1
-        first_unknown = first_unknown or number
-    shown = list(rows)
-    if len(shown) > LEFT_OUT_ROWS_SHOWN:
-        unlisted = len(shown) - LEFT_OUT_ROWS_SHOWN
-        shown[LEFT_OUT_ROWS_SHOWN:] = [
-            f"({unlisted} more kinds of top-level command not read; not listed)"
-        ]
-    if unknown:
-        shown.append(no_command_row(unknown, first_unknown))
-    return shown
+    return unread_top_level_rows(
+        raw,
+        taken=_taken,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )
 
 
 def parse_intent(raw: str) -> CanonicalIntent:

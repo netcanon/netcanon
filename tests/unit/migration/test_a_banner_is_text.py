@@ -1025,7 +1025,10 @@ def _digest(codec: str, path: str) -> str:
 #: input with an ``ip dns``, ``sntp``, ``ntp`` or ``logging`` line,
 #: when its management plane was read by priority and by what the
 #: switch polls, its rows for those lines changed and the rest of its
-#: tree as it was (``codecs/aruba_aoss/test_management_plane.py``).
+#: tree as it was (``codecs/aruba_aoss/test_management_plane.py``); and
+#: every EOS input with a line in column 0 that no reader takes, when
+#: each kind became a row, the rest of its tree as it was
+#: (``codecs/arista_eos/test_what_no_reader_takes.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1145,15 +1148,15 @@ BEFORE: dict[str, str] = {
     # (test_a_header_names_one_interface.py): was "c6abd209a7bc".
     "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "36d87c78fda1",
     "synthetic/dell_os10/kitchen_sink.cfg": "2afb408e4714",
-    "real/arista_eos/batfish_duplicateprivate_eos4211.txt": "92358f840447",
-    "real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt": "0760df6623db",
-    "real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt": "06ce2c081564",
-    "real/arista_eos/karneliuk_a_eos1_eos4260.txt": "0b4c4b217747",
-    "real/arista_eos/ksator_dcs_7150s64_eos4224.txt": "1b74762ebc5b",
+    "real/arista_eos/batfish_duplicateprivate_eos4211.txt": "9212a11c378b",
+    "real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt": "64e5b1968863",
+    "real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt": "86b9d11f0259",
+    "real/arista_eos/karneliuk_a_eos1_eos4260.txt": "b6d2f3e1274f",
+    "real/arista_eos/ksator_dcs_7150s64_eos4224.txt": "ab4c67297d54",
     # Moved on purpose: its pools are written in EOS's `dhcp server`
     # grammar, and one is served on `Vlan100` (dhcp_pools.py): was
     # "5f8ca989330b".
-    "synthetic/arista_eos/kitchen_sink.txt": "85bc13b04b06",
+    "synthetic/arista_eos/kitchen_sink.txt": "22799702d769",
     "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
     "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
     "real/cisco_iosxr/batfish_ibgp_border01.txt": "639b6fd2954a",

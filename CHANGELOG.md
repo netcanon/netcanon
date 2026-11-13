@@ -1426,6 +1426,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An EOS line that nothing translates is said.**  The Arista EOS
+  parser reads a hostname, DNS, NTP and syslog servers, interfaces,
+  VLANs, VRFs, static routes, SNMP, local users, RADIUS servers, the
+  DHCP server and the VARP MAC, and the shared Tier-3 patterns name
+  ACLs of the IOS form, route maps, QoS maps, crypto and MLAG; every
+  other line in column 0 was in no output and no row -- BGP and
+  OSPF, plain `ip access-list <name>` ACLs and prefix lists, spanning
+  tree, AAA, eAPI and TerminAttr, `logging` settings, a VLAN range
+  (`vlan 20-30`), a second server on one `ip name-server` line, a
+  second `snmp-server community` line (the tree holds one community)
+  -- in jobs that said `completed`, while the codec's docstring said
+  BGP/OSPF, eAPI, STP, AAA and TerminAttr were on the banner.  Now
+  each kind of such line is a row of `dropped_tier3_sections`, as
+  OS10's are (#676): its command word, and the word after it where
+  that says which command it is (`router bgp`, `logging buffered`),
+  never a value; a line that begins with a word EOS configurations
+  are not seen to begin with is counted in one row that shows none
+  of its text.  The two parsers share the code
+  (`_tier3_detection.unread_top_level_rows`).  An indented line of a
+  stanza that the stanza's reader does not take still has no row.
+  The committed EOS inputs gain rows; no output moves.
+
 - **Every review line a target writes for a loss holds the job
   `partial`.**  A renderer writes a `review:` line where it leaves a
   record out, or writes it otherwise than the source states it, for a
