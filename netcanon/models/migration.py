@@ -356,7 +356,7 @@ class Refusal(BaseModel):
 
     Attributes:
         limit: Which limit: ``vlan_ids``, ``memberships``, ``ports``,
-            ``interfaces``, ``copies``, ``words``, ``text``,
+            ``interfaces``, ``routes``, ``copies``, ``words``, ``text``,
             ``seconds``, or ``at_once`` -- the server works on a set
             number of requests at once, and this one did not get a
             turn inside the time it may take.  Nothing of its config
@@ -376,8 +376,8 @@ class Refusal(BaseModel):
     """
 
     limit: Literal[
-        "vlan_ids", "memberships", "ports", "interfaces", "copies", "words",
-        "text", "seconds", "at_once",
+        "vlan_ids", "memberships", "ports", "interfaces", "routes", "copies",
+        "words", "text", "seconds", "at_once",
     ]
     what: str
     asked: int | float

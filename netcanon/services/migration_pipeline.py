@@ -2222,12 +2222,13 @@ def _stale_next_hops(
     The translator rewrites a ``gateway`` that is exactly the name of
     an interface of the tree (and, between two configs of one codec,
     such a name with a unit), and removes the route when that
-    interface is dropped.  What it leaves as written: a LIST of
-    gateways (RouterOS ``gateway=ether1,ether2``), across vendors a
-    unit of an interface (Junos ``next-hop et-0/0/24.0``) — and a
-    next hop that names a port of the declared source the config
-    gives no interface record, which the translator cannot know is a
-    port.  Read here from the
+    interface is dropped.  What it leaves as written: across vendors
+    a unit of an interface (Junos ``next-hop et-0/0/24.0``), a list
+    of gateways held in one route (no parser makes one now: a
+    RouterOS ``gateway=ether1,ether2`` is a route a gateway, each of
+    which follows its port) — and a next hop that names a port of
+    the declared source the config gives no interface record, which
+    the translator cannot know is a port.  Read here from the
     parsed source tree, the finished run and the pairing, so the plan
     can say it.
 

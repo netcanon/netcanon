@@ -89,6 +89,7 @@ KINDS: dict[str, tuple[str, str]] = {
     "memberships": ("port memberships (one port in one VLAN or one LAG)", "lists and ranges"),
     "ports": ("different ports named by port ranges", "ranges"),
     "interfaces": ("interfaces", ""),
+    "routes": ("static routes", "route lines"),
     "copies": ("entries copied from an interface-range onto its members", "interface-ranges"),
     "words": ("words of set commands written out from block-form text", "statements"),
     "text": ("characters of rendered config", "pieces"),
@@ -122,6 +123,7 @@ _HELD = {
     "memberships": "port memberships (one port in one VLAN or one LAG)",
     "ports": "ports that a VLAN's or a LAG's port list names and no interface stanza declares",
     "interfaces": "interfaces",
+    "routes": "static routes",
 }
 
 
@@ -143,6 +145,10 @@ class Limits:
     memberships: int | None
     ports: int | None
     interfaces: int | None
+    #: Static routes.  A route is a line on most platforms, so the
+    #: length of the text bounds them; a RouterOS route with a list
+    #: of gateways is a route a gateway, from a few bytes each.
+    routes: int | None
     copies: int | None
     words: int | None
     text: int | None
@@ -169,15 +175,19 @@ class Limits:
 #: container (``docs/demo-plan/07-budget.md`` has the measurements):
 #: with them, the text that reaches every limit at once is one request
 #: the instance survives.  ``vlan_ids``: 256 ports that each allow
-#: every VLAN.  ``at_once``: ONE request at a time.  Every number
-#: here is for one request; two of the largest at once were measured
-#: to end the instance, and in turn they fit.
+#: every VLAN.  ``routes``: RouterOS lists of interface gateways
+#: onto OPNsense, the heaviest route a request can make.
+#: ``at_once``: ONE request at a time.  Every number here is for one
+#: request; two of the largest at once were measured to end the
+#: instance, and in turn they fit.
 SMALL = Limits(
-    "small", 1_048_576, 50_000, 2_048, 2_500, 10_000, 250_000, 8_000_000, 20.0,
+    "small", 1_048_576, 50_000, 2_048, 2_500, 50_000, 10_000, 250_000, 8_000_000, 20.0,
     at_once=1,
 )
 #: The default.  ``vlan_ids``: 4,096 ports that each allow every VLAN.
 #: ``memberships``: three times the largest device a vendor verifies.
+#: ``routes``: more than a paste of the largest size a request takes
+#: (10,000,000 characters) holds written a route a line.
 #: ``at_once``: no limit, here and in the two sets below.  This is
 #: what the desktop application runs, where there is one user and
 #: nobody to wait behind; and on a server it is the operator who
@@ -186,14 +196,14 @@ SMALL = Limits(
 #: slow every server down to protect a size none of these sets
 #: was measured against.
 STANDARD = Limits(
-    "standard", 16_777_216, 1_000_000, 8_192, 50_000, 100_000, 4_000_000, 64_000_000, 120.0,
+    "standard", 16_777_216, 1_000_000, 8_192, 50_000, 500_000, 100_000, 4_000_000, 64_000_000, 120.0,
 )
 #: Four times ``standard`` (five times its seconds).
 LARGE = Limits(
-    "large", 67_108_864, 4_000_000, 32_768, 200_000, 400_000, 16_000_000, 256_000_000, 600.0,
+    "large", 67_108_864, 4_000_000, 32_768, 200_000, 2_000_000, 400_000, 16_000_000, 256_000_000, 600.0,
 )
 #: No limit and no deadline.
-UNLIMITED = Limits("unlimited", None, None, None, None, None, None, None, None)
+UNLIMITED = Limits("unlimited", None, None, None, None, None, None, None, None, None)
 
 PROFILES: dict[str, Limits] = {p.name: p for p in (SMALL, STANDARD, LARGE, UNLIMITED)}
 
@@ -1185,6 +1195,8 @@ def census(tree: Any) -> None:
         + sum(len(lag.members) for lag in lags)
     )
     meter.settle("memberships", pairs, what=_HELD["memberships"])
+    routes = getattr(tree, "static_routes", None) or []
+    meter.settle("routes", len(routes), what=_HELD["routes"])
     cap = meter.limits.ports
     if cap is not None and pairs > cap:
         named: set[str] = set()

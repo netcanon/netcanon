@@ -129,7 +129,7 @@ def test_a_list_is_counted_in_words_before_it_is_made() -> None:
     values = " ".join(f"v{n}" for n in range(40))
     text = HEAD + f"set system name-server [ {values} ]\n"
     tiny = Limits(name="tiny", vlan_ids=None, memberships=None, ports=None, interfaces=None,
-                  copies=None, words=40 * 3 - 1, text=None, seconds=None)
+                  routes=None, copies=None, words=40 * 3 - 1, text=None, seconds=None)
     with limits_scope(tiny), pytest.raises(LimitExceeded) as caught:
         JUNOS.parse(text)
     assert (caught.value.kind, caught.value.asked) == ("words", 40 * 3)

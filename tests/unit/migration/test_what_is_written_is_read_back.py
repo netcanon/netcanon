@@ -154,9 +154,17 @@ def test_routeros_splits_an_address_pinned_to_an_interface() -> None:
     assert (route.gateway, route.interface) == ("192.0.2.1", "ether1")
 
 
-def test_routeros_keeps_a_form_the_tree_has_no_field_for_as_written() -> None:
-    route = _route("192.0.2.1,192.0.2.2")
-    assert (route.gateway, route.interface) == ("192.0.2.1,192.0.2.2", "")
+def test_routeros_reads_a_list_of_gateways_as_a_route_each() -> None:
+    """A list is ECMP: the tree has a route for each gateway, in the
+    order written, an address as its gateway and a name as its
+    interface (``mikrotik_routeros/test_a_list_of_gateways.py`` has
+    the rest)."""
+    text = "/ip route\nadd dst-address=198.51.100.0/24 gateway=192.0.2.1,ether2\n"
+    routes = get_codec("mikrotik_routeros").parse(text).static_routes
+    assert [(r.destination, r.gateway, r.interface) for r in routes] == [
+        ("198.51.100.0/24", "192.0.2.1", ""),
+        ("198.51.100.0/24", "", "ether2"),
+    ]
 
 
 @pytest.mark.parametrize(

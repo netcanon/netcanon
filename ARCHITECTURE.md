@@ -1708,12 +1708,14 @@ uses.  A route's next hop can name an interface too (RouterOS
 `gateway=ether1`, Junos `next-hop et-0/0/24.0`): where it is exactly
 an interface's name — or, between two configs of one codec, such a
 name with a unit — the route follows its interface and goes with a
-dropped one.  Any other form (a list of gateways, a routing-table
-suffix, a unit across vendors) is left as written, and
-`run_plan_with_models` lists the route (`stale_next_hops`) — as it
-does a next hop naming a port of the declared source that the config
-has no interface record for.  A list whose members only changed
-places among themselves still says what it said, and is not listed.
+dropped one.  A RouterOS list of gateways is a route a gateway, and
+each follows its port.  Any other form (a routing-table suffix, a
+unit across vendors, a list held in one route, which no parser
+makes) is left as written, and `run_plan_with_models` lists the
+route (`stale_next_hops`) — as it does a next hop naming a port of
+the declared source that the config has no interface record for.
+A list whose members only changed places among themselves still
+says what it said, and is not listed.
 
 **A port's hardware identity is not a reference to it.**  RouterOS
 keeps a port's *factory name* (`ether2`) beside the name an operator

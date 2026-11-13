@@ -54,7 +54,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from ...limits import ticked
+from ...limits import charge, ticked
 from .._dhcp_pools import as_int, as_text
 from .._helpers import Uniques, a_few_named, a_tag
 from .._input_shape import detect_input_shape
@@ -1954,9 +1954,13 @@ def _parse_ip_route(
     cost multi-path) routes have multiple gateways (next-hop) values"
     (MikroTik, IP Routing:
     https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing)
-    -- and is kept as one value, each gateway once, as it was: the tree
-    holds one next hop a route, and a route a gateway is many routes
-    from few bytes, which no limit counts yet.
+    -- and the tree holds one next hop a route, so it is a route a
+    gateway, each gateway once: the form RouterOS 7 itself writes ECMP
+    in ("Multiple equally preferred routes to the same destination
+    ... grouped together automatically", the same page), and the one
+    every other platform reads as ECMP.  A route a gateway is many
+    routes from few bytes, so every line is charged as the routes it
+    makes BEFORE they are made (``routes``).
     """
     for line in ticked(lines):
         if not line.startswith("add"):
@@ -1984,9 +1988,10 @@ def _parse_ip_route(
         # ``distance=250``) round-trips instead of silently reparsing to 0.
         distance_raw = kv.get("distance", "")
         metric = int(distance_raw) if distance_raw.isdigit() else 0
-        intent.static_routes.append(_the_route(
-            dest, ",".join(gateways), metric, kv.get("comment", ""),
-        ))
+        charge("routes", len(gateways), dest)
+        comment = kv.get("comment", "")
+        for gateway in gateways:
+            intent.static_routes.append(_the_route(dest, gateway, metric, comment))
 
 
 def _discards(line: str, kv: dict[str, str]) -> bool:
@@ -2026,16 +2031,8 @@ def _gateways(gateway_raw: str) -> list[str] | None:
 def _the_route(
     dest: str, gateway_raw: str, metric: int, description: str,
 ) -> CanonicalStaticRoute:
-    """The route to *dest* through its ``gateway=`` value."""
-    if "," in gateway_raw:
-        # A list of gateways: kept in ``gateway`` as it is written
-        # (:func:`_parse_ip_route`).
-        return CanonicalStaticRoute(
-            destination=dest,
-            gateway=gateway_raw,
-            metric=metric,
-            description=description,
-        )
+    """The route to *dest* through ONE gateway of its ``gateway=``
+    value (:func:`_gateways`)."""
     # (#9) RouterOS combines an IP next-hop and an egress interface
     # into one ``gateway=<ip>%<iface>`` argument (also the shape of an
     # IPv6 link-local scoped next-hop, ``fe80::1%ether1``).  render.py
@@ -2078,12 +2075,12 @@ def _names_an_interface(gateway: str) -> bool:
     """Whether a route's ``gateway=`` value is one interface's name.
 
     A route's gateway is an IP address or an interface, and an ECMP
-    route has several (RouterOS manual, IP Routing); ``<ip>%<interface>``
-    pins an address to an interface, and is split by the caller.  One
-    value that is not an address, with no ``,`` (a list), is an
-    interface's name.
+    route has several (RouterOS manual, IP Routing), which the caller
+    splits; ``<ip>%<interface>`` pins an address to an interface, and
+    is split by the caller too.  One value that is not an address is
+    an interface's name.
     """
-    if not gateway or "," in gateway:
+    if not gateway:
         return False
     try:
         ipaddress.ip_address(gateway)

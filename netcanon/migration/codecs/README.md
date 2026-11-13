@@ -532,10 +532,11 @@ for the reference pattern).
    two places (`netcanon/migration/limits.py`; the Hard Rule in
    `AGENTS.md` has the reasons).  **An expander charges before it
    makes**: where a token becomes many entries — a range of VLAN ids
-   or of ports, a keyword for "every", a list copied onto every member
-   — count what is about to be made on the line before it is, with what
-   the config wrote, which a refusal quotes:
-   `charge("vlan_ids", high - low + 1, token)`.  **A loop over lines
+   or of ports, a keyword for "every", a list copied onto every member,
+   a list of gateways that is a route each — count what is about to be
+   made on the line before it is, with what the config wrote, which a
+   refusal quotes: `charge("vlan_ids", high - low + 1, token)`,
+   `charge("routes", len(gateways), destination)`.  **A loop over lines
    looks at the deadline**: `for line in ticked(raw.splitlines()):`,
    and `tick()` as the first statement of a `while` that walks by
    index.  Nothing else is the codec's: the meter is opened round its

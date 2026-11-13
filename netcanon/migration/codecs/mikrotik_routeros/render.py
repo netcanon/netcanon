@@ -164,6 +164,55 @@ def _ros_major(version: str) -> int | None:
     return int(head) if head.isdigit() else None
 
 
+def _route_gateway(route: Any) -> str:
+    """The ``gateway=`` value of one route: ``<ip>%<iface>`` where both
+    are set (the next hop pinned to an egress interface), else the one
+    that is."""
+    if route.gateway and route.interface:
+        return f"{route.gateway}%{route.interface}"
+    return route.gateway or route.interface or ""
+
+
+def _route_lines(routes: list[Any], one_list: bool) -> list[tuple[Any, list[str]]]:
+    """The routes of a section, each with the gateways its line writes.
+
+    The tree holds one next hop a route, and several routes to one
+    destination at one distance are an ECMP route.  RouterOS 7 writes
+    ECMP so, a line a gateway ("Multiple equally preferred routes are
+    grouped together automatically and are used for ECMP", MikroTik,
+    How Packets Are Routed:
+    https://help.mikrotik.com/docs/pages/viewpage.action?pageId=30146592).
+    A RouterOS 6 config writes it as ONE route with a list of gateways,
+    which is what the parser splits; so where *one_list* is set (a tree
+    read from RouterOS 6, written back for it) the routes of one group
+    -- one destination, distance and comment, in no VRF -- are one line
+    again, at the place of the first, each gateway once.  What two
+    separate routes of one distance do on RouterOS 6 is not
+    established: the same page says "selection of active route is
+    arbitrary" under a note that asks whether it is still valid, and
+    only a user of MikroTik's forum says that RouterOS 6 makes ECMP of a
+    list alone.  A gateway that holds a ``,`` is never joined: the list
+    would be read back as more gateways.  Grouped by key, once each.
+    """
+    out: list[tuple[Any, list[str]]] = []
+    groups: dict[tuple[str, int, str], tuple[list[str], set[str]]] = {}
+    for route in routes:
+        gateway = _route_gateway(route)
+        if not one_list or route.vrf or not gateway or "," in gateway:
+            out.append((route, [gateway] if gateway else []))
+            continue
+        key = (route.destination or "", route.metric or 0, route.description or "")
+        held = groups.get(key)
+        if held is None:
+            gateways = [gateway]
+            groups[key] = (gateways, {gateway})
+            out.append((route, gateways))
+        elif gateway not in held[1]:
+            held[1].add(gateway)
+            held[0].append(gateway)
+    return out
+
+
 def _all_ip_literals(servers: list[str]) -> bool:
     """True iff ``servers`` is non-empty and every entry is an IP literal.
 
@@ -818,6 +867,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # (MikroTik, IP Routing:
     # https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing).
     # Every route was an ``add`` of ``/ip route``, IPv6 ones included.
+    # An ECMP route is a line a gateway, but for RouterOS 6, which is
+    # written one list (:func:`_route_lines`).
+    one_list = (
+        tree.source_vendor == "mikrotik_routeros"
+        and _ros_major(tree.source_version) == 6
+    )
     for head, routes in (
         ("/ip route", [r for r in tree.static_routes if ":" not in (r.destination or "")]),
         ("/ipv6 route", [r for r in tree.static_routes if ":" in (r.destination or "")]),
@@ -825,7 +880,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if not routes:
             continue
         lines.append(head)
-        for route in routes:
+        for route, gateways in _route_lines(routes, one_list):
             if route.vrf:
                 # The output makes no VRF or routing table, so a
                 # route of one is left out and said.  Written as an
@@ -843,14 +898,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(f"dst-address={_quote_if_needed(route.destination)}")
             # The whole ``gateway=`` value is one string, quoted as
             # one: an interface named with a space is part of it.
-            if route.gateway and route.interface:
-                # Both populated -- RouterOS combined form pins the
-                # next-hop IP to a specific egress interface.
-                gateway = f"{route.gateway}%{route.interface}"
-            else:
-                gateway = route.gateway or route.interface
-            if gateway:
-                parts.append(f"gateway={_quote_if_needed(gateway)}")
+            if gateways:
+                parts.append(f"gateway={_quote_if_needed(','.join(gateways))}")
             if route.metric:
                 # RouterOS admin distance (default 1); emit only when the
                 # canonical metric is set so ordinary routes stay clean.
