@@ -773,8 +773,9 @@ the policy locally:
   XR `interface preconfigure` stanza, which the router holds and
   does not run, and a section row for an `interface range` header
   and for a `<dhcpd>` zone that has no device, whose pool is left
-  out.  The OS10, Arista EOS and Cisco NX-OS parsers add a row for
-  each kind of line in column 0 that no reader of them takes, and
+  out.  The OS10, Arista EOS, Cisco NX-OS and Aruba AOS-CX parsers
+  add a row for each kind of line in column 0 that no reader of
+  them takes, and
   one, made by `no_command_row`, that counts the lines that begin
   with no command they know; `is_no_command_row` tells that one
   apart, as any text that is not a config gives it.  All are made by

@@ -1025,7 +1025,8 @@ and true of the same sentence — they are not in the output:
   written apart (`interface ethernet 1/2`; on OS10 `interface
   ethernet 1/1/14`, as Dell types it) is one name, and is read as
   the name the switch prints (`ethernet1/2`, `ethernet1/1/14`).
-* **A command's words** (OS10, Arista EOS, Cisco NX-OS) — each kind of line in
+* **A command's words** (OS10, Arista EOS, Cisco NX-OS, Aruba AOS-CX) —
+  each kind of line in
   column 0 that no reader of the parser takes and no pattern of the
   detector names.  On OS10: `clock timezone`, `spanning-tree mode`,
   `nve`, `virtual-network`, an `ntp server`, `logging server` or `ip
@@ -1044,7 +1045,13 @@ and true of the same sentence — they are not in the output:
   `hostname` or `snmp-server community` line, a second line of a
   local user's name and the like.  The NX-OS renderer writes its own
   `vdc`, `line` and `boot` lines, which are not the source's, so an
-  NX-OS job onto NX-OS has those rows as well.
+  NX-OS job onto NX-OS has those rows as well.  On AOS-CX: `vsx`,
+  `evpn`, `ntp server`, `ip dns`, `ip prefix-list`, `ssh server`,
+  `spanning-tree priority`, `tacacs-server host`, `apply
+  access-list`, `router vrrp`, a `vlan` line of a list, a range or
+  an id no switch has, a second `hostname` or `snmp-server
+  community` line, a second line of a local user's name and the
+  like.
   The row is the line's command
   word, and the word after it where that says which command it
   is, never a value; one row a kind, however many lines it has,
@@ -1057,8 +1064,8 @@ and true of the same sentence — they are not in the output:
   else is `partial`, "No source constructs were recognized", as
   one that gives no row.  An indented line of a stanza the parser
   reads that the stanza's reader does not take has no row.  Until
-  2026-11-12 (OS10) and 2026-11-13 (EOS, NX-OS) such lines were in
-  no output and no row.
+  2026-11-12 (OS10) and 2026-11-13 (EOS, NX-OS, AOS-CX) such lines
+  were in no output and no row.
 * **`<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has
   no interface`** (OPNsense) — a DHCP pool keyed by a zone no
   device is assigned to.  It has no interface to be on, and is

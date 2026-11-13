@@ -805,7 +805,9 @@ class ArubaAOSCXCodec(CodecBase):
         # never read by any render-side code.  Read from the text the
         # parser read: a banner's lines are text, not stanzas.  After
         # them, the rows the parser itself made: a sub-interface whose
-        # tag statement is not one VLAN id.
+        # tag statement is not one VLAN id, the routes and VTEPs it
+        # left out, and each kind of line in column 0 that no reader
+        # takes.
         intent.dropped_tier3_sections = list(dict.fromkeys([
             *detect_tier3_sections_aoscx(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,

@@ -77,6 +77,10 @@ RD / route-target (``evpn / vlan N / rd auto / route-target ...`` —
 almost always ``auto``-derived, no cross-vendor canonical home), the
 symmetric-IRB L3VNI (``vni N / vrf <name>``), VSX (incl. the LAG
 ``multi-chassis`` flag), and the Tier-3 protocol / ACL / QoS blocks.
+A line in column 0 that none of these readers takes is a row of
+``dropped_tier3_sections`` (:func:`_rows_for_what_no_reader_takes`):
+``evpn``, ``vsx``, ``ntp server``, ``ssh server``, ``spanning-tree``,
+``apply access-list``, a second ``hostname``.
 """
 
 from __future__ import annotations
@@ -87,7 +91,11 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ..._tier3_detection import left_out_rows
+from ..._tier3_detection import (
+    is_an_aoscx_section_line,
+    left_out_rows,
+    unread_top_level_rows,
+)
 from ..._user_secrets import classify_hash
 from ...canonical.intent import (
     CanonicalIntent,
@@ -128,11 +136,17 @@ logger = logging.getLogger(__name__)
 # Regex constants — module-level so they compile once per import.
 # ---------------------------------------------------------------------------
 
-_HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: The patterns applied to the whole text under ``re.MULTILINE`` read
+#: one line each: the white space between their words is ``[^\S\n]``,
+#: never ``\s``, which crosses a line break -- ``snmp-server
+#: system-location`` with no value was read with the NEXT line for its
+#: location, and that line was in no row
+#: (:func:`_rows_for_what_no_reader_takes` asks a line at a time).
+_HOSTNAME_RE = re.compile(r"^hostname[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE)
 #: ``!Version ArubaOS-CX FL.10.13.1000`` — the platform-family-prefixed
 #: release string after the ``ArubaOS-CX`` marker.
 _VERSION_RE = re.compile(
-    r"^!Version\s+ArubaOS-CX\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^!Version[^\S\n]+ArubaOS-CX[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 
 #: ``interface <name>`` — captures the type token plus an OPTIONAL
@@ -207,7 +221,8 @@ _LACP_MODE_RE = re.compile(
 #: spaces).  The keyword is CAPTURED: it says what the value is
 #: (:func:`_stored_secret`).
 _USER_RE = re.compile(
-    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(ciphertext|plaintext)\s+(\S+)",
+    r"^user[^\S\n]+(\S+)[^\S\n]+group[^\S\n]+(\S+)[^\S\n]+password"
+    r"[^\S\n]+(ciphertext|plaintext)[^\S\n]+(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
 #: AOS-CX built-in group that maps to the cross-vendor admin privilege.
@@ -218,13 +233,15 @@ _AOSCX_ADMIN_GROUPS = {"administrators"}
 # `contact`), `snmp-server community <name>`, and a `snmpv3 user` block
 # whose auth / priv keys are `<ciphertext|plaintext> <blob>`.
 _SNMP_COMMUNITY_RE = re.compile(
-    r"^snmp-server\s+community\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^snmp-server[^\S\n]+community[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 _SNMP_LOCATION_RE = re.compile(
-    r"^snmp-server\s+system-location\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+    r"^snmp-server[^\S\n]+system-location[^\S\n]+(.+)$",
+    re.IGNORECASE | re.MULTILINE,
 )
 _SNMP_CONTACT_RE = re.compile(
-    r"^snmp-server\s+system-contact\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+    r"^snmp-server[^\S\n]+system-contact[^\S\n]+(.+)$",
+    re.IGNORECASE | re.MULTILINE,
 )
 #: ``snmpv3 user <name> auth <proto> auth-pass <ciphertext|plaintext>
 #: <blob> [priv <proto> priv-pass <ciphertext|plaintext> <blob>]``.  The
@@ -233,9 +250,11 @@ _SNMP_CONTACT_RE = re.compile(
 #: it is the switch's own statement of what the value is, and each token
 #: carries its own, so auth and priv are read independently.
 _SNMPV3_USER_RE = re.compile(
-    r"^snmpv3\s+user\s+(\S+)"
-    r"\s+auth\s+(\S+)\s+auth-pass\s+(ciphertext|plaintext)\s+(\S+)"
-    r"(?:\s+priv\s+(\S+)\s+priv-pass\s+(ciphertext|plaintext)\s+(\S+))?",
+    r"^snmpv3[^\S\n]+user[^\S\n]+(\S+)"
+    r"[^\S\n]+auth[^\S\n]+(\S+)[^\S\n]+auth-pass[^\S\n]+(ciphertext|plaintext)"
+    r"[^\S\n]+(\S+)"
+    r"(?:[^\S\n]+priv[^\S\n]+(\S+)[^\S\n]+priv-pass[^\S\n]+(ciphertext|plaintext)"
+    r"[^\S\n]+(\S+))?",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -306,6 +325,24 @@ _VRF_DECL_RE = re.compile(r"^vrf\s+(\S+)\s*$", re.IGNORECASE)
 #: ``vlan <id>`` — AOS-CX declares one VLAN id per line (no comma / range
 #: list in ``show running-config``).
 _VLAN_TOP_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: A VLAN id in ASCII digits, no more of them than an id is read from:
+#: an id of the switch's is 1 to 4094, and a longer run (or a digit of
+#: another script, which ``\d`` takes and ``int`` reads) is none.
+_A_VLAN_ID_RE = re.compile(r"[0-9]{1,10}")
+
+
+def _vlan_declared(line: str) -> int | None:
+    """The VLAN a top-level ``vlan <id>`` *line* declares, or ``None``
+    where it declares none the switch has (an id outside 1-4094, or
+    not in ASCII digits).  What :func:`_parse_vlans` reads, and what
+    :func:`_rows_for_what_no_reader_takes` asks of a ``vlan`` line."""
+    m = _VLAN_TOP_RE.match(line)
+    if m is None or not _A_VLAN_ID_RE.fullmatch(m.group(1)):
+        return None
+    vid = int(m.group(1))
+    return vid if 1 <= vid <= 4094 else None
+
+
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _VLAN_DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 
@@ -559,6 +596,165 @@ def _refuse_a_flat_text(raw: str) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Lines in column 0 that nothing translates
+# ---------------------------------------------------------------------------
+
+#: The lines in column 0 a reader of this module takes, every one of
+#: them, by what each reader asks of a line: a pattern's ``match``, or
+#: a function that gives what the line holds and nothing where it is
+#: not read.  An ``interface`` header is a record, a LAG, the VTEP or
+#: a row of its own (a sub-interface whose tag statement is not read,
+#: a VTEP that is shut); a ``vlan`` line is a VLAN where its id is one
+#: a switch has; an ``ip route`` or ``ipv6 route`` line is a route, or
+#: counted in a row for the routes that are not held
+#: (:func:`_routes_not_held_rows`).  The readers that read one line of
+#: a kind are :data:`_READ_ONCE`, and the local users are read one
+#: line a name (:func:`_rows_for_what_no_reader_takes`).  A reader that
+#: is added to the parse is added to one of them, and the other way
+#: round.
+_TOP_LEVEL_READERS: tuple[Callable[[str], object], ...] = (
+    _IFACE_RE.match,
+    _VRF_DECL_RE.match,
+    _vlan_declared,
+    _ROUTE_LINE_RE.match,
+    _SNMPV3_USER_RE.match,
+)
+
+#: The readers that read the first line of their kind and no other,
+#: each giving the match it reads or ``None``: the tree holds one
+#: hostname, SNMP community, location and contact.  A later line of
+#: the kind is in no output, and a row says so.
+_READ_ONCE: tuple[Callable[[str], re.Match[str] | None], ...] = (
+    _HOSTNAME_RE.search,
+    _SNMP_COMMUNITY_RE.search,
+    _SNMP_LOCATION_RE.search,
+    _SNMP_CONTACT_RE.search,
+)
+
+#: Words of a session, not of the configuration: a pasted ``configure
+#: terminal``, ``end`` or ``write memory`` holds nothing to translate.
+_SESSION_WORDS = frozenset({"configure", "end", "exit", "write"})
+
+#: The words AOS-CX configurations begin a line in column 0 with, which
+#: a row may show: the words the committed AOS-CX inputs begin such a
+#: line with (and take back with ``no``), the words of the public
+#: AOS-CX configurations on GitHub that more than one of them begins
+#: such a line with, and the words this module's readers and the
+#: AOS-CX Tier-3 patterns read (``ipv6``, ``class``, ``policy``,
+#: ``vsf``).  A line that begins with another word is said all the
+#: same, in a row that counts such lines and shows none of their text
+#: (:func:`_rows_for_what_no_reader_takes`).  A word missing here
+#: costs a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "access-list", "apply", "aruba-central", "banner", "class",
+    "clock", "configuration-lockout", "evpn", "hostname", "https-server",
+    "interface", "ip", "ipv6", "led", "lldp", "logging", "loop-protect",
+    "nae-script", "ntp", "policy", "profile", "route-map", "router",
+    "snmp-server", "snmpv3", "spanning-tree", "ssh", "system",
+    "tacacs-server", "user", "vlan", "vrf", "vsf", "vsx",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``ntp server``, ``spanning-tree mode``,
+#: ``router vrrp``, ``ssh server``).  After any other the second word
+#: is often a name the operator chose (``hostname``, ``user``,
+#: ``vrf``, ``route-map``, ``profile``), which a row does not show
+#: (``_tier3_detection.command_label``).
+_FAMILIES = frozenset({
+    "aaa", "access-list", "apply", "banner", "class", "clock",
+    "configuration-lockout", "https-server", "ip", "ipv6", "led", "lldp",
+    "logging", "loop-protect", "ntp", "router", "snmp-server", "snmpv3",
+    "spanning-tree", "ssh", "system", "tacacs-server",
+})
+
+
+def _line_at(raw: str, start: int) -> str:
+    """The line of *raw* that begins at *start*, as
+    ``str.splitlines`` gives it."""
+    end = raw.find("\n", start)
+    return raw[start : end if end != -1 else len(raw)].splitlines()[0]
+
+
+def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that no reader takes --
+    :data:`_TOP_LEVEL_READERS`, the line each of :data:`_READ_ONCE`
+    reads, the first ``user`` line of each name, a line a Tier-3
+    pattern gives a row of its own
+    (``_tier3_detection.is_an_aoscx_section_line``) -- and that is not
+    a word of a session (:data:`_SESSION_WORDS`) is in no output, and
+    a row says so (``_tier3_detection.unread_top_level_rows``): a row
+    of its command word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`),
+    one for each kind of line, past
+    ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one that counts
+    the rest; a line that begins with a word AOS-CX configurations are
+    not seen to begin with is counted in one row, with the number of
+    the first such line and nothing of its text
+    (``_tier3_detection.no_command_row``), which is no sign that the
+    text was a config.  A line that does not begin with a letter
+    (``!Version``, a comment) is no command, and is not counted.
+
+    Up to 0.7.7 only the kinds a Tier-3 pattern named had a row, and an
+    AOS-CX config's VSX and EVPN stanzas, its NTP, DNS and SSH
+    settings, its spanning tree, its prefix lists, its TACACS servers
+    and the access lists it applies were in no output and no row, in
+    jobs that said ``completed``.  So every line is asked, not a list
+    of kinds, as the Arista EOS, Cisco NX-OS and OS10 parsers ask
+    them.  Not reached: a line of a stanza (indented) that the
+    stanza's reader does not take; and a banner, whose lines -- the
+    one that opens it among them -- are text, emptied before any
+    reader (:func:`without_banner_bodies`).
+
+    Args:
+        raw: The text the readers are given, its banners emptied
+            (:func:`without_banner_bodies`) and before any stanza is
+            taken out of it, so that a line has the number it has in
+            the text that was pasted.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    once: dict[str, int] = {}
+    for read in _READ_ONCE:
+        m = read(raw)
+        if m is not None:
+            line = _line_at(raw, m.start())
+            once[line] = once.get(line, 0) + 1
+    users: set[str] = set()
+
+    def taken(line: str) -> bool:
+        # The lines come in order: a line a reader of one line read is
+        # taken once, as the parse reads it once (no line before it
+        # can be the same, or the reader would have read that one).
+        if once.get(line):
+            once[line] -= 1
+            return True
+        user = _USER_RE.match(line)
+        if user is not None:
+            # The first line of a name is read, a later one is not
+            # (``_parse_local_users``).
+            if user.group(1) in users:
+                return False
+            users.add(user.group(1))
+            return True
+        if any(reader(line) for reader in _TOP_LEVEL_READERS):
+            return True
+        return is_an_aoscx_section_line(line)
+
+    return unread_top_level_rows(
+        raw,
+        taken=taken,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse AOS-CX ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -590,6 +786,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # A text with no indentation is refused in words, before any
     # reader takes a stanza's body for lines of the top level.
     _refuse_a_flat_text(raw)
+    # Each line in column 0 that no reader below takes is a row, asked
+    # before any stanza is taken out so that a row's line number is the
+    # line's in the text that was pasted; the rows go after every other.
+    top_level = _rows_for_what_no_reader_takes(raw)
 
     intent = CanonicalIntent(
         source_vendor="aruba_aoscx",
@@ -674,6 +874,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
     )
     project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
+
+    intent.dropped_tier3_sections.extend(top_level)
 
     logger.debug(
         "aruba_aoscx parsed: hostname=%r ifaces=%d vlans=%d routes=%d "
@@ -1268,14 +1470,11 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
 
     current_id: int | None = None
     for line in ticked(raw.splitlines()):
-        tm = _VLAN_TOP_RE.match(line)
-        if tm:
-            vid = int(tm.group(1))
-            if 1 <= vid <= 4094:
+        if _VLAN_TOP_RE.match(line):
+            vid = _vlan_declared(line)
+            if vid is not None:
                 _touch(vid)
-                current_id = vid
-            else:
-                current_id = None
+            current_id = vid
             continue
 
         if current_id is not None:

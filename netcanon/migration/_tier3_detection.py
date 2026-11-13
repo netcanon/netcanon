@@ -33,9 +33,10 @@ Public functions:
     * :func:`detect_tier3_sections_aoss`, ``_nxos``, ``_iosxr``,
       ``_aoscx``, ``_dellos10`` and ``_vyos`` — each its platform's
       CLI; :func:`is_an_iosxe_cli_section_line`,
-      :func:`is_a_nxos_section_line` and
+      :func:`is_a_nxos_section_line`,
+      :func:`is_an_aoscx_section_line` and
       :func:`is_a_dellos10_section_line` ask one line what the
-      IOS-XE, NX-OS and OS10 detectors ask a text.
+      IOS-XE, NX-OS, AOS-CX and OS10 detectors ask a text.
     * :func:`left_out_row` / :func:`left_out_rows` /
       :func:`is_left_out_row` — the row for a statement a parser
       read and left out on purpose (a Junos statement the source
@@ -45,8 +46,8 @@ Public functions:
       that tells such a row from a section header.
     * :func:`unread_top_level_rows` / :func:`command_label` — the
       rows for the lines in column 0 that no reader of a parser takes
-      (the Arista EOS, Cisco NX-OS and OS10 parsers ask every such
-      line), each a
+      (the Arista EOS, Cisco NX-OS, Aruba AOS-CX and OS10 parsers
+      ask every such line), each a
       command's words; :func:`no_command_row` /
       :func:`is_no_command_row` — the row that counts such lines that
       begin with no command the parser knows, and the test that tells
@@ -522,6 +523,14 @@ def is_a_nxos_section_line(line: str) -> bool:
     NX-OS parser asks of every line in column 0 it does not read
     (``cisco_nxos.parse._rows_for_what_no_reader_takes``)."""
     return any(pattern.match(line) for pattern in _NXOS_TIER3_HEADERS)
+
+
+def is_an_aoscx_section_line(line: str) -> bool:
+    """Whether a pattern of :func:`detect_tier3_sections_aoscx` takes the
+    one line *line*, which then has a row of its own: what the Aruba
+    AOS-CX parser asks of every line in column 0 it does not read
+    (``aruba_aoscx.parse._rows_for_what_no_reader_takes``)."""
+    return any(pattern.match(line) for pattern in _AOSCX_TIER3_HEADERS)
 
 
 #: A word that says which command of a family a line is

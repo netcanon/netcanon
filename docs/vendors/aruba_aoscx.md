@@ -178,6 +178,36 @@ Deliberately deferred to [Tier
   the deployment of a model family, which makes its port names right
 - **NAT** — AOS-CX does not host typical edge NAT
 
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`vsx`, `evpn`, `ntp server`, `ip dns`, `ip prefix-list`, `ssh
+server`, `spanning-tree priority`, `tacacs-server host`, `apply
+access-list`, `router vrrp`), never a value; one row a kind, however
+many lines it has.  That includes the forms of a command the parser
+reads only in one form or only once: a `vlan` line of a list, a range
+or an id no switch has (`vlan 10,20`, `vlan 5000`), a `vrf` line with
+more than a name, an `snmpv3 user` line with no `auth`, a `user` line
+with no `password`, a second `hostname`, `snmp-server community`,
+`system-location` or `system-contact` line, and a second line of a
+local user's name (the tree holds one line of each).  A line that
+begins with a word AOS-CX configurations are not seen to begin with
+is counted in one row that shows none of its text.  Until 2026-11-13
+only the kinds a pattern named (routing protocols, access lists,
+route maps, classes, policies, VSF) had a row, and the rest were in
+no output and no row, in jobs that said `completed`.  Not reached: an
+indented line of a stanza the parser reads that the stanza's reader
+does not take has no row, nor has a banner, whose lines are text.
+
+The readers of a hostname, the release, a local user, an SNMP
+community, location, contact and SNMPv3 user take their value from
+their own line.  Up to 2026-11-13 the white space between their
+words could be a line break, so an `snmp-server system-location`
+line with no value was read with the next line for its location, and
+a `hostname` or `user` line with none with the next line for the
+hostname or the account.  A `vlan` line in digits of another script
+was read as the VLAN those digits stand for; it is a row now.
+
 If your migration involves these surfaces, plan to hand-translate
 them or pair Netcanon with a complementary tool — see
 [`../COMPARISON.md`](../COMPARISON.md).
