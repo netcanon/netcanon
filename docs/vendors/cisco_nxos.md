@@ -208,6 +208,38 @@ Deliberately deferred to [Tier
 - **QoS** — `class-map type qos` / `policy-map type qos` /
   `service-policy`
 
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`vpc domain`, `evpn`, `ip prefix-list`, `spanning-tree mode`,
+`logging level`, `line vty`, `copp profile`), never a value; one row a
+kind, however many lines it has.  A `feature` line is a row where
+nothing reads what it enables (`feature bgp`, `feature ssh`, `feature
+vpc`); one whose configuration the parser reads (`feature
+interface-vlan`, `feature lacp`, `feature hsrp`, `feature tunnel`,
+`feature nv overlay`, `feature vn-segment-vlan-based`, `feature fabric
+forwarding`) is not: what it enables is translated, and the renderer
+writes its own `feature` lines from the tree -- none for the anycast
+gateway, which Cisco's VXLAN BGP EVPN design guide configures with no
+`feature fabric forwarding` line.
+That includes the forms of a command the parser reads only in one
+form or only once: a `logging` or `ip name-server` line that names no
+address, a `vlan configuration` line, an `snmp-server user` line with
+no `auth`, a second `hostname`, `ip domain-name`, `snmp-server
+community`, `location` or `contact` line, and a second line of a local
+user's name (`username <name> sshkey ...`; the tree holds one line of
+each).  The renderer writes its own `vdc`, `line` and `boot` lines,
+which are not the source's, so their rows are on an NX-OS job onto
+NX-OS too.  A line that begins with a word NX-OS configurations are
+not seen to begin with (a terminal's prompt above the printout, say)
+is counted in one row that shows none of its text.  Until 2026-11-13
+only the kinds a pattern named (routing protocols, ACLs, route maps,
+QoS maps, crypto, AAA, SPAN sessions) had a row, and the rest were in
+no output and no row, in jobs that said `completed`.  Not reached: an
+indented line of a stanza the parser reads that the stanza's reader
+does not take has no row, nor has a banner or a scheduler job, whose
+lines are text.
+
 If your migration involves these surfaces, plan to hand-translate
 them or pair Netcanon with a complementary tool — see
 [`../COMPARISON.md`](../COMPARISON.md).

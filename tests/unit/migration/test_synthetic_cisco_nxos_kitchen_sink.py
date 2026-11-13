@@ -85,11 +85,14 @@ def test_no_tier3_sections_are_detected(tree) -> None:
     rather than deleted — it is what distinguishes "the fixture has no
     Tier-3 content" from "the detector stopped firing".
 
-    The one row is the fixture's ``hsrp version 2``: no group of it needs
-    version 2, and the version is not kept, so the job says so.
+    The first row is the fixture's ``hsrp version 2``: no group of it
+    needs version 2, and the version is not kept, so the job says so.
+    The others are its ``vdc``, ``line`` and ``boot`` lines, which
+    nothing translates, a row each.
     """
     rows = tree.dropped_tier3_sections
-    assert len(rows) == 1 and rows[0].startswith("hsrp version 2: Vlan10 -- ")
+    assert rows[0].startswith("hsrp version 2: Vlan10 -- ")
+    assert rows[1:] == ["vdc", "line console", "line vty", "boot nxos"]
 
 
 # ---------------------------------------------------------------------------

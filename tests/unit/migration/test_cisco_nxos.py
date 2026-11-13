@@ -366,10 +366,15 @@ class TestRoundTrip:
         a, b = _canonical(first), _canonical(second)
         # The fixture's ``hsrp version 2`` is not kept (no group of it
         # needs version 2), and a row of the source's parse says so; the
-        # output has no such line to say it of.
+        # output has no such line to say it of.  The ``vdc``, ``line``
+        # and ``boot`` lines are a row each in both parses: nothing
+        # translates them, and the renderer writes its own, which are
+        # not the source's.
+        wrapper = ["vdc", "line console", "line vty", "boot nxos"]
         rows = a.pop("dropped_tier3_sections")
-        assert len(rows) == 1 and rows[0].startswith("hsrp version 2: Vlan10 -- ")
-        assert b.pop("dropped_tier3_sections") == []
+        assert rows[0].startswith("hsrp version 2: Vlan10 -- ")
+        assert rows[1:] == wrapper
+        assert b.pop("dropped_tier3_sections") == wrapper
         assert a == b
 
     def test_render_reparses_as_nxos(self, codec, kitchen_sink):
