@@ -103,6 +103,13 @@ translatable with caveats:
 - Local users, where the target takes the secret's form (see
   "Hash portability" under "Common gotchas"); a `nopassword`
   account is a review line on every target
+- VXLAN (`cisco_iosxe_cli`) -- VLAN↔VNI bindings (`vlan configuration
+  <id>` / `member evpn-instance 1 vni <vni>`) and the `interface nve1`
+  VTEP.  As a target, a VTEP whose source no record states (a VyOS
+  one that states none, one whose loopback the map dropped, an
+  overlay of L3 VNIs only) is written with a review line where
+  `source-interface` would go.  ⚠️ Up to 0.7.7 it was written
+  `Loopback0`, an interface nothing named
 
 ## L3 redundancy: VRRP + SD-Access anycast-gateway
 

@@ -1401,6 +1401,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A VTEP source that no record states is not invented on EOS,
+  IOS-XE (CLI) or NX-OS.**  The tree holds no VTEP source when the
+  source config states none (a VyOS `vxlan` interface with neither
+  `source-interface` nor `source-address`), when the operator's map
+  dropped the interface it named, and when the overlay is L3 VNIs
+  only.  The three renderers wrote `Loopback0` / `loopback0` in its
+  place -- an interface nothing names -- in jobs that said
+  `completed`; where the map had dropped the source, beside a
+  warning that said the VTEP was left without one.  None is written
+  now, and a review line stands where the source line would go.
+  Junos, VyOS and AOS-CX wrote none already.  The committed VyOS
+  inputs whose overlay states no source move onto the three.
+
 - **An AOS-CX VTEP that is down is left out and said, with every
   VNI under it.**  AOS-CX brings `interface vxlan` up only on `no
   shutdown`, as it does a port, a LAG and `interface mgmt`.  The

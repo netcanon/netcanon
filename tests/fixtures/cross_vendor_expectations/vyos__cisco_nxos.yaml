@@ -591,13 +591,14 @@ per_field_expectation:
       LOSSY: its reason is the per-VNI sub-flags (`suppress-arp`,
       `ingress-replication protocol bgp`) not round-tripping, and no corpus
       cell sets one.  The VNI number itself is clean on every cell.
-      Two ADJACENT sub-fields that are not audited keys on this pair do drift
-      on 2 cells each and are worth an operator's attention:
-      `source_interface` (empty -> `loopback0`, the NVE render supplying a VTEP
-      source the VyOS netdev did not name) and `udp_port`
+      An ADJACENT sub-field that is not an audited key on this pair drifts
+      on 2 cells and is worth an operator's attention: `udp_port`
       (`8472` -> `4789`, cisco_nxos declares `/vxlan-vnis/udp-port` lossy for
       exactly this).  If the far-end VTEPs are still on the legacy Linux port
-      8472, the overlay will not come up.
+      8472, the overlay will not come up.  Those 2 cells state no VTEP
+      source, and none is written: a review line stands where
+      `source-interface` would go.  Up to 0.7.7 `source_interface` went from
+      empty to `loopback0` there, the render inventing a source.
     references: [vyos-nxos-surface]
 
   "vxlan_vnis[].vlan_id":

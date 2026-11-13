@@ -1959,16 +1959,15 @@ not:
   its new name (`vlan100` renamed `vlan97` is written
   `vlan-id=97`), and one with a name of its own (`clustervlan100`)
   can come back as `vlan<id>`;
-* a **loopback that is a VXLAN source** (EOS, NX-OS).  A rename is
-  shown.  Dropped, its stanza goes and the VXLAN source line
-  still names it;
 * **Junos `irb`**, the bare name a config lists beside its
   `irb.<unit>` interfaces: neither is shown, and the units stay
   under `irb`.
 
 Over the committed inputs, each onto its own vendor, every other
 row of that section did what it said: a LAG, a tunnel, a loopback
-that is no VXLAN source, a VLAN interface on AOS-CX, NX-OS, Junos
+(one that is a VXLAN source on EOS or NX-OS too: dropped, the VTEP
+is written with a review line where its source line was, and the
+job says it lost its source), a VLAN interface on AOS-CX, NX-OS, Junos
 (`irb.<unit>`) and OPNsense.  The API has always answered the same
 request the same way; what is new is that the page offers it.  After such
 an entry, read the output: where the old name is still in it, take

@@ -608,12 +608,13 @@ per_field_expectation:
       `/vxlan-vnis/vni` supported.
       Recorded explicitly because the mesh shows `vxlan_vnis` drifting on
       those same 3 cells, which invites a "the VXLAN surface collapsed"
-      reading.  It did not: the drift is entirely in two sub-fields that are
-      not audited keys — `flood_list` empties (arista_eos declares
+      reading.  It did not: the drift is entirely in a sub-field that is
+      not an audited key — `flood_list` empties (arista_eos declares
       `/vxlan-vnis/flood-list` LOSSY; the head-end replication list is not
-      emitted), and on the two `wcni-kind-*` cells `source_interface` goes
-      from empty to `Loopback0`, which is the render ADDING a VTEP source,
-      not losing one.
+      emitted).  The two `wcni-kind-*` cells state no VTEP source, and
+      none is written: a review line stands where `vxlan
+      source-interface` would go.  Up to 0.7.7 `source_interface` went
+      from empty to `Loopback0` there, the render inventing a source.
     references: [vyos-arista-surface]
 
   "vxlan_vnis[].vlan_id":

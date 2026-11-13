@@ -61,6 +61,7 @@ from ...canonical.intent import CanonicalIntent
 from .._helpers import (
     charge_id_lines,
     native_vlan_stated,
+    no_vtep_source,
     one_mtu_written,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
@@ -983,15 +984,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     #     mappings inside a single ``interface Vxlan1`` stanza.
     #     GAP-EVPN-2: source-interface + udp-port come from the
     #     CanonicalVxlan records (per-switch values stamped on
-    #     every VNI mapping at parse-time); fall back to
-    #     ``Loopback0`` / ``4789`` when no record carries a non-
-    #     default value (e.g. a render of a tree built purely from
-    #     a VRF / l3_vni scenario with no L2 VNIs).
+    #     every VNI mapping at parse-time).  A source no record
+    #     states is not invented: a review line stands where it
+    #     would go (``no_vtep_source``).  The UDP port falls back
+    #     to 4789, the IANA port, when no record carries another.
     has_l3_vnis = any(
         ri.l3_vni is not None for ri in tree.routing_instances
     )
     if tree.vxlan_vnis or has_l3_vnis:
-        src_iface = "Loopback0"
+        src_iface = ""
         for v in tree.vxlan_vnis:
             if v.source_interface:
                 src_iface = v.source_interface
@@ -1002,7 +1003,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 udp_port = v.udp_port
                 break
         out.append("interface Vxlan1")
-        out.append(f"   vxlan source-interface {src_iface}")
+        if src_iface:
+            out.append(f"   vxlan source-interface {src_iface}")
+        else:
+            out.append(no_vtep_source("   ", "vxlan source-interface"))
         out.append(f"   vxlan udp-port {udp_port}")
         for v in tree.vxlan_vnis:
             out.append(f"   vxlan vlan {v.vlan_id} vni {v.vni}")

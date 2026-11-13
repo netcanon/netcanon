@@ -48,6 +48,7 @@ from .._helpers import (
     _coalesce_vlan_ids,
     every_native_vlan_tagged,
     native_vlan_stated,
+    no_vtep_source,
     one_mtu_written,
     same_vendor_version,
     switchport_trunk_allowed_value,
@@ -578,8 +579,9 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
     via the ``vlan N / vn-segment`` lines rendered earlier); L3VNIs come
     from ``routing_instances[].l3_vni`` (``member vni <l3vni>
     associate-vrf``).  ``source-interface`` is the switch-level VTEP
-    source (broadcast across every CanonicalVxlan record; falls back to
-    ``loopback0`` when undeclared).  ``host-reachability protocol bgp`` is
+    source (broadcast across every CanonicalVxlan record); when no record
+    states one, none is written and a review line stands where it would
+    go (``no_vtep_source``).  ``host-reachability protocol bgp`` is
     the constant modern BGP-EVPN head-end default.  Per-VNI flooding is
     emitted from the canonical record: ``mcast-group`` (multicast
     flood-and-learn) when set, else a ``ingress-replication protocol
@@ -595,12 +597,13 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
         return []
     source_iface = next(
         (x.source_interface for x in tree.vxlan_vnis if x.source_interface), "",
-    ) or "loopback0"
+    )
     block = [
         "interface nve1",
         "  no shutdown",
         "  host-reachability protocol bgp",
-        f"  source-interface {source_iface}",
+        f"  source-interface {source_iface}" if source_iface
+        else no_vtep_source("  ", "source-interface"),
     ]
     for v in sorted(tree.vxlan_vnis, key=lambda x: x.vni):
         block.append(f"  member vni {v.vni}")
