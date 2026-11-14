@@ -49,9 +49,9 @@ Public functions:
       that tells such a row from a section header.
     * :func:`unread_top_level_rows` / :func:`command_label` — the
       rows for the lines in column 0 that no reader of a parser takes
-      (the Arista EOS, Cisco NX-OS, Cisco IOS XR, Aruba AOS-S, Aruba
-      AOS-CX and OS10 parsers ask every such line), each a
-      command's words; :func:`no_command_row` /
+      (the Arista EOS, Cisco NX-OS, Cisco IOS XR, Cisco IOS-XE CLI,
+      Aruba AOS-S, Aruba AOS-CX and OS10 parsers ask every such
+      line), each a command's words; :func:`no_command_row` /
       :func:`is_no_command_row` — the row that counts such lines that
       begin with no command the parser knows, and the test that tells
       it from the others.
@@ -515,8 +515,10 @@ def is_a_dellos10_section_line(line: str) -> bool:
 def is_an_iosxe_cli_section_line(line: str) -> bool:
     """Whether a pattern of :func:`detect_tier3_sections_iosxe_cli`
     takes the one line *line*, which then has a row of its own: what
-    the Arista EOS parser asks of every line in column 0 it does not
-    read (``arista_eos.parse._rows_for_what_no_reader_takes``)."""
+    the Arista EOS and Cisco IOS-XE CLI parsers ask of every line in
+    column 0 they do not read
+    (``arista_eos.parse._rows_for_what_no_reader_takes``,
+    ``cisco_iosxe_cli.parse._rows_for_what_no_reader_takes``)."""
     return any(pattern.match(line) for pattern in _IOSXE_TIER3_HEADERS)
 
 

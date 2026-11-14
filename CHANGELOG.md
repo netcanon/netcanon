@@ -1465,6 +1465,47 @@ timestamp if your timezone matters for an audit.
   none with the next line's address for a syslog host.  An indented
   line of a stanza that the stanza's reader does not take still has
   no row.  The committed IOS XR inputs gain rows; no output moves.
+- **An IOS-XE line that nothing translates is said.**  The Cisco
+  IOS-XE CLI parser reads a hostname, the release, a domain, DNS,
+  NTP and syslog servers, interfaces, VRFs, VLANs, static routes and
+  the default gateway, SNMP (the first community, the location and
+  contact, a trap host named by an IPv4 address, SNMPv3 users),
+  RADIUS servers, the switch's DHCP server, local users and the
+  anycast gateway's MAC; and the IOS-XE Tier-3 patterns name access
+  lists, NAT, class and policy maps, route maps, crypto, zone pairs
+  and MLAG.  Every other line in column 0 was in no output and no
+  row -- spanning tree, `line` settings, SSH and HTTP settings,
+  `service` and `aaa` lines, `ip routing`, DHCP snooping, `router
+  ospf` and `router bgp`, `logging` settings, a second `hostname`,
+  `ip domain` or `snmp-server community` line, an SNMP host named by
+  an IPv6 address, a second line of a local user's name and a
+  `username` line of a form the parser does not read -- in jobs that
+  said `completed`.  Now each kind of such line is a row of
+  `dropped_tier3_sections`, as those of the EOS, NX-OS, AOS-CX, IOS
+  XR, AOS-S and OS10 parsers are: its command word, and the word
+  after it where that says which command it is (`spanning-tree
+  mode`, `line vty`, `ip ssh`, `router ospf`), never a value; a
+  `logging` line's row is the word alone, since a syslog host's name
+  or address can come right after it.  A line that begins with a
+  word IOS-XE configurations are not seen to begin with is counted
+  in one row that shows none of its text; the lines the device
+  prints around the configuration (`Building configuration...`,
+  `Current configuration : <n> bytes`, the boot markers) are no row.
+  The readers of a hostname, the release, a name server, an NTP
+  server, a syslog host and the SNMP location and contact read their
+  own line: the white space between their words could be a line
+  break, so a `hostname`, `version`, `snmp-server location` or
+  `snmp-server contact` line with no value was read with the next
+  line for its value, and an `ip name-server`, `ntp server` or
+  `logging` line with none with the address on the next line.  An
+  indented line of a stanza that the stanza's reader does not take
+  still has no row, and a banner has none.  In a text without its
+  indentation that is read (no stanza the parser reads has a line
+  after it that could be its body), a line of a stanza nothing reads
+  is a line in column 0, with a row of its own.  The renderer writes
+  its own `service timestamps` lines, so an IOS-XE output read again
+  has that row.  The committed IOS-XE inputs gain rows; no output
+  moves.
 - **An AOS-S line that nothing translates is said.**  The Aruba
   AOS-S parser reads a hostname, SNMP (the first community, the
   location and contact, a trap host named by an IPv4 address,

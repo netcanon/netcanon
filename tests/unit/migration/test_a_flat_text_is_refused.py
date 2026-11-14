@@ -50,6 +50,7 @@ from types import ModuleType
 
 import pytest
 
+from netcanon.migration._tier3_detection import is_no_command_row
 from netcanon.migration.codecs import _scanner
 from netcanon.migration.codecs.aruba_aoscx import parse as aoscx_parse
 from netcanon.migration.codecs.base import ParseError
@@ -231,8 +232,12 @@ def _message(codec: str, line: int) -> str:
 
 #: Committed captures in which, dedented, no stanza the parser reads is
 #: followed by a line that could be its body: they are the same text to
-#: the parser.  Found by hand (:func:`_first_flat_by_hand`), and pinned,
-#: so that a reading that finds no stanza anywhere is seen.
+#: the parser but for its rows.  Found by hand
+#: (:func:`_first_flat_by_hand`), and pinned, so that a reading that
+#: finds no stanza anywhere is seen.  A line of a stanza that nothing
+#: reads is, dedented, a line in column 0 that no reader takes, with a
+#: row of its own (``codecs/cisco_iosxe_cli/test_what_no_reader_takes.py``):
+#: the flat text says more, never less (:func:`_same_but_for_rows`).
 NO_BODY = {
     "cisco_iosxe_cli:batfish_cisco_aaa.txt",
     "cisco_iosxe_cli:batfish_cisco_ip_route.txt",
@@ -245,12 +250,39 @@ def _first_flat_dedented(codec: str, path: Path) -> int | None:
     return _first_flat_by_hand(codec, _dedent(_read(path)))
 
 
+def _named(rows: list[str]) -> set[str]:
+    """The rows that name a kind: the row that counts lines of no command
+    the parser knows says how many, which a dedented text changes."""
+    return {row for row in rows if not is_no_command_row(row)}
+
+
+def _same_but_for_rows(name: str, printed: dict, flat: dict) -> None:
+    """*flat* is the tree *printed* is but for its rows, and has every
+    row of *printed* that names a kind."""
+    printed, flat = dict(printed), dict(flat)
+    printed_rows = printed.pop("dropped_tier3_sections")
+    flat_rows = flat.pop("dropped_tier3_sections")
+    assert flat == printed, name
+    assert _named(printed_rows) <= _named(flat_rows), name
+
+
+def test_the_check_of_a_text_with_no_body_can_fail() -> None:
+    printed = {"hostname": "r1", "dropped_tier3_sections": ["line vty"]}
+    _same_but_for_rows("more rows", printed, {
+        **printed, "dropped_tier3_sections": ["line vty", "transport"],
+    })
+    with pytest.raises(AssertionError):
+        _same_but_for_rows("a row lost", printed, {**printed, "dropped_tier3_sections": []})
+    with pytest.raises(AssertionError):
+        _same_but_for_rows("another tree", printed, {**printed, "hostname": "r2"})
+
+
 def _check_flat(codec: str, path: Path) -> None:
     raw = _read(path)
     at = _first_flat_dedented(codec, path)
     if at is None:
         assert f"{codec}:{path.name}" in NO_BODY, path.name
-        assert _tree(codec, _dedent(raw)) == _tree(codec, raw), path.name
+        _same_but_for_rows(path.name, _tree(codec, raw), _tree(codec, _dedent(raw)))
         return
     error = _refusal(codec, _dedent(raw))
     assert str(error) == _message(codec, at), path.name

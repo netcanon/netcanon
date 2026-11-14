@@ -1040,7 +1040,10 @@ def _digest(codec: str, path: str) -> str:
 #: (``codecs/cisco_iosxr/test_what_no_reader_takes.py``); and every
 #: AOS-S input with a line in column 0 that no reader takes, when each
 #: kind became a row, the rest of its tree as it was
-#: (``codecs/aruba_aoss/test_what_no_reader_takes.py``).
+#: (``codecs/aruba_aoss/test_what_no_reader_takes.py``); and every
+#: IOS-XE input with a line in column 0 that no reader takes, when each
+#: kind became a row, the rest of its tree as it was
+#: (``codecs/cisco_iosxe_cli/test_what_no_reader_takes.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "bfd67696de2a",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "f37f1937c656",
@@ -1074,44 +1077,44 @@ BEFORE: dict[str, str] = {
     "real/aruba_aoss/user_contrib_2930m_wc1611.cfg": "ab3497fb3bca",
     "synthetic/aruba_aoss/kitchen_sink.cfg": "c2e9eba32004",
     "aruba_aoss/show_run_simple.txt": "8ccfd240ba66",
-    "real/cisco_iosxe/batfish_cisco_aaa.txt": "e25af909db82",
+    "real/cisco_iosxe/batfish_cisco_aaa.txt": "efa50219e6d1",
     # Moved on purpose, by its tunnels' ends and a row and nothing
     # else: `tunnel source` and `tunnel destination` are read, and its
     # `tunnel source dynamic` is listed among the sections not
     # translated (codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py):
     # was "ac89fc3d7159".
-    "real/cisco_iosxe/batfish_cisco_interface.txt": "8928d38b76db",
+    "real/cisco_iosxe/batfish_cisco_interface.txt": "ea32b3609fe4",
     # Moved on purpose, by its two VRF routes and a row and nothing
     # else: the next hop of each is in the global table (`global`), so
     # it is left out and counted (test_a_next_hop_in_another_vrf.py):
     # was "ab1f0cce8811".
-    "real/cisco_iosxe/batfish_cisco_ip_route.txt": "352bda777c69",
-    "real/cisco_iosxe/batfish_cisco_logging.txt": "b1aad8f82e94",
-    "real/cisco_iosxe/batfish_cisco_snmp.txt": "ec27664e753c",
-    "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "d4cdf42f627c",
-    "real/cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt": "e94bbbbcc894",
+    "real/cisco_iosxe/batfish_cisco_ip_route.txt": "8c473f531317",
+    "real/cisco_iosxe/batfish_cisco_logging.txt": "79e8f7844273",
+    "real/cisco_iosxe/batfish_cisco_snmp.txt": "101c9747868c",
+    "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "a815181890bd",
+    "real/cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt": "c10fddd8dc4c",
     # The IOSv capture whose every line is at column 0 was here: the
     # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
     # (``test_a_flat_text_is_refused.py``).
-    "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
+    "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "33de03286694",
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
-    "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "c6fe61cfb3a2",
-    "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "879b0c3f72b4",
+    "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "6a7bb5d63800",
+    "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "4342112a3c23",
     # Moved on purpose, by its tunnels' ends and nothing else
     # (codecs/cisco_iosxe_cli/test_a_tunnels_two_ends.py): was
     # "a4c84dfdfed7".
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "21b9bd47653a",
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "25f529f54c46",
     # Moved on purpose, by a row and nothing else: `switch 1 provision
     # c9300-24ux` is listed among the sections not translated
     # (TestCatalystStack): was "7192fbc5fd5e".
-    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "3f77c6b89ade",
+    "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "452847ad21dc",
     # Moved on purpose: its RADIUS ``key 7`` is held behind ``iosxe:``.
     # And again, by its two DHCP pools and nothing else: each is read as
     # the server hands it out, with a range and the interface whose
     # subnet is its network (test_a_pool_as_the_server_hands_it_out.py):
     # was "70caca86d542".
-    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "04c2854292eb",
-    "iosxe/show_run_simple.txt": "fba5436f7b17",
+    "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "3e948e029613",
+    "iosxe/show_run_simple.txt": "b7afff98990f",
     "real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt": "c32f6b4c0c4f",
     "real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt": "b738b9483d97",
     "real/cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt": "35430cc997e7",

@@ -30,6 +30,12 @@ anycast-gateway-mac MAC`` populating
 ``fabric forwarding mode anycast-gateway`` mirroring the primary
 IP into ``virtual_gateway_address``).
 
+A line in column 0 that none of these readers takes, and that no Tier-3
+pattern names, is a row of ``dropped_tier3_sections``
+(:func:`_rows_for_what_no_reader_takes`): ``spanning-tree``, ``line``,
+``ip ssh``, ``ip http``, ``service``, ``logging`` settings, a second
+``snmp-server community``, a second ``hostname``.
+
 Extracted verbatim from ``codec.py`` during the parse/render split;
 behaviour is identical to the prior in-class implementation.  The
 codec module's ``parse()`` method is now a one-line delegator to
@@ -54,7 +60,11 @@ from collections.abc import Callable
 from typing import Any
 
 from ..._radius_secrets import IOSXE_ENVELOPE
-from ..._tier3_detection import left_out_rows
+from ..._tier3_detection import (
+    is_an_iosxe_cli_section_line,
+    left_out_rows,
+    unread_top_level_rows,
+)
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -103,7 +113,7 @@ from .._scanner import (
     without_text_bodies,
 )
 from ..base import ParseError
-from .dhcp_pools import Pools, pools_of, read_pool_line, read_top
+from .dhcp_pools import Pools, a_top_line, pools_of, read_pool_line, read_top
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +268,7 @@ _VRRP_AF_RE = re.compile(
 # primary IP as the anycast gateway.  See docs/v0.2.0-planning/
 # 02-anycast-gateway/02-per-vendor-grammar.md § "Cisco IOS-XE SD-Access".
 _FABRIC_AG_MAC_RE = re.compile(
-    r"^fabric\s+forwarding\s+anycast-gateway-mac\s+(?P<mac>\S+)\s*$",
+    r"^fabric[^\S\n]+forwarding[^\S\n]+anycast-gateway-mac[^\S\n]+(?P<mac>\S+)[^\S\n]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _FABRIC_AG_MODE_RE = re.compile(
@@ -399,11 +409,17 @@ def _infer_type(iface_name: str) -> str:
     return "ianaift:other"
 
 
-_HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: The patterns applied to the whole text under ``re.MULTILINE`` read
+#: one line each: the white space between their words is ``[^\S\n]``,
+#: never ``\s``, which crosses a line break -- a ``hostname`` line with
+#: no value was read with the NEXT line's first word for the hostname,
+#: and that line was in no row (:func:`_rows_for_what_no_reader_takes`
+#: asks a line at a time).
+_HOSTNAME_RE = re.compile(r"^hostname[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE)
 #: Running-config ``version 17.9`` header — first token after a column-0
 #: ``version`` keyword is the IOS/IOS-XE release.  Partial/tolerance
 #: captures omit the header, so absence is honest (→ ``""``).
-_VERSION_RE = re.compile(r"^version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+_VERSION_RE = re.compile(r"^version[^\S\n]+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 
@@ -568,7 +584,7 @@ _LOCAL_USER_RE = re.compile(
 # e.g. ``ip name-server 1.1.1.1 8.8.8.8`` is two servers, not one.
 # Mirrors arista_eos prior art (same wire syntax in the IOS family).
 _TOP_NAME_SERVER_RE = re.compile(
-    r"^ip\s+name-server\s+(?:vrf\s+\S+\s+)?(.+)$",
+    r"^ip[^\S\n]+name-server[^\S\n]+(?:vrf[^\S\n]+\S+[^\S\n]+)?(.+)$",
     re.IGNORECASE | re.MULTILINE,
 )
 # ``ip domain name X`` is the modern (post-12.4T) form.  ``ip
@@ -577,11 +593,11 @@ _TOP_NAME_SERVER_RE = re.compile(
 # devices and from operators who learned the syntax pre-12.4T.  Accept
 # both — they mean the same thing.
 _TOP_DOMAIN_RE = re.compile(
-    r"^ip\s+domain(?:\s+name|-name)\s+(\S+)\s*$",
+    r"^ip[^\S\n]+domain(?:[^\S\n]+name|-name)[^\S\n]+(\S+)[^\S\n]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _TOP_NTP_SERVER_RE = re.compile(
-    r"^ntp\s+server\s+(?:vrf\s+\S+\s+)?(\S+)",
+    r"^ntp[^\S\n]+server[^\S\n]+(?:vrf[^\S\n]+\S+[^\S\n]+)?(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
 # Syslog destinations.  The IOS / IOS-XE / IOS-XR / NX-OS families all spell
@@ -597,7 +613,22 @@ _TOP_NTP_SERVER_RE = re.compile(
 # severity level, message id, UDP port) is never a valid IPv4/IPv6 literal, so
 # the guard rejects the noise structurally.  Mirrors the opnsense resolved-
 # next-hop IP guard.
-_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(
+    r"^[^\S\n]*logging[^\S\n]+(\S.*)$", re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _syslog_host(rest: str) -> str | None:
+    """The syslog host a ``logging`` line names: the first word of
+    *rest* (what follows ``logging``) that is an IP address, or
+    ``None`` where the line names none (``logging buffered 5000``)."""
+    for token in rest.split():
+        try:
+            ipaddress.ip_address(token)
+        except ValueError:
+            continue
+        return token
+    return None
 
 # ``vrf definition <name>`` opens a VRF stanza; sub-commands include
 # ``description X``, ``rd <rd>``, ``route-target {import|export|both}
@@ -915,6 +946,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # A text with no indentation is refused in words, before any
     # reader takes a stanza's body for lines of the top level.
     _refuse_a_flat_text(raw)
+    # Each line in column 0 that no reader below takes is a row, asked
+    # before any stanza is taken out so that a row's line number is the
+    # line's in the text that was pasted; the rows go after every other.
+    top_level = _rows_for_what_no_reader_takes(raw)
 
     intent = CanonicalIntent(
         source_vendor="cisco_iosxe",
@@ -949,11 +984,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # anycast-gateway-mac <MAC>`` at top-level declares the chassis-
     # wide anycast MAC.  Per-SVI anycast-mode marker is handled
     # inside :func:`_parse_interfaces`.
-    m = _FABRIC_AG_MAC_RE.search(raw)
+    m = _anycast_mac_read(raw)
     if m:
-        normalised = _normalise_mac_to_colon_hex(m.group("mac"))
-        if normalised:
-            intent.anycast_gateway_mac = normalised
+        intent.anycast_gateway_mac = _normalise_mac_to_colon_hex(m.group("mac"))
 
     # VRF definitions (``vrf definition <name>`` top-level stanzas).
     # Per-interface ``vrf forwarding <name>`` membership is set by
@@ -1069,6 +1102,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
     project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
+    intent.dropped_tier3_sections.extend(top_level)
+
     # Parse-end summary: lets ops answer "did parse succeed?" from
     # a debug-level log line without needing to inspect the
     # response JSON.  Zero counts across the board on a non-empty
@@ -1087,6 +1122,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
         given,
     )
     return intent
+
+
+def _anycast_mac_read(raw: str) -> re.Match[str] | None:
+    """The ``fabric forwarding anycast-gateway-mac`` line the parse
+    reads, or ``None``: the first such line, where what it holds is a
+    MAC (``_helpers._normalise_mac_to_colon_hex``)."""
+    m = _FABRIC_AG_MAC_RE.search(raw)
+    if m is None or not _normalise_mac_to_colon_hex(m.group("mac")):
+        return None
+    return m
 
 
 def _extract_hostname(raw: str) -> str:
@@ -1151,15 +1196,10 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
         # sub-commands (buffer sizes, severities, message ids) carry no IP
         # token, so they contribute nothing.  De-dup, first-seen order
         # (``seen_syslog`` set-guard keeps it O(1) per line -- perf review P2).
-        for token in m.group(1).split():
-            try:
-                ipaddress.ip_address(token)
-            except ValueError:
-                continue
-            if token not in seen_syslog:
-                seen_syslog.add(token)
-                intent.syslog_servers.append(token)
-            break
+        host = _syslog_host(m.group(1))
+        if host is not None and host not in seen_syslog:
+            seen_syslog.add(host)
+            intent.syslog_servers.append(host)
 
 
 def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
@@ -2397,17 +2437,18 @@ def _parse_static_routes(
 
 # -- SNMP parse helpers (shared via re-export for sibling codecs if needed)
 
+# Each reads one line (``[^\S\n]``, never ``\s``): see _HOSTNAME_RE.
 _SNMP_COMMUNITY_RE = re.compile(
-    r'^snmp-server\s+community\s+(\S+)', re.IGNORECASE | re.MULTILINE,
+    r'^snmp-server[^\S\n]+community[^\S\n]+(\S+)', re.IGNORECASE | re.MULTILINE,
 )
 _SNMP_LOCATION_RE = re.compile(
-    r'^snmp-server\s+location\s+(.+)$', re.IGNORECASE | re.MULTILINE,
+    r'^snmp-server[^\S\n]+location[^\S\n]+(.+)$', re.IGNORECASE | re.MULTILINE,
 )
 _SNMP_CONTACT_RE = re.compile(
-    r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE | re.MULTILINE,
+    r'^snmp-server[^\S\n]+contact[^\S\n]+(.+)$', re.IGNORECASE | re.MULTILINE,
 )
 _SNMP_HOST_RE = re.compile(
-    r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)',
+    r'^snmp-server[^\S\n]+host[^\S\n]+(\d+\.\d+\.\d+\.\d+)',
     re.IGNORECASE | re.MULTILINE,
 )
 # SNMPv3 user line.  Canonical shape on Cisco IOS-XE CLI:
@@ -2430,11 +2471,11 @@ _SNMP_HOST_RE = re.compile(
 # in the passphrase bucket and round-trips back out on render"; it did not, and
 # the keyword is not a trailer.)
 _SNMP_V3_USER_RE = re.compile(
-    r"^snmp-server\s+user\s+(\S+)\s+(\S+)\s+v3"
-    r"(?:\s+(encrypted))?"
-    r"(?:\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+))?"
-    r"(?:\s+priv\s+(des|3des|aes)(?:\s+(128|192|256))?\s+(\S+))?"
-    r"\s*$",
+    r"^snmp-server[^\S\n]+user[^\S\n]+(\S+)[^\S\n]+(\S+)[^\S\n]+v3"
+    r"(?:[^\S\n]+(encrypted))?"
+    r"(?:[^\S\n]+auth[^\S\n]+(md5|sha|sha224|sha256|sha384|sha512)[^\S\n]+(\S+))?"
+    r"(?:[^\S\n]+priv[^\S\n]+(des|3des|aes)(?:[^\S\n]+(128|192|256))?[^\S\n]+(\S+))?"
+    r"[^\S\n]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -2724,3 +2765,229 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
             priv_kind=kind,
         ))
     return snmp
+
+
+# ---------------------------------------------------------------------------
+# Lines in column 0 that nothing translates
+# ---------------------------------------------------------------------------
+
+
+def _a_syslog_line(line: str) -> bool:
+    """Whether *line* is a ``logging`` line :func:`_parse_globals`
+    reads: one that names a host's address."""
+    m = _SYSLOG_LINE_RE.match(line)
+    return m is not None and _syslog_host(m.group(1)) is not None
+
+
+#: The lines in column 0 a reader of this module takes, every one of
+#: them, by what each reader asks of a line: a pattern's ``match``, or
+#: a function that says whether the line is read.  An ``interface``
+#: header is a record, the VXLAN container (``interface nve1``) or a
+#: row of its own (``interface range``, a sub-interface whose tag is
+#: not read); a ``vlan``, ``vlan configuration``, ``vrf definition``,
+#: ``ip dhcp pool`` or ``radius server`` line is the header of a stanza
+#: whose lines are read; an ``ip route`` line is a route, or counted in
+#: the row for routes the router does not install or whose next hop is
+#: in another VRF; ``ip dhcp excluded-address`` is read or counted in a
+#: row of its own; a ``logging`` line is a syslog host where it names
+#: one's address.  The readers that read one line of a kind are
+#: :data:`_READ_ONCE`, and the local users are read one line a name
+#: (:func:`_rows_for_what_no_reader_takes`).  A reader that is added to
+#: the parse is added to one of them, and the other way round.
+_TOP_LEVEL_READERS: tuple[Callable[[str], object], ...] = (
+    _IFACE_RE.match,
+    _VRF_DEFINITION_RE.match,
+    _VLAN_RE.match,
+    _VLAN_CONFIG_RE.match,
+    tags_every_native_vlan,
+    _TOP_NAME_SERVER_RE.match,
+    _TOP_NTP_SERVER_RE.match,
+    _a_syslog_line,
+    _STATIC_ROUTE_RE.match,
+    _STATIC_ROUTE_V6_RE.match,
+    _DEFAULT_GATEWAY_RE.match,
+    _SNMP_HOST_RE.match,
+    _SNMP_V3_USER_RE.match,
+    _DHCP_POOL_HEADER_RE.match,
+    a_top_line,
+    _RADIUS_SERVER_HEADER_RE.match,
+    _RADIUS_HOST_LEGACY_RE.match,
+)
+
+#: The readers that read the first line of their kind and no other,
+#: each giving the match it reads or ``None``: the tree holds one
+#: hostname, release, domain, SNMP community, location and contact,
+#: and one anycast-gateway MAC.  A later line of the kind is in no
+#: output, and a row says so.
+_READ_ONCE: tuple[Callable[[str], re.Match[str] | None], ...] = (
+    _HOSTNAME_RE.search,
+    _VERSION_RE.search,
+    _TOP_DOMAIN_RE.search,
+    _SNMP_COMMUNITY_RE.search,
+    _SNMP_LOCATION_RE.search,
+    _SNMP_CONTACT_RE.search,
+    _anycast_mac_read,
+)
+
+#: Words of a session, not of the configuration: a pasted ``configure
+#: terminal``, ``end`` or ``write memory`` holds nothing to translate.
+_SESSION_WORDS = frozenset({"configure", "end", "exit", "write"})
+
+#: A line the device prints around the configuration, not a line of
+#: it: ``Building configuration...`` and ``Current configuration : N
+#: bytes`` above ``show running-config``, ``Using N out of N bytes``
+#: above ``show startup-config`` (Cisco's command reference prints it
+#: with and without the ``uncompressed size``), and the markers it
+#: prints around the ``boot`` lines.  Batfish's Cisco IOS grammar skips
+#: a line that begins with any of them (``Cisco_ignored.g4``).  Matched
+#: whole, after the line's trailing white space.
+_PRINTOUT_RE = re.compile(
+    r"Building configuration\.\.\."
+    r"|Current configuration[ \t]*:[ \t]*\d{1,12}[ \t]+bytes"
+    r"|Using[ \t]+\d{1,12}[ \t]+out[ \t]+of[ \t]+\d{1,12}[ \t]+bytes"
+    r"(?:,[ \t]*uncompressed[ \t]+size[ \t]*=[ \t]*\d{1,12}[ \t]+bytes)?"
+    r"|boot-start-marker|boot-end-marker",
+)
+
+#: The words IOS-XE configurations begin a line in column 0 with, which
+#: a row may show: the words the committed IOS-XE inputs begin such a
+#: line with, the words this module's readers and the IOS-XE Tier-3
+#: patterns read, and words of the top-level commands Batfish's Cisco
+#: IOS grammar reads (``CiscoParser.g4``'s stanzas, and the lines
+#: ``Cisco_ignored.g4`` skips).  A line that begins with another word is
+#: said all the same, in a row that counts such lines and shows none of
+#: their text (:func:`_rows_for_what_no_reader_takes`).  A word missing
+#: here costs a row its name, never the row.
+_COMMAND_WORDS = frozenset({
+    "aaa", "access-list", "alias", "app-hosting", "archive", "banner",
+    "bfd", "boot", "call-home", "cdp", "class-map", "clock",
+    "control-plane", "crypto", "cts", "device-tracking", "diagnostic",
+    "dot1x", "enable", "errdisable", "event", "fabric", "file", "flow",
+    "hardware", "hostname", "interface", "iox", "ip", "ipv6", "key",
+    "kron", "l2vpn", "license", "line", "lldp", "logging", "login", "mac",
+    "memory", "mlag", "mmi", "monitor", "mpls", "multilink",
+    "netconf-yang", "network-clock", "ntp", "object-group", "parser",
+    "platform", "policy-map", "port-channel", "power", "privilege",
+    "process", "radius", "radius-server", "redundancy", "restconf",
+    "route-map", "router", "sampler", "scheduler", "sdm", "service",
+    "snmp-server", "spanning-tree", "stack-power", "stackwise-virtual",
+    "subscriber", "switch", "switchport", "system", "table-map", "tacacs",
+    "tacacs-server", "telemetry", "template", "time-range", "track",
+    "transceiver", "udld", "username", "version", "vlan", "vrf", "vstack",
+    "vtp", "wsma", "zone", "zone-pair",
+})
+
+#: The words of :data:`_COMMAND_WORDS` whose second word says which of
+#: their commands a line is (``ip ssh``, ``spanning-tree mode``,
+#: ``line vty``, ``router ospf``).  After any other the second word is
+#: often a name the operator chose (``hostname``, ``username``,
+#: ``sampler``, ``template``, ``route-map``), which a row does not show
+#: (``_tier3_detection.command_label``).  ``logging`` is not one:
+#: IOS-XE takes a syslog host's address or its NAME straight after the
+#: word (``logging <host>``), and a name is a value.
+_FAMILIES = frozenset({
+    "aaa", "alias", "app-hosting", "banner", "bfd", "boot", "cdp",
+    "clock", "control-plane", "crypto", "cts", "device-tracking",
+    "diagnostic", "dot1x", "enable", "errdisable", "event", "fabric",
+    "file", "flow", "hardware", "ip", "ipv6", "key", "kron", "l2vpn",
+    "license", "line", "lldp", "login", "mac", "memory", "mlag", "mmi",
+    "monitor", "mpls", "multilink", "netconf-yang", "network-clock",
+    "ntp", "object-group", "parser", "platform", "port-channel", "power",
+    "privilege", "process", "radius", "radius-server", "router",
+    "scheduler", "sdm", "service", "snmp-server", "spanning-tree",
+    "stack-power", "subscriber", "switchport", "system", "tacacs",
+    "tacacs-server", "telemetry", "transceiver", "udld", "vlan", "vstack",
+    "vtp", "wsma", "zone", "zone-pair",
+})
+
+
+def _line_at(raw: str, start: int) -> str:
+    """The line of *raw* that begins at *start*, as
+    ``str.splitlines`` gives it."""
+    end = raw.find("\n", start)
+    return raw[start : end if end != -1 else len(raw)].splitlines()[0]
+
+
+def _rows_for_what_no_reader_takes(raw: str) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the lines in column
+    0 that nothing translates.
+
+    A line in column 0 is a statement of the top level, or the header
+    of a stanza whose lines are under it.  One that no reader takes --
+    :data:`_TOP_LEVEL_READERS`, the line each of :data:`_READ_ONCE`
+    reads, the first ``username`` line of each name in the form
+    :func:`_parse_local_users` reads, a line a Tier-3 pattern gives a
+    row of its own (``_tier3_detection.is_an_iosxe_cli_section_line``)
+    -- and that is not a word of a session (:data:`_SESSION_WORDS`) or
+    a line the device prints around the configuration
+    (:data:`_PRINTOUT_RE`) is in no output, and a row says so
+    (``_tier3_detection.unread_top_level_rows``): a row of its command
+    word (:data:`_COMMAND_WORDS`, :data:`_FAMILIES`), one for each kind
+    of line, past ``_tier3_detection.LEFT_OUT_ROWS_SHOWN`` of them one
+    that counts the rest; a line that begins with a word IOS-XE
+    configurations are not seen to begin with is counted in one row,
+    with the number of the first such line and nothing of its text
+    (``_tier3_detection.no_command_row``), which is no sign that the
+    text was a config.  A line that does not begin with a letter (a
+    ``!``) is no command, and is not counted.
+
+    Up to 0.7.7 only the kinds a Tier-3 pattern named had a row, and an
+    IOS-XE config's spanning tree, its ``line``, SSH, HTTP and AAA
+    settings, its ``logging`` settings, its routing protocols
+    (``router ospf``, ``router bgp``), a second SNMP community and a
+    second line of a local user were in no output and no row, in jobs
+    that said
+    ``completed``.  So every line is asked, not a list of kinds, as the
+    Arista EOS, Cisco NX-OS, Aruba AOS-CX, Cisco IOS XR, Aruba AOS-S
+    and OS10 parsers ask them.  Not reached: a line of a stanza
+    (indented) that the stanza's reader does not take; and a banner, a
+    menu's text, a line's message or a macro, whose lines -- the one
+    that opens it among them -- are text, emptied before any reader
+    (:func:`without_banner_bodies`).
+
+    Args:
+        raw: The text the readers are given, its bodies emptied
+            (:func:`without_banner_bodies`) and before any stanza is
+            taken out of it, so that a line has the number it has in the
+            text that was pasted.
+
+    Returns:
+        The rows, in the order their lines come; the row that counts
+        lines with no known command word last.
+    """
+    once: dict[str, int] = {}
+    for read in _READ_ONCE:
+        m = read(raw)
+        if m is not None:
+            line = _line_at(raw, m.start())
+            once[line] = once.get(line, 0) + 1
+    users: set[str] = set()
+
+    def taken(line: str) -> bool:
+        # The lines come in order: a line a reader of one line read is
+        # taken once, as the parse reads it once (no line before it
+        # can be the same, or the reader would have read that one).
+        if once.get(line):
+            once[line] -= 1
+            return True
+        user = _LOCAL_USER_RE.match(line)
+        if user is not None:
+            # The first line of a name is read, a later one is not
+            # (``_parse_local_users``).
+            if user.group(1) in users:
+                return False
+            users.add(user.group(1))
+            return True
+        if any(reader(line) for reader in _TOP_LEVEL_READERS):
+            return True
+        if _PRINTOUT_RE.fullmatch(line.rstrip()):
+            return True
+        return is_an_iosxe_cli_section_line(line)
+
+    return unread_top_level_rows(
+        raw,
+        taken=taken,
+        command_words=_COMMAND_WORDS,
+        families=_FAMILIES,
+        session_words=_SESSION_WORDS,
+    )

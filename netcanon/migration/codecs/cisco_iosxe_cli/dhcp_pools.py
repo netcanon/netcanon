@@ -336,6 +336,16 @@ def read_top(lines: Iterable[str]) -> Top:
     return top
 
 
+def a_top_line(line: str) -> bool:
+    """Whether :func:`read_top` reads *line*, a line of the top: an
+    ``ip dhcp excluded-address`` line, read or counted in a row of its
+    own, or ``[no] service dhcp``."""
+    if not line or line[0] in " \t":
+        return False
+    statement = line.strip()
+    return bool(_EXCLUDED_HEAD_RE.match(statement) or _SERVICE_RE.match(statement))
+
+
 def _merged(spans: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
     """*spans* sorted, with spans that overlap or touch made one."""
     merged: list[tuple[int, int]] = []

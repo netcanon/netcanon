@@ -74,9 +74,14 @@ def _groups(tree: CanonicalIntent) -> dict[int, dict]:
 #: no reader takes (``codecs/cisco_nxos/test_what_no_reader_takes.py``).
 NXOS_WRAPPER_ROWS = ["vdc", "line console", "line vty", "boot nxos"]
 
+#: And of an IOS-XE output: the renderer writes its own ``service
+#: timestamps`` lines, which no reader takes
+#: (``codecs/cisco_iosxe_cli/test_what_no_reader_takes.py``).
+IOSXE_WRAPPER_ROWS = ["service timestamps"]
+
 
 def _rows_read_back(codec, text: str) -> list[str]:
-    """The rows of *text* read back by *codec*, the NX-OS wrapper's taken out.
+    """The rows of *text* read back by *codec*, the wrapper's taken out.
 
     The wrapper's rows are asserted, whole and in order, before they are
     taken out, so that nothing else can hide among them.
@@ -85,6 +90,9 @@ def _rows_read_back(codec, text: str) -> list[str]:
     if codec.name == NXOS.name:
         assert rows[-len(NXOS_WRAPPER_ROWS):] == NXOS_WRAPPER_ROWS, rows
         return rows[:-len(NXOS_WRAPPER_ROWS)]
+    if codec.name == IOSXE.name:
+        assert rows[:len(IOSXE_WRAPPER_ROWS)] == IOSXE_WRAPPER_ROWS, rows
+        return rows[len(IOSXE_WRAPPER_ROWS):]
     return rows
 
 

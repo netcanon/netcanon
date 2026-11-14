@@ -574,7 +574,8 @@ class CiscoIOSXECLICodec(CodecBase):
         # (ACLs, NAT, QoS, route-maps, crypto).  Notification-only —
         # never read by any render-side code.  After them, the rows
         # the parser itself made: the header of a stanza a keyword
-        # opens (``interface range ...``).  Read from the text the
+        # opens (``interface range ...``), and each kind of line in
+        # column 0 that no reader takes.  Read from the text the
         # parser read: a banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = list(dict.fromkeys([
             *detect_tier3_sections_iosxe_cli(without_banner_bodies(raw)),

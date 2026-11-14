@@ -323,6 +323,47 @@ Deliberately deferred to [Tier
   among the sections not translated.  A stack is declared as a
   deployment of a model family, which makes its port names right
 
+Every line in column 0 that no reader of the parser takes and no
+Tier-3 pattern names is a row of the job's Tier-3 list: its command
+word, and the word after it where that says which command it is
+(`spanning-tree mode`, `line vty`, `ip ssh`, `ip http`, `ip
+routing`, `service timestamps`, `aaa new-model`, `router ospf`,
+`router bgp`, `snmp-server enable`), never a value; one row a kind,
+however many lines it has.  That includes the forms of a command the
+parser reads only in one form or only once: an SNMP host named by an
+IPv6 address, a `username` line of a form the parser does not read
+(`username <name> algorithm-type ...`), a `logging` line that names
+no host address, a second `hostname`, `ip domain` or `snmp-server
+community` line, and a second line of a local user's name (the tree
+holds one of each).  A `logging` line's row is the word alone:
+Cisco's System Message Logging guide gives the syslog host, by name
+or address, right after `logging`, the form its Embedded Syslog
+Manager command reference says `logging host` replaced, so the word
+after `logging` can be a host's name.  A line that begins with a
+word IOS-XE configurations are not seen to begin with is counted in
+one row that shows none of its text.  The lines the device prints
+around the configuration (`Building configuration...`, `Current
+configuration : <n> bytes`, `Using <n> out of <n> bytes`, and the
+`boot-start-marker` and `boot-end-marker` lines, which Batfish's
+Cisco IOS grammar skips as well) are no row.  The renderer writes its
+own `service timestamps` lines, so an output of it read again has that
+row.  Until 2026-11-13 only
+the kinds a pattern named (access lists, NAT, class and policy maps,
+route maps, crypto, zone pairs, MLAG) had a row, and the rest were
+in no output and no row, in jobs that said `completed`.  Not
+reached: an indented line of a stanza the parser reads that the
+stanza's reader does not take has no row; a banner's lines are
+text, and a banner has no row.
+
+The readers of a hostname, the release, a name server, an NTP
+server, a syslog host and the SNMP location and contact take their
+value from their own line.  Up to 2026-11-13 the white space between
+their words could be a line break, so a `hostname`, `version`,
+`snmp-server location` or `snmp-server contact` line with no value
+was read with the next line for its value, and an `ip name-server`,
+`ntp server` or `logging` line with none with the address on the
+next line.
+
 If your migration involves these surfaces, plan to hand-translate
 them or pair Netcanon with a complementary tool — see
 [`../COMPARISON.md`](../COMPARISON.md).
