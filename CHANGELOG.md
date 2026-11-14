@@ -1262,6 +1262,18 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Every private-key block of a user-contributed capture is the
+  placeholder.**  The FortiGate 100E capture's OpenSSH key blocks
+  (under `config firewall ssh local-key` and `local-ca`) hold the
+  corpus placeholder `REMOVED_FIXTURE_SANITISATION`, as its
+  certificate key blocks do, and its ACME domain is `example.test`.
+  Neither value is parsed into the canonical model, so no conversion
+  output changes.  A new test (`tests/unit/test_fixture_key_material.py`)
+  fails if any `user_contrib_*` capture holds a private-key body
+  other than the placeholder, or a FortiOS `ENC` value other than a
+  synthetic marker.  The capture's row in
+  `tests/fixtures/real/NOTICE.md` lists what it holds in their place.
+
 - **The cross-mesh audit no longer counts an SNMP attribute that is
   empty on both sides as carried.**  Since Wave 10γ a sub-field of a
   list (`interfaces[].vrf`) with no data on any record of either side
