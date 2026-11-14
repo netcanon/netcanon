@@ -63,7 +63,8 @@ Architecture
   is None) routes to ``TRIVIAL_EMPTY``.
   On a dict field (``snmp``), the attributes that have data on either
   side, so that an ``snmp.community`` empty on both sides routes there
-  as well.
+  as well -- also where only one side holds the dict (a target that
+  writes no ``snmp``).
 
 Constraints honoured
 --------------------
@@ -667,6 +668,19 @@ def compute_field_disposition(
             # same as an empty surface).
             preserved = _scalar_equal(src_val, tgt_val)
             record["preserved"] = preserved
+            # A dict on one side only (a target that writes no
+            # ``snmp`` at all): its attributes with data are the
+            # dict's, so that an attribute it holds nothing in routes
+            # to TRIVIAL_EMPTY in Phase 4, as when both sides hold it.
+            dict_sides = [
+                _strip_cosmetic_snmp(field, value)
+                for value in (src_val, tgt_val)
+                if isinstance(value, dict)
+            ]
+            if dict_sides:
+                record["subfields_with_data"] = _subfields_with_data(
+                    dict_sides, [],
+                )
             if preserved and _is_empty_zero_state(src_val) and _is_empty_zero_state(tgt_val):
                 # Both scalars in their zero state (None / "" / 0 / []).
                 # Same TRIVIAL_EMPTY semantics — see Wave 10α.

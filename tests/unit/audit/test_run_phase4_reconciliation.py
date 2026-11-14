@@ -1054,6 +1054,23 @@ def test_a_dict_attribute_with_no_data_beside_a_drift_is_trivial() -> None:
     assert actual_disposition(fd, "snmp.location")[0] == "drifted"
 
 
+def test_a_dict_attribute_with_no_data_where_the_target_writes_none() -> None:
+    """The target writes no ``snmp``: an attribute the source holds
+    nothing in is not carried and not lost; one it holds is lost."""
+    fd = _snmp_record(
+        False, swd=["location"],
+        source={"community": "", "location": "a", "trap_hosts": []},
+        target=None,
+    )
+    assert actual_disposition(fd, "snmp.trap_hosts")[0] == (
+        "trivially_preserved"
+    )
+    assert actual_disposition(fd, "snmp.community")[0] == (
+        "trivially_preserved"
+    )
+    assert actual_disposition(fd, "snmp.location")[0] == "drifted"
+
+
 def test_a_dict_attribute_falls_back_to_preserved_without_the_list() -> None:
     """Older JSON, with no ``subfields_with_data`` on the dict."""
     fd = _snmp_record(True)
