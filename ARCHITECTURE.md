@@ -2275,7 +2275,10 @@ field)` cell into one of eight variance classes:
   sub-field also routes here rather than masquerading as
   METHODOLOGY_under.  Phase 1 records the union of sub-fields with
   data per parent list (`subfields_with_data`) so the cascade can
-  distinguish the trivial case from real preservation.  Severity
+  distinguish the trivial case from real preservation, and the
+  attributes with data on a dict field (`snmp`), so that an
+  `snmp.community` empty on both sides of an `snmp` that has a
+  location routes here too.  Severity
   `ok`.  Phase 1's `compute_field_disposition` flags the upstream
   `trivially_preserved` boolean for parent lists; the reconciler
   routes both parent and sub-field cases here regardless of the

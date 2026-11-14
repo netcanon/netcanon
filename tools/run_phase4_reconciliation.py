@@ -928,6 +928,17 @@ def actual_disposition(
         # also trivially-empty.
         if parent.get("trivially_preserved"):
             return "trivially_preserved", None
+        # And an attribute empty on both sides of a dict that has data
+        # on another (an ``snmp`` with a location and no community):
+        # the cell aligns by absence, as a list's sub-field does above.
+        # Without ``subfields_with_data`` (older JSON) it is plain
+        # ``preserved``.
+        subfields_with_data = parent.get("subfields_with_data")
+        if (
+            subfields_with_data is not None
+            and subfield.split(".", 1)[0] not in subfields_with_data
+        ):
+            return "trivially_preserved", None
         return "preserved", None
 
     # Form: bare top-level field name.
