@@ -853,6 +853,28 @@ def test_subfields_with_data_unions_source_and_target_records() -> None:
     assert "description" in swd
 
 
+def test_subfields_with_data_on_a_dict_lists_its_attributes_with_data() -> None:
+    """A dict field (``snmp``) carries the attributes that have data on
+    either side, so Phase 4 can tell an attribute empty on both sides
+    from one carried."""
+    intent = CanonicalIntent(snmp=CanonicalSNMP(location="lab"))
+    rec = compute_field_disposition(intent, intent)["snmp"]
+    assert rec["preserved"] is True
+    swd = rec["subfields_with_data"]
+    assert "location" in swd
+    assert "community" not in swd
+    assert "trap_hosts" not in swd
+
+
+def test_subfields_with_data_on_a_dict_unions_the_two_sides() -> None:
+    src = CanonicalIntent(snmp=CanonicalSNMP(community="fakeCommA"))
+    tgt = CanonicalIntent(snmp=CanonicalSNMP(location="lab"))
+    swd = compute_field_disposition(src, tgt)["snmp"]["subfields_with_data"]
+    assert "community" in swd
+    assert "location" in swd
+    assert "contact" not in swd
+
+
 # ---------------------------------------------------------------------------
 # Wave 10γ — drift-summary cap-of-5 truncation
 #

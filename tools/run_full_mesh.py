@@ -61,6 +61,9 @@ Architecture
   set so a list with rows but no data on a given sub-field
   (e.g. ``interfaces`` populated but every row's ``switchport_mode``
   is None) routes to ``TRIVIAL_EMPTY``.
+  On a dict field (``snmp``), the attributes that have data on either
+  side, so that an ``snmp.community`` empty on both sides routes there
+  as well.
 
 Constraints honoured
 --------------------
@@ -625,6 +628,14 @@ def compute_field_disposition(
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
+            # The list cascade above, for the attributes of one record:
+            # an ``snmp`` with a location says nothing of a community
+            # that is empty on both sides, so Phase 4 routes such an
+            # attribute to TRIVIAL_EMPTY, not ALIGNED / METHODOLOGY_under.
+            if src_val or tgt_val:
+                record["subfields_with_data"] = _subfields_with_data(
+                    [cmp_src], [cmp_tgt],
+                )
             if preserved and not src_val and not tgt_val:
                 # Both dicts empty — same semantics as the empty-list
                 # case above.  See Wave 10α.
@@ -679,7 +690,8 @@ def _subfields_with_data(
     on at least one record across the union of ``src`` and ``tgt``.
 
     Used by :func:`compute_field_disposition` to populate the
-    ``subfields_with_data`` field on list parent-records (Wave 10γ).
+    ``subfields_with_data`` field on list parent-records (Wave 10γ),
+    and on a dict field as a list of its one record (``snmp``).
     Phase 4's sub-field cascade reads this set to detect the case where
     a parent list has rows but a particular sub-field is empty on every
     row — those sub-fields cascade to TRIVIAL_EMPTY rather than

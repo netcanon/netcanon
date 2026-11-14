@@ -1262,6 +1262,18 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **The cross-mesh audit no longer counts an SNMP attribute that is
+  empty on both sides as carried.**  Since Wave 10γ a sub-field of a
+  list (`interfaces[].vrf`) with no data on any record of either side
+  is `TRIVIAL_EMPTY`; an attribute of a dict field was not: an
+  `snmp` with a location and no community, on both sides, rated
+  `snmp.community` `ALIGNED`, or `METHODOLOGY_ISSUE_under` against a
+  YAML that says the target loses a community -- with no community on
+  either side to lose.  Phase 1 records the attributes with data on a
+  dict field (`subfields_with_data`), and Phase 4 routes the others to
+  `TRIVIAL_EMPTY`.  `METHODOLOGY_ISSUE_under` 1971 → 1810, `ALIGNED`
+  9045 → 8547, `TRIVIAL_EMPTY` 34883 → 35542; `CODEC_BUG` and every
+  YAML are unchanged.
 - **The vendor reference pages and expectation YAMLs say what the
   port translator does with a number.**  Many said a LAG or a port
   numbered from 0 on one platform was shifted by one on another:

@@ -1008,6 +1008,83 @@ def test_reconcile_cell_subfield_with_data_still_methodology_under() -> None:
 
 
 # ---------------------------------------------------------------------------
+# The same cascade for the attributes of a dict field (``snmp``).
+#
+# An ``snmp`` with a location and no community, on both sides, rated
+# ``snmp.community`` preserved -- METHODOLOGY_under against a YAML that
+# says the target loses a community, with no community on either side to
+# lose.  Phase 1 records ``subfields_with_data`` on a dict field too.
+# ---------------------------------------------------------------------------
+
+
+def _snmp_record(preserved, swd=None, source=None, target=None):
+    record = {"preserved": preserved, "source_count": 5, "target_count": 5}
+    if swd is not None:
+        record["subfields_with_data"] = swd
+    if not preserved:
+        record["source"] = source
+        record["target"] = target
+    return {"snmp": record}
+
+
+def test_a_dict_attribute_with_no_data_is_trivially_preserved() -> None:
+    fd = _snmp_record(True, swd=["location"])
+    assert actual_disposition(fd, "snmp.community") == (
+        "trivially_preserved", None,
+    )
+    assert actual_disposition(fd, "snmp.location") == ("preserved", None)
+
+
+def test_a_dict_attribute_with_data_is_preserved() -> None:
+    fd = _snmp_record(True, swd=["community", "location"])
+    assert actual_disposition(fd, "snmp.community") == ("preserved", None)
+
+
+def test_a_dict_attribute_with_no_data_beside_a_drift_is_trivial() -> None:
+    """The dict drifted on its location; the community is empty on both
+    sides, and is no more tested than if the dict had matched."""
+    fd = _snmp_record(
+        False, swd=["location"],
+        source={"community": "", "location": "a"},
+        target={"community": "", "location": "b"},
+    )
+    assert actual_disposition(fd, "snmp.community")[0] == (
+        "trivially_preserved"
+    )
+    assert actual_disposition(fd, "snmp.location")[0] == "drifted"
+
+
+def test_a_dict_attribute_falls_back_to_preserved_without_the_list() -> None:
+    """Older JSON, with no ``subfields_with_data`` on the dict."""
+    fd = _snmp_record(True)
+    assert actual_disposition(fd, "snmp.community") == ("preserved", None)
+
+
+def test_reconcile_cell_dict_attribute_with_no_data_is_trivial_empty() -> None:
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "dell_os10",
+        "target_codec": "cisco_iosxr",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": _snmp_record(True, swd=["location", "v3_users"]),
+    }
+    expectation = {
+        "per_field_expectation": {
+            "snmp.community": {"disposition": "unsupported"},
+            "snmp.trap_hosts": {"disposition": "lossy"},
+            "snmp.location": {"disposition": "unsupported"},
+        },
+    }
+    fv = reconcile_cell(cell, expectation)["field_variances"]
+    assert fv["snmp.community"]["variance"] == recon.VAR_TRIVIAL_EMPTY
+    assert fv["snmp.trap_hosts"]["variance"] == recon.VAR_TRIVIAL_EMPTY
+    # A location carried against "unsupported" is still the signal.
+    assert fv["snmp.location"]["variance"] == recon.VAR_METHODOLOGY_UNDER
+
+
+# ---------------------------------------------------------------------------
 # Capability-aware anycast reclassification (v0.2.0 Wave-C surface)
 #
 # A drifted address field whose drift is confined to the anycast-gateway
