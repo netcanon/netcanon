@@ -1262,6 +1262,16 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Nor where the target writes no `snmp` at all.**  The record of a
+  dict field against None (IOS XR and IOS-XE NETCONF write no SNMP,
+  and a target that writes none of the SNMPv3 users of an `snmp`
+  that holds nothing else writes none either) took the scalar path,
+  which records no attributes with data, so an attribute empty on
+  the source still rated `ALIGNED` or `METHODOLOGY_ISSUE_under`.
+  Phase 1 records the attributes of the one dict there too.
+  `METHODOLOGY_ISSUE_under` 1810 → 1619, `ALIGNED` 8547 → 8214,
+  `TRIVIAL_EMPTY` 35542 → 36066, every move an `snmp` attribute;
+  `CODEC_BUG`, the expected classes and every YAML are unchanged.
 - **The cross-mesh audit no longer counts an SNMP attribute that is
   empty on both sides as carried.**  Since Wave 10γ a sub-field of a
   list (`interfaces[].vrf`) with no data on any record of either side

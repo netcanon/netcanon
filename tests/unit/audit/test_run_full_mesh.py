@@ -866,6 +866,25 @@ def test_subfields_with_data_on_a_dict_lists_its_attributes_with_data() -> None:
     assert "trap_hosts" not in swd
 
 
+def test_subfields_with_data_on_a_dict_the_target_does_not_write() -> None:
+    """A target that writes no ``snmp`` at all: the record is the
+    dict against None, and still says which attributes hold data."""
+    src = CanonicalIntent(snmp=CanonicalSNMP(location="lab"))
+    rec = compute_field_disposition(src, CanonicalIntent())["snmp"]
+    assert rec["preserved"] is False
+    assert rec["target"] is None
+    swd = rec["subfields_with_data"]
+    assert "location" in swd
+    assert "trap_hosts" not in swd
+    assert "community" not in swd
+
+
+def test_a_scalar_against_none_records_no_attributes() -> None:
+    src = CanonicalIntent(hostname="r1")
+    rec = compute_field_disposition(src, CanonicalIntent())["hostname"]
+    assert "subfields_with_data" not in rec
+
+
 def test_subfields_with_data_on_a_dict_unions_the_two_sides() -> None:
     src = CanonicalIntent(snmp=CanonicalSNMP(community="fakeCommA"))
     tgt = CanonicalIntent(snmp=CanonicalSNMP(location="lab"))
